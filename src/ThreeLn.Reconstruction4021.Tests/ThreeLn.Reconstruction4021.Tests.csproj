@@ -11,4 +11,8 @@
     <PackageReference Include="TUnit" Version="1.65.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ThreeLn.Reconstruction4021.Core\ThreeLn.Reconstruction4021.Core.csproj" />
+  </ItemGroup>
+
 </Project>

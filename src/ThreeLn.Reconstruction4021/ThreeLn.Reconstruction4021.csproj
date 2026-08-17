@@ -7,4 +7,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ThreeLn.Reconstruction4021.Core\ThreeLn.Reconstruction4021.Core.csproj" />
+  </ItemGroup>
+
 </Project>
