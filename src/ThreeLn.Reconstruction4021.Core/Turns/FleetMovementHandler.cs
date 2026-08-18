@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using ThreeLn.Reconstruction4021.Core.Entities;
 using ThreeLn.Reconstruction4021.Core.Galaxy;
 using ThreeLn.Reconstruction4021.Core.Types;
@@ -11,16 +12,16 @@ namespace ThreeLn.Reconstruction4021.Core.Turns;
 /// </summary>
 public sealed class FleetMovementHandler : IFleetMovementHandler
 {
-    private static readonly Dictionary<FleetType, int> MovementRateByType = new()
+    private static readonly FrozenDictionary<FleetType, int> _movementRateByType = new Dictionary<FleetType, int>()
     {
         [FleetType.Standard] = 1,
         [FleetType.JumpFleet] = 10,
         [FleetType.HunterKillerFleet] = 10,
         [FleetType.Penetrator] = 2,
         [FleetType.AdvancedWarpFleet] = 2,
-    };
+    }.ToFrozenDictionary();
 
-    private static readonly Dictionary<ShipType, int> FuelBurnPerShip = new()
+    private static readonly FrozenDictionary<ShipType, int> _fuelBurnPerShip = new Dictionary<ShipType, int>()
     {
         [ShipType.Fighter] = 4,
         [ShipType.HunterKiller] = 8,
@@ -29,43 +30,36 @@ public sealed class FleetMovementHandler : IFleetMovementHandler
         [ShipType.Penetrator] = 10,
         [ShipType.Starship] = 14,
         [ShipType.Transport] = 7,
-    };
+    }.ToFrozenDictionary();
 
     public void AdvanceFleets(Game game, Empire actingEmpire, Empire nextEmpire)
     {
-        foreach (var fleet in game.Galaxy.Fleets.ToList())
-        {
-            if (fleet.Owner == actingEmpire && ShouldAdvanceActingEmpireFleet(fleet, game))
-            {
+        foreach (var fleet in game.Galaxy.Fleets.ToList()) {
+            if (fleet.Owner == actingEmpire && ShouldAdvanceActingEmpireFleet(fleet, game)) {
                 AdvanceFleet(fleet);
                 continue;
             }
 
-            if (fleet.Owner == nextEmpire && ShouldAdvanceNextEmpireFleet(fleet, game))
+            if (fleet.Owner == nextEmpire && ShouldAdvanceNextEmpireFleet(fleet, game)) {
                 AdvanceFleet(fleet);
+            }
         }
     }
 
     public void AdvanceStarbases(Game game, Empire empire)
     {
-        foreach (var starbase in game.Galaxy.Starbases.ToList())
-        {
-            if (starbase.Owner != empire
-                || starbase.Destination is null
-                || starbase.Status == FleetStatus.Lost)
-            {
+        foreach (var starbase in game.Galaxy.Starbases.ToList()) {
+            if (starbase.Owner != empire || starbase.Destination is null || starbase.Status == FleetStatus.Lost) {
                 continue;
             }
 
-            if (starbase.Location == starbase.Destination.Value)
-            {
+            if (starbase.Location == starbase.Destination.Value) {
                 starbase.Destination = null;
                 starbase.Status = FleetStatus.Ready;
                 continue;
             }
 
-            if (starbase.YearsUntilNextMove > 0)
-            {
+            if (starbase.YearsUntilNextMove > 0) {
                 starbase.YearsUntilNextMove--;
                 continue;
             }
@@ -76,8 +70,9 @@ public sealed class FleetMovementHandler : IFleetMovementHandler
                 ? FleetStatus.Ready
                 : FleetStatus.InTransit;
 
-            if (starbase.Location == starbase.Destination.Value)
+            if (starbase.Location == starbase.Destination.Value) {
                 starbase.Destination = null;
+            }
 
             starbase.YearsUntilNextMove = 1;
         }
@@ -184,13 +179,13 @@ public sealed class FleetMovementHandler : IFleetMovementHandler
 
     private static int GetShipFuelCost(ShipCounts ships)
     {
-        return ships.Fighters * FuelBurnPerShip[ShipType.Fighter]
-            + ships.HunterKillers * FuelBurnPerShip[ShipType.HunterKiller]
-            + ships.Jumpships * FuelBurnPerShip[ShipType.Jumpship]
-            + ships.Jumptransports * FuelBurnPerShip[ShipType.Jumptransport]
-            + ships.Penetrators * FuelBurnPerShip[ShipType.Penetrator]
-            + ships.Starships * FuelBurnPerShip[ShipType.Starship]
-            + ships.Transports * FuelBurnPerShip[ShipType.Transport];
+        return ships.Fighters * _fuelBurnPerShip[ShipType.Fighter]
+            + ships.HunterKillers * _fuelBurnPerShip[ShipType.HunterKiller]
+            + ships.Jumpships * _fuelBurnPerShip[ShipType.Jumpship]
+            + ships.Jumptransports * _fuelBurnPerShip[ShipType.Jumptransport]
+            + ships.Penetrators * _fuelBurnPerShip[ShipType.Penetrator]
+            + ships.Starships * _fuelBurnPerShip[ShipType.Starship]
+            + ships.Transports * _fuelBurnPerShip[ShipType.Transport];
     }
 
     private static int GetCargoFuelCost(CargoHold cargo)
@@ -205,7 +200,7 @@ public sealed class FleetMovementHandler : IFleetMovementHandler
     }
 
     private static int GetMovementRate(FleetType fleetType) =>
-        MovementRateByType.TryGetValue(fleetType, out var orbitRate)
+        _movementRateByType.TryGetValue(fleetType, out var orbitRate)
             ? orbitRate
             : 1;
 
