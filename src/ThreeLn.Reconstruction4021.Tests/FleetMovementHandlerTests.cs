@@ -17,8 +17,7 @@ public class FleetMovementHandlerTests
         game.Empires.Add(human);
         game.Empires.Add(ai);
 
-        var jumpFleet = new Fleet
-        {
+        var jumpFleet = new Fleet {
             Owner = human,
             Location = new Coordinate(0, 0),
             Destination = new Coordinate(10, 0),
@@ -27,8 +26,7 @@ public class FleetMovementHandlerTests
         };
         jumpFleet.Ships.Jumpships = 2;
 
-        var warpFleet = new Fleet
-        {
+        var warpFleet = new Fleet {
             Owner = ai,
             Location = new Coordinate(0, 0),
             Destination = new Coordinate(2, 0),
@@ -54,8 +52,7 @@ public class FleetMovementHandlerTests
     {
         var human = new Empire { Name = "Human" };
         var game = new Game(new Galaxy(size: 20));
-        var fleet = new Fleet
-        {
+        var fleet = new Fleet {
             Owner = human,
             Location = new Coordinate(0, 0),
             Destination = new Coordinate(10, 0),
@@ -66,7 +63,9 @@ public class FleetMovementHandlerTests
         game.Galaxy.Fleets.Add(fleet);
 
         var handler = new FleetMovementHandler();
-        handler.AdvanceFleets(game, human, new Empire { Name = "AI" });
+        // Standard-type fleets only advance as the *next* empire's fleets (FLEET.PAS:892-903),
+        // so human must be passed as nextEmpire here for this fleet to be evaluated at all.
+        handler.AdvanceFleets(game, new Empire { Name = "AI" }, human);
 
         await Assert.That(fleet.Status).IsEqualTo(FleetStatus.Inactive);
         await Assert.That(fleet.Location).IsEqualTo(new Coordinate(0, 0));
@@ -78,8 +77,7 @@ public class FleetMovementHandlerTests
     {
         var empire = new Empire { Name = "Human" };
         var game = new Game(new Galaxy(size: 20));
-        var starbase = new Starbase
-        {
+        var starbase = new Starbase {
             Owner = empire,
             Location = new Coordinate(0, 0),
             Destination = new Coordinate(1, 0),

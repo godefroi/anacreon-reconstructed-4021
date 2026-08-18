@@ -12,8 +12,7 @@ namespace ThreeLn.Reconstruction4021.Core.Turns;
 /// </summary>
 public sealed class FleetMovementHandler : IFleetMovementHandler
 {
-    private static readonly FrozenDictionary<FleetType, int> _movementRateByType = new Dictionary<FleetType, int>()
-    {
+    private static readonly FrozenDictionary<FleetType, int> _movementRateByType = new Dictionary<FleetType, int>() {
         [FleetType.Standard] = 1,
         [FleetType.JumpFleet] = 10,
         [FleetType.HunterKillerFleet] = 10,
@@ -21,8 +20,7 @@ public sealed class FleetMovementHandler : IFleetMovementHandler
         [FleetType.AdvancedWarpFleet] = 2,
     }.ToFrozenDictionary();
 
-    private static readonly FrozenDictionary<ShipType, int> _fuelBurnPerShip = new Dictionary<ShipType, int>()
-    {
+    private static readonly FrozenDictionary<ShipType, int> _fuelBurnPerShip = new Dictionary<ShipType, int>() {
         [ShipType.Fighter] = 4,
         [ShipType.HunterKiller] = 8,
         [ShipType.Jumpship] = 12,
@@ -82,12 +80,11 @@ public sealed class FleetMovementHandler : IFleetMovementHandler
     {
         if (fleet.Destination is null
             || fleet.Status == FleetStatus.Lost
-            || fleet.Status == FleetStatus.Inactive)
-        {
+            || fleet.Status == FleetStatus.Inactive) {
             return false;
         }
 
-        return fleet.Type is FleetType.JumpFleet or FleetType.HunterKillerFleet
+        return fleet.Type == FleetType.JumpFleet
             && !IsAtStargate(fleet.Location, fleet.Owner, game);
     }
 
@@ -95,8 +92,7 @@ public sealed class FleetMovementHandler : IFleetMovementHandler
     {
         if (fleet.Destination is null
             || fleet.Status == FleetStatus.Lost
-            || fleet.Status == FleetStatus.Inactive)
-        {
+            || fleet.Status == FleetStatus.Inactive) {
             return false;
         }
 
@@ -119,8 +115,7 @@ public sealed class FleetMovementHandler : IFleetMovementHandler
             return;
 
         var destination = fleet.Destination.Value;
-        if (fleet.Location == destination)
-        {
+        if (fleet.Location == destination) {
             fleet.Destination = null;
             fleet.Status = FleetStatus.Ready;
             return;
@@ -144,23 +139,20 @@ public sealed class FleetMovementHandler : IFleetMovementHandler
         if (requiredFuel <= 0)
             return true;
 
-        if (fleet.Fuel >= requiredFuel)
-        {
+        if (fleet.Fuel >= requiredFuel) {
             fleet.Fuel -= requiredFuel;
             return true;
         }
 
         var deficit = requiredFuel - fleet.Fuel;
-        while (deficit > 0 && fleet.Cargo.Trillum > 0)
-        {
+        while (deficit > 0 && fleet.Cargo.Trillum > 0) {
             var converted = Math.Min(fleet.Cargo.Trillum, deficit);
             fleet.Cargo.Trillum -= converted;
             fleet.Fuel += converted;
             deficit -= converted;
         }
 
-        if (deficit > 0)
-        {
+        if (deficit > 0) {
             fleet.Status = FleetStatus.Inactive;
             fleet.Destination = null;
             return false;
@@ -211,8 +203,7 @@ public sealed class FleetMovementHandler : IFleetMovementHandler
         out Coordinate nextLocation)
     {
         var current = start;
-        for (var step = 0; step < steps; step++)
-        {
+        for (var step = 0; step < steps; step++) {
             if (current == destination)
                 break;
 

@@ -29,13 +29,15 @@ public sealed class Fleet : IMovable
     {
         get {
             var s = Ships;
-            if (s.Starships + s.Penetrators + s.Jumpships + s.Fighters + s.Jumptransports + s.Transports == 0)
+            var standard = s.Starships + s.Fighters + s.Transports;
+
+            if (s.Penetrators + s.Jumpships + s.Jumptransports + standard == 0)
                 return FleetType.HunterKillerFleet;
-            if (s.Starships + s.Penetrators + s.Fighters + s.Transports == 0)
+            if (s.Penetrators + standard == 0)
                 return FleetType.JumpFleet;
-            if (s.Starships + s.Jumpships + s.Jumptransports + s.Transports + s.Fighters == 0)
+            if (s.Jumpships + s.Jumptransports + standard == 0)
                 return FleetType.Penetrator;
-            if (s.Starships + s.Fighters + s.Transports == 0)
+            if (standard == 0)
                 return FleetType.AdvancedWarpFleet;
             return FleetType.Standard;
         }

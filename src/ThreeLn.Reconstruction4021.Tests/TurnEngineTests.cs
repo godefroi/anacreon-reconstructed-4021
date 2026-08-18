@@ -57,8 +57,7 @@ public class TurnEngineTests
         List<string> log, params (Empire Empire, ITurnHandler Handler)[] empires)
     {
         var game = new Game(new Core.Galaxy.Galaxy(size: 10));
-        foreach (var (empire, handler) in empires)
-        {
+        foreach (var (empire, handler) in empires) {
             game.Empires.Add(empire);
             game.TurnHandlers[empire] = handler;
         }
