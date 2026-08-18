@@ -27,8 +27,7 @@ public sealed class Fleet : IMovable
     /// </summary>
     public FleetType Type
     {
-        get
-        {
+        get {
             var s = Ships;
             if (s.Starships + s.Penetrators + s.Jumpships + s.Fighters + s.Jumptransports + s.Transports == 0)
                 return FleetType.HunterKillerFleet;

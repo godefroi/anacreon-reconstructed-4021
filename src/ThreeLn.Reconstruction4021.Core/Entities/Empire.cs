@@ -9,8 +9,7 @@ public sealed class Empire
     /// default DefenseSettings — genuinely read during combat against independent worlds
     /// (ATTACK.PAS:1383-1396) — not a stand-in for "no owner".
     /// </summary>
-    public static Empire Independent { get; } = new()
-    {
+    public static Empire Independent { get; } = new() {
         Name = "Independent",
         IsIndependent = true,
     };
