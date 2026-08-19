@@ -10,7 +10,7 @@ namespace ThreeLn.Reconstruction4021.Core.Turns;
 /// - Planet/starbase/stargate/construction visibility is accumulated: Known persists, Scouted is updated.
 /// - Scouting radius: adjacent cells (Chebyshev), plus capital/starbase/planet scans at distance < 6 or <= 5.
 /// </summary>
-public sealed class VisibilityHandler : IVisibilityHandler
+public sealed class VisibilityHandler(Random random) : IVisibilityHandler
 {
     // Starbase and capital scan radii: distance < 6 means within 5 cells (Chebyshev metric, INTRFACE.PAS:1387,1439).
     private const int StarbaseScanRadius = 6;
@@ -77,7 +77,7 @@ public sealed class VisibilityHandler : IVisibilityHandler
         }
     }
 
-    private static void ScoutObjects(Empire empire, Game game)
+    private void ScoutObjects(Empire empire, Game game)
     {
         // Scout around each of the empire's owned planets and fleets (INTRFACE.PAS:1565-1582).
         foreach (var planet in game.Galaxy.Planets)
@@ -89,10 +89,10 @@ public sealed class VisibilityHandler : IVisibilityHandler
                 ScoutAdjacent(fleet.Location, empire, game);
 
         // Determine scouted status for all existing entities (INTRFACE.PAS:1585-1614).
-        DetermineIfScoutedPlanets(game.Galaxy.Planets, empire, game);
-        DetermineIfScoutedStarbases(game.Galaxy.Starbases, empire, game);
-        DetermineIfScoutedStargates(game.Galaxy.Stargates, empire, game);
-        DetermineIfScoutedConstructions(game.Galaxy.ConstructionSites, empire, game);
+        DetermineIfScouted(game.Galaxy.Planets, empire.Planets, empire, game, p => p.Location, p => p.Owner);
+        DetermineIfScouted(game.Galaxy.Starbases, empire.Starbases, empire, game, s => s.Location, s => s.Owner);
+        DetermineIfScouted(game.Galaxy.Stargates, empire.Stargates, empire, game, g => g.Location, g => g.Owner);
+        DetermineIfScouted(game.Galaxy.ConstructionSites, empire.ConstructionSites, empire, game, c => c.Location, c => c.Owner);
     }
 
     private static void ScoutAdjacent(Coordinate center, Empire empire, Game game)
@@ -129,102 +129,56 @@ public sealed class VisibilityHandler : IVisibilityHandler
         }
     }
 
-    private static void DetermineIfScoutedPlanets(List<Planet> planets, Empire empire, Game game)
+    /// <summary>
+    /// Matches INTRFACE.PAS:1421-1454 (DetermineIfScouted). An entity never yet Known can only be
+    /// discovered via a 50% roll while in starbase scan range — capital range plays no part in first
+    /// discovery. An entity already Known but not Scouted (its Scouted tier decayed since a prior
+    /// turn — see ClearScouted/VisibilityHandler.RefreshVisibility) is unconditionally re-detected by
+    /// capital or starbase range. These are different rules, not one rule applied twice; conflating
+    /// them (applying range checks unconditionally to any not-yet-scouted entity) was the bug fixed here.
+    /// </summary>
+    private void DetermineIfScouted<T>(
+        IEnumerable<T> entities,
+        EntityVisibility<T> visibility,
+        Empire empire,
+        Game game,
+        Func<T, Coordinate> location,
+        Func<T, Empire> owner) where T : notnull
     {
-        foreach (var planet in planets) {
-            if (empire.Planets.Scouted.Contains(planet))
+        foreach (var entity in entities) {
+            if (visibility.Scouted.Contains(entity))
                 continue;
 
-            if (planet.Owner == empire) {
-                empire.Planets.MarkScouted(planet);
-                continue;
-            }
-
-            // Scout if within capital scan range (INTRFACE.PAS:1437-1440).
-            var capital = empire.Capital;
-            if (capital != null && Chebyshev(capital.Location, planet.Location) < CapitalScanRadius) {
-                empire.Planets.MarkScouted(planet);
+            if (owner(entity) == empire) {
+                visibility.MarkScouted(entity);
                 continue;
             }
 
-            // Scout if within starbase scan range (INTRFACE.PAS:1441-1442).
-            if (IsInRangeOfStarbase(planet.Location, empire, game)) {
-                empire.Planets.MarkScouted(planet);
-            }
-        }
-    }
+            var entityLocation = location(entity);
 
-    private static void DetermineIfScoutedStarbases(List<Starbase> starbases, Empire empire, Game game)
-    {
-        foreach (var starbase in starbases) {
-            if (empire.Starbases.Scouted.Contains(starbase))
-                continue;
+            if (visibility.Known.Contains(entity)) {
+                // Known but not scouted: capital or starbase range re-detects it (INTRFACE.PAS:1437-1442).
+                var capital = empire.Capital;
+                if (capital != null && Chebyshev(capital.Location, entityLocation) < CapitalScanRadius) {
+                    visibility.MarkScouted(entity);
+                    continue;
+                }
 
-            if (starbase.Owner == empire) {
-                empire.Starbases.MarkScouted(starbase);
-                continue;
-            }
-
-            var capital = empire.Capital;
-            if (capital != null && Chebyshev(capital.Location, starbase.Location) < CapitalScanRadius) {
-                empire.Starbases.MarkScouted(starbase);
-                continue;
-            }
-
-            if (IsInRangeOfStarbase(starbase.Location, empire, game)) {
-                empire.Starbases.MarkScouted(starbase);
-            }
-        }
-    }
-
-    private static void DetermineIfScoutedStargates(List<Stargate> stargates, Empire empire, Game game)
-    {
-        foreach (var stargate in stargates) {
-            if (empire.Stargates.Scouted.Contains(stargate))
-                continue;
-
-            if (stargate.Owner == empire) {
-                empire.Stargates.MarkScouted(stargate);
-                continue;
-            }
-
-            var capital = empire.Capital;
-            if (capital != null && Chebyshev(capital.Location, stargate.Location) < CapitalScanRadius) {
-                empire.Stargates.MarkScouted(stargate);
-                continue;
-            }
-
-            if (IsInRangeOfStarbase(stargate.Location, empire, game)) {
-                empire.Stargates.MarkScouted(stargate);
-            }
-        }
-    }
-
-    private static void DetermineIfScoutedConstructions(List<ConstructionSite> constructions, Empire empire, Game game)
-    {
-        foreach (var constr in constructions) {
-            if (empire.ConstructionSites.Scouted.Contains(constr))
-                continue;
-
-            if (constr.Owner == empire) {
-                empire.ConstructionSites.MarkScouted(constr);
-                continue;
-            }
-
-            var capital = empire.Capital;
-            if (capital != null && Chebyshev(capital.Location, constr.Location) < CapitalScanRadius) {
-                empire.ConstructionSites.MarkScouted(constr);
-                continue;
-            }
-
-            if (IsInRangeOfStarbase(constr.Location, empire, game)) {
-                empire.ConstructionSites.MarkScouted(constr);
+                if (IsInRangeOfStarbase(entityLocation, empire, game))
+                    visibility.MarkScouted(entity);
+            } else {
+                // Not yet known: 50% chance (Rnd(1,2)=1), starbase range only (INTRFACE.PAS:1445-1453).
+                if (IsInRangeOfStarbase(entityLocation, empire, game) && random.Next(2) == 0)
+                    visibility.MarkScouted(entity);
             }
         }
     }
 
     private static bool IsAdjacentToEmpireTerritory(Coordinate location, Empire empire, Game game)
     {
+        // Matches Pascal's GetStatus(Obj)=PlayerEmp check: Obj is whichever object occupies that
+        // sector's slot — CreatePlanet/CreateStarbase/CreateStargate/Construction all write into it
+        // (INTRFACE.PAS:349,375,417,514) — so any owned object there counts, not just planets.
         foreach (var (dx, dy) in _adjacentOffsets) {
             var x = location.X + dx;
             var y = location.Y + dy;
@@ -235,6 +189,12 @@ public sealed class VisibilityHandler : IVisibilityHandler
             var adj = new Coordinate(x, y);
 
             if (game.Galaxy.Planets.Any(p => p.Owner == empire && p.Location == adj))
+                return true;
+            if (game.Galaxy.Starbases.Any(s => s.Owner == empire && s.Location == adj))
+                return true;
+            if (game.Galaxy.Stargates.Any(g => g.Owner == empire && g.Location == adj))
+                return true;
+            if (game.Galaxy.ConstructionSites.Any(c => c.Owner == empire && c.Location == adj))
                 return true;
             if (game.Galaxy.Fleets.Any(f => f.Owner == empire && f.Location == adj))
                 return true;

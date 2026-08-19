@@ -10,9 +10,21 @@ namespace ThreeLn.Reconstruction4021.Tests;
 /// Verifies fog-of-war mechanics: fleet visibility is ephemeral (cleared each turn),
 /// planet/starbase/stargate/construction visibility is accumulated (Known persists).
 /// Scouting radii match INTRFACE.PAS: adjacent cells, capital/starbase radius < 6, planet <= 5.
+/// First discovery of a never-Known entity requires starbase range AND a 50% roll
+/// (INTRFACE.PAS:1445-1453); capital range only re-detects an already-Known entity
+/// (INTRFACE.PAS:1437-1440) — these are different rules, exercised separately below.
 /// </summary>
 public class VisibilityHandlerTests
 {
+    /// <summary>Deterministic stand-in for the 50% discovery roll (Rnd(1,2)=1 in Pascal).</summary>
+    private sealed class FixedRandom(int nextValue) : Random
+    {
+        public override int Next(int maxValue) => nextValue;
+    }
+
+    private static readonly Random _alwaysSucceeds = new FixedRandom(0);
+    private static readonly Random _alwaysFails = new FixedRandom(1);
+
     private static Game BuildGame(Core.Galaxy.Galaxy? galaxy = null, params (string name, Empire empire)[] empires)
     {
         galaxy ??= new Core.Galaxy.Galaxy(size: 20);
@@ -44,7 +56,7 @@ public class VisibilityHandlerTests
         fleet.Ships.Starships = 1;
         game.Galaxy.Fleets.Add(fleet);
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Fleets.Scouted).Contains(fleet);
@@ -68,7 +80,38 @@ public class VisibilityHandlerTests
         enemyFleet.Ships.Starships = 1;
         game.Galaxy.Fleets.Add(enemyFleet);
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.Fleets.Scouted).Contains(enemyFleet);
+    }
+
+    [Test]
+    public async Task EnemyFleetAdjacentToStarbaseWithNoScanIsScoutedViaTerritory()
+    {
+        // IndustrialComplex grants no scan radius (IsInRangeOfStarbase excludes it), so this
+        // isolates the territory-adjacency rule (any owned object occupies the sector, not just
+        // planets/fleets — INTRFACE.PAS:349,375,417,514) from the starbase-scan rule.
+        var human = new Empire { Name = "Human" };
+        var enemy = new Empire { Name = "Enemy" };
+        var game = BuildGame(null, ("Human", human), ("Enemy", enemy));
+
+        var complex = new Starbase {
+            Owner = human,
+            Location = new Coordinate(10, 10),
+            Kind = StarbaseKind.IndustrialComplex,
+        };
+        game.Galaxy.Starbases.Add(complex);
+
+        var enemyFleet = new Fleet {
+            Owner = enemy,
+            Location = new Coordinate(10, 11), // Adjacent to the complex
+            Status = FleetStatus.Ready,
+        };
+        enemyFleet.Ships.Starships = 1;
+        game.Galaxy.Fleets.Add(enemyFleet);
+
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Fleets.Scouted).Contains(enemyFleet);
@@ -92,7 +135,7 @@ public class VisibilityHandlerTests
         hkFleet.Ships.HunterKillers = 1;
         game.Galaxy.Fleets.Add(hkFleet);
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Fleets.Scouted).DoesNotContain(hkFleet);
@@ -120,7 +163,8 @@ public class VisibilityHandlerTests
         enemyFleet.Ships.Starships = 1;
         game.Galaxy.Fleets.Add(enemyFleet);
 
-        var handler = new VisibilityHandler();
+        // Fleet scouting's starbase-range check is unconditional (no RNG gate) per INTRFACE.PAS:1536-1541.
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Fleets.Scouted).Contains(enemyFleet);
@@ -148,7 +192,7 @@ public class VisibilityHandlerTests
         enemyFleet.Ships.Starships = 1;
         game.Galaxy.Fleets.Add(enemyFleet);
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysSucceeds);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Fleets.Scouted).DoesNotContain(enemyFleet);
@@ -166,7 +210,7 @@ public class VisibilityHandlerTests
         };
         game.Galaxy.Planets.Add(planet);
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Planets.Scouted).Contains(planet);
@@ -190,15 +234,18 @@ public class VisibilityHandlerTests
         };
         game.Galaxy.Planets.Add(enemyPlanet);
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Planets.Scouted).Contains(enemyPlanet);
     }
 
     [Test]
-    public async Task PlanetInCapitalScanRangeIsScouted()
+    public async Task NeverKnownPlanetInCapitalRangeIsNotScouted()
     {
+        // Regression test for the bug: capital range must not grant FIRST discovery — only
+        // starbase range (with a 50% roll) can do that (INTRFACE.PAS:1442-1453). Capital range
+        // only re-detects an entity that was already Known on some earlier turn.
         var human = new Empire { Name = "Human" };
         var game = BuildGame(null, ("Human", human));
 
@@ -209,13 +256,39 @@ public class VisibilityHandlerTests
         game.Galaxy.Planets.Add(capital);
         human.Capital = capital;
 
+        var neverSeenPlanet = new Planet {
+            Owner = new Empire { Name = "Enemy" },
+            Location = new Coordinate(14, 10), // Distance 4 from capital (< 6), never adjacent
+        };
+        game.Galaxy.Planets.Add(neverSeenPlanet);
+
+        var handler = new VisibilityHandler(_alwaysSucceeds);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.Planets.Scouted).DoesNotContain(neverSeenPlanet);
+        await Assert.That(human.Planets.Known).DoesNotContain(neverSeenPlanet);
+    }
+
+    [Test]
+    public async Task KnownPlanetInCapitalRangeIsReScouted()
+    {
+        // Once a planet has been Known (e.g. via prior adjacency), capital range unconditionally
+        // re-detects it (INTRFACE.PAS:1437-1440) — no RNG involved for this upgrade path.
+        var human = new Empire { Name = "Human" };
+        var game = BuildGame(null, ("Human", human));
+
+        var capital = new Planet { Owner = human, Location = new Coordinate(10, 10) };
+        game.Galaxy.Planets.Add(capital);
+        human.Capital = capital;
+
         var distantPlanet = new Planet {
             Owner = new Empire { Name = "Enemy" },
             Location = new Coordinate(14, 10), // Distance 4 from capital (< 6)
         };
         game.Galaxy.Planets.Add(distantPlanet);
+        human.Planets.MarkKnown(distantPlanet); // Simulate prior discovery (e.g. past adjacency).
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Planets.Scouted).Contains(distantPlanet);
@@ -227,10 +300,7 @@ public class VisibilityHandlerTests
         var human = new Empire { Name = "Human" };
         var game = BuildGame(null, ("Human", human));
 
-        var capital = new Planet {
-            Owner = human,
-            Location = new Coordinate(10, 10),
-        };
+        var capital = new Planet { Owner = human, Location = new Coordinate(10, 10) };
         game.Galaxy.Planets.Add(capital);
         human.Capital = capital;
 
@@ -239,11 +309,63 @@ public class VisibilityHandlerTests
             Location = new Coordinate(16, 10), // Distance 6 from capital (not < 6)
         };
         game.Galaxy.Planets.Add(distantPlanet);
+        human.Planets.MarkKnown(distantPlanet);
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Planets.Scouted).DoesNotContain(distantPlanet);
+    }
+
+    [Test]
+    public async Task UnknownPlanetInStarbaseRangeDiscoveredOnSuccessfulRoll()
+    {
+        var human = new Empire { Name = "Human" };
+        var game = BuildGame(null, ("Human", human));
+
+        var starbase = new Starbase {
+            Owner = human,
+            Location = new Coordinate(10, 10),
+            Kind = StarbaseKind.CommandBase,
+        };
+        game.Galaxy.Starbases.Add(starbase);
+
+        var undiscoveredPlanet = new Planet {
+            Owner = new Empire { Name = "Enemy" },
+            Location = new Coordinate(13, 10), // Distance 3 (< 6)
+        };
+        game.Galaxy.Planets.Add(undiscoveredPlanet);
+
+        var handler = new VisibilityHandler(_alwaysSucceeds);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.Planets.Scouted).Contains(undiscoveredPlanet);
+    }
+
+    [Test]
+    public async Task UnknownPlanetInStarbaseRangeNotDiscoveredOnFailedRoll()
+    {
+        var human = new Empire { Name = "Human" };
+        var game = BuildGame(null, ("Human", human));
+
+        var starbase = new Starbase {
+            Owner = human,
+            Location = new Coordinate(10, 10),
+            Kind = StarbaseKind.CommandBase,
+        };
+        game.Galaxy.Starbases.Add(starbase);
+
+        var undiscoveredPlanet = new Planet {
+            Owner = new Empire { Name = "Enemy" },
+            Location = new Coordinate(13, 10), // Distance 3 (< 6)
+        };
+        game.Galaxy.Planets.Add(undiscoveredPlanet);
+
+        var handler = new VisibilityHandler(_alwaysFails);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.Planets.Scouted).DoesNotContain(undiscoveredPlanet);
+        await Assert.That(human.Planets.Known).DoesNotContain(undiscoveredPlanet);
     }
 
     [Test]
@@ -267,7 +389,7 @@ public class VisibilityHandlerTests
         enemyFleet.Ships.Starships = 1;
         game.Galaxy.Fleets.Add(enemyFleet);
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
 
         // Turn 1: scout both planet and fleet
         handler.RefreshVisibility(human, game);
@@ -286,7 +408,7 @@ public class VisibilityHandlerTests
     }
 
     [Test]
-    public async Task StarbaseInRangeOfCapitalIsScouted()
+    public async Task KnownStarbaseInRangeOfCapitalIsReScouted()
     {
         var human = new Empire { Name = "Human" };
         var game = BuildGame(null, ("Human", human));
@@ -302,8 +424,9 @@ public class VisibilityHandlerTests
             Kind = StarbaseKind.CommandBase,
         };
         game.Galaxy.Starbases.Add(starbase);
+        human.Starbases.MarkKnown(starbase);
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Starbases.Scouted).Contains(starbase);
@@ -325,7 +448,7 @@ public class VisibilityHandlerTests
         };
         game.Galaxy.ConstructionSites.Add(constr);
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.ConstructionSites.Scouted).Contains(constr);
@@ -357,14 +480,14 @@ public class VisibilityHandlerTests
             }
         }
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Planets.Scouted.Count).IsEqualTo(9);
     }
 
     [Test]
-    public async Task IndependentWorldInCapitalRangeIsScouted()
+    public async Task KnownIndependentWorldInCapitalRangeIsReScouted()
     {
         var human = new Empire { Name = "Human" };
         var game = BuildGame(null, ("Human", human));
@@ -381,8 +504,9 @@ public class VisibilityHandlerTests
             Location = new Coordinate(14, 10), // Distance 4 from capital (< 6)
         };
         game.Galaxy.Planets.Add(independentWorld);
+        human.Planets.MarkKnown(independentWorld);
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Planets.Scouted).Contains(independentWorld);
@@ -417,7 +541,7 @@ public class VisibilityHandlerTests
         targetFleet.Ships.Starships = 1;
         game.Galaxy.Fleets.Add(targetFleet);
 
-        var handler = new VisibilityHandler();
+        var handler = new VisibilityHandler(_alwaysFails);
         handler.RefreshVisibility(human, game);
 
         // Should be scouted because of command base, not industrial complex
