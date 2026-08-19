@@ -64,12 +64,12 @@ public sealed class FleetMovementHandler : IFleetMovementHandler
 
             MoveTowardDestination(starbase.Location, starbase.Destination.Value, 1, out var nextLocation);
             starbase.Location = nextLocation;
-            starbase.Status = starbase.Location == starbase.Destination.Value
-                ? FleetStatus.Ready
-                : FleetStatus.InTransit;
 
             if (starbase.Location == starbase.Destination.Value) {
                 starbase.Destination = null;
+                starbase.Status = FleetStatus.Ready;
+            } else {
+                starbase.Status = FleetStatus.InTransit;
             }
 
             starbase.YearsUntilNextMove = 1;
