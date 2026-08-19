@@ -11,19 +11,29 @@ then `UpdateWorld` over every planet and starbase, then `UpdateConstruction`, th
 This phase lands `UpdateWorld` for planets first; starbases, construction, and empire-level updates
 follow once that's working.
 
-**Design decisions to lock in before writing code:**
+**Design decisions, resolved:**
 
-- **RNG strategy.** `UpdatePopulation`, `UpdateEfficiency`, and `UpdateTechLevel` all roll dice.
-  Pick one approach and use it everywhere in this phase: inject a `Random` (same pattern as
-  `VisibilityHandler`), or assert bounds/invariants in tests instead of exact values.
-- **Planet/starbase overlap.** Both run through `UpdateWorld` (one procedure, branches on
-  `World.ObjTyp`). Decide: a narrow interface covering the shared fields (`Location`, `Owner`,
-  `Population`, `Efficiency`, `RevolutionIndex`, `Industry`, `Ships`, `Cargo`), or duplicated logic.
-  `IMovable` is the existing precedent for a Fleet/Starbase-shared narrow interface.
-- **`Empire.TotalRevolutionIndex`.** `UpdateUniverse` zeroes `NewTotalRevIndex` at line 1445, then
-  each world's `UpdateRevolution` presumably accumulates into it, and `UpdateEmpire` applies it
-  empire-wide. Verify whether this needs to be genuine per-turn accumulated state or can just be a
-  derived sum over owned worlds' `RevolutionIndex` (matches this project's derive-don't-store bias).
+- **RNG strategy.** Inject a `Random` (same pattern as `VisibilityHandler`'s constructor param, no
+  default). Tests use a `Random` subclass fixing `Next`'s return for deterministic branches, and
+  assert bounds/invariants (e.g. "efficiency never exceeds 100") for the genuinely-random magnitude
+  ones. Translation trap: Pascal's `Rnd(lo,hi)` is inclusive on both ends — `Rnd(2,5)` is
+  `random.Next(2, 6)` in C#, not `random.Next(2, 5)`. Dozens of these calls are coming; check every one.
+- **Planet/starbase overlap — deferred, not decided now.** Read the starbase branch of `UpdateWorld`
+  (UPDATE.PAS:1417-1430): every starbase runs `UpdateEfficiency`/`UpdateTechLevel`/`UpdateDefenses`
+  unconditionally, but the population/food/industry/revolution pipeline only runs for
+  industrial-complex starbases (`STyp=cmp`) — other kinds never touch population or economy at all,
+  and even complexes get a hardcoded `ArtCls` in place of a real world-class field. The overlap is
+  much smaller than "one shared procedure" suggests. Write Commits 1-3 directly against `Planet`,
+  no interface — decide the shared shape at Commit 4, once the actual starbase duplication is visible
+  instead of guessed at from one call site.
+- **`Empire.TotalRevolutionIndex` — genuine stored state, not derived.** `UpdateRevolution` reads
+  `TotalRevIndex(Emp)` mid-tick (last year's committed value) to influence the current world's
+  revolution-index change, while `Rebellion` writes deltas into a separate scratch accumulator
+  `NewTotalRevIndex[Emp]` (independent ± counter driven by rebellion outcomes, not a sum of per-world
+  indices). `UpdateEmpire` commits the scratch value at the end of the tick. This is a
+  snapshot/accumulate/commit pattern across the whole world loop, not something a live sum could
+  reproduce (reading a "current total" partway through would be order-dependent on which worlds had
+  already been processed). Implement `TotalRevolutionIndex` as real state updated the same way.
 
 **Commits, in order:**
 
