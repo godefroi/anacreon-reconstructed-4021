@@ -12,4 +12,11 @@ Bottom-up order: simulation core first, UI last. Each phase gets its own plan/de
 8. **Human interactive turn handler + Terminal.Gui UI** — the last `ITurnHandler` implementation, plus the actual windowed interface (map view, fleet orders, construction, etc.) per `TUI_LIBRARY_RECOMMENDATION.md`.
 9. **Async/hotseat turn mode** — deferred multiplayer option; sequential mode (already built) is the only mode a solo player sees.
 
+## Deferred items
+
+Scope decisions: not on the critical path to a playable game, defer until other phases need them:
+
+- **Probe visibility** — `Empire.Probes` exists; probes grant scouting around their location. Deferred because probe movement (`UpdateProbes`) is not yet implemented. Wire up when the probes phase lands.
+- **Minefield visibility** — `SectorRecord.MineScout` in the original is per-cell (not per-entity); no `EntityVisibility<Minefield>` exists on `Empire`. Requires combat-phase decision on minefield hit resolution and per-cell tracking. Defer to combat or economy phase.
+
 Not scheduled, pull in only if/when needed: v2 gameplay changes and new features from `PASCAL_V1_VS_V2_DIFF.md` (all opt-in, none are baseline).
