@@ -25,23 +25,45 @@ Bottom-up order: simulation core first, UI last. Each phase gets its own plan/de
    - ProduceRawMaterial, GetIndustrialDistribution, UpdateIndustry, Production (UPDATE.PAS:1375-1379). Heavy numerical model; production formula at lines 844-925.
    - Defer UseUpAmbrosia (coupled to Commit 1, adds complexity)
    
+   **Commit 2b: Ambrosia consumption** (optional, if scope allows)
+   - UseUpAmbrosia — UPDATE.PAS:1163-1276, coupled to Commit 2 production (ambrosia addiction logic, affects pop/efficiency/revolution)
+   
    **Commit 3: Tech advancement**
    - UpdateTechLevel(WorldID, Emp, Tech) — UPDATE.PAS:1032-1072, random advancement/decay toward capital
-   - Consider deferring UpdateDefenses/UpdateMilitary (scope creep; not on critical path)
+   
+   **Commit 4: Starbase economy**
+   - Same UpdateWorld sequence as planets, but with SupplyLink/SurplusLink (raw-material distribution across empire). Simpler when planets are working.
+   
+   **Commit 5: Construction and empire-wide updates**
+   - UpdateConstruction(i) — UPDATE.PAS:103-220, countdown and completion logic
+   - UpdateEmpire(Emp) — UPDATE.PAS:222+, apply NewTotalRevIndex accumulation to empire state
+   
+   **Deferred to later phases:**
+   - UpdateDefenses/UpdateMilitary (UPDATE.PAS:1278-1351, 1386) — defense/troop buildup; scope creep for initial economy, pull in if combat phase needs baseline defenses
    
    **Constants to extract:** MaxPop array (UPDATE.PAS:1077-1098), BasePop lookup, TechAdj[], TechAdj2[], K6, SuppliesPerBillion, DrugsPerBillion, ThgLmt() clamp function.
 4. **Galaxy / new-game setup** — galaxy generation or scenario loading, empire creation, initial fleet/planet placement. Needed before any of the above can run against a real game rather than hand-built test fixtures.
 5. **NPE AI** — implement an `ITurnHandler` for computer empires (start with one "classic" implementation; the handler-per-empire design already supports adding an "advanced" variant later).
-6. **Combat** — attack resolution, fleet/starbase destruction, capital loss and empire elimination (the turn loop currently assumes empires never leave `Game.Empires` mid-game — this phase removes that assumption).
-7. **Save/load** — translation layer to read/write original `.SAV` files; explicitly does not shape the in-memory model (per earlier decision).
-8. **Human interactive turn handler + Terminal.Gui UI** — the last `ITurnHandler` implementation, plus the actual windowed interface (map view, fleet orders, construction, etc.) per `TUI_LIBRARY_RECOMMENDATION.md`.
-9. **Async/hotseat turn mode** — deferred multiplayer option; sequential mode (already built) is the only mode a solo player sees.
+6. **Probe movement and visibility** — `UpdateProbes` (deferred from phase 2); probes move each turn and grant scouting around their location. Wire into visibility refresh after probes are moving.
+7. **Combat** — attack resolution, fleet/starbase destruction, capital loss and empire elimination (the turn loop currently assumes empires never leave `Game.Empires` mid-game — this phase removes that assumption). Includes minefield scouting (`SectorRecord.MineScout` per-cell) and minefield hit resolution.
+8. **Save/load** — translation layer to read/write original `.SAV` files; explicitly does not shape the in-memory model (per earlier decision).
+9. **Human interactive turn handler + Terminal.Gui UI** — the last `ITurnHandler` implementation, plus the actual windowed interface (map view, fleet orders, construction, etc.) per `TUI_LIBRARY_RECOMMENDATION.md`.
+10. **Async/hotseat turn mode** — deferred multiplayer option; sequential mode (already built) is the only mode a solo player sees.
 
-## Deferred items
+## Deferred items (ordered by where they become possible)
 
-Scope decisions: not on the critical path to a playable game, defer until other phases need them:
+Scope decisions: not on the critical path to a playable game, deferred until other phases need them.
 
-- **Probe visibility** — `Empire.Probes` exists; probes grant scouting around their location. Deferred because probe movement (`UpdateProbes`) is not yet implemented. Wire up when the probes phase lands.
-- **Minefield visibility** — `SectorRecord.MineScout` in the original is per-cell (not per-entity); no `EntityVisibility<Minefield>` exists on `Empire`. Requires combat-phase decision on minefield hit resolution and per-cell tracking. Defer to combat or economy phase.
+**Economy phase (Commits 4-5):**
+- **Starbase economy variants** — SupplyLink/SurplusLink raw-material redistribution (UPDATE.PAS:1408,1413) and industrial-complex-only production (lines 1403-1415 branch on STyp=cmp)
+- **UpdateDefenses/UpdateMilitary** — defense and troop buildup per world (UPDATE.PAS:1278-1351, 1386). Scope creep; pull in only if combat phase needs baseline defensive state.
+- **UseUpAmbrosia full logic** — Commit 2b optional; ambrosia addiction effects (death, riots, efficiency loss) couple to production.
 
-Not scheduled, pull in only if/when needed: v2 gameplay changes and new features from `PASCAL_V1_VS_V2_DIFF.md` (all opt-in, none are baseline).
+**After phase 6 (Probe movement):**
+- **Probe visibility in scouting** — probes grant scouting radius around their location, fed into RefreshVisibility. Deferred: probe movement (`UpdateProbes`) not yet implemented.
+
+**Phase 7 (Combat):**
+- **Minefield visibility and hit resolution** — `SectorRecord.MineScout` is per-cell (not per-entity; no `EntityVisibility<Minefield>`). Requires combat mechanics for minefield damage and per-cell tracking. Deferred to combat phase.
+
+**Not scheduled, pull in only if/when needed:**
+- v2 gameplay changes and new features from `PASCAL_V1_VS_V2_DIFF.md` (all opt-in, none are baseline)
