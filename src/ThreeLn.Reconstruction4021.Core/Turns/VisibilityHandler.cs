@@ -25,52 +25,20 @@ public sealed class VisibilityHandler : IVisibilityHandler
 
     public void RefreshVisibility(Empire empire, Game game)
     {
-        // Fleet visibility is ephemeral — clear completely each turn (ScoutFleets rewrites it).
+        // Fleet visibility is ephemeral — clear completely each turn (INTRFACE.PAS:ScoutFleets rewrites all).
         empire.Fleets.Clear();
 
         // Planet/starbase/stargate/construction visibility: clear only Scouted, keep Known (INTRFACE.PAS:ClearScoutSet).
-        ClearScoutedOnly(empire);
+        empire.Planets.ClearScouted();
+        empire.Starbases.ClearScouted();
+        empire.Stargates.ClearScouted();
+        empire.ConstructionSites.ClearScouted();
 
         // Rebuild fleet visibility (INTRFACE.PAS:ScoutFleets).
         ScoutFleets(empire, game);
 
         // Rebuild entity visibility (INTRFACE.PAS:ScoutObjects + DetermineIfScouted).
         ScoutObjects(empire, game);
-    }
-
-    private static void ClearScoutedOnly(Empire empire)
-    {
-        // Only clear Scouted sets; Known persists.
-        var clearedPlanets = new List<Planet>();
-        var clearedStarbases = new List<Starbase>();
-        var clearedStargates = new List<Stargate>();
-        var clearedConstrs = new List<ConstructionSite>();
-
-        foreach (var p in empire.Planets.Scouted)
-            clearedPlanets.Add(p);
-        foreach (var s in empire.Starbases.Scouted)
-            clearedStarbases.Add(s);
-        foreach (var g in empire.Stargates.Scouted)
-            clearedStargates.Add(g);
-        foreach (var c in empire.ConstructionSites.Scouted)
-            clearedConstrs.Add(c);
-
-        // Re-create visibility collections to drop Scouted but keep Known.
-        empire.Planets.Clear();
-        foreach (var p in clearedPlanets)
-            empire.Planets.MarkKnown(p);
-
-        empire.Starbases.Clear();
-        foreach (var s in clearedStarbases)
-            empire.Starbases.MarkKnown(s);
-
-        empire.Stargates.Clear();
-        foreach (var g in clearedStargates)
-            empire.Stargates.MarkKnown(g);
-
-        empire.ConstructionSites.Clear();
-        foreach (var c in clearedConstrs)
-            empire.ConstructionSites.MarkKnown(c);
     }
 
     private static void ScoutFleets(Empire empire, Game game)

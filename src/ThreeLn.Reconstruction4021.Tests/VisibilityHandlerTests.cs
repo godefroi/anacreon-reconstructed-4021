@@ -274,12 +274,14 @@ public class VisibilityHandlerTests
         await Assert.That(human.Planets.Scouted).Contains(enemyPlanet);
         await Assert.That(human.Fleets.Scouted).Contains(enemyFleet);
 
-        // Move fleet far away
+        // Move fleet far away; move human planet away so enemy planet is no longer adjacent/scanned
         enemyFleet.Location = new Coordinate(0, 0);
+        humanPlanet.Location = new Coordinate(10, 10);
 
-        // Turn 2: planet should still be known, fleet should disappear
+        // Turn 2: planet should still be known (not scouted), fleet should disappear
         handler.RefreshVisibility(human, game);
-        await Assert.That(human.Planets.Scouted).Contains(enemyPlanet); // Planet Known persists
+        await Assert.That(human.Planets.Scouted).DoesNotContain(enemyPlanet); // Scouted cleared
+        await Assert.That(human.Planets.Known).Contains(enemyPlanet); // Known persists
         await Assert.That(human.Fleets.Scouted).DoesNotContain(enemyFleet); // Fleet visibility reset
     }
 
@@ -359,6 +361,31 @@ public class VisibilityHandlerTests
         handler.RefreshVisibility(human, game);
 
         await Assert.That(human.Planets.Scouted.Count).IsEqualTo(9);
+    }
+
+    [Test]
+    public async Task IndependentWorldInCapitalRangeIsScouted()
+    {
+        var human = new Empire { Name = "Human" };
+        var game = BuildGame(null, ("Human", human));
+
+        var capital = new Planet {
+            Owner = human,
+            Location = new Coordinate(10, 10),
+        };
+        game.Galaxy.Planets.Add(capital);
+        human.Capital = capital;
+
+        var independentWorld = new Planet {
+            Owner = Empire.Independent,
+            Location = new Coordinate(14, 10), // Distance 4 from capital (< 6)
+        };
+        game.Galaxy.Planets.Add(independentWorld);
+
+        var handler = new VisibilityHandler();
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.Planets.Scouted).Contains(independentWorld);
     }
 
     [Test]

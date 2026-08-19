@@ -22,6 +22,11 @@ public sealed class EntityVisibility<T> where T : notnull
         _scouted.Add(entity);
     }
 
+    public void ClearScouted()
+    {
+        _scouted.Clear();
+    }
+
     public void Clear()
     {
         _known.Clear();
