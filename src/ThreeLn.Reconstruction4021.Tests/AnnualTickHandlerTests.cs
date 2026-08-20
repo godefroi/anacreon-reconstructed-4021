@@ -7,11 +7,14 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Verifies Commit 1 of the economy phase: population growth, efficiency, food consumption, and
-/// revolution/rebellion for planets (UPDATE.PAS:UpdateWorld's planet branch, minus the production
-/// pipeline and tech advancement, which are later commits). All tests use FixedRandom(0), which
-/// makes every Rnd(min,max) call resolve to exactly `min` — every value below is hand-computed
-/// against that fixed floor, not asserted against a range.
+/// Verifies Commit 1 of the economy phase: population growth, efficiency, and food consumption for
+/// planets (UPDATE.PAS:UpdateWorld's planet branch, minus the production pipeline and tech
+/// advancement, which are later commits). Revolution/rebellion has its own class,
+/// AnnualTickHandlerRevolutionTests, since it's golden-file-backed rather than hand-traced. All
+/// tests here use FixedRandom(0), which makes every Rnd(min,max) call resolve to exactly `min` —
+/// every value below is hand-computed against that fixed floor, not asserted against a range. This
+/// is safe to keep hardcoded (not golden-file-backed): none of UpdatePopulation/UpdateEfficiency/
+/// UseUpFood involve a sqrt/pow cascade or other formula that's error-prone to hand-verify.
 /// </summary>
 public class AnnualTickHandlerTests
 {
@@ -122,50 +125,66 @@ public class AnnualTickHandlerTests
         await Assert.That(planet.RevolutionIndex).IsEqualTo(40);
     }
 
-    [Test]
-    public async Task WorldRebelsWhenRevolutionIndexExceedsThreshold()
+}
+
+/// <summary>
+/// Verifies revolution/rebellion for planets (UPDATE.PAS's UpdateRevolution/Rebellion pair, economy
+/// phase Commit 1). MatchesGoldenFile checks the real Pascal arithmetic across a case matrix
+/// (including the previously-untested military-suppression branch, UPDATE.PAS:715-735) against
+/// reference/verify/golden/revolution.golden — computed by a real FreePascal run of
+/// reference/verify/revolution.pas (GoldenFileTests), not hand-typed. revolution.pas's
+/// UpdateRevolutionScenario starts exactly where UpdateRevolution itself starts — it does NOT run
+/// UpdatePopulation/UpdateEfficiency first, unlike RunAnnualTick — so RevolutionCases tracks two
+/// population values per case; see its doc comment. The two tests below stay hardcoded: they assert
+/// cross-tick bookkeeping behavior (an accumulator resets each year; an inverted Rnd range from a
+/// prior tick's negative accumulator must not throw), not a single tick's Pascal arithmetic.
+/// </summary>
+public class AnnualTickHandlerRevolutionTests
+{
+    private static Game BuildGame(params Planet[] planets)
     {
-        // Population(2350) > MaxPop[Barren](2340) -> Rnd(-10,10)=-10 -> Population=2340 (UpdatePopulation).
-        // Cargo.Supplies=1000 comfortably covers foodNeeded=585 -> no starvation.
-        // UpdateRevolution: ChangeRevIndex(0 + Rnd(-5,2)=-5) drops RevolutionIndex from 95 to 90.
-        // Military=0 (no Legions/NinjaLegions) never exceeds optimumMilitary -> troop branch skipped.
-        // Rebellion trigger: RevolutionIndex(90)>75 and Rnd(1,100)=1<90 and Type<>Capital -> Rebellion fires.
-        // Inside Rebellion: rebels=max(1,ThgLmt(sqrt(2340)*65))=3144, chanceToEndRebel=0 (military=0),
-        // Rnd(1,100)=1 is not < 0 -> world rebels (not suppressed):
-        //   Owner->Independent, Type->Independent, SelfSufficiency->5/5/5/5,
-        //   ChangeRevIndex(-Rnd(40,50)=-40) -> RevolutionIndex=50, Cargo.Legions=rebels=3144,
-        //   Empire.TotalRevolutionIndex scratch += Rnd(5,10)=5.
-        // Tail: Population unchanged (military=0), Efficiency: UpdateEfficiency(80, bracket 76-90,
-        // Rnd(0,3)=0) leaves Efficiency=80, then Rebellion's Math.Max(0,80-Rnd(5,15)=5)=75.
+        var game = new Game(new Core.Galaxy.Galaxy(size: 20));
+        game.Galaxy.Planets.AddRange(planets);
+        return game;
+    }
+
+    [Test]
+    [MethodDataSource(typeof(PascalGroundTruth.RevolutionCases), nameof(PascalGroundTruth.RevolutionCases.AsDataSource))]
+    public async Task MatchesGoldenFile(PascalGroundTruth.RevolutionCase c)
+    {
+        var golden = PascalGroundTruth.GoldenFile.Load("revolution.golden");
+
         var owner = new Empire { Name = "Test" };
         var planet = new Planet {
             Location = new Coordinate(0, 0),
             Owner = owner,
-            Population = 2350,
-            Class = WorldClass.Barren,
-            TechLevel = TechLevel.Warp,
-            Efficiency = 80,
-            RevolutionIndex = 95,
-            Type = WorldType.Agricultural,
+            Population = c.PlanetPop,
+            Class = c.Class,
+            TechLevel = c.Tech,
+            Efficiency = c.Efficiency,
+            RevolutionIndex = c.RevIndex,
+            Type = c.Type,
         };
-        planet.Cargo.Supplies = 1000;
+        planet.Cargo.Legions = c.Legions;
+        planet.Cargo.NinjaLegions = c.Ninja;
+        // UseUpFood runs between UpdatePopulation and UpdateRevolution; foodNeeded is
+        // ThgLmt((Population/100)*25), which ThgLmt itself caps at MaxResources (9999) no matter how
+        // large Population is — so Supplies=9999 guarantees no starvation for any case here.
+        planet.Cargo.Supplies = 9999;
         var game = BuildGame(planet);
         game.Empires.Add(owner);
         var handler = new AnnualTickHandler(new FixedRandom(0));
 
         handler.RunAnnualTick(game);
 
-        await Assert.That(planet.Owner).IsSameReferenceAs(Empire.Independent);
-        await Assert.That(planet.Type).IsEqualTo(WorldType.Independent);
-        await Assert.That(planet.RevolutionIndex).IsEqualTo(50);
-        await Assert.That(planet.Population).IsEqualTo(2340);
-        await Assert.That(planet.Efficiency).IsEqualTo(75);
-        await Assert.That(planet.Cargo.Legions).IsEqualTo(3144);
-        await Assert.That(planet.SelfSufficiency.Chemical).IsEqualTo(5);
-        await Assert.That(planet.SelfSufficiency.Metal).IsEqualTo(5);
-        await Assert.That(planet.SelfSufficiency.Supply).IsEqualTo(5);
-        await Assert.That(planet.SelfSufficiency.Trillum).IsEqualTo(5);
-        await Assert.That(owner.TotalRevolutionIndex).IsEqualTo(5);
+        var expected = golden[c.Name];
+        await Assert.That(planet.Cargo.Legions).IsEqualTo(int.Parse(expected["legions"]));
+        await Assert.That(planet.Cargo.NinjaLegions).IsEqualTo(int.Parse(expected["ninja"]));
+        await Assert.That(planet.Population).IsEqualTo(int.Parse(expected["population"]));
+        await Assert.That(planet.Efficiency).IsEqualTo(int.Parse(expected["efficiency"]));
+        await Assert.That(planet.RevolutionIndex).IsEqualTo(int.Parse(expected["revindex"]));
+        await Assert.That(owner.TotalRevolutionIndex).IsEqualTo(int.Parse(expected["total_rev_delta"]));
+        await Assert.That(planet.Owner.IsIndependent).IsEqualTo(bool.Parse(expected["rebelled"]));
     }
 
     [Test]
@@ -239,15 +258,17 @@ public class AnnualTickHandlerTests
 /// <summary>
 /// Verifies Commit 2 of the economy phase: raw material and ship/cargo production for planets
 /// (UPDATE.PAS's ProduceRawMaterial/GetIndustrialDistribution/UpdateIndustry/Production, called via
-/// AnnualTickHandler.RunProductionPipeline). Expected values here are NOT hand-derived — Pop=1000,
-/// Class=EthCls, and Tech=Gate were deliberately chosen to fully exercise the sqrt/pow cascade in
-/// GetIndustrialDistribution, which is infeasible to hand-trace reliably. Instead, every expected
-/// value was produced by reference/verify/production.pas (shared tables/helpers in common.pas), a
-/// standalone FreePascal harness that transcribes the literal DATACNST.PAS/INTRFACE.PAS/UPDATE.PAS/
-/// MISC.PAS tables and procedures byte-for-byte and runs the identical call sequence
-/// RunProductionPipeline uses, with Rnd hardcoded to return its lower bound (matching
-/// FixedRandom(0)'s semantics exactly). This is a from-source ground truth, not a self-check against
-/// this C# port — see that file's header comment for its one known deviation.
+/// AnnualTickHandler.RunProductionPipeline). MatchesGoldenFile checks the real Pascal arithmetic —
+/// Pop=1000, Class=EthCls, and Tech=Gate cases deliberately exercise the sqrt/pow cascade in
+/// GetIndustrialDistribution, infeasible to hand-trace reliably — against
+/// reference/verify/golden/production.golden, computed by a real FreePascal run of
+/// reference/verify/production.pas's FullPipeline (GoldenFileTests), not hand-typed. Cargo.Supplies
+/// and Cargo.Ambrosia are excluded from that comparison: UseUpFood/UseUpAmbrosia run later in the
+/// same tick and consume them based on post-growth Population, which production.pas's ground truth
+/// (computed on the pre-growth Population the pipeline actually sees) doesn't model — see
+/// NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction for the one case that actually exercises
+/// that gap. See production.pas's header comment for its one known deviation (the split
+/// ProductionShips/ProductionCargo loops), which none of ProductionCases's cases trigger.
 /// </summary>
 public class AnnualTickHandlerProductionTests
 {
@@ -258,161 +279,100 @@ public class AnnualTickHandlerProductionTests
         return game;
     }
 
-    [Test]
-    public async Task TrillumProductionDrawsDownReservesWhenIndustryAlreadyDeveloped()
+    private static Planet MakePlanet(PascalGroundTruth.ProductionCase c, Empire owner)
     {
-        // ProduceRawMaterial runs before UpdateIndustry in RunProductionPipeline, so this result
-        // depends only on the Industry level set here, not on anything GetIndustrialDistribution/
-        // UpdateIndustry compute afterward for this tick.
-        var owner = new Empire { Name = "Test" };
         var planet = new Planet {
             Location = new Coordinate(0, 0),
             Owner = owner,
-            Class = WorldClass.EarthLike,
-            Type = WorldType.TrillumMine,
-            TechLevel = TechLevel.Gate,
-            Efficiency = 100,
-            Population = 1000,
-            TrillumReserve = 500,
+            Class = c.Class,
+            Type = c.Type,
+            TechLevel = c.Tech,
+            Efficiency = c.Efficiency,
+            Population = c.Population,
+            TrillumReserve = c.TrillumReserve,
+            IsAddictedToAmbrosia = c.AmbAddict,
         };
-        planet.Industry.TrillumMining = 100;
-        planet.Cargo.Supplies = 1000;
-        var game = BuildGame(planet);
-        game.Empires.Add(owner);
-        var handler = new AnnualTickHandler(new FixedRandom(0));
-
-        handler.RunAnnualTick(game);
-
-        await Assert.That(planet.Cargo.Trillum).IsEqualTo(238);
-        await Assert.That(planet.TrillumReserve).IsEqualTo(498);
+        planet.Industry.Bioindustry = c.IndusBio;
+        planet.Industry.Chemical = c.IndusChe;
+        planet.Industry.Mining = c.IndusMin;
+        planet.Industry.ShipyardGeneral = c.IndusSYG;
+        planet.Industry.ShipyardJump = c.IndusSYJ;
+        planet.Industry.ShipyardStarship = c.IndusSYS;
+        planet.Industry.ShipyardTransport = c.IndusSYT;
+        planet.Industry.Supply = c.IndusSup;
+        planet.Industry.TrillumMining = c.IndusTri;
+        planet.Cargo.Legions = c.CargoMen;
+        planet.Cargo.NinjaLegions = c.CargoNnj;
+        planet.Cargo.Ambrosia = c.CargoAmb;
+        planet.Cargo.Chemicals = c.CargoChe;
+        planet.Cargo.Metals = c.CargoMet;
+        planet.Cargo.Supplies = c.CargoSup;
+        planet.Cargo.Trillum = c.CargoTri;
+        return planet;
     }
 
     [Test]
-    public async Task PreTechWorldOnlyProducesSuppliesEvenWithOtherIndustryDeveloped()
+    [MethodDataSource(typeof(PascalGroundTruth.ProductionCases), nameof(PascalGroundTruth.ProductionCases.AsDataSource))]
+    public async Task MatchesGoldenFile(PascalGroundTruth.ProductionCase c)
     {
-        // TechDev[PreTchLvl] = [sup] only, so che/tri production is gated off entirely despite
-        // Industry.Chemical/TrillumMining both being fully developed (100) — matching UPDATE.PAS:1359-1369.
+        var golden = PascalGroundTruth.GoldenFile.Load("production.golden");
+        var expected = golden[c.Name];
+
         var owner = new Empire { Name = "Test" };
-        var planet = new Planet {
-            Location = new Coordinate(0, 0),
-            Owner = owner,
-            Class = WorldClass.EarthLike,
-            Type = WorldType.TrillumMine,
-            TechLevel = TechLevel.PreTech,
-            Efficiency = 100,
-            Population = 0, // kept tiny so UpdatePopulation/UseUpFood can't perturb Cargo.Supplies below
-            TrillumReserve = 500,
-        };
-        planet.Industry.Chemical = 100;
-        planet.Industry.TrillumMining = 100;
-        planet.Industry.Supply = 100;
+        if (c.AllShipsUnlocked)
+            owner.Technology.Ships.UnionWith(Enum.GetValues<ShipType>());
+        var planet = MakePlanet(c, owner);
         var game = BuildGame(planet);
         game.Empires.Add(owner);
         var handler = new AnnualTickHandler(new FixedRandom(0));
 
         handler.RunAnnualTick(game);
 
-        await Assert.That(planet.Cargo.Trillum).IsEqualTo(0);
-        await Assert.That(planet.Cargo.Chemicals).IsEqualTo(0);
-        await Assert.That(planet.Cargo.Supplies).IsEqualTo(122);
-        await Assert.That(planet.TrillumReserve).IsEqualTo(500);
+        await Assert.That(planet.Industry.Bioindustry).IsEqualTo(int.Parse(expected["bio"]));
+        await Assert.That(planet.Industry.Chemical).IsEqualTo(int.Parse(expected["che"]));
+        await Assert.That(planet.Industry.Mining).IsEqualTo(int.Parse(expected["min"]));
+        await Assert.That(planet.Industry.ShipyardGeneral).IsEqualTo(int.Parse(expected["syg"]));
+        await Assert.That(planet.Industry.ShipyardJump).IsEqualTo(int.Parse(expected["syj"]));
+        await Assert.That(planet.Industry.ShipyardStarship).IsEqualTo(int.Parse(expected["sys"]));
+        await Assert.That(planet.Industry.ShipyardTransport).IsEqualTo(int.Parse(expected["syt"]));
+        await Assert.That(planet.Industry.Supply).IsEqualTo(int.Parse(expected["sup"]));
+        await Assert.That(planet.Industry.TrillumMining).IsEqualTo(int.Parse(expected["tri"]));
+
+        await Assert.That(planet.Ships.Fighters).IsEqualTo(int.Parse(expected["fgt"]));
+        await Assert.That(planet.Ships.HunterKillers).IsEqualTo(int.Parse(expected["hkr"]));
+        await Assert.That(planet.Ships.Jumpships).IsEqualTo(int.Parse(expected["jmp"]));
+        await Assert.That(planet.Ships.Jumptransports).IsEqualTo(int.Parse(expected["jtn"]));
+        await Assert.That(planet.Ships.Penetrators).IsEqualTo(int.Parse(expected["pen"]));
+        await Assert.That(planet.Ships.Starships).IsEqualTo(int.Parse(expected["ssp"]));
+        await Assert.That(planet.Ships.Transports).IsEqualTo(int.Parse(expected["trn"]));
+
+        await Assert.That(planet.Cargo.Legions).IsEqualTo(int.Parse(expected["cargomen"]));
+        await Assert.That(planet.Cargo.NinjaLegions).IsEqualTo(int.Parse(expected["cargonnj"]));
+        await Assert.That(planet.Cargo.Chemicals).IsEqualTo(int.Parse(expected["cargoche"]));
+        await Assert.That(planet.Cargo.Metals).IsEqualTo(int.Parse(expected["cargomet"]));
+        await Assert.That(planet.Cargo.Trillum).IsEqualTo(int.Parse(expected["cargotri"]));
+        await Assert.That(planet.TrillumReserve).IsEqualTo(int.Parse(expected["trillumreserve"]));
     }
 
     [Test]
-    public async Task FullProductionPipelineForCapitalTypeWorld()
+    public async Task NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction()
     {
-        // Exercises the entire pipeline in composed order, including GetIndustrialDistribution's
-        // Gamma/Beta cascade (Capital has a principal industry, so it takes the non-PI-less branch)
-        // and Production building all seven ship types from one developed ShipyardGeneral level.
+        // Same setup as the "NinjaProductionThrottledByScarceAmbrosia" golden case, checking the one
+        // field production.pas can't ground-truth (see this class's header comment): Cargo.Ambrosia
+        // ends the tick at 0, not because production touched it (golden's cargoamb stays 5, unchanged
+        // from what this case starts with), but because UseUpAmbrosia (population upkeep, running
+        // later in the same UpdateWorld) needs ThgLmt((1000/100)*11.5)=115 for 1000 population against
+        // only 5 in stock -- nowhere near enough, so it's fully drained (halved-need branch: 115/2=57>5).
+        var c = PascalGroundTruth.ProductionCases.All.Single(x => x.Name == "NinjaProductionThrottledByScarceAmbrosia");
         var owner = new Empire { Name = "Test" };
-        owner.Technology.Ships.UnionWith(Enum.GetValues<ShipType>());
-        var planet = new Planet {
-            Location = new Coordinate(0, 0),
-            Owner = owner,
-            Class = WorldClass.EarthLike,
-            Type = WorldType.Capital,
-            TechLevel = TechLevel.Gate,
-            Efficiency = 100,
-            Population = 1000,
-            TrillumReserve = 5000,
-        };
-        planet.Industry.ShipyardGeneral = 100;
-        planet.Industry.TrillumMining = 100;
-        planet.Cargo.Chemicals = 5000;
-        planet.Cargo.Metals = 5000;
-        planet.Cargo.Supplies = 5000;
-        planet.Cargo.Trillum = 5000;
+        var planet = MakePlanet(c, owner);
         var game = BuildGame(planet);
         game.Empires.Add(owner);
         var handler = new AnnualTickHandler(new FixedRandom(0));
 
         handler.RunAnnualTick(game);
 
-        await Assert.That(planet.Industry.Bioindustry).IsEqualTo(0);
-        await Assert.That(planet.Industry.Chemical).IsEqualTo(10);
-        await Assert.That(planet.Industry.Mining).IsEqualTo(13);
-        await Assert.That(planet.Industry.ShipyardGeneral).IsEqualTo(115);
-        await Assert.That(planet.Industry.ShipyardJump).IsEqualTo(0);
-        await Assert.That(planet.Industry.ShipyardStarship).IsEqualTo(0);
-        await Assert.That(planet.Industry.ShipyardTransport).IsEqualTo(0);
-        await Assert.That(planet.Industry.Supply).IsEqualTo(10);
-        await Assert.That(planet.Industry.TrillumMining).IsEqualTo(50);
-
-        await Assert.That(planet.Ships.Fighters).IsEqualTo(113);
-        await Assert.That(planet.Ships.HunterKillers).IsEqualTo(21);
-        await Assert.That(planet.Ships.Jumpships).IsEqualTo(37);
-        await Assert.That(planet.Ships.Jumptransports).IsEqualTo(21);
-        await Assert.That(planet.Ships.Penetrators).IsEqualTo(16);
-        await Assert.That(planet.Ships.Starships).IsEqualTo(8);
-        await Assert.That(planet.Ships.Transports).IsEqualTo(42);
-
-        await Assert.That(planet.Cargo.Chemicals).IsEqualTo(4863);
-        await Assert.That(planet.Cargo.Metals).IsEqualTo(4211);
-        await Assert.That(planet.Cargo.Trillum).IsEqualTo(5217);
-        await Assert.That(planet.TrillumReserve).IsEqualTo(4998);
-    }
-
-    [Test]
-    public async Task NinjaProductionThrottledByScarceAmbrosiaButProductionItselfNeverDeductsIt()
-    {
-        // Preserves UPDATE.PAS:896-916's asymmetric raw-material handling: Ambrosia's requirement is
-        // checked (and throttles ninja production when scarce) but only che/met/sup/tri are ever
-        // actually subtracted from cargo by *production*. Ambrosia still ends the tick at 0, not
-        // because production touched it, but because UseUpAmbrosia (population upkeep, running later
-        // in the same UpdateWorld) needs ThgLmt((1000/100)*11.5)=115 for 1000 population against only
-        // 5 in stock -- nowhere near enough, so it's fully drained (halved-need branch: 115/2=57 > 5).
-        var owner = new Empire { Name = "Test" };
-        var planet = new Planet {
-            Location = new Coordinate(0, 0),
-            Owner = owner,
-            Class = WorldClass.EarthLike,
-            Type = WorldType.NinjaWorld,
-            TechLevel = TechLevel.Gate,
-            Efficiency = 100,
-            Population = 1000,
-            TrillumReserve = 5000,
-        };
-        planet.Industry.Bioindustry = 100;
-        planet.Cargo.Chemicals = 5000;
-        planet.Cargo.Metals = 5000;
-        planet.Cargo.Supplies = 5000;
-        planet.Cargo.Trillum = 5000;
-        planet.Cargo.Ambrosia = 5;
-        var game = BuildGame(planet);
-        game.Empires.Add(owner);
-        var handler = new AnnualTickHandler(new FixedRandom(0));
-
-        handler.RunAnnualTick(game);
-
-        await Assert.That(planet.Industry.Bioindustry).IsEqualTo(97);
-        await Assert.That(planet.Industry.Chemical).IsEqualTo(21);
-        await Assert.That(planet.Industry.Mining).IsEqualTo(6);
-        await Assert.That(planet.Industry.Supply).IsEqualTo(10);
-        await Assert.That(planet.Industry.TrillumMining).IsEqualTo(6);
-
-        await Assert.That(planet.Cargo.NinjaLegions).IsEqualTo(5);
         await Assert.That(planet.Cargo.Ambrosia).IsEqualTo(0);
-        await Assert.That(planet.Cargo.Chemicals).IsEqualTo(4998);
     }
 }
 
@@ -445,7 +405,7 @@ public class AnnualTickHandlerAmbrosiaTests
 {
     private static Game BuildGame(params Planet[] planets)
     {
-        var game = new Game(new Core.Galaxy.Galaxy(size: 20));
+        var game = new Game(new Galaxy(size: 20));
         game.Galaxy.Planets.AddRange(planets);
         return game;
     }

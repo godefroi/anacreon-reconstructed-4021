@@ -3,10 +3,10 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
 /// <summary>
-/// Named inputs shared between the golden-file generator (AmbrosiaGoldenFileTests, [Explicit],
-/// requires fpc) and the always-on AnnualTickHandlerAmbrosiaTests.MatchesGoldenFile. Only inputs
-/// live here — expected outputs live exclusively in reference/verify/golden/ambrosia.golden,
-/// computed by a real FreePascal run of ambrosia.pas, never hand-typed.
+/// Named inputs shared between the golden-file generator (GoldenFileTests, [Explicit], requires
+/// fpc) and the always-on AnnualTickHandlerAmbrosiaTests.MatchesGoldenFile. Only inputs live here —
+/// expected outputs live exclusively in reference/verify/golden/ambrosia.golden, computed by a real
+/// FreePascal run of ambrosia.pas, never hand-typed.
 /// </summary>
 public sealed record AmbrosiaCase(
     string Name,
@@ -16,7 +16,7 @@ public sealed record AmbrosiaCase(
     int Efficiency,
     int StartAmbrosia,
     bool StartAddicted,
-    int RngFixedValue);
+    int RngFixedValue) : INamedCase;
 
 internal static class AmbrosiaCases
 {

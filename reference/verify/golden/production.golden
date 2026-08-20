@@ -1,0 +1,4 @@
+case=TrillumDrawsDownReserves;bio=0;che=0;min=0;syg=0;syj=0;sys=0;syt=0;sup=10;tri=100;fgt=0;hkr=0;jmp=0;jtn=0;pen=0;ssp=0;trn=0;cargomen=0;cargonnj=0;cargoamb=0;cargoche=0;cargomet=0;cargosup=1000;cargotri=238;trillumreserve=498
+case=PreTechOnlyProducesSupplies;bio=0;che=50;min=0;syg=0;syj=0;sys=0;syt=0;sup=50;tri=50;fgt=0;hkr=0;jmp=0;jtn=0;pen=0;ssp=0;trn=0;cargomen=0;cargonnj=0;cargoamb=0;cargoche=0;cargomet=0;cargosup=122;cargotri=0;trillumreserve=500
+case=FullPipelineCapitalWorld;bio=0;che=10;min=13;syg=115;syj=0;sys=0;syt=0;sup=10;tri=50;fgt=113;hkr=21;jmp=37;jtn=21;pen=16;ssp=8;trn=42;cargomen=0;cargonnj=0;cargoamb=0;cargoche=4863;cargomet=4211;cargosup=5000;cargotri=5217;trillumreserve=4998
+case=NinjaProductionThrottledByScarceAmbrosia;bio=97;che=21;min=6;syg=0;syj=0;sys=0;syt=0;sup=10;tri=6;fgt=0;hkr=0;jmp=0;jtn=0;pen=0;ssp=0;trn=0;cargomen=0;cargonnj=5;cargoamb=5;cargoche=4998;cargomet=4871;cargosup=5000;cargotri=5000;trillumreserve=5000

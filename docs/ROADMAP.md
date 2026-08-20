@@ -43,9 +43,12 @@ follow once that's working.
    *and* raises revolution index; these two are coupled, don't split them) → `UpdateRevolution`
    (full body, including the military-suppression branch and `Rebellion`). `HostileLife` shipped
    with this commit too (cheap, sits right after `UpdateRevolution` in Pascal) though it isn't its
-   own roadmap line. Untested branches, faithful to source but never exercised: `HostileLife`, and
-   the military-suppression path (`Military>OptimumMilitary`, UPDATE.PAS:715-735) — add coverage if
-   a future change touches either.
+   own roadmap line. Untested branch, faithful to source but never exercised: `HostileLife` — add
+   coverage if a future change touches it. `AnnualTickHandlerTests` covers population/efficiency/food
+   (hardcoded — no sqrt/pow cascade or other formula that's error-prone to hand-verify);
+   `AnnualTickHandlerRevolutionTests` covers revolution/rebellion, golden-file-backed (see below),
+   including the previously-untested military-suppression path (`Military>OptimumMilitary`,
+   UPDATE.PAS:715-735).
 2. ✅ **Industry and production** (planets only) — `ProduceRawMaterial`, `GetIndustrialDistribution`,
    `UpdateIndustry`, `Production` (UPDATE.PAS:1375-1379; production formula at 844-925), inserted
    before `UpdateEfficiency` in `UpdateWorld` (Pascal runs the whole production pipeline first).
@@ -53,36 +56,41 @@ follow once that's working.
    `TechDev`'s monotonic structure) rather than modeling per-empire incremental research — nothing
    seeds or grows `Empire.Technology.Ships` yet (that needs both new-game setup, Phase 2, and
    `NewTechLevel`'s per-tick research rolls, Commit 5 below), so ship production is correct but inert
-   until those land. Verified against `reference/verify/production.pas` (shared tables/helpers in
-   `common.pas`), a standalone FreePascal harness that transcribes the literal Pascal tables/procedures
-   and runs identical inputs (see its header comment for one known deviation) — this caught two real
-   bugs: `SelfSufficiencySettings` defaulted to 0 instead of Pascal's `InitializeISSP` default of 5
-   (badly distorting `GetIndustrialDistribution`'s sqrt terms), and FreePascal's built-in `Round()` is
-   banker's rounding, not Turbo Pascal's round-half-away-from-zero (fixed with a `PascalRound` helper
-   in `common.pas`) — both missed by hand-tracing. `reference/verify/revolution.pas` does the same for
-   `UpdateRevolution`/`Rebellion` (Commit 1), including the previously-untested military-suppression
-   branch (UPDATE.PAS:715-735) — see `RevolutionPascalVerificationTests.cs`.
+   until those land. `AnnualTickHandlerProductionTests` — Pop=1000/Class=EthCls/Tech=Gate cases
+   deliberately exercise the sqrt/pow cascade in `GetIndustrialDistribution`, infeasible to hand-trace
+   reliably — is golden-file-backed via `reference/verify/production.pas`'s `FullPipeline` (see
+   below); this originally caught two real bugs: `SelfSufficiencySettings` defaulted to 0 instead of
+   Pascal's `InitializeISSP` default of 5 (badly distorting `GetIndustrialDistribution`'s sqrt terms),
+   and FreePascal's built-in `Round()` is banker's rounding, not Turbo Pascal's round-half-away-from-
+   zero (fixed with a `PascalRound` helper in `common.pas`) — both missed by hand-tracing.
    - ✅ **Commit 2b, ambrosia addiction** — `UseUpAmbrosia` (UPDATE.PAS:1163-1276), inserted between
      `UseUpFood` and `UpdateRevolution`. Makes `IsAddictedToAmbrosia` real state instead of a
      permanently-false flag Commit 2's own production pipeline already read (`AmbrosiaAdj` in
-     `GetIndustrialDistribution`/`UpdateIndustry`). Introduces a **golden-file** pattern for
-     ground-truth tests, piloted here: `reference/verify/ambrosia.pas` is a from-source
-     transcription (not copied from the C# port); `AmbrosiaGoldenFileTests` ([Explicit], requires
-     fpc) runs it and writes `reference/verify/golden/ambrosia.golden`, a committed
-     `case=Name;key=value;...` file; `AnnualTickHandlerAmbrosiaTests.MatchesGoldenFile` (always-on,
-     data-driven via `AmbrosiaCases`/`[MethodDataSource]`) reads that file and asserts the C# port
-     against it. This replaces the earlier approach of hand-typing expected values into both an
-     opt-in harness-backed test and a hardcoded regular test independently — two hardcoded sets can
-     silently agree with the same mistake; a golden file traces every regular-suite assertion to one
-     real Pascal computation. Revolution/Production predate this pattern and haven't been migrated.
-     Covers addiction onset and the shortage-death/efficiency/riot/tech-regression branches; two
-     guard tests (never-decrement-below-`PreTchLvl`, no-ambrosia-cargo no-op) stay hardcoded since
-     they assert control flow, not arithmetic. One sub-branch (industrial sabotage,
+     `GetIndustrialDistribution`/`UpdateIndustry`). `AnnualTickHandlerAmbrosiaTests` covers addiction
+     onset and the shortage-death/efficiency/riot/tech-regression branches, golden-file-backed (see
+     below); two guard tests (never-decrement-below-`PreTchLvl`, no-ambrosia-cargo no-op) stay
+     hardcoded since they assert control flow, not arithmetic. One sub-branch (industrial sabotage,
      UPDATE.PAS:1226-1234 — destroys `Trunc(level*Rnd(0,20)/100)` off every industry type) is
      faithful to source but not covered by any case: `Industry` starts at 0 on every test planet, and
      `RunProductionPipeline`'s own industry growth earlier in the same tick is infeasible to
-     hand-trace on top of the shortage math (same reason `AnnualTickHandlerProductionTests` leans on
-     the Pascal harness instead of hand-derivation) — add coverage if it's ever touched.
+     hand-trace on top of the shortage math (same reason the production tests lean on the Pascal
+     harness instead of hand-derivation) — add coverage if it's ever touched.
+   - **Golden-file ground truth.** `reference/verify/{ambrosia,revolution,production}.pas` are
+     from-source transcriptions (not copied from the C# port — an early `ambrosia.pas` draft slipped
+     into doing that, caught before landing, see its header comment) of `UseUpAmbrosia`,
+     `UpdateRevolution`/`Rebellion`, and the production pipeline (`FullPipeline`), sharing tables/
+     helpers in `common.pas`. `GoldenFileTests` ([Explicit] + `Category("PascalGroundTruth")`,
+     requires fpc — excluded from the default `dotnet test` run) runs each harness via a shared
+     `GoldenFile.Regenerate` helper and writes a committed `reference/verify/golden/*.golden` file
+     (`case=Name;key=value;...` lines). The always-on `AnnualTickHandler{Ambrosia,Revolution,
+     Production}Tests.MatchesGoldenFile` tests (data-driven via each domain's `*Cases.AsDataSource`
+     and TUnit's `[MethodDataSource]`) read that file and assert the C# port against it — so no
+     hand-typed expected value can silently agree with the same mistake on both sides of a check.
+     Regenerate a golden file (review the diff, then commit) whenever its `*Cases.All` or its
+     harness's transcription changes. `production.golden`/`revolution.golden` exclude
+     `Cargo.Supplies`/`Cargo.Ambrosia` (production) and don't track state UpdateRevolution mutates
+     downstream of what `UpdateRevolutionScenario` itself computes — see each domain's test-class doc
+     comment for the exact scope.
 3. **Tech advancement** (planets only) — `UpdateTechLevel` (UPDATE.PAS:1032-1072), random
    advancement/regression toward the empire's capital tech level.
 4. **Starbase economy** — same `UpdateWorld` sequence, but with `SupplyLink`/`SurplusLink`

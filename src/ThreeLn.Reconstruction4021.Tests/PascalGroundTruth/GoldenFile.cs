@@ -1,15 +1,45 @@
 namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
+/// <summary>Implemented by every domain's case record (AmbrosiaCase, RevolutionCase, ...) so
+/// GoldenFile.Regenerate can key rows without each domain repeating that plumbing.</summary>
+internal interface INamedCase
+{
+    string Name { get; }
+}
+
 /// <summary>
 /// Reads/writes the golden files committed under reference/verify/golden/ — one "case=Name;key=
 /// value;..." line per named scenario, each value computed once by a real FreePascal run (an
-/// [Explicit]-gated generator test in this namespace) and read back by an always-on test that
+/// [Explicit]-gated generator test in GoldenFileTests) and read back by an always-on test that
 /// drives the same scenario through the C# port. This is what makes the always-on assertions trace
 /// to the real Pascal source instead of a hand-typed literal that could silently agree with a
 /// shared mistake on both sides.
 /// </summary>
 internal static class GoldenFile
 {
+    /// <summary>Runs harnessName in "case" mode with one arg per case (via argFormatter), writes the
+    /// result to reference/verify/golden/{harnessName}.golden keyed by each case's Name, and
+    /// verifies the file round-trips. Shared by every domain's regenerator test in GoldenFileTests —
+    /// only the harness name, case list, and per-case arg format differ between domains.</summary>
+    public static void Regenerate<TCase>(string harnessName, IReadOnlyList<TCase> cases, Func<TCase, string> argFormatter)
+        where TCase : INamedCase
+    {
+        var args = cases.Select(argFormatter).Prepend("case").ToArray();
+        var output = PascalHarness.CompileAndRun(harnessName, args);
+        var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (lines.Length != cases.Count)
+            throw new InvalidOperationException(
+                $"{harnessName}: expected one output line per case ({cases.Count}), got {lines.Length}.\n{output}");
+
+        var fileName = harnessName + ".golden";
+        Write(fileName, cases.Zip(lines, (c, line) => (c.Name, HarnessOutput: line)));
+
+        var reloaded = Load(fileName);
+        if (reloaded.Count != cases.Count)
+            throw new InvalidOperationException(
+                $"{fileName}: wrote {cases.Count} rows but read back {reloaded.Count} — case names must be unique.");
+    }
+
     private static string DirectoryPath => Path.Combine(PascalHarness.RepoRoot, "reference", "verify", "golden");
 
     /// <summary>Reads a committed golden file, keyed by its "case" field.</summary>

@@ -7,14 +7,24 @@
   Build and run (FreePascal, tested with fpc 3.2.2):
     fpc production.pas && ./production.exe
 
+  Machine-parseable mode, one case per command-line argument, each a comma-separated tuple:
+    Cls,Typ,Pop,Eff,TechOrd,AmbAddict,
+    IndusBio,IndusChe,IndusMin,IndusSYG,IndusSYJ,IndusSYS,IndusSYT,IndusSup,IndusTri,
+    CargoMen,CargoNnj,CargoAmb,CargoChe,CargoMet,CargoSup,CargoTri,TrillumReserve
+  where Cls/Typ/TechOrd are WorldClass/WorldTypes/TechLevel's 0-based ordinals (see common.pas) and
+  AmbAddict is 0 or 1. Runs FullPipeline (below — the same call sequence RunProductionPipeline uses)
+  and prints one "key=value;..." line per case to stdout, consumed by PascalHarness. Example:
+    ./production case 9,20,1000,100,10,0,0,0,0,0,0,0,0,0,100,0,0,0,0,0,1000,0,500
+
   KNOWN DEVIATION: ProductionShips/ProductionCargo below are split into two procedures, each with
   its own "FOR IndI:=BioInd TO SYTInd" loop, where the real Production procedure (and the C# port)
   runs ONE such loop with both ship and cargo production nested inside per industry. Because raw
   material cargo mutates in place across the whole loop, the split changes results whenever two
   industries in BioInd..SYTInd both have a developed level AND raw materials are scarce enough to
-  throttle production — Scenario F/H below avoid this by using scenarios where only one such
-  industry is ever nonzero. If a future scenario needs multiple simultaneously-developed
-  industries under raw-material scarcity, merge these back into one procedure first. }
+  throttle production — every case (Scenario F/H below, and every ProductionCases case) avoids this
+  by using scenarios where only one such industry is ever nonzero. If a future case needs multiple
+  simultaneously-developed industries under raw-material scarcity, merge these back into one
+  procedure first. }
 program Production;
 
 {$mode fpc}
@@ -477,10 +487,101 @@ procedure Scenario3;
    WriteLn('Cargo nnj=',Cargo[nnj],' amb=',Cargo[amb],' che=',Cargo[che]);
    end;
 
+{ ---------------------------------------------------------------------------------------------- }
+
+function ParseLongInt(const s: String): LongInt;
+   var code: Integer;
+   begin
+   Val(s, ParseLongInt, code);
+   if code<>0 then
+      begin
+      WriteLn(StdErr, 'production: bad integer "',s,'" (position ',code,')');
+      Halt(1);
+      end;
+   end;
+
+procedure RunCase(const arg: String);
+   var
+      parts: array[1..23] of LongInt;
+      partIdx,i,startPos: Integer;
+      tok: String;
+      Cls: WorldClass;
+      Typ: WorldTypes;
+      Pop: LongInt;
+      Eff: Integer;
+      Tech: TechLevel;
+      AmbAddict: Boolean;
+      Indus: IndusArray;
+      Cargo: CargoArray;
+      Ships: ShipArray;
+      TriReserves: LongInt;
+   begin
+   partIdx:=1;
+   startPos:=1;
+   for i:=1 to Length(arg)+1 do
+      if (i>Length(arg)) or (arg[i]=',') then
+         begin
+         tok:=Copy(arg,startPos,i-startPos);
+         if partIdx>23 then
+            begin
+            WriteLn(StdErr,'production: too many fields in "',arg,'"');
+            Halt(1);
+            end;
+         parts[partIdx]:=ParseLongInt(tok);
+         Inc(partIdx);
+         startPos:=i+1;
+         end;
+   if partIdx<>24 then
+      begin
+      WriteLn(StdErr,'production: expected 23 comma-separated fields, got ',partIdx-1,' in "',arg,'"');
+      Halt(1);
+      end;
+
+   Cls:=WorldClass(parts[1]);
+   Typ:=WorldTypes(parts[2]);
+   Pop:=parts[3];
+   Eff:=parts[4];
+   Tech:=TechLevel(parts[5]);
+   AmbAddict:=parts[6]<>0;
+
+   Indus[BioInd]:=parts[7];  Indus[CheInd]:=parts[8];  Indus[MinInd]:=parts[9];
+   Indus[SYGInd]:=parts[10]; Indus[SYJInd]:=parts[11]; Indus[SYSInd]:=parts[12];
+   Indus[SYTInd]:=parts[13]; Indus[SupInd]:=parts[14]; Indus[TriInd]:=parts[15];
+
+   Cargo[men]:=parts[16]; Cargo[nnj]:=parts[17]; Cargo[amb]:=parts[18];
+   Cargo[che]:=parts[19]; Cargo[met]:=parts[20]; Cargo[sup]:=parts[21]; Cargo[tri]:=parts[22];
+
+   TriReserves:=parts[23];
+   FillChar(Ships,SizeOf(Ships),0);
+
+   FullPipeline(Cls,Typ,Pop,Eff,Tech,AmbAddict,Indus,Cargo,Ships,TriReserves);
+
+   WriteLn('bio=',Indus[BioInd],';che=',Indus[CheInd],';min=',Indus[MinInd],
+           ';syg=',Indus[SYGInd],';syj=',Indus[SYJInd],';sys=',Indus[SYSInd],
+           ';syt=',Indus[SYTInd],';sup=',Indus[SupInd],';tri=',Indus[TriInd],
+           ';fgt=',Ships[fgt],';hkr=',Ships[hkr],';jmp=',Ships[jmp],';jtn=',Ships[jtn],
+           ';pen=',Ships[pen],';ssp=',Ships[ssp],';trn=',Ships[trn],
+           ';cargomen=',Cargo[men],';cargonnj=',Cargo[nnj],';cargoamb=',Cargo[amb],
+           ';cargoche=',Cargo[che],';cargomet=',Cargo[met],';cargosup=',Cargo[sup],';cargotri=',Cargo[tri],
+           ';trillumreserve=',TriReserves);
+   end;
+
+procedure RunCaseMode;
+   var i: Integer;
+   begin
+   for i:=2 to ParamCount do
+      RunCase(ParamStr(i));
+   end;
+
 begin
-Scenario1;
-WriteLn;
-Scenario2;
-WriteLn;
-Scenario3;
+if (ParamCount>0) and (ParamStr(1)='case') then
+   RunCaseMode
+else
+   begin
+   Scenario1;
+   WriteLn;
+   Scenario2;
+   WriteLn;
+   Scenario3;
+   end;
 end.
