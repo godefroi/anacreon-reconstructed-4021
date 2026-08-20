@@ -4,10 +4,13 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
 /// <summary>
 /// Shells out to FreePascal (fpc) to compile and run the harnesses in reference/verify/, computing
-/// ground truth live instead of via hand-transcribed/pasted expected values. Backs the [Explicit],
-/// [Category("PascalGroundTruth")]-gated tests in this namespace — never invoked by the default
-/// `dotnet test` run, since it requires fpc on PATH. Run that category with:
-///   dotnet run --treenode-filter "/*/*/*/*[Category=PascalGroundTruth]"
+/// ground truth from the real Pascal source instead of via hand-transcribed/pasted expected values.
+/// Some tests in this namespace assert directly against a live harness run; others (see GoldenFile)
+/// use it to regenerate a committed golden file that the always-on suite reads from, so a fast
+/// `dotnet test` run never needs fpc installed. Either way, this class's callers are [Explicit] +
+/// [Category("PascalGroundTruth")]-gated — never invoked by the default `dotnet test` run. Run that
+/// category with:
+///   dotnet test --no-build -- --treenode-filter "/*/*/*/*[Category=PascalGroundTruth]"
 /// </summary>
 internal static class PascalHarness
 {
@@ -16,16 +19,20 @@ internal static class PascalHarness
 
     public static bool IsFpcAvailable => FpcPathLazy.Value is not null;
 
+    /// <summary>Repo root (the directory containing reference/verify), for locating harness sources
+    /// and the golden files under reference/verify/golden/. Throws if it can't be found — every
+    /// caller needs it to do anything useful, so there's no value in returning null here too.</summary>
+    public static string RepoRoot => RepoRootLazy.Value
+        ?? throw new InvalidOperationException("Could not locate the repo root (no reference/verify directory found above the test assembly).");
+
     /// <summary>Compiles reference/verify/{harnessName}.pas (if not already compiled this run) and
     /// executes it with the given arguments, returning captured stdout.</summary>
     public static string CompileAndRun(string harnessName, params string[] args)
     {
         var fpc = FpcPathLazy.Value
             ?? throw new InvalidOperationException("fpc not found on PATH — install FreePascal to run PascalGroundTruth tests.");
-        var repoRoot = RepoRootLazy.Value
-            ?? throw new InvalidOperationException("Could not locate the repo root (no reference/verify directory found above the test assembly).");
 
-        var verifyDir = Path.Combine(repoRoot, "reference", "verify");
+        var verifyDir = Path.Combine(RepoRoot, "reference", "verify");
         var sourcePath = Path.Combine(verifyDir, harnessName + ".pas");
         if (!File.Exists(sourcePath))
             throw new FileNotFoundException($"Harness source not found: {sourcePath}");
@@ -34,6 +41,20 @@ internal static class PascalHarness
 
         var exePath = Path.Combine(verifyDir, harnessName + ".exe");
         return RunProcess(exePath, args, verifyDir);
+    }
+
+    /// <summary>Parses one "key=value;key=value;..." line — the wire format every harness in this
+    /// directory prints, and the format golden files use verbatim (see GoldenFile).</summary>
+    public static IReadOnlyDictionary<string, string> ParseFields(string line)
+    {
+        var fields = new Dictionary<string, string>();
+        foreach (var part in line.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) {
+            var eq = part.IndexOf('=');
+            if (eq < 0)
+                continue;
+            fields[part[..eq]] = part[(eq + 1)..];
+        }
+        return fields;
     }
 
     private static string RunProcess(string fileName, IReadOnlyList<string> args, string workingDirectory)

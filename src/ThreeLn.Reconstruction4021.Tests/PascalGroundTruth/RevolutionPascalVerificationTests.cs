@@ -87,7 +87,7 @@ public class RevolutionPascalVerificationTests
 
         for (var i = 0; i < cases.Length; i++) {
             var c = cases[i];
-            var expected = ParseLine(lines[i]);
+            var expected = PascalHarness.ParseFields(lines[i]);
 
             var owner = new Empire { Name = "Test" };
             var planet = new Planet {
@@ -126,15 +126,4 @@ public class RevolutionPascalVerificationTests
         }
     }
 
-    private static Dictionary<string, string> ParseLine(string line)
-    {
-        var fields = new Dictionary<string, string>();
-        foreach (var part in line.Split(';', StringSplitOptions.RemoveEmptyEntries)) {
-            var eq = part.IndexOf('=');
-            if (eq < 0)
-                continue;
-            fields[part[..eq]] = part[(eq + 1)..];
-        }
-        return fields;
-    }
 }

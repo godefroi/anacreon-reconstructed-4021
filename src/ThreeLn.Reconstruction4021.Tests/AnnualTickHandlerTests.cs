@@ -418,20 +418,28 @@ public class AnnualTickHandlerProductionTests
 
 /// <summary>
 /// Verifies Commit 2b of the economy phase: UseUpAmbrosia (UPDATE.PAS:1163-1276), addiction/
-/// starvation-of-ambrosia effects on population, efficiency, revolution index, tech level, and the
-/// addiction flag itself. All planets use Type=Capital (Rebellion can never fire for a capital,
-/// UPDATE.PAS:751) and Efficiency=100 (UpdateEfficiency's own switch has no bracket above 99, so it's
-/// a no-op regardless of the RNG) to keep every other UpdateWorld step a deterministic no-op except
-/// the one under test — Class=ClassM/Tech=Warp (or Tech=PreTech for the regression-guard case) are
-/// chosen so UpdatePopulation's "current > basePop" branch applies, which needs no RNG either. The
-/// four random side effects inside the ambrosia-shortage branch (UPDATE.PAS:1216-1241: no-op / riot /
-/// industrial sabotage / tech regression) are exercised individually via FixedRandom except
-/// industrial sabotage — Industry starts at 0 on every planet here, and RunProductionPipeline (which
-/// runs earlier in the same tick) grows it toward a distribution-derived optimum by an amount that's
-/// infeasible to hand-trace on top of the shortage math, the same reason AnnualTickHandlerProductionTests
-/// leans on the Pascal harness instead of hand-derivation. The sabotage case is a straightforward
-/// Trunc(level*Rnd(0,20)/100) applied per industry type (BioInd..TriInd, i.e. all of them) — reviewed
-/// against source but not independently unit-tested; add coverage if it's ever touched.
+/// starvation-of-ambrosia effects on population, efficiency, tech level, and the addiction flag
+/// itself. All planets use Type=Capital (Rebellion can never fire for a capital, UPDATE.PAS:751) and
+/// Efficiency=100 (UpdateEfficiency's own switch has no bracket above 99, so it's a no-op regardless
+/// of the RNG) to keep every other UpdateWorld step a deterministic no-op except the one under test
+/// — Class=ClassM/Tech=Warp (or Tech=PreTech for the regression-guard case) are chosen so
+/// UpdatePopulation's "current > basePop" branch applies, which needs no RNG either.
+///
+/// MatchesGoldenFile covers the cases with real Pascal arithmetic to check (addiction onset,
+/// shortage-driven death/efficiency, riot, tech regression) against
+/// reference/verify/golden/ambrosia.golden — computed by a real FreePascal run of
+/// reference/verify/ambrosia.pas (AmbrosiaGoldenFileTests), not hand-typed, so these can never
+/// silently agree with a shared mistake in both the golden values and the C# port. The two guard
+/// tests below stay hardcoded: they assert control flow (a branch never taken, a value staying
+/// exactly at a boundary), not Pascal arithmetic, so there's nothing for a golden file to add.
+///
+/// The industrial-sabotage random branch (UPDATE.PAS:1226-1234) is faithful to source but not
+/// covered by any case here or in the golden file: Industry starts at 0 on every planet, and
+/// RunProductionPipeline (which runs earlier in the same tick) grows it toward a distribution-derived
+/// optimum by an amount that's infeasible to hand-trace on top of the shortage math, the same reason
+/// AnnualTickHandlerProductionTests leans on the Pascal harness instead of hand-derivation. The
+/// sabotage case is a straightforward Trunc(level*Rnd(0,20)/100) applied per industry type
+/// (BioInd..TriInd, i.e. all of them) — add coverage if it's ever touched.
 /// </summary>
 public class AnnualTickHandlerAmbrosiaTests
 {
@@ -453,95 +461,28 @@ public class AnnualTickHandlerAmbrosiaTests
     };
 
     [Test]
-    public async Task AmbrosiaConsumedNormallyWhenAddictedAndSupplySufficient()
+    [MethodDataSource(typeof(PascalGroundTruth.AmbrosiaCases), nameof(PascalGroundTruth.AmbrosiaCases.AsDataSource))]
+    public async Task MatchesGoldenFile(PascalGroundTruth.AmbrosiaCase c)
     {
-        // Pop(1000)>BasePop[Warp](700) -> deterministic growth of +PascalRound(700/100)=+7 -> 1007.
-        // AmbNeeded=ThgLmt((1007/100)*11.5)=115, well under the 200 in stock -> plain deduction, no
-        // death/efficiency/revindex effects, and no un-addict roll (that only happens on shortage).
+        var golden = PascalGroundTruth.GoldenFile.Load("ambrosia.golden");
+
         var owner = new Empire { Name = "Test" };
-        var planet = MakeCapital(1000, TechLevel.Warp, owner);
+        var planet = MakeCapital(c.PlanetPop, c.Tech, owner);
         planet.Cargo.Supplies = 9999;
-        planet.Cargo.Ambrosia = 200;
-        planet.IsAddictedToAmbrosia = true;
+        planet.Cargo.Ambrosia = c.StartAmbrosia;
+        planet.IsAddictedToAmbrosia = c.StartAddicted;
         var game = BuildGame(planet);
         game.Empires.Add(owner);
-        var handler = new AnnualTickHandler(new FixedRandom(0));
+        var handler = new AnnualTickHandler(new FixedRandom(c.RngFixedValue));
 
         handler.RunAnnualTick(game);
 
-        await Assert.That(planet.Cargo.Ambrosia).IsEqualTo(85);
-        await Assert.That(planet.Population).IsEqualTo(1007);
-        await Assert.That(planet.Efficiency).IsEqualTo(100);
-        await Assert.That(planet.IsAddictedToAmbrosia).IsTrue();
-    }
-
-    [Test]
-    public async Task AmbrosiaShortageKillsPopulationDropsEfficiencyAndCanEndAddiction()
-    {
-        // Same growth as above -> Population=1007, AmbNeeded=115 against only 50 in stock ->
-        // Lack=65 -> Die=Min(ThgLmt(0.12*65)=7, 1007/7=143)=7 -> Population=1000,
-        // EffChange=Min((int)(0.9*7)=6,100)=6 -> Efficiency=94. FixedRandom(0) -> Rnd(1,10)=1 (the
-        // 1..4 "nothing else happens" case) and the un-addict roll Rnd(1,100)=1<=25 succeeds.
-        var owner = new Empire { Name = "Test" };
-        var planet = MakeCapital(1000, TechLevel.Warp, owner);
-        planet.Cargo.Supplies = 9999;
-        planet.Cargo.Ambrosia = 50;
-        planet.IsAddictedToAmbrosia = true;
-        var game = BuildGame(planet);
-        game.Empires.Add(owner);
-        var handler = new AnnualTickHandler(new FixedRandom(0));
-
-        handler.RunAnnualTick(game);
-
-        await Assert.That(planet.Cargo.Ambrosia).IsEqualTo(0);
-        await Assert.That(planet.Population).IsEqualTo(1000);
-        await Assert.That(planet.Efficiency).IsEqualTo(94);
-        await Assert.That(planet.IsAddictedToAmbrosia).IsFalse();
-    }
-
-    [Test]
-    public async Task AmbrosiaShortageRiotBranchKillsAdditionalPopulation()
-    {
-        // Identical shortage setup to the test above (Die=7, Population=1000, Efficiency=94) but
-        // FixedRandom(4) pushes Rnd(1,10) to 4+1=5, landing in the riot case (5..7): a second
-        // die-off of ThgLmt((Rnd(50,120)/100)*7) = ThgLmt((54/100)*7)=ThgLmt(3.78)=3 more people.
-        var owner = new Empire { Name = "Test" };
-        var planet = MakeCapital(1000, TechLevel.Warp, owner);
-        planet.Cargo.Supplies = 9999;
-        planet.Cargo.Ambrosia = 50;
-        planet.IsAddictedToAmbrosia = true;
-        var game = BuildGame(planet);
-        game.Empires.Add(owner);
-        var handler = new AnnualTickHandler(new FixedRandom(4));
-
-        handler.RunAnnualTick(game);
-
-        await Assert.That(planet.Cargo.Ambrosia).IsEqualTo(0);
-        await Assert.That(planet.Population).IsEqualTo(997);
-        await Assert.That(planet.Efficiency).IsEqualTo(94);
-        await Assert.That(planet.IsAddictedToAmbrosia).IsFalse();
-    }
-
-    [Test]
-    public async Task AmbrosiaShortageTechRegressionBranchDecrementsTechLevel()
-    {
-        // Same shortage math as the base case (Die=7, Population=1000, Efficiency=94) but
-        // FixedRandom(9) pushes Rnd(1,10) to 9+1=10, the tech-regression case: Warp (already above
-        // PreTech) steps back to PreWarp.
-        var owner = new Empire { Name = "Test" };
-        var planet = MakeCapital(1000, TechLevel.Warp, owner);
-        planet.Cargo.Supplies = 9999;
-        planet.Cargo.Ambrosia = 50;
-        planet.IsAddictedToAmbrosia = true;
-        var game = BuildGame(planet);
-        game.Empires.Add(owner);
-        var handler = new AnnualTickHandler(new FixedRandom(9));
-
-        handler.RunAnnualTick(game);
-
-        await Assert.That(planet.TechLevel).IsEqualTo(TechLevel.PreWarp);
-        await Assert.That(planet.Population).IsEqualTo(1000);
-        await Assert.That(planet.Efficiency).IsEqualTo(94);
+        var expected = golden[c.Name];
+        await Assert.That(planet.Population).IsEqualTo(int.Parse(expected["population"]));
+        await Assert.That(planet.Efficiency).IsEqualTo(int.Parse(expected["efficiency"]));
+        await Assert.That((int)planet.TechLevel).IsEqualTo(int.Parse(expected["techlevel"]));
+        await Assert.That(planet.Cargo.Ambrosia).IsEqualTo(int.Parse(expected["ambrosia"]));
+        await Assert.That(planet.IsAddictedToAmbrosia).IsEqualTo(bool.Parse(expected["addicted"]));
     }
 
     [Test]
@@ -566,45 +507,6 @@ public class AnnualTickHandlerAmbrosiaTests
         await Assert.That(planet.TechLevel).IsEqualTo(TechLevel.PreTech);
         await Assert.That(planet.Population).IsEqualTo(993);
         await Assert.That(planet.Efficiency).IsEqualTo(94);
-    }
-
-    [Test]
-    public async Task WorldBecomesAddictedWhenSurplusAvailableAndRollSucceeds()
-    {
-        // Not addicted yet, AmbNeeded(115)<=stock(200) -> eligible to addict; FixedRandom(0) makes the
-        // Rnd(1,100)<25 roll succeed. Consumption is always the halved need regardless of the roll:
-        // 115 div 2 = 57 -> 200-57=143.
-        var owner = new Empire { Name = "Test" };
-        var planet = MakeCapital(1000, TechLevel.Warp, owner);
-        planet.Cargo.Supplies = 9999;
-        planet.Cargo.Ambrosia = 200;
-        var game = BuildGame(planet);
-        game.Empires.Add(owner);
-        var handler = new AnnualTickHandler(new FixedRandom(0));
-
-        handler.RunAnnualTick(game);
-
-        await Assert.That(planet.IsAddictedToAmbrosia).IsTrue();
-        await Assert.That(planet.Cargo.Ambrosia).IsEqualTo(143);
-    }
-
-    [Test]
-    public async Task WorldStaysUnaddictedWhenRollFails()
-    {
-        // Same surplus setup, but FixedRandom(50) fails the Rnd(1,100)<25 roll (result 51). Still
-        // consumes the same halved need (200-57=143) -- the roll only gates the addiction flag.
-        var owner = new Empire { Name = "Test" };
-        var planet = MakeCapital(1000, TechLevel.Warp, owner);
-        planet.Cargo.Supplies = 9999;
-        planet.Cargo.Ambrosia = 200;
-        var game = BuildGame(planet);
-        game.Empires.Add(owner);
-        var handler = new AnnualTickHandler(new FixedRandom(50));
-
-        handler.RunAnnualTick(game);
-
-        await Assert.That(planet.IsAddictedToAmbrosia).IsFalse();
-        await Assert.That(planet.Cargo.Ambrosia).IsEqualTo(143);
     }
 
     [Test]

@@ -5,8 +5,12 @@
   Mem[segment:offset] video writes that can't compile on a modern target, TP-compat mode or not
   (verified empirically before choosing hand-transcription over that route).
 
-  Rnd(Min,Max) always returns Min — the deterministic stand-in matching the C# test double
-  FixedRandom(0) used throughout the C# test suite, so expected values line up exactly.
+  Rnd(Min,Max) returns Min+RngFixedValue (RngFixedValue defaults to 0) — the deterministic stand-in
+  matching the C# test double FixedRandom(n), which makes every Random.Next(maxValue) call return n
+  regardless of maxValue. Set RngFixedValue before a call to reproduce a specific FixedRandom(n) case;
+  it does not replicate FixedRandom's Mx<=Mn short-circuit (real Rnd/FixedRandom both return exactly
+  Mn for a degenerate range, ignoring n) since no call in these harnesses hits a degenerate range with
+  RngFixedValue<>0 — if one ever does, this needs the same guard C#'s Rnd has.
 
   FreePascal's built-in Round() is IEEE round-half-to-even (confirmed empirically: Round(2.5)=2,
   Round(3.5)=4 — even under {$MODE TP}, which doesn't change this). Real Turbo Pascal's Round()
@@ -186,6 +190,11 @@ const
          [LAM..tri,SRM..outp,lnk,dis],
          [LAM..dis]  );
 
+var
+   { See the Rnd doc comment at the top of this file. Defaults to 0 (every global var in Pascal is
+     zero-initialized), matching plain FixedRandom(0) until a harness opts into a different value. }
+   RngFixedValue: LongInt;
+
 function GreaterInt(a,b: LongInt): LongInt;
 function LesserInt(a,b: LongInt): LongInt;
 function ThgLmt(x: Real): LongInt;
@@ -208,8 +217,7 @@ function ThgLmt(x: Real): LongInt;
    end;
 function Rnd(Mn,Mx: Integer): Integer;
    begin
-   { deterministic stand-in matching the C# test double FixedRandom(0): every roll floors to Mn }
-   Rnd:=Mn;
+   Rnd:=Mn+RngFixedValue;
    end;
 
 { INT.PAS:120-131 — value +/- variation% of itself. }

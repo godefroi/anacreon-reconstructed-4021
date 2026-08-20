@@ -1,0 +1,6 @@
+case=SufficientSupply;population=1007;efficiency=100;techlevel=5;ambrosia=85;addicted=TRUE;revindex=0
+case=ShortageNoEffect;population=1000;efficiency=94;techlevel=5;ambrosia=0;addicted=FALSE;revindex=3
+case=ShortageRiot;population=997;efficiency=94;techlevel=5;ambrosia=0;addicted=FALSE;revindex=3
+case=ShortageTechRegression;population=1000;efficiency=94;techlevel=4;ambrosia=0;addicted=FALSE;revindex=3
+case=BecomesAddicted;population=1007;efficiency=100;techlevel=5;ambrosia=143;addicted=TRUE;revindex=0
+case=StaysUnaddicted;population=1007;efficiency=100;techlevel=5;ambrosia=143;addicted=FALSE;revindex=0
