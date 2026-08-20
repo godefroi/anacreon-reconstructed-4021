@@ -53,7 +53,7 @@ follow once that's working.
    `TechDev`'s monotonic structure) rather than modeling per-empire incremental research — nothing
    seeds or grows `Empire.Technology.Ships` yet (that needs both new-game setup, Phase 2, and
    `NewTechLevel`'s per-tick research rolls, Commit 5 below), so ship production is correct but inert
-   until those land. Verified against `_ref/verify/verify.pas`, a standalone FreePascal harness that
+   until those land. Verified against `reference/verify/verify.pas`, a standalone FreePascal harness that
    transcribes the literal Pascal tables/procedures and runs identical inputs (see its header comment
    for one known deviation) — this caught a real bug (`SelfSufficiencySettings` defaulted to 0 instead
    of Pascal's `InitializeISSP` default of 5, badly distorting `GetIndustrialDistribution`'s sqrt

@@ -5,11 +5,11 @@
 
 # Reference Pascal source and verification harness are tracked; the manual and image/art archives
 # are not (handled separately), and neither are the harness's own FreePascal build byproducts.
-_ref/*.doc
-_ref/*.docx
-_ref/*.zip
-_ref/**/*.exe
-_ref/**/*.o
+reference/*.doc
+reference/*.docx
+reference/*.zip
+reference/**/*.exe
+reference/**/*.o
 
 # dotenv files
 .env

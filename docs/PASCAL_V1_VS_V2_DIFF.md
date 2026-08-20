@@ -1,6 +1,6 @@
 # v1.31 vs. v2 Pascal source diff
 
-Reference document only — nothing here is acted on yet. v1.31 (`_ref/DOSAnacreonSource131`) remains the canonical baseline for the port. This records what actually differs in `_ref/DOSAnacreonSource20` ("v2"), so bugfixes can be pulled in deliberately and gameplay/balance changes can be gated behind explicit options later, rather than adopted silently. See [[anacreon-v2-source-caveat]] in project memory for the standing policy.
+Reference document only — nothing here is acted on yet. v1.31 (`reference/DOSAnacreonSource131`) remains the canonical baseline for the port. This records what actually differs in `reference/DOSAnacreonSource20` ("v2"), so bugfixes can be pulled in deliberately and gameplay/balance changes can be gated behind explicit options later, rather than adopted silently. See [[anacreon-v2-source-caveat]] in project memory for the standing policy.
 
 Research done by a sub-agent (full changelog read, full `diff -rq` of both trees, unified diffs of every differing file read with context); file-list and the `WorldClass` enum-insertion finding below were independently re-verified directly against source for this document.
 
