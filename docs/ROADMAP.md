@@ -53,12 +53,17 @@ follow once that's working.
    `TechDev`'s monotonic structure) rather than modeling per-empire incremental research — nothing
    seeds or grows `Empire.Technology.Ships` yet (that needs both new-game setup, Phase 2, and
    `NewTechLevel`'s per-tick research rolls, Commit 5 below), so ship production is correct but inert
-   until those land. Verified against `reference/verify/verify.pas`, a standalone FreePascal harness that
-   transcribes the literal Pascal tables/procedures and runs identical inputs (see its header comment
-   for one known deviation) — this caught a real bug (`SelfSufficiencySettings` defaulted to 0 instead
-   of Pascal's `InitializeISSP` default of 5, badly distorting `GetIndustrialDistribution`'s sqrt
-   terms) that hand-tracing had missed. Defer `UseUpAmbrosia` (couples to this commit's output but is
-   a large addition on its own — addiction death/riot/efficiency effects, UPDATE.PAS:1163-1276).
+   until those land. Verified against `reference/verify/production.pas` (shared tables/helpers in
+   `common.pas`), a standalone FreePascal harness that transcribes the literal Pascal tables/procedures
+   and runs identical inputs (see its header comment for one known deviation) — this caught two real
+   bugs: `SelfSufficiencySettings` defaulted to 0 instead of Pascal's `InitializeISSP` default of 5
+   (badly distorting `GetIndustrialDistribution`'s sqrt terms), and FreePascal's built-in `Round()` is
+   banker's rounding, not Turbo Pascal's round-half-away-from-zero (fixed with a `PascalRound` helper
+   in `common.pas`) — both missed by hand-tracing. `reference/verify/revolution.pas` does the same for
+   `UpdateRevolution`/`Rebellion` (Commit 1), including the previously-untested military-suppression
+   branch (UPDATE.PAS:715-735) — see `RevolutionPascalVerificationTests.cs`. Defer `UseUpAmbrosia`
+   (couples to this commit's output but is a large addition on its own — addiction death/riot/
+   efficiency effects, UPDATE.PAS:1163-1276).
 3. **Tech advancement** (planets only) — `UpdateTechLevel` (UPDATE.PAS:1032-1072), random
    advancement/regression toward the empire's capital tech level.
 4. **Starbase economy** — same `UpdateWorld` sequence, but with `SupplyLink`/`SurplusLink`

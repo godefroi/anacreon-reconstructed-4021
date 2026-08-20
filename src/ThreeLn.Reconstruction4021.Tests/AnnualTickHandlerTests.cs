@@ -242,11 +242,12 @@ public class AnnualTickHandlerTests
 /// AnnualTickHandler.RunProductionPipeline). Expected values here are NOT hand-derived — Pop=1000,
 /// Class=EthCls, and Tech=Gate were deliberately chosen to fully exercise the sqrt/pow cascade in
 /// GetIndustrialDistribution, which is infeasible to hand-trace reliably. Instead, every expected
-/// value was produced by reference/verify/verify.pas, a standalone FreePascal harness that transcribes
-/// the literal DATACNST.PAS/INTRFACE.PAS/UPDATE.PAS/MISC.PAS tables and procedures byte-for-byte and
-/// runs the identical call sequence RunProductionPipeline uses, with Rnd hardcoded to return its
-/// lower bound (matching FixedRandom(0)'s semantics exactly). This is a from-source ground truth,
-/// not a self-check against this C# port — see that file's header comment for its one known deviation.
+/// value was produced by reference/verify/production.pas (shared tables/helpers in common.pas), a
+/// standalone FreePascal harness that transcribes the literal DATACNST.PAS/INTRFACE.PAS/UPDATE.PAS/
+/// MISC.PAS tables and procedures byte-for-byte and runs the identical call sequence
+/// RunProductionPipeline uses, with Rnd hardcoded to return its lower bound (matching
+/// FixedRandom(0)'s semantics exactly). This is a from-source ground truth, not a self-check against
+/// this C# port — see that file's header comment for its one known deviation.
 /// </summary>
 public class AnnualTickHandlerProductionTests
 {

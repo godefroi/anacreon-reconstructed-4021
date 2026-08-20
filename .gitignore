@@ -10,6 +10,7 @@ reference/*.docx
 reference/*.zip
 reference/**/*.exe
 reference/**/*.o
+reference/**/*.ppu
 
 # dotenv files
 .env
