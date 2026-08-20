@@ -195,6 +195,16 @@ function Rnd(Mn,Mx: Integer): Integer;
    Rnd:=Mn;
    end;
 
+{ FreePascal's built-in Round() is IEEE round-half-to-even (confirmed empirically: Round(2.5)=2,
+  Round(3.5)=4 — even under {$MODE TP}, which doesn't change this). Real Turbo Pascal's Round()
+  rounds half away from zero. Every Round() call in this file MUST go through this function instead
+  of the built-in, or a value landing on an exact .5 boundary silently diverges from Turbo Pascal. }
+function PascalRound(x: Real): LongInt;
+   begin
+   if x>=0 then PascalRound:=Trunc(x+0.5)
+   else PascalRound:=Trunc(x-0.5);
+   end;
+
 function Expnt(Base,Exponent: Real): Real;
    begin
    Expnt:=Exp(Exponent*Ln(Base));
@@ -207,7 +217,7 @@ function TotalProd(Pop: LongInt; Tech: TechLevel): LongInt;
    temp1:=K1*Expnt(Pop+K2,K3)*TechAdj[Tech]/100;
    if temp1>999 then temp1:=999
    else if temp1<0 then temp1:=0;
-   TotalProd:=Round(temp1);
+   TotalProd:=PascalRound(temp1);
    end;
 
 procedure GetIndustrialDistribution(Tech: TechLevel; Cls: WorldClass; Pop: LongInt;
@@ -291,17 +301,17 @@ procedure UpdateIndustry(Cls: WorldClass; Tech: TechLevel; Eff: Integer; Pop: Lo
       Temp: Real;
    begin
    TIP:=TotalProd(Pop,Tech);
-   if AmbAddict then TIP:=Round(TIP*AmbrosiaAdj);
+   if AmbAddict then TIP:=PascalRound(TIP*AmbrosiaAdj);
    if TIP>999 then TIP:=999;
 
    Temp:=TIP/10000;
    for IndI:=BioInd to TriInd do
       begin
-      OptimumLevel:=Round(Temp*IndDist[IndI]*ClassIndAdj[Cls,IndI]);
+      OptimumLevel:=PascalRound(Temp*IndDist[IndI]*ClassIndAdj[Cls,IndI]);
       if (IndDist[IndI]>0) and (OptimumLevel=0) then OptimumLevel:=1;
       if Indus[IndI]<OptimumLevel then
          begin
-         ConsRate:=Round(OptimumLevel*(Eff/500));
+         ConsRate:=PascalRound(OptimumLevel*(Eff/500));
          if ConsRate<1 then ConsRate:=1;
          ConsRate:=LesserInt(ConsRate,OptimumLevel-Indus[IndI]);
          RawNeeded:=ThgLmt((ConsRate/100)*NewIndRawN[IndI]);
@@ -313,7 +323,7 @@ procedure UpdateIndustry(Cls: WorldClass; Tech: TechLevel; Eff: Integer; Pop: Lo
          end
       else if Indus[IndI]>OptimumLevel then
          begin
-         ConsRate:=-Round(Eff/2);
+         ConsRate:=-PascalRound(Eff/2);
          if ConsRate>-1 then ConsRate:=-1;
          if Indus[IndI]+ConsRate<OptimumLevel then ConsRate:=OptimumLevel-Indus[IndI];
          RawNeeded:=0;
@@ -358,7 +368,7 @@ procedure ProduceTrillum(var TriProd: LongInt; TriAvail: LongInt; var TriReserve
    else if ((TriReserves*LongInt(10))<TriProd) and (Rnd(1,2)=1) then
       RevIndexDelta:=RevIndexDelta+Rnd(3,5);
 
-   TriReserves:=GreaterInt(0,TriReserves-Round(TriProd/100));
+   TriReserves:=GreaterInt(0,TriReserves-PascalRound(TriProd/100));
    end;
 
 procedure ProduceRawMaterial(var Indus: IndusArray; Technology: TechnologySet; IP: Real;
@@ -540,7 +550,7 @@ procedure Scenario1;
    WriteLn('--- Scenario 6: UpdateIndustry with Indus already AT optimum for one field, Cls=EthCls Typ=RsrTyp ---');
    GetIndustrialDistribution(GteTchLvl,EthCls,1000,RsrTyp,100,False,5,5,5,5,Dist);
    TIP:=TotalProd(1000,GteTchLvl);
-   WriteLn('TIP=',TIP,' OptimumSupply=Round(TIP/10000*Dist[Sup]*100)=',Round((TIP/10000)*Dist[SupInd]*100));
+   WriteLn('TIP=',TIP,' OptimumSupply=PascalRound(TIP/10000*Dist[Sup]*100)=',PascalRound((TIP/10000)*Dist[SupInd]*100));
    end;
 
 procedure Scenario2;
