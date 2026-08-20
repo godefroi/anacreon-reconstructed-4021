@@ -16,12 +16,6 @@ namespace ThreeLn.Reconstruction4021.Tests;
 /// </summary>
 public class VisibilityHandlerTests
 {
-    /// <summary>Deterministic stand-in for the 50% discovery roll (Rnd(1,2)=1 in Pascal).</summary>
-    private sealed class FixedRandom(int nextValue) : Random
-    {
-        public override int Next(int maxValue) => nextValue;
-    }
-
     private static readonly Random _alwaysSucceeds = new FixedRandom(0);
     private static readonly Random _alwaysFails = new FixedRandom(1);
 

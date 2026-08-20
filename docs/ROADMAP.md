@@ -37,10 +37,15 @@ follow once that's working.
 
 **Commits, in order:**
 
-1. **Population, efficiency, revolution** (planets only) — `UpdateEfficiency` (UPDATE.PAS:1381,
+1. ✅ **Population, efficiency, revolution** (planets only) — `UpdateEfficiency` (UPDATE.PAS:1381,
    capped at 100) → `UpdatePopulation` (UPDATE.PAS:1074-1116, `MaxPop` table per world class,
    exponential/linear growth) → `UseUpFood` (UPDATE.PAS:1118-1161 — starvation reduces population
-   *and* raises revolution index; these two are coupled, don't split them) → `UpdateRevolution`.
+   *and* raises revolution index; these two are coupled, don't split them) → `UpdateRevolution`
+   (full body, including the military-suppression branch and `Rebellion`). `HostileLife` shipped
+   with this commit too (cheap, sits right after `UpdateRevolution` in Pascal) though it isn't its
+   own roadmap line. Untested branches, faithful to source but never exercised: `HostileLife`, and
+   the military-suppression path (`Military>OptimumMilitary`, UPDATE.PAS:715-735) — add coverage if
+   a future change touches either.
 2. **Industry and production** (planets only) — `ProduceRawMaterial`, `GetIndustrialDistribution`,
    `UpdateIndustry`, `Production` (UPDATE.PAS:1375-1379; production formula at 844-925). The
    heaviest numerical model in this phase. Defer `UseUpAmbrosia` (couples to this commit's output
