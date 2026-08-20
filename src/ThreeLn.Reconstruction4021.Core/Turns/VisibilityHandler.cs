@@ -134,11 +134,21 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
 
     /// <summary>
     /// Matches INTRFACE.PAS:1421-1454 (DetermineIfScouted). An entity never yet Known can only be
-    /// discovered via a 50% roll while in starbase scan range — capital range plays no part in first
-    /// discovery. An entity already Known but not Scouted (its Scouted tier decayed since a prior
-    /// turn — see ClearScouted/VisibilityHandler.RefreshVisibility) is unconditionally re-detected by
-    /// capital or starbase range. These are different rules, not one rule applied twice; conflating
-    /// them (applying range checks unconditionally to any not-yet-scouted entity) was the bug fixed here.
+    /// discovered via a 50% roll while in starbase scan range — capital range and ownership both play
+    /// no part in first discovery (INTRFACE.PAS:1445-1453's roll branch is a plain sibling of the
+    /// `Known` branch, not nested inside it — ownership only short-circuits detection for an entity
+    /// ALREADY Known). An entity already Known but not Scouted (its Scouted tier decayed since a prior
+    /// turn — see ClearScouted/VisibilityHandler.RefreshVisibility) is unconditionally re-detected if
+    /// owned, and otherwise by capital or starbase range. Three different rules, not one rule applied
+    /// three times; conflating "owned" with "always visible regardless of Known" was a second bug in
+    /// this method, found after the first (range checks applied unconditionally to any not-yet-scouted
+    /// entity) had already been fixed once. In practice this rarely matters yet: planets self-scout via
+    /// ScoutAdjacent's own-location offset regardless, and starbases/stargates are Known from creation
+    /// in Pascal (CreateStarbase/CreateStargate set KnownBy immediately) — a guarantee this codebase
+    /// can't yet reproduce, since no new-game/construction setup exists to call an equivalent hook. A
+    /// test-constructed owned starbase/stargate with nothing to establish Known first now needs the
+    /// same 50%-roll-in-its-own-scan-range path as everyone else, same as real Pascal would require of
+    /// an owned object nothing had ever scouted or created via the normal channels.
     /// </summary>
     private void DetermineIfScouted<T>(
         IEnumerable<T> entities,
@@ -152,15 +162,16 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
             if (visibility.Scouted.Contains(entity))
                 continue;
 
-            if (owner(entity) == empire) {
-                visibility.MarkScouted(entity);
-                continue;
-            }
-
             var entityLocation = location(entity);
 
             if (visibility.Known.Contains(entity)) {
-                // Known but not scouted: capital or starbase range re-detects it (INTRFACE.PAS:1437-1442).
+                // Known but not scouted: owned entities are unconditionally re-detected; otherwise
+                // capital or starbase range re-detects it (INTRFACE.PAS:1437-1442).
+                if (owner(entity) == empire) {
+                    visibility.MarkScouted(entity);
+                    continue;
+                }
+
                 var capital = empire.Capital;
                 if (capital != null && Chebyshev(capital.Location, entityLocation) < CapitalScanRadius) {
                     visibility.MarkScouted(entity);
@@ -170,7 +181,8 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
                 if (IsInRangeOfStarbase(entityLocation, empire, game))
                     visibility.MarkScouted(entity);
             } else {
-                // Not yet known: 50% chance (Rnd(1,2)=1), starbase range only (INTRFACE.PAS:1445-1453).
+                // Not yet known: 50% chance (Rnd(1,2)=1), starbase range only, regardless of
+                // ownership (INTRFACE.PAS:1445-1453).
                 if (IsInRangeOfStarbase(entityLocation, empire, game) && random.Next(2) == 0)
                     visibility.MarkScouted(entity);
             }

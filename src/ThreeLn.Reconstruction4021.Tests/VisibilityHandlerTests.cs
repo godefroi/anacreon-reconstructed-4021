@@ -600,4 +600,29 @@ public class VisibilityHandlerTests
 
         await Assert.That(human.ConstructionSites.Scouted).DoesNotContain(constr);
     }
+
+    [Test]
+    public async Task OwnedStarbaseNeverKnownNeedsTheSameRollAsAnyoneElse()
+    {
+        // INTRFACE.PAS:1421-1454 — the "GetStatus(Obj)=Emp" ownership short-circuit lives inside the
+        // `IF Known(Emp,Obj) THEN` branch, not as a top-level check. An owned entity nothing has ever
+        // marked Known (no creation-time hook exists in this codebase yet, see DetermineIfScouted's
+        // doc comment) needs the same 50%-roll-in-its-own-scan-range path as anyone else. This
+        // starbase is trivially within its own scan range (distance 0), so only the roll gates it.
+        var human = new Empire { Name = "Human" };
+        var game = BuildGame(null, ("Human", human));
+
+        var starbase = new Starbase {
+            Owner = human,
+            Location = new Coordinate(10, 10),
+            Kind = StarbaseKind.CommandBase,
+        };
+        game.Galaxy.Starbases.Add(starbase);
+
+        var handler = new VisibilityHandler(_alwaysFails);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.Starbases.Known).DoesNotContain(starbase);
+        await Assert.That(human.Starbases.Scouted).DoesNotContain(starbase);
+    }
 }
