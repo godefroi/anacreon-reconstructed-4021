@@ -75,7 +75,7 @@ follow once that's working.
      `RunProductionPipeline`'s own industry growth earlier in the same tick is infeasible to
      hand-trace on top of the shortage math (same reason the production tests lean on the Pascal
      harness instead of hand-derivation) — add coverage if it's ever touched.
-   - **Golden-file ground truth.** `reference/verify/{ambrosia,revolution,production}.pas` are
+   - ✅ **Golden-file ground truth.** `reference/verify/{ambrosia,revolution,production}.pas` are
      from-source transcriptions (not copied from the C# port — an early `ambrosia.pas` draft slipped
      into doing that, caught before landing, see its header comment) of `UseUpAmbrosia`,
      `UpdateRevolution`/`Rebellion`, and the production pipeline (`FullPipeline`), sharing tables/
@@ -91,11 +91,20 @@ follow once that's working.
      `Cargo.Supplies`/`Cargo.Ambrosia` (production) and don't track state UpdateRevolution mutates
      downstream of what `UpdateRevolutionScenario` itself computes — see each domain's test-class doc
      comment for the exact scope.
+   - **Commit 2c, military buildup** — `UpdateMilitary` (UPDATE.PAS:606-617), inserted between
+     `UseUpAmbrosia` and `UpdateRevolution` (runs unconditionally for planets — the same insertion
+     point `AnnualTickHandler.UpdateWorld`'s doc comment already marks). Small and self-contained:
+     reuses the `OptimumMilitary` formula already implemented inline in `UpdateRevolution`'s
+     suppression branch, and just grows `Cargo.Legions` toward it — no new tables needed. Not a
+     combat-phase concern despite the name; it's a plain per-tick economy step that happens to feed
+     numbers combat will later read.
 3. **Tech advancement** (planets only) — `UpdateTechLevel` (UPDATE.PAS:1032-1072), random
    advancement/regression toward the empire's capital tech level.
 4. **Starbase economy** — same `UpdateWorld` sequence, but with `SupplyLink`/`SurplusLink`
    (UPDATE.PAS:1408,1413 — raw-material redistribution across the empire) and industrial-complex-only
-   production (`STyp=cmp` branch, lines 1403-1415).
+   production and economy (`STyp=cmp` branches, lines 1403-1415 for production and 1420-1427 for
+   population/food/ambrosia/military/revolution — starbases gate the *entire* economy pipeline,
+   including Commit 2c's `UpdateMilitary`, on being an industrial complex, not just production).
 5. **Construction and empire-level updates** — `UpdateConstruction` (UPDATE.PAS:103-220, countdown
    and completion) and `UpdateEmpire` (UPDATE.PAS:222+, applies accumulated revolution index). This
    is also the earliest point `NewTechLevel`/`GetChanceForNewTech` (empire-level research: rolls a
@@ -103,10 +112,6 @@ follow once that's working.
    separate roll to advance `Empire.TechnologyLevel` once the current level's full `TechDev` set is
    unlocked — UPDATE.PAS:~320-420) can land; nothing populates `Empire.Technology.Ships` before this,
    so Commit 2's ship production stays correct-but-inert until it's implemented.
-
-**Deferred past this phase, pull in only when something else needs them:**
-- `UpdateDefenses`/`UpdateMilitary` (UPDATE.PAS:1278-1351,1386 — defense/troop buildup; pull in only
-  if the combat phase needs baseline defensive state)
 
 **Constants to extract:** `MaxPop` array (UPDATE.PAS:1077-1098), `BasePop` lookup, `TechAdj[]`,
 `TechAdj2[]`, `K6`, `SuppliesPerBillion`, `DrugsPerBillion`, `ThgLmt()` clamp function.
@@ -136,6 +141,14 @@ currently assumes empires never leave `Game.Empires` mid-game (`TurnEngine.Advan
 `Game.NextEmpire`) — this phase removes that assumption. Also lands minefield mechanics:
 `SectorRecord.MineScout` is per-cell (not per-entity, no `EntityVisibility<Minefield>` exists),
 so minefield visibility needs its own tracking structure, not a sixth `EntityVisibility<T>` on `Empire`.
+
+Needs `UpdateDefenses` (UPDATE.PAS:1278-1351) landed first as baseline defensive state for attack
+resolution to read: builds up a `Defns` array (new `DefnsTypes` enum — LAM/def/ion-style planetary
+defenses) from raw materials, gated by researched `Technology`. Bigger than Commit 2c's
+`UpdateMilitary` — needs three new tables (`DefAdj`, `DefBuildRate`, `RawM` per defense type) not yet
+extracted, and it branches on `WorldID.ObjTyp=Pln` vs `=Base` (runs unconditionally for both, per
+UPDATE.PAS:1387,1429) — exactly the planet/starbase overlap question deferred to economy phase
+Commit 4, so land the planet-only version no earlier than that.
 
 ## 6. Save/load
 
