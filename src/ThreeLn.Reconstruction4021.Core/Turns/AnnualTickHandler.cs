@@ -32,6 +32,13 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     private const double SafetyAdj = 1.05;
     private const double AmbrosiaAdj = 1.45;
 
+    // Ambrosia addiction constants (DATACNST.PAS:41-45).
+    private const double DrugsPerBillion = 11.5;
+    private const int ChanceToAddict = 25;
+    private const double AddictDeathCoeff = 0.12;
+    private const double AddictEffCoeff = 0.9;
+    private const double AddictRevICoeff = 0.55;
+
     private static readonly FrozenDictionary<WorldClass, int> _maxPopulationByClass = new Dictionary<WorldClass, int> {
         [WorldClass.Ambrosia] = 4830,
         [WorldClass.Arid] = 4100,
@@ -448,7 +455,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// [Commit 3: UpdateTechLevel]                                                          &lt;- between
     /// UpdatePopulation
     /// UseUpFood
-    /// [Commit 2b: UseUpAmbrosia]                                                           &lt;- between
+    /// UseUpAmbrosia
     /// [deferred: UpdateMilitary, UpdateDefenses]                                            &lt;- between
     /// UpdateRevolution
     /// HostileLife (if Class == Hostile)
@@ -460,6 +467,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
         UpdateEfficiency(planet);
         UpdatePopulation(planet);
         UseUpFood(planet);
+        UseUpAmbrosia(planet);
         UpdateRevolution(planet, newTotalRevIndex);
 
         if (planet.Class == WorldClass.Hostile)
@@ -849,6 +857,59 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
             }
         } else {
             planet.Cargo.Supplies -= foodNeeded;
+        }
+    }
+
+    /// <summary>
+    /// UPDATE.PAS:1163-1276. Skips AddNews — no news subsystem yet (same precedent as UseUpFood and
+    /// UpdateRevolution above) — but every state effect (population, efficiency, revolution index,
+    /// tech level, industry, addiction flag) is kept.
+    /// </summary>
+    private void UseUpAmbrosia(Planet planet)
+    {
+        var ambNeeded = ThgLmt((planet.Population / 100.0) * DrugsPerBillion);
+
+        if (planet.IsAddictedToAmbrosia) {
+            if (ambNeeded <= planet.Cargo.Ambrosia) {
+                planet.Cargo.Ambrosia -= ambNeeded;
+                return;
+            }
+
+            // Not enough ambrosia: people die, efficiency and revolution index suffer, and one of
+            // four random side effects (nothing / riots / industrial sabotage / tech regression) fires.
+            var lack = ambNeeded - planet.Cargo.Ambrosia;
+            planet.Cargo.Ambrosia = 0;
+
+            var die = Math.Min(ThgLmt(AddictDeathCoeff * lack), planet.Population / 7);
+            planet.Population -= die;
+
+            var effChange = Math.Min((int)(AddictEffCoeff * die), planet.Efficiency);
+            planet.Efficiency -= effChange;
+
+            ChangeRevIndex(planet, (int)(AddictRevICoeff * die));
+
+            switch (Rnd(1, 10)) {
+                case >= 5 and <= 7:
+                    planet.Population -= ThgLmt((Rnd(50, 120) / 100.0) * die);
+                    break;
+                case 8 or 9:
+                    foreach (var industry in Enum.GetValues<IndustryType>())
+                        planet.Industry[industry] -= (int)(planet.Industry[industry] * Rnd(0, 20) / 100.0);
+                    break;
+                case 10:
+                    if (planet.TechLevel > TechLevel.PreTech)
+                        planet.TechLevel--;
+                    break;
+            }
+
+            if (Rnd(1, 100) <= ChanceToAddict)
+                planet.IsAddictedToAmbrosia = false;
+        } else if (planet.Cargo.Ambrosia > 0) {
+            if (ambNeeded <= planet.Cargo.Ambrosia && Rnd(1, 100) < ChanceToAddict)
+                planet.IsAddictedToAmbrosia = true;
+
+            ambNeeded /= 2;
+            planet.Cargo.Ambrosia = Math.Max(0, planet.Cargo.Ambrosia - ambNeeded);
         }
     }
 

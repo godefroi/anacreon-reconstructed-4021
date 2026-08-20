@@ -61,9 +61,20 @@ follow once that's working.
    banker's rounding, not Turbo Pascal's round-half-away-from-zero (fixed with a `PascalRound` helper
    in `common.pas`) — both missed by hand-tracing. `reference/verify/revolution.pas` does the same for
    `UpdateRevolution`/`Rebellion` (Commit 1), including the previously-untested military-suppression
-   branch (UPDATE.PAS:715-735) — see `RevolutionPascalVerificationTests.cs`. Defer `UseUpAmbrosia`
-   (couples to this commit's output but is a large addition on its own — addiction death/riot/
-   efficiency effects, UPDATE.PAS:1163-1276).
+   branch (UPDATE.PAS:715-735) — see `RevolutionPascalVerificationTests.cs`.
+   - ✅ **Commit 2b, ambrosia addiction** — `UseUpAmbrosia` (UPDATE.PAS:1163-1276), inserted between
+     `UseUpFood` and `UpdateRevolution`. Makes `IsAddictedToAmbrosia` real state instead of a
+     permanently-false flag Commit 2's own production pipeline already read (`AmbrosiaAdj` in
+     `GetIndustrialDistribution`/`UpdateIndustry`). See `AnnualTickHandlerAmbrosiaTests` for the
+     addiction-onset, shortage-death/efficiency/revindex, riot, and tech-regression branches — all
+     hand-traced with `FixedRandom`, isolated from the production pipeline's own RNG/growth by using
+     `Type=Capital` (never rebels) and `Efficiency=100` (no-ops `UpdateEfficiency` regardless of RNG).
+     One sub-branch (industrial sabotage, UPDATE.PAS:1226-1234 — destroys `Trunc(level*Rnd(0,20)/100)`
+     off every industry type) is faithful to source but not independently unit-tested: `Industry`
+     starts at 0 on every test planet, and `RunProductionPipeline`'s own industry growth earlier in
+     the same tick is infeasible to hand-trace on top of the shortage math (same reason
+     `AnnualTickHandlerProductionTests` leans on the Pascal harness instead of hand-derivation) — add
+     coverage if it's ever touched.
 3. **Tech advancement** (planets only) — `UpdateTechLevel` (UPDATE.PAS:1032-1072), random
    advancement/regression toward the empire's capital tech level.
 4. **Starbase economy** — same `UpdateWorld` sequence, but with `SupplyLink`/`SurplusLink`
@@ -78,7 +89,6 @@ follow once that's working.
    so Commit 2's ship production stays correct-but-inert until it's implemented.
 
 **Deferred past this phase, pull in only when something else needs them:**
-- `UseUpAmbrosia` full addiction logic (commit 2's natural follow-on)
 - `UpdateDefenses`/`UpdateMilitary` (UPDATE.PAS:1278-1351,1386 — defense/troop buildup; pull in only
   if the combat phase needs baseline defensive state)
 
