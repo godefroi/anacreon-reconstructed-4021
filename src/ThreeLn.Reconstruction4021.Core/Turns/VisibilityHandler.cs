@@ -88,11 +88,14 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
             if (fleet.Owner == empire && fleet.Status != Types.FleetStatus.Lost)
                 ScoutAdjacent(fleet.Location, empire, game);
 
-        // Determine scouted status for all existing entities (INTRFACE.PAS:1585-1614).
+        // Determine scouted status for all existing entities (INTRFACE.PAS:1584-1610). Construction
+        // sites are deliberately excluded: Pascal's ScoutObjects only runs this range/roll check for
+        // Pln, Base, and Gate — a construction site can only become Scouted via adjacency
+        // (ScoutAdjacent above) or by being freshly created by its owner (Construction sets
+        // ScoutedBy/KnownBy directly, INTRFACE.PAS:507-508 — not modeled yet, no construction phase exists).
         DetermineIfScouted(game.Galaxy.Planets, empire.Planets, empire, game, p => p.Location, p => p.Owner);
         DetermineIfScouted(game.Galaxy.Starbases, empire.Starbases, empire, game, s => s.Location, s => s.Owner);
         DetermineIfScouted(game.Galaxy.Stargates, empire.Stargates, empire, game, g => g.Location, g => g.Owner);
-        DetermineIfScouted(game.Galaxy.ConstructionSites, empire.ConstructionSites, empire, game, c => c.Location, c => c.Owner);
     }
 
     private static void ScoutAdjacent(Coordinate center, Empire empire, Game game)
@@ -205,10 +208,11 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
 
     private static bool IsInRangeOfStarbase(Coordinate location, Empire empire, Game game)
     {
-        // Command bases and fortresses scan (not industrial complexes/outposts — INTRFACE.PAS:1388).
+        // Every starbase kind scans except industrial complexes — INTRFACE.PAS:1388 is
+        // `GetBaseType(BaseID)<>cmp`, not a CommandBase/Fortress allowlist; Outposts scan too.
         return game.Galaxy.Starbases.Any(s =>
             s.Owner == empire &&
-            (s.Kind == Types.StarbaseKind.CommandBase || s.Kind == Types.StarbaseKind.Fortress) &&
+            s.Kind != Types.StarbaseKind.IndustrialComplex &&
             Chebyshev(s.Location, location) < StarbaseScanRadius);
     }
 

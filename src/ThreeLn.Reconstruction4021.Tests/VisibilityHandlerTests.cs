@@ -541,4 +541,63 @@ public class VisibilityHandlerTests
         // Should be scouted because of command base, not industrial complex
         await Assert.That(human.Fleets.Scouted).Contains(targetFleet);
     }
+
+    [Test]
+    public async Task FleetInRangeOfOutpostIsScouted()
+    {
+        // INTRFACE.PAS:1388 is `GetBaseType(BaseID)<>cmp` — every StarbaseTypes member except
+        // IndustrialComplex scans, Outpost included. Not a CommandBase/Fortress allowlist.
+        var human = new Empire { Name = "Human" };
+        var enemy = new Empire { Name = "Enemy" };
+        var game = BuildGame(null, ("Human", human), ("Enemy", enemy));
+
+        var outpost = new Starbase {
+            Owner = human,
+            Location = new Coordinate(10, 10),
+            Kind = StarbaseKind.Outpost,
+        };
+        game.Galaxy.Starbases.Add(outpost);
+
+        var enemyFleet = new Fleet {
+            Owner = enemy,
+            Location = new Coordinate(13, 10), // Distance 3 from outpost (< 6)
+            Status = FleetStatus.Ready,
+        };
+        enemyFleet.Ships.Starships = 1;
+        game.Galaxy.Fleets.Add(enemyFleet);
+
+        var handler = new VisibilityHandler(_alwaysFails);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.Fleets.Scouted).Contains(enemyFleet);
+    }
+
+    [Test]
+    public async Task ConstructionSiteInStarbaseRangeButNotAdjacentIsNotScouted()
+    {
+        // Pascal's ScoutObjects (INTRFACE.PAS:1584-1610) only runs DetermineIfScouted's range/roll
+        // check for Pln, Base, and Gate — never Con. A construction site outside adjacency range
+        // must stay unscouted regardless of starbase range or roll outcome.
+        var human = new Empire { Name = "Human" };
+        var enemy = new Empire { Name = "Enemy" };
+        var game = BuildGame(null, ("Human", human), ("Enemy", enemy));
+
+        var commandBase = new Starbase {
+            Owner = human,
+            Location = new Coordinate(10, 10),
+            Kind = StarbaseKind.CommandBase,
+        };
+        game.Galaxy.Starbases.Add(commandBase);
+
+        var constr = new ConstructionSite {
+            Owner = enemy,
+            Location = new Coordinate(13, 10), // Distance 3 from the command base (< 6), not adjacent
+        };
+        game.Galaxy.ConstructionSites.Add(constr);
+
+        var handler = new VisibilityHandler(_alwaysSucceeds);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.ConstructionSites.Scouted).DoesNotContain(constr);
+    }
 }
