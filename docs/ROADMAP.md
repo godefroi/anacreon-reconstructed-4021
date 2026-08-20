@@ -46,17 +46,31 @@ follow once that's working.
    own roadmap line. Untested branches, faithful to source but never exercised: `HostileLife`, and
    the military-suppression path (`Military>OptimumMilitary`, UPDATE.PAS:715-735) — add coverage if
    a future change touches either.
-2. **Industry and production** (planets only) — `ProduceRawMaterial`, `GetIndustrialDistribution`,
-   `UpdateIndustry`, `Production` (UPDATE.PAS:1375-1379; production formula at 844-925). The
-   heaviest numerical model in this phase. Defer `UseUpAmbrosia` (couples to this commit's output
-   but is a large addition on its own — addiction death/riot/efficiency effects, UPDATE.PAS:1163-1276).
+2. ✅ **Industry and production** (planets only) — `ProduceRawMaterial`, `GetIndustrialDistribution`,
+   `UpdateIndustry`, `Production` (UPDATE.PAS:1375-1379; production formula at 844-925), inserted
+   before `UpdateEfficiency` in `UpdateWorld` (Pascal runs the whole production pipeline first).
+   Ship/cargo tech-gating is TechLevel-derived (via a per-item "minimum tech level" table built from
+   `TechDev`'s monotonic structure) rather than modeling per-empire incremental research — nothing
+   seeds or grows `Empire.Technology.Ships` yet (that needs both new-game setup, Phase 2, and
+   `NewTechLevel`'s per-tick research rolls, Commit 5 below), so ship production is correct but inert
+   until those land. Verified against `_ref/verify/verify.pas`, a standalone FreePascal harness that
+   transcribes the literal Pascal tables/procedures and runs identical inputs (see its header comment
+   for one known deviation) — this caught a real bug (`SelfSufficiencySettings` defaulted to 0 instead
+   of Pascal's `InitializeISSP` default of 5, badly distorting `GetIndustrialDistribution`'s sqrt
+   terms) that hand-tracing had missed. Defer `UseUpAmbrosia` (couples to this commit's output but is
+   a large addition on its own — addiction death/riot/efficiency effects, UPDATE.PAS:1163-1276).
 3. **Tech advancement** (planets only) — `UpdateTechLevel` (UPDATE.PAS:1032-1072), random
    advancement/regression toward the empire's capital tech level.
 4. **Starbase economy** — same `UpdateWorld` sequence, but with `SupplyLink`/`SurplusLink`
    (UPDATE.PAS:1408,1413 — raw-material redistribution across the empire) and industrial-complex-only
    production (`STyp=cmp` branch, lines 1403-1415).
 5. **Construction and empire-level updates** — `UpdateConstruction` (UPDATE.PAS:103-220, countdown
-   and completion) and `UpdateEmpire` (UPDATE.PAS:222+, applies accumulated revolution index).
+   and completion) and `UpdateEmpire` (UPDATE.PAS:222+, applies accumulated revolution index). This
+   is also the earliest point `NewTechLevel`/`GetChanceForNewTech` (empire-level research: rolls a
+   chance each tick to unlock one more `TechnologyTypes` item into `Empire.Technology`, then a
+   separate roll to advance `Empire.TechnologyLevel` once the current level's full `TechDev` set is
+   unlocked — UPDATE.PAS:~320-420) can land; nothing populates `Empire.Technology.Ships` before this,
+   so Commit 2's ship production stays correct-but-inert until it's implemented.
 
 **Deferred past this phase, pull in only when something else needs them:**
 - `UseUpAmbrosia` full addiction logic (commit 2's natural follow-on)

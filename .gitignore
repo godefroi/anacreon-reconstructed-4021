@@ -3,7 +3,13 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
-_ref/
+# Reference Pascal source and verification harness are tracked; the manual and image/art archives
+# are not (handled separately), and neither are the harness's own FreePascal build byproducts.
+_ref/*.doc
+_ref/*.docx
+_ref/*.zip
+_ref/**/*.exe
+_ref/**/*.o
 
 # dotenv files
 .env

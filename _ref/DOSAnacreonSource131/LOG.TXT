@@ -1,0 +1,40 @@
+Fixes and Changes In Version 1.22
+
+02/27/90: Fixed a bug in empire update that would send fleets to
+coordinate 0,0 on the map and crash the system. This bug caused
+garbage to appear on the menus. Thanks to Bruce Johnson who pointed
+out the bug and provided substantial documentation to help me fix it.
+
+02/28/90: Fixed a bug in empire conquest. When a capital is
+conquered, a new world is chosen as a capital. Sometimes a starbase
+is chosen. Unfortunately, the NPE routines cannot deal with a
+starbase as a capital. I had to take out the routines in empire
+conquest so that only planets can be capitals. Thanks to Julian
+Richter for finding this bug.
+
+Fixes and Changes In Version 1.30
+
+10/04/90: Fixed a bug when an player empire is conquered. It used to
+get into an infinite loop, asking for the password over and over
+again.
+
+10/06/90: Pirate empire now set their defenses as kingdom empires do.
+
+10/10/90: Added berserker empires (NPE Type = 4). They use starbases to 
+move from planet to planet stealing resources.
+
+10/11/90: Add ability to request close up of fleets as well as
+worlds. Now when hitting <Return> in the map a listbox of all objects
+in the sector appears; player is allowed to select close up on one of
+them.
+
+10/15/90: Fixed a bug in the Launch LAM routines that did not allow
+the player to launch LAMs to a starbases that was known but not
+scouted.
+
+10/16/90: Fixed a bug in ATTNPE.PAS which caused NPE fleets attacking
+transport fleets to retreat without fighting.
+
+10/18/90: Added guardian empires (NPE Type = 5). These simple empires 
+LAM any fleet that gets in range. They are very useful for blindly 
+protecting areas of the galaxy.

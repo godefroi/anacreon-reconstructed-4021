@@ -1,0 +1,123 @@
+Jan 16, 2004
+
+Well, I thought I would get this version out sooner, but I kept finding
+more and more things I wanted to implement or fix!  Well, now here it 
+is, and since the changes have been so drastic I decided to release it
+as version 2.0.  I'm aware of a few bugs that are still there, but they
+are minor and I feel they can wait just a little longer.  Besides, I 
+want to get this out and see what people think of the new features.  I
+imagine that, after getting feedback, some changes might be in order.
+
+So please give me feedback! :)
+
+In version 2.0, the following things have been changed:
+
+  - Changed disruptors so that they not only slow down enemy jumpfleets
+    within 3 sectors to warp speed, but also can make your warp ships 
+    go jump speed within that area.  This change was made because 
+    disruptors are so expensive and neither I nor anybody I've talked
+    to about it have ever found them worth building.  This will make 
+    them more useful and thus more attractive and pertinent.
+
+  - Added an SRMSweep order for fleets.
+
+  - Added (finally!) Terraforming as a gate-level technology.  This has
+    been mentioned in the code (my friend and I discovered it while
+    perusing the .exe while we were young teenagers) but was never quite
+    implemented.  I'm not sure if I like it being so powerful, but we'll
+    see how we like it.  I've tried to temper its power by making the
+    side-effects pretty daunting.  Please let me know what you think!
+
+  - In the WorldBackgroundIndex, the following changes have been made:
+
+    - Added an 'O' target which matches the owner of the object in
+      question.  Thus, '2:4  O  E:1,2' would be matched when looking
+      at planet 4 only if the empire looking at it were empires 1 or 2
+      AND owned the planet.  (Just '2:4 O' would match any owner.)
+
+    - Fixed it so that multiple brackets could be used.  E.g. if part
+      of your flavor text is 'Just look at [C2:13] or [N2:5]' it will
+      give you the coordinates of planet 13 and the name of planet 5,
+      instead of the coordinates of 13 and then '[N2:5]' for the second
+      part.
+
+    - Changed it so that any "void" coordinates (i.e. coordinates for
+      an object that doesn't exist) are not displayed in the flavor
+      text.  This makes it so you can show coordinates of objects not
+      yet created without having the whole place covered with "-17,24"
+      or whatever coordinate is just off the upper-left corner of the map
+
+  - Added a scenario command "RandomizePlayers."  This is important
+    because I always got bored with playing the same player.  I wanted
+    to be able to play as other players without having to play ALL the
+    players.  (Like be player 4 without having to be players 1-3 also.)
+    Any non-created player empires that have NOT yet been created will
+    be randomly allocated to players who have not yet been assigned an
+    empire.  If RandomizePlayers comes before any player empires have 
+    been created, they will all be random.  Otherwise, only remaining
+    ones will be.  This is just a hook in case people want to create
+    scenarios where one empire MUST be a player and others may be random-
+    ized. 
+
+  - Fixed it so that when you change your capital, the map is redrawn 
+    immediately instead of having to wait until the next year for it to
+    reflect the change in coordinate origins.
+
+  - Fixed the bug that allowed fleets under orders to dump materials into
+    a construction site, thus making those materials simply vanish from
+    the game.  Now the materials will stay in the fleet until there's a
+    valid place to drop them off.
+
+  - Fixed a bug that made HK fleets move at the same time as Warp fleets,
+    instead of moving like the jump-speed ships they are.
+
+  - Implemented Warp Link Frequencies.  Under "Empire," you'll now see
+    "Link Frequencies."  The idea is that the owner of a gate/link/disrupter
+    can allow other empires to use the device by sharing the paraspace
+    frequencies needed to activate it.  It opens up some neat possibilites.
+    So anyway, you can use any gate as long as the frequency you provide
+    matches the owner's frequency.
+
+  - Fixed the small annoyance where you couldn't choose a construction
+    site directly from the map.  Now you can.
+
+I also have finished my scenario The Nebula, and I have a couple more in 
+the works.  Those will be released in good time.  In the meantime, if 
+anybody has any decent scenarios they've written, please send them to me 
+and I'll consider packaging them with the next version.
+
+Happy playing!  Please let me know if you have any suggestions / bug fixes
+that you would like to see worked on.
+
+- Adam Luker
+  zot@aapc.com
+
+
+Sep. 24, 2003
+After 13 years, Anacreon has finally been resurrected!  Expect
+lots of development in the next little while since I'm so excited
+about it.  I know it's probably a little immature to release version
+1.31 already, after just two little bug-fixes, but these were the
+ones that are most apparent, and I wanted to get out a new version
+quickly.
+
+In version 1.31, the following long-standing bugs have been fixed:
+
+  - Any unnamed Fleet240 or Enemy240 was unviewable except 
+    through the F5 screen
+  - Advanced ships (eg. starships) were allowed to defend 
+    a planet, making the planet unconquerable.
+
+Next on the to-do list:
+
+  - Implement "SweepSRMs" and "Abort" in fleet orders
+  - Fix the '[]' parsing in scenario flavor text to allow
+    more than one set of brackets per line
+  - See what I can do about enlarging the size of the universe
+    (Larger map, more planets, more empires ... more of everything)
+  - Finish scenario "The Nebula," which will depend on the '[]' bug
+    being fixed
+  - Implement Terraforming as a Gate-level technology
+  - Investigate making Disruptors more useful
+     - Less time to build?  Block gating-in?
+  - That'll do, for now. :)

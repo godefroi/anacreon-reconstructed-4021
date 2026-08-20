@@ -235,3 +235,179 @@ public class AnnualTickHandlerTests
         await Assert.That(owner.TotalRevolutionIndex).IsEqualTo(0);
     }
 }
+
+/// <summary>
+/// Verifies Commit 2 of the economy phase: raw material and ship/cargo production for planets
+/// (UPDATE.PAS's ProduceRawMaterial/GetIndustrialDistribution/UpdateIndustry/Production, called via
+/// AnnualTickHandler.RunProductionPipeline). Expected values here are NOT hand-derived — Pop=1000,
+/// Class=EthCls, and Tech=Gate were deliberately chosen to fully exercise the sqrt/pow cascade in
+/// GetIndustrialDistribution, which is infeasible to hand-trace reliably. Instead, every expected
+/// value was produced by _ref/verify/verify.pas, a standalone FreePascal harness that transcribes
+/// the literal DATACNST.PAS/INTRFACE.PAS/UPDATE.PAS/MISC.PAS tables and procedures byte-for-byte and
+/// runs the identical call sequence RunProductionPipeline uses, with Rnd hardcoded to return its
+/// lower bound (matching FixedRandom(0)'s semantics exactly). This is a from-source ground truth,
+/// not a self-check against this C# port — see that file's header comment for its one known deviation.
+/// </summary>
+public class AnnualTickHandlerProductionTests
+{
+    private static Game BuildGame(params Planet[] planets)
+    {
+        var game = new Game(new Core.Galaxy.Galaxy(size: 20));
+        game.Galaxy.Planets.AddRange(planets);
+        return game;
+    }
+
+    [Test]
+    public async Task TrillumProductionDrawsDownReservesWhenIndustryAlreadyDeveloped()
+    {
+        // ProduceRawMaterial runs before UpdateIndustry in RunProductionPipeline, so this result
+        // depends only on the Industry level set here, not on anything GetIndustrialDistribution/
+        // UpdateIndustry compute afterward for this tick.
+        var owner = new Empire { Name = "Test" };
+        var planet = new Planet {
+            Location = new Coordinate(0, 0),
+            Owner = owner,
+            Class = WorldClass.EarthLike,
+            Type = WorldType.TrillumMine,
+            TechLevel = TechLevel.Gate,
+            Efficiency = 100,
+            Population = 1000,
+            TrillumReserve = 500,
+        };
+        planet.Industry.TrillumMining = 100;
+        planet.Cargo.Supplies = 1000;
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(planet.Cargo.Trillum).IsEqualTo(238);
+        await Assert.That(planet.TrillumReserve).IsEqualTo(498);
+    }
+
+    [Test]
+    public async Task PreTechWorldOnlyProducesSuppliesEvenWithOtherIndustryDeveloped()
+    {
+        // TechDev[PreTchLvl] = [sup] only, so che/tri production is gated off entirely despite
+        // Industry.Chemical/TrillumMining both being fully developed (100) — matching UPDATE.PAS:1359-1369.
+        var owner = new Empire { Name = "Test" };
+        var planet = new Planet {
+            Location = new Coordinate(0, 0),
+            Owner = owner,
+            Class = WorldClass.EarthLike,
+            Type = WorldType.TrillumMine,
+            TechLevel = TechLevel.PreTech,
+            Efficiency = 100,
+            Population = 0, // kept tiny so UpdatePopulation/UseUpFood can't perturb Cargo.Supplies below
+            TrillumReserve = 500,
+        };
+        planet.Industry.Chemical = 100;
+        planet.Industry.TrillumMining = 100;
+        planet.Industry.Supply = 100;
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(planet.Cargo.Trillum).IsEqualTo(0);
+        await Assert.That(planet.Cargo.Chemicals).IsEqualTo(0);
+        await Assert.That(planet.Cargo.Supplies).IsEqualTo(122);
+        await Assert.That(planet.TrillumReserve).IsEqualTo(500);
+    }
+
+    [Test]
+    public async Task FullProductionPipelineForCapitalTypeWorld()
+    {
+        // Exercises the entire pipeline in composed order, including GetIndustrialDistribution's
+        // Gamma/Beta cascade (Capital has a principal industry, so it takes the non-PI-less branch)
+        // and Production building all seven ship types from one developed ShipyardGeneral level.
+        var owner = new Empire { Name = "Test" };
+        owner.Technology.Ships.UnionWith(Enum.GetValues<ShipType>());
+        var planet = new Planet {
+            Location = new Coordinate(0, 0),
+            Owner = owner,
+            Class = WorldClass.EarthLike,
+            Type = WorldType.Capital,
+            TechLevel = TechLevel.Gate,
+            Efficiency = 100,
+            Population = 1000,
+            TrillumReserve = 5000,
+        };
+        planet.Industry.ShipyardGeneral = 100;
+        planet.Industry.TrillumMining = 100;
+        planet.Cargo.Chemicals = 5000;
+        planet.Cargo.Metals = 5000;
+        planet.Cargo.Supplies = 5000;
+        planet.Cargo.Trillum = 5000;
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(planet.Industry.Bioindustry).IsEqualTo(0);
+        await Assert.That(planet.Industry.Chemical).IsEqualTo(10);
+        await Assert.That(planet.Industry.Mining).IsEqualTo(13);
+        await Assert.That(planet.Industry.ShipyardGeneral).IsEqualTo(115);
+        await Assert.That(planet.Industry.ShipyardJump).IsEqualTo(0);
+        await Assert.That(planet.Industry.ShipyardStarship).IsEqualTo(0);
+        await Assert.That(planet.Industry.ShipyardTransport).IsEqualTo(0);
+        await Assert.That(planet.Industry.Supply).IsEqualTo(10);
+        await Assert.That(planet.Industry.TrillumMining).IsEqualTo(50);
+
+        await Assert.That(planet.Ships.Fighters).IsEqualTo(113);
+        await Assert.That(planet.Ships.HunterKillers).IsEqualTo(21);
+        await Assert.That(planet.Ships.Jumpships).IsEqualTo(37);
+        await Assert.That(planet.Ships.Jumptransports).IsEqualTo(21);
+        await Assert.That(planet.Ships.Penetrators).IsEqualTo(16);
+        await Assert.That(planet.Ships.Starships).IsEqualTo(8);
+        await Assert.That(planet.Ships.Transports).IsEqualTo(42);
+
+        await Assert.That(planet.Cargo.Chemicals).IsEqualTo(4863);
+        await Assert.That(planet.Cargo.Metals).IsEqualTo(4211);
+        await Assert.That(planet.Cargo.Trillum).IsEqualTo(5217);
+        await Assert.That(planet.TrillumReserve).IsEqualTo(4998);
+    }
+
+    [Test]
+    public async Task NinjaProductionThrottledByScarceAmbrosiaButAmbrosiaNeverDeducted()
+    {
+        // Preserves UPDATE.PAS:896-916's asymmetric raw-material handling: Ambrosia's requirement is
+        // checked (and throttles ninja production when scarce) but only che/met/sup/tri are ever
+        // actually subtracted from cargo. Ambrosia stays at 5 despite gating production down to 5.
+        var owner = new Empire { Name = "Test" };
+        var planet = new Planet {
+            Location = new Coordinate(0, 0),
+            Owner = owner,
+            Class = WorldClass.EarthLike,
+            Type = WorldType.NinjaWorld,
+            TechLevel = TechLevel.Gate,
+            Efficiency = 100,
+            Population = 1000,
+            TrillumReserve = 5000,
+        };
+        planet.Industry.Bioindustry = 100;
+        planet.Cargo.Chemicals = 5000;
+        planet.Cargo.Metals = 5000;
+        planet.Cargo.Supplies = 5000;
+        planet.Cargo.Trillum = 5000;
+        planet.Cargo.Ambrosia = 5;
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(planet.Industry.Bioindustry).IsEqualTo(97);
+        await Assert.That(planet.Industry.Chemical).IsEqualTo(21);
+        await Assert.That(planet.Industry.Mining).IsEqualTo(6);
+        await Assert.That(planet.Industry.Supply).IsEqualTo(10);
+        await Assert.That(planet.Industry.TrillumMining).IsEqualTo(6);
+
+        await Assert.That(planet.Cargo.NinjaLegions).IsEqualTo(5);
+        await Assert.That(planet.Cargo.Ambrosia).IsEqualTo(5);
+        await Assert.That(planet.Cargo.Chemicals).IsEqualTo(4998);
+    }
+}

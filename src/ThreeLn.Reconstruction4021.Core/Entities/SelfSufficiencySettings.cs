@@ -8,8 +8,10 @@ namespace ThreeLn.Reconstruction4021.Core.Entities;
 /// </summary>
 public sealed class SelfSufficiencySettings
 {
-    public int Chemical { get; set; }
-    public int Metal { get; set; }
-    public int Supply { get; set; }
-    public int Trillum { get; set; }
+    // Pascal's CreatePlanet always calls InitializeISSP, setting ImpExp to DefaultISSP ($5555 — every
+    // nibble at index 5, ISSP[5]=1.00) — so a newly-created planet's dials start here, not at 0.
+    public int Chemical { get; set; } = 5;
+    public int Metal { get; set; } = 5;
+    public int Supply { get; set; } = 5;
+    public int Trillum { get; set; } = 5;
 }
