@@ -178,3 +178,38 @@ Deferred multiplayer option — sequential mode (already built) is the only mode
 
 Not scheduled, pull in only if/when needed: v2 gameplay changes and new features from
 `PASCAL_V1_VS_V2_DIFF.md` (all opt-in, none are baseline).
+
+## Ground-truth harness generation: patch-vs-transcribe (prototyped, validated)
+
+Current practice (`reference/verify/*.pas`) transcribes each procedure into a fresh file, hand-read
+from source every time (`[[feedback_transcribe_pascal_harness_from_source]]`). Prototyped an
+alternative in `reference/verify/patch-prototype/`: maintain small patches against the real
+`reference/DOSAnacreonSource131/*.PAS` files, apply them to a disposable copy at build time
+(`build.ps1`), and call the real, only-minimally-touched `UpdateWorld` directly against a
+hand-assembled `Universe^` instead of a simplified/parameterized stand-in.
+
+**Outcome: validated end to end, kept as a second lane, not adopted as the default.** Every blocker
+hit getting `UpdateWorld` (and everything it actually calls) to compile turned out to be small and
+mechanical — dead UI/demo code deleted (`Environ`'s `FeatureInActive`/`LoadConfiguration`, `UPDATE.PAS`'s
+whole `UpdateUniverse`), trivial I/O helpers (`WriteVariable`/`ReadVariable` — just
+`BlockRead`/`BlockWrite`+`IOResult`) duplicated locally instead of importing `Dos2`'s
+`Printer`/`CRT`/`EIO`/`WND` chain for them, a couple of TP-isms (`STRG.PAS`'s inline-8086-opcode
+`AllUpCase`, `PRIMINTR.PAS`'s real-mode `MaxAvail` heap check, fpc's stricter `$V+` string-length
+matching), and one pure-math procedure (`GetIndustrialDistribution`) relocated verbatim out of
+`INTRFACE.PAS` to avoid pulling in `Fleet`/`Orders`/`NPE` for a single function. A driver
+(`runworld.pas`) assembling a real 2-planet `Universe^` and calling the real `UpdateWorld` reproduced
+`TechLevelCases.OwnedWorldBehindCapitalAdvances` exactly (`techlevel=6`, matching `techlevel.golden`).
+Also surfaced a genuine landmine: `DATASTRC.PAS:235`'s `GlobalSets ABSOLUTE SetOfActiveFleets` overlay
+compiles cleanly under fpc but doesn't preserve Turbo Pascal's declaration-order memory layout it
+depends on — writing through it silently corrupted the `Universe` pointer (a real access-violation
+crash, not a compile error). Full writeup: `reference/verify/patch-prototype/README.md`.
+
+**Recommendation.** Transcription stays the default for new isolated-procedure golden cases — cheap,
+bounded, proven across four commits. Reach for the patch-based real-`Universe^` approach only when a
+procedure's fidelity risk is high enough to justify it: many state-shaped lookups transcription would
+otherwise have to simplify into plain parameters (`GetCapital`/`GetTech`-style calls), or call
+*ordering* across a real pipeline is the thing worth checking — the exact "cross-cutting field" bug
+class hit twice this session with transcription (`UpdateMilitary` mutating `Cargo.Legions` before
+`UpdateRevolution` reads it). Don't expand into combat/fleet movement/NPE AI by default — `Intrface`'s
+`Fleet`/`Orders`/`NPE` dependency was dodged here by relocating one function; the next subsystem's
+dependency web is an open question, not something this result generalizes to.
