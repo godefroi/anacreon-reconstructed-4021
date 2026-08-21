@@ -108,8 +108,16 @@ follow once that's working.
      names `ThgLmt`/`RndVar` read as noise to anyone without the Pascal source open, so
      `AnnualTickHandler`'s private helpers are now `ClampResource`/`Jitter`, with the original Pascal
      names preserved in each one's xmldoc instead of in the identifier.
-3. **Tech advancement** (planets only) — `UpdateTechLevel` (UPDATE.PAS:1032-1072), random
-   advancement/regression toward the empire's capital tech level.
+3. ✅ **Tech advancement** (planets only) — `UpdateTechLevel` (UPDATE.PAS:1032-1072), inserted between
+   `UpdateEfficiency` and `UpdatePopulation` (the same insertion point `AnnualTickHandler.UpdateWorld`'s
+   doc comment already marked). Independent worlds drift upward on their own (1-in-50/tick); owned
+   worlds chase their empire's capital tech level up (`TechLvlInc`=16% chance/tick, DATACNST.PAS:61)
+   or down (1-in-15/tick) — `Empire.Capital` already existed as a `Planet?` from the data-model phase,
+   so no new state was needed. A null `Owner.Capital` (a state Pascal's `GetCapital` can't produce for
+   a real, founded empire) is a defensive no-op, covered by one hardcoded guard test; every other
+   branch is golden-file-backed (`techlevel.pas`/`techlevel.golden`,
+   `TechLevelCases`/`AnnualTickHandlerTechLevelTests`) since UpdateTechLevel's own formula never reads
+   Population, unlike Revolution/Military — no `PlanetPop`/`HarnessPop` split was needed here.
 4. **Starbase economy** — same `UpdateWorld` sequence, but with `SupplyLink`/`SurplusLink`
    (UPDATE.PAS:1408,1413 — raw-material redistribution across the empire) and industrial-complex-only
    production and economy (`STyp=cmp` branches, lines 1403-1415 for production and 1420-1427 for

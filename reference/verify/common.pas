@@ -52,6 +52,7 @@ const
    K4 = 0.0; K6 = 11000.0;
    SafetyAdj = 1.05;
    AmbrosiaAdj = 1.45;
+   TechLvlInc = 16;  { % chance that world has of increasing tech (DATACNST.PAS:61). }
 
    TechAdj: array[TechLevel] of Integer =
       (  25, 40, 49, 57, 66, 80, 85, 90, 94, 97,100 );

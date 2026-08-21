@@ -6,11 +6,12 @@ namespace ThreeLn.Reconstruction4021.Core.Turns;
 
 /// <summary>
 /// Runs the annual economy tick (UPDATE.PAS:UpdateUniverse). Commit 1 covered population growth,
-/// efficiency, food consumption, and revolution/rebellion for planets. Commit 2 (this one) adds raw
-/// material and ship/cargo production for planets. Tech advancement, starbase economy, and
-/// construction/empire-level updates are later commits (see docs/ROADMAP.md and the insertion-point
-/// map on <see cref="UpdateWorld"/>). HostileLife shipped early with Commit 1 (it's cheap and sits
-/// right after UpdateRevolution in Pascal) even though it isn't its own roadmap line.
+/// efficiency, food consumption, and revolution/rebellion for planets. Commit 2 added raw material
+/// and ship/cargo production for planets (plus 2b/2c, ambrosia addiction and military buildup).
+/// Commit 3 (this one) adds tech-level advancement/regression. Starbase economy and construction/
+/// empire-level updates are later commits (see docs/ROADMAP.md and the insertion-point map on
+/// <see cref="UpdateWorld"/>). HostileLife shipped early with Commit 1 (it's cheap and sits right
+/// after UpdateRevolution in Pascal) even though it isn't its own roadmap line.
 /// </summary>
 public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
 {
@@ -38,6 +39,9 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     private const double AddictDeathCoeff = 0.12;
     private const double AddictEffCoeff = 0.9;
     private const double AddictRevICoeff = 0.55;
+
+    /// <summary>% chance a world advances toward its empire's capital tech level each tick (DATACNST.PAS:61).</summary>
+    private const int TechLevelIncreaseChance = 16;
 
     private static readonly FrozenDictionary<WorldClass, int> _maxPopulationByClass = new Dictionary<WorldClass, int> {
         [WorldClass.Ambrosia] = 4830,
@@ -454,7 +458,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// <code>
     /// Production pipeline (ProduceRawMaterial/GetIndustrialDistribution/UpdateIndustry/Production)
     /// UpdateEfficiency
-    /// [Commit 3: UpdateTechLevel]                                                          &lt;- between
+    /// UpdateTechLevel
     /// UpdatePopulation
     /// UseUpFood
     /// UseUpAmbrosia
@@ -468,6 +472,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     {
         RunProductionPipeline(planet);
         UpdateEfficiency(planet);
+        UpdateTechLevel(planet);
         UpdatePopulation(planet);
         UseUpFood(planet);
         UseUpAmbrosia(planet);
@@ -822,6 +827,38 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
             };
 
         planet.Efficiency = Math.Min(100, planet.Efficiency + inc);
+    }
+
+    /// <summary>
+    /// UPDATE.PAS:1032-1072. Skips AddNews (no news subsystem yet, same precedent as every other
+    /// UpdateWorld step). Independent worlds drift upward on their own (1-in-50 chance per tick);
+    /// owned worlds instead chase their empire's capital tech level up or down. A world with no
+    /// capital to compare against (Owner.Capital is null) is a state Pascal's GetCapital can't
+    /// produce for a real empire — every empire is founded with one — so this is purely a defensive
+    /// no-op for incomplete test/setup state, not a modeled game rule.
+    /// </summary>
+    private void UpdateTechLevel(Planet planet)
+    {
+        if (planet.TechLevel == TechLevel.Gate)
+            return;
+
+        if (planet.Owner.IsIndependent) {
+            if (Rnd(1, 50) == 1)
+                planet.TechLevel++;
+            return;
+        }
+
+        var capitalTech = planet.Owner.Capital?.TechLevel;
+        if (capitalTech is null)
+            return;
+
+        if (capitalTech > planet.TechLevel) {
+            if (Rnd(1, 100) <= TechLevelIncreaseChance)
+                planet.TechLevel++;
+        } else if (capitalTech < planet.TechLevel) {
+            if (Rnd(1, 15) == 1)
+                planet.TechLevel--;
+        }
     }
 
     private void UpdatePopulation(Planet planet)

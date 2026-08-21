@@ -1,0 +1,8 @@
+case=IndependentWorldAdvances;techlevel=6
+case=IndependentWorldAtGateNeverAdvances;techlevel=10
+case=OwnedWorldBehindCapitalAdvances;techlevel=6
+case=OwnedWorldBehindCapitalNoAdvanceWhenRollFails;techlevel=5
+case=OwnedWorldAheadOfCapitalRegresses;techlevel=4
+case=OwnedWorldAheadOfCapitalNoRegressWhenRollFails;techlevel=5
+case=OwnedWorldAtCapitalTechIsNoOp;techlevel=5
+case=OwnedWorldAtGateNeverAdvancesPastCeiling;techlevel=10

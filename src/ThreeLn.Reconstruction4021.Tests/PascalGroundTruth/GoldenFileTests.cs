@@ -40,6 +40,11 @@ public class GoldenFileTests
             c => $"{c.HarnessPop},{c.Legions},{(int)c.Type},{c.RngFixedValue}");
 
     [Test, Explicit, Category("PascalGroundTruth")]
+    public void RegenerateTechLevelGoldenFile() =>
+        GoldenFile.Regenerate("techlevel", TechLevelCases.All,
+            c => $"{(int)c.Tech},{(c.IsIndependent ? 1 : 0)},{(int)c.CapitalTech},{c.RngFixedValue}");
+
+    [Test, Explicit, Category("PascalGroundTruth")]
     public void RegenerateProductionGoldenFile() =>
         GoldenFile.Regenerate("production", ProductionCases.All,
             c => $"{(int)c.Class},{(int)c.Type},{c.Population},{c.Efficiency},{(int)c.Tech},{(c.AmbAddict ? 1 : 0)}," +

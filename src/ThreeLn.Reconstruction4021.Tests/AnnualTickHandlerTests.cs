@@ -539,3 +539,81 @@ public class AnnualTickHandlerMilitaryTests
         await Assert.That(planet.Cargo.Legions).IsEqualTo(int.Parse(expected["legions"]));
     }
 }
+
+/// <summary>
+/// Verifies Commit 3 of the economy phase: UpdateTechLevel (UPDATE.PAS:1032-1072), tech-level
+/// advancement/regression toward an owned world's empire's capital (or a 1-in-50 independent drift
+/// for unowned worlds). MatchesGoldenFile checks the real Pascal arithmetic against
+/// reference/verify/golden/techlevel.golden, computed by a real FreePascal run of
+/// reference/verify/techlevel.pas (GoldenFileTests), not hand-typed. Unlike Revolution/MilitaryCase,
+/// UpdateTechLevel's formula never reads Population, so every case here uses a tiny Population(10)
+/// that always takes UpdatePopulation's "&lt;75" branch — whatever that grows to under a given
+/// RngFixedValue doesn't matter, since only TechLevel is asserted. The one guard test below (no
+/// capital set) stays hardcoded: it's a defensive no-op for incomplete test/setup state Pascal's real
+/// GetCapital can't produce, not Pascal arithmetic for a golden file to add.
+/// </summary>
+public class AnnualTickHandlerTechLevelTests
+{
+    private static Game BuildGame(params Planet[] planets)
+    {
+        var game = new Game(new Core.Galaxy.Galaxy(size: 20));
+        game.Galaxy.Planets.AddRange(planets);
+        return game;
+    }
+
+    private static Planet MakePlanet(TechLevel tech, Empire owner) => new() {
+        Location = new Coordinate(0, 0),
+        Owner = owner,
+        Population = 10,
+        Class = WorldClass.ClassM,
+        TechLevel = tech,
+        Efficiency = 100,
+    };
+
+    [Test]
+    [MethodDataSource(typeof(PascalGroundTruth.TechLevelCases), nameof(PascalGroundTruth.TechLevelCases.AsDataSource))]
+    public async Task MatchesGoldenFile(PascalGroundTruth.TechLevelCase c)
+    {
+        var golden = PascalGroundTruth.GoldenFile.Load("techlevel.golden");
+
+        Empire owner;
+        if (c.IsIndependent) {
+            owner = Empire.Independent;
+        } else {
+            owner = new Empire { Name = "Test" };
+            owner.Capital = new Planet {
+                Location = new Coordinate(1, 1),
+                Owner = owner,
+                TechLevel = c.CapitalTech,
+            };
+        }
+        var planet = MakePlanet(c.Tech, owner);
+        planet.Cargo.Supplies = 9999;
+        var game = BuildGame(planet);
+        if (!c.IsIndependent)
+            game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(c.RngFixedValue));
+
+        handler.RunAnnualTick(game);
+
+        var expected = golden[c.Name];
+        await Assert.That((int)planet.TechLevel).IsEqualTo(int.Parse(expected["techlevel"]));
+    }
+
+    [Test]
+    public async Task OwnedWorldWithNoCapitalIsANoOp()
+    {
+        // Owner.Capital is null (never set) -> UpdateTechLevel has nothing to compare against, so
+        // it's a defensive no-op rather than throwing or defaulting to some arbitrary tech level.
+        var owner = new Empire { Name = "Test" };
+        var planet = MakePlanet(TechLevel.Warp, owner);
+        planet.Cargo.Supplies = 9999;
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(planet.TechLevel).IsEqualTo(TechLevel.Warp);
+    }
+}
