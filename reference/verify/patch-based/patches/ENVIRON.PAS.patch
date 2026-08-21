@@ -1,0 +1,145 @@
+--- a/ENVIRON.PAS
++++ b/ENVIRON.PAS
+@@ -10,11 +10,11 @@
+ 
+ INTERFACE
+ 
+-USES Crt,
+-     Strg,
+-     DOS2,
+-     EIO,
+-     WND,
++{ PATCH (fpc): Crt/DOS2/EIO/WND dropped -- only FeatureInActive/LoadConfiguration/
++  SaveConfiguration needed them (all deleted below as demo-UI/config-file code
++  unrelated to Universe state); LoadEnvironment/SaveEnvironment/ResetEmpiresToMove
++  are kept verbatim and need only Strg/Types plus a local WriteVariable/ReadVariable. }
++USES Strg,
+      Types;
+ 
+ CONST
+@@ -42,11 +42,8 @@
+    SavDirect: String64;
+    UseColor: Boolean;
+ 
+-PROCEDURE FeatureInActive;
+-PROCEDURE LoadConfiguration;
+ FUNCTION LoadEnvironment(VAR SF: FILE): Word;
+ PROCEDURE ResetEmpiresToMove;
+-PROCEDURE SaveConfiguration;
+ FUNCTION SaveEnvironment(VAR SF: FILE): Word;
+ 
+ IMPLEMENTATION
+@@ -54,73 +51,29 @@
+ USES
+    PrimIntr;
+ 
+-PROCEDURE LoadConfiguration;
+-   VAR
+-      ConfigFile: FILE;
+-      Error: Word;
+-      Filename: LineStr;
++{ PATCH (fpc): FeatureInActive (demo-nag dialog) and LoadConfiguration/
++  SaveConfiguration (directory/color prefs, DOS config-file I/O) deleted --
++  UI/config-file code, no Universe-state relevance. PrimIntr kept: only
++  ResetEmpiresToMove's EmpireActive/EmpirePlayer calls need it. Note this is a
++  mutual implementation-only dependency (PrimIntr's own implementation may
++  need Environ's Year/Player) -- legal in Pascal since neither's INTERFACE
++  section uses the other; if fpc rejects it, that's the next thing to fix. }
+ 
++FUNCTION ReadVariable(VAR AnyFile: FILE; VAR AnyVar; VarSize: Word): Word;
+    BEGIN
+-   Filename:=HomeDirectory+ConfFilename;
+-   Assign(ConfigFile,Filename);
+    {$I-}
+-   Reset(ConfigFile,1);
++   BlockRead(AnyFile,AnyVar,VarSize);
+    {$I+}
++   ReadVariable:=IOResult;
++   END;  { ReadVariable }
+ 
+-   Error:=IOResult;
+-   IF Error=0 THEN
+-      BEGIN
+-      {$I-}
+-      BlockRead(ConfigFile,SceDirect,64);
+-      BlockRead(ConfigFile,SavDirect,64);
+-		BlockRead(ConfigFile,HlpDirect,64);
+-      BlockRead(ConfigFile,UseColor,1);
+-      Close(ConfigFile);
+-      {$I+}
+-      Error:=IOResult;
+-      END;
+-
+-   IF Error<>0 THEN
+-      BEGIN
+-      DOSErrorWindow(Error,Filename);
+-      SceDirect:='';
+-      SavDirect:='';
+-		HlpDirect:='';
+-      UseColor:=True;
+-      END;
+-   END;  { LoadConfiguration }
+-
+-PROCEDURE SaveConfiguration;
+-   VAR
+-      ConfigFile: FILE;
+-      Error: Word;
+-      Filename: LineStr;
+-
++FUNCTION WriteVariable(VAR AnyFile: FILE; VAR AnyVar; VarSize: Word): Word;
+    BEGIN
+-   Filename:=HomeDirectory+ConfFilename;
+-   Assign(ConfigFile,Filename);
+    {$I-}
+-   Rewrite(ConfigFile,1);
++   BlockWrite(AnyFile,AnyVar,VarSize);
+    {$I+}
+-
+-   Error:=IOResult;
+-   IF Error=0 THEN
+-      BEGIN
+-      {$I-}
+-      BlockWrite(ConfigFile,SceDirect,64);
+-      BlockWrite(ConfigFile,SavDirect,64);
+-		BlockWrite(ConfigFile,HlpDirect,64);
+-      BlockWrite(ConfigFile,UseColor,1);
+-      Close(ConfigFile);
+-      {$I+}
+-      Error:=IOResult;
+-      END;
+-
+-   IF Error<>0 THEN
+-      DOSErrorWindow(Error,Filename)
+-   ELSE
+-      ConfigModified:=False;
+-   END;  { SaveConfiguration }
++   WriteVariable:=IOResult;
++   END;  { WriteVariable }
+ 
+ FUNCTION LoadEnvironment(VAR SF: FILE): Word;
+    VAR
+@@ -169,23 +122,5 @@
+          EmpiresToMove:=EmpiresToMove+[Emp];
+    END;  { ResetEmpiresToMove }
+ 
+-PROCEDURE FeatureInActive;
+-   VAR
+-      Wind: WindowHandle;
+-      Ch: Char;
+-
+-   BEGIN
+-   OpenWindow(15,6,50,12,ThinBRD,'',LightGray,C.SYSWBorder,Wind);
+-   WriteString('That command is not active in this demo',2,2,LightGray);
+-   WriteString('version. If you want to purchase the full',2,3,LightGray);
+-   WriteString('program, write to:',2,4,LightGray);
+-
+-   WriteString('TMA',17,6,LightGray);
+-   WriteString('15 Whittier Rd.',17,7,LightGray);
+-   WriteString('Natick, MA 01760',17,8,LightGray);
+-   GetChoice(AnyKey,NoCaseDistinct,Ch);
+-   CloseWindow;
+-   END;  { FeatureInActive }
+-
+ END.
+ 
+\ No newline at end of file

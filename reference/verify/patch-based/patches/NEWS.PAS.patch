@@ -1,0 +1,41 @@
+--- a/NEWS.PAS
++++ b/NEWS.PAS
+@@ -144,8 +144,25 @@
+ 
+ IMPLEMENTATION
+ 
+-USES
+-   Dos2;
++{ PATCH (fpc): Dos2 dropped -- LoadNewsData/SaveNewsData only ever called
++  WriteVariable/ReadVariable from it (trivial BlockWrite/BlockRead+IOResult,
++  no real Dos2/Printer/CRT/EIO/WND coupling); kept verbatim here instead. }
++
++FUNCTION ReadVariable(VAR AnyFile: FILE; VAR AnyVar; VarSize: Word): Word;
++   BEGIN
++   {$I-}
++   BlockRead(AnyFile,AnyVar,VarSize);
++   {$I+}
++   ReadVariable:=IOResult;
++   END;  { ReadVariable }
++
++FUNCTION WriteVariable(VAR AnyFile: FILE; VAR AnyVar; VarSize: Word): Word;
++   BEGIN
++   {$I-}
++   BlockWrite(AnyFile,AnyVar,VarSize);
++   {$I+}
++   WriteVariable:=IOResult;
++   END;  { WriteVariable }
+ 
+ TYPE
+    NewsDataRecord = RECORD
+@@ -165,7 +182,9 @@
+    BEGIN
+    WITH NewsData[Player] DO
+       BEGIN
+-      IF MaxAvail>20 THEN
++      { PATCH (fpc): MaxAvail (TP's real-mode heap-free check) has no
++        equivalent under virtual memory; guard is always true here. }
++      IF True THEN
+          BEGIN
+          New(NewSlot);
+ 

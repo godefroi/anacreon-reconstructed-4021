@@ -1,0 +1,31 @@
+--- a/GALAXY.PAS
++++ b/GALAXY.PAS
+@@ -59,8 +59,26 @@
+ 
+ IMPLEMENTATION
+ 
+-USES
+-   Dos2;
++{ PATCH (fpc): Dos2 dropped -- SaveSector/LoadSector only ever called
++  WriteVariable/ReadVariable from it, which are themselves trivial BlockWrite/
++  BlockRead+IOResult wrappers with no real Dos2/Printer/CRT/EIO/WND coupling.
++  Kept verbatim here instead of pulling in that whole chain. }
++
++FUNCTION ReadVariable(VAR AnyFile: FILE; VAR AnyVar; VarSize: Word): Word;
++   BEGIN
++   {$I-}
++   BlockRead(AnyFile,AnyVar,VarSize);
++   {$I+}
++   ReadVariable:=IOResult;
++   END;  { ReadVariable }
++
++FUNCTION WriteVariable(VAR AnyFile: FILE; VAR AnyVar; VarSize: Word): Word;
++   BEGIN
++   {$I-}
++   BlockWrite(AnyFile,AnyVar,VarSize);
++   {$I+}
++   WriteVariable:=IOResult;
++   END;  { WriteVariable }
+ 
+ PROCEDURE ClrMineScout(XY: XYCoord);
+ 	BEGIN

@@ -1,0 +1,38 @@
+--- a/INT.PAS
++++ b/INT.PAS
+@@ -15,6 +15,17 @@
+ FUNCTION Sgn(X: LongInt): LongInt;
+ PROCEDURE SwapInt(VAR a,b: Integer);
+ 
++{ PATCH: test-only RNG override, mirroring the C# port's
++  FixedRandom harness convention -- when >=0, every Rnd(Min,Max) call returns
++  Min+ForcedRandomValue (substituting the fixed value for the real
++  Random(range) term in Rnd's own Min+Random(range) formula below, same as
++  the C# side's Rnd(lo,hi) => lo+random.Next(...) wrapping FixedRandom), so
++  results are directly comparable to existing golden files generated against
++  that same convention. -1 (the default) means "use the real RNG," unchanged
++  from source. }
++VAR
++   ForcedRandomValue: Integer;
++
+ IMPLEMENTATION
+ 
+ PROCEDURE SwapInt{VAR a,b: Integer};
+@@ -111,7 +122,9 @@
+    is returned. }
+ 
+    BEGIN
+-   IF Max<=Min THEN
++   IF ForcedRandomValue>=0 THEN
++      Rnd:=Min+ForcedRandomValue
++   ELSE IF Max<=Min THEN
+       Rnd:=Min
+    ELSE
+       Rnd:=Random((Max-Min)+1)+Min;
+@@ -130,4 +143,6 @@
+    RndVar:=Rnd(Value-temp1,Value+temp1);
+    END;  { RndVar }
+ 
++BEGIN
++ForcedRandomValue:=-1;
+ END.
