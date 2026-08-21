@@ -87,17 +87,27 @@ follow once that's working.
      and TUnit's `[MethodDataSource]`) read that file and assert the C# port against it — so no
      hand-typed expected value can silently agree with the same mistake on both sides of a check.
      Regenerate a golden file (review the diff, then commit) whenever its `*Cases.All` or its
-     harness's transcription changes. `production.golden`/`revolution.golden` exclude
-     `Cargo.Supplies`/`Cargo.Ambrosia` (production) and don't track state UpdateRevolution mutates
-     downstream of what `UpdateRevolutionScenario` itself computes — see each domain's test-class doc
-     comment for the exact scope.
-   - **Commit 2c, military buildup** — `UpdateMilitary` (UPDATE.PAS:606-617), inserted between
+     harness's transcription changes. `production.golden` excludes `Cargo.Supplies`/`Cargo.Ambrosia`/
+     `Cargo.Legions` (all mutated later in the same tick by steps `FullPipeline` doesn't model) — see
+     each domain's test-class doc comment for the exact scope.
+   - ✅ **Commit 2c, military buildup** — `UpdateMilitary` (UPDATE.PAS:606-617), inserted between
      `UseUpAmbrosia` and `UpdateRevolution` (runs unconditionally for planets — the same insertion
      point `AnnualTickHandler.UpdateWorld`'s doc comment already marks). Small and self-contained:
      reuses the `OptimumMilitary` formula already implemented inline in `UpdateRevolution`'s
      suppression branch, and just grows `Cargo.Legions` toward it — no new tables needed. Not a
      combat-phase concern despite the name; it's a plain per-tick economy step that happens to feed
-     numbers combat will later read.
+     numbers combat will later read. Golden-file-backed (`military.pas`/`military.golden`,
+     `MilitaryCases`/`AnnualTickHandlerMilitaryTests`), including a case that exercises the
+     `MaxResources` clamp on `OptimumMilitary` itself (`OptMilitary[Base]`=200% pushes the raw figure
+     to 20000 before clamping). Landing this exposed a real cross-cutting gap in `revolution.pas`'s
+     ground truth: it modeled `Cargo[men]` as untouched between population growth and
+     `UpdateRevolution`, which stopped being true once `UpdateMilitary` runs in between in the real
+     pipeline (UPDATE.PAS:1386-1388) — fixed by moving `UpdateMilitaryScenario` into `common.pas` and
+     having `revolution.pas` chain it first, matching the real call order (see `RevolutionCases`'s doc
+     comment). Also prompted a naming cleanup while in this file: the transcribed-from-Pascal helper
+     names `ThgLmt`/`RndVar` read as noise to anyone without the Pascal source open, so
+     `AnnualTickHandler`'s private helpers are now `ClampResource`/`Jitter`, with the original Pascal
+     names preserved in each one's xmldoc instead of in the identifier.
 3. **Tech advancement** (planets only) — `UpdateTechLevel` (UPDATE.PAS:1032-1072), random
    advancement/regression toward the empire's capital tech level.
 4. **Starbase economy** — same `UpdateWorld` sequence, but with `SupplyLink`/`SurplusLink`

@@ -204,6 +204,7 @@ procedure ChangeRevIndexV(var RevIndex: LongInt; Chg: LongInt);
 function PascalRound(x: Real): LongInt;
 function Expnt(Base,Exponent: Real): Real;
 function TotalProd(Pop: LongInt; Tech: TechLevel): LongInt;
+procedure UpdateMilitaryScenario(Pop: LongInt; Typ: WorldTypes; var MPop: LongInt);
 
 implementation
 
@@ -255,6 +256,18 @@ function TotalProd(Pop: LongInt; Tech: TechLevel): LongInt;
    if temp1>999 then temp1:=999
    else if temp1<0 then temp1:=0;
    TotalProd:=PascalRound(temp1);
+   end;
+
+{ UPDATE.PAS:606-617, verbatim. Shared by military.pas (standalone) and revolution.pas (which chains
+  it before UpdateRevolutionScenario, matching UpdateWorld's real call order at UPDATE.PAS:1386-1388:
+  UpdateMilitary always runs immediately before UpdateRevolution). }
+procedure UpdateMilitaryScenario(Pop: LongInt; Typ: WorldTypes; var MPop: LongInt);
+   var
+      OptimumMilitary: LongInt;
+   begin
+   OptimumMilitary:=ThgLmt(RndVar(PascalRound((Pop/150)*OptMilitary[Typ]),10));
+   if OptimumMilitary>MPop then
+      MPop:=ThgLmt(MPop+(Pop/10)*(OptMilitary[Typ]/100));
    end;
 
 end.

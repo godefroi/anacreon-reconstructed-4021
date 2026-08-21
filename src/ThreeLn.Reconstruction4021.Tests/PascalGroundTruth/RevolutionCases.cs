@@ -11,10 +11,15 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// revolution.pas's UpdateRevolutionScenario starts exactly at the point UpdateRevolution itself
 /// starts — it does NOT run UpdatePopulation/UpdateEfficiency first, unlike RunAnnualTick, which runs
 /// the whole UpdateWorld pipeline (RunProductionPipeline, UpdateEfficiency, UpdatePopulation,
-/// UseUpFood, UpdateRevolution, in that order) first. So every case tracks two population values:
-/// PlanetPop (fed to the C# Planet before RunAnnualTick) and HarnessPop (what UpdatePopulation will
-/// have turned it into by the time UpdateRevolution actually runs, hand-derived below) — feeding
-/// PlanetPop straight to the harness would silently double-apply the population adjustment.
+/// UseUpFood, UseUpAmbrosia, UpdateMilitary, UpdateRevolution, in that order) first. So every case
+/// tracks two population values: PlanetPop (fed to the C# Planet before RunAnnualTick) and HarnessPop
+/// (what UpdatePopulation will have turned it into by the time UpdateRevolution actually runs,
+/// hand-derived below) — feeding PlanetPop straight to the harness would silently double-apply the
+/// population adjustment. UpdateMilitary needs no such split on the Legions side: since it runs
+/// immediately before UpdateRevolution in the real pipeline (UPDATE.PAS:1386-1388),
+/// UpdateRevolutionScenario itself chains Common's UpdateMilitaryScenario first and uses ITS output
+/// as both the Military figure and Rebellion's starting Cargo[men] — Legions below is always the
+/// pre-UpdateMilitary value, same as what's fed to the C# Planet.
 /// Efficiency needs no such split: every case uses 80 or 100, both no-ops under UpdateEfficiency at
 /// FixedRandom(0) (only brackets &lt;=75 actually increment) — confirmed per case below, not assumed.
 /// Industry stays at its zero default throughout, so RunProductionPipeline can't perturb Cargo/

@@ -456,7 +456,8 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// UpdatePopulation
     /// UseUpFood
     /// UseUpAmbrosia
-    /// [deferred: UpdateMilitary, UpdateDefenses]                                            &lt;- between
+    /// UpdateMilitary
+    /// [deferred: UpdateDefenses]                                                           &lt;- between
     /// UpdateRevolution
     /// HostileLife (if Class == Hostile)
     /// </code>
@@ -468,6 +469,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
         UpdatePopulation(planet);
         UseUpFood(planet);
         UseUpAmbrosia(planet);
+        UpdateMilitary(planet);
         UpdateRevolution(planet, newTotalRevIndex);
 
         if (planet.Class == WorldClass.Hostile)
@@ -546,7 +548,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
                 if (!CargoTechAvailable(cargo, effectiveTech))
                     continue;
 
-                var production = Math.Max(1, ThgLmt(prodAdj * adjustment));
+                var production = Math.Max(1, ClampResource(prodAdj * adjustment));
 
                 if (cargo == CargoType.Trillum)
                     production = ProduceTrillum(planet, production, planet.Cargo[CargoType.Trillum]);
@@ -673,7 +675,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
             if (current < optimumLevel) {
                 consRate = Math.Max(1, PascalRound(optimumLevel * (planet.Efficiency / 500.0)));
                 consRate = Math.Min(consRate, optimumLevel - current);
-                rawNeeded = ThgLmt(consRate / 100.0 * metalCost);
+                rawNeeded = ClampResource(consRate / 100.0 * metalCost);
                 if (rawNeeded > planet.Cargo.Metals) {
                     // Safe from a divide-by-zero on Supply (metalCost=0): that case makes rawNeeded 0
                     // above, so this branch (rawNeeded > Cargo.Metals >= 0) can't be reached for it.
@@ -692,7 +694,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
 
             if (current + consRate > 999) {
                 consRate = 999 - current;
-                rawNeeded = ThgLmt(consRate / 100.0 * metalCost);
+                rawNeeded = ClampResource(consRate / 100.0 * metalCost);
             } else if (current + consRate < 0) {
                 consRate = -current;
                 rawNeeded = 0;
@@ -729,7 +731,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
         if (!ShipTechAvailable(planet, ship, effectiveTech))
             return;
 
-        var production = ThgLmt(prodAdj * adjustment);
+        var production = ClampResource(prodAdj * adjustment);
         if (production <= 0)
             production = 1;
 
@@ -747,7 +749,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
         if (!CargoTechAvailable(cargo, effectiveTech))
             return;
 
-        var production = ThgLmt(prodAdj * adjustment);
+        var production = ClampResource(prodAdj * adjustment);
 
         // Only ninja/ambrosia-type worlds make ninjas/ambrosia; ambrosia also needs the right class.
         if (cargo == CargoType.NinjaLegion && planet.Type != WorldType.NinjaWorld)
@@ -781,10 +783,10 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
                 continue;
             }
 
-            var needed = ThgLmt(production * (costPer100 / 100.0));
+            var needed = ClampResource(production * (costPer100 / 100.0));
             if (needed > planet.Cargo[rawMaterial]) {
-                production = ThgLmt(planet.Cargo[rawMaterial] / (double)costPer100 * 100);
-                needed = ThgLmt(production * (costPer100 / 100.0));
+                production = ClampResource(planet.Cargo[rawMaterial] / (double)costPer100 * 100);
+                needed = ClampResource(production * (costPer100 / 100.0));
             }
             rawNeeded[rawMaterial] = needed;
         }
@@ -801,7 +803,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     private static void ClampCargo(CargoHold cargo)
     {
         foreach (var type in Enum.GetValues<CargoType>())
-            cargo[type] = ThgLmt(cargo[type]);
+            cargo[type] = ClampResource(cargo[type]);
     }
 
     private void UpdateEfficiency(Planet planet)
@@ -840,7 +842,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
 
     private void UseUpFood(Planet planet)
     {
-        var foodNeeded = ThgLmt((planet.Population / 100.0) * SuppliesPerBillion);
+        var foodNeeded = ClampResource((planet.Population / 100.0) * SuppliesPerBillion);
 
         if (foodNeeded > planet.Cargo.Supplies) {
             var lack = foodNeeded - planet.Cargo.Supplies;
@@ -867,7 +869,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// </summary>
     private void UseUpAmbrosia(Planet planet)
     {
-        var ambNeeded = ThgLmt((planet.Population / 100.0) * DrugsPerBillion);
+        var ambNeeded = ClampResource((planet.Population / 100.0) * DrugsPerBillion);
 
         if (planet.IsAddictedToAmbrosia) {
             if (ambNeeded <= planet.Cargo.Ambrosia) {
@@ -880,7 +882,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
             var lack = ambNeeded - planet.Cargo.Ambrosia;
             planet.Cargo.Ambrosia = 0;
 
-            var die = Math.Min(ThgLmt(AddictDeathCoeff * lack), planet.Population / 7);
+            var die = Math.Min(ClampResource(AddictDeathCoeff * lack), planet.Population / 7);
             planet.Population -= die;
 
             var effChange = Math.Min((int)(AddictEffCoeff * die), planet.Efficiency);
@@ -890,7 +892,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
 
             switch (Rnd(1, 10)) {
                 case >= 5 and <= 7:
-                    planet.Population -= ThgLmt((Rnd(50, 120) / 100.0) * die);
+                    planet.Population -= ClampResource((Rnd(50, 120) / 100.0) * die);
                     break;
                 case 8 or 9:
                     foreach (var industry in Enum.GetValues<IndustryType>())
@@ -913,12 +915,26 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
         }
     }
 
+    /// <summary>
+    /// UPDATE.PAS:606-617. Grows a world's military (Cargo.Legions) toward the optimum for its type
+    /// and population; only ever grows it, never shrinks it — an already-above-optimum world (e.g.
+    /// one being reinforced ahead of an attack) is left alone here, not walked back down.
+    /// </summary>
+    private void UpdateMilitary(Planet planet)
+    {
+        var optimumMilitary = ClampResource(Jitter(
+            PascalRound(planet.Population / 150.0 * _optimumMilitaryByType[planet.Type]), 10));
+        if (optimumMilitary > planet.Cargo.Legions)
+            planet.Cargo.Legions = ClampResource(
+                planet.Cargo.Legions + planet.Population / 10.0 * (_optimumMilitaryByType[planet.Type] / 100.0));
+    }
+
     private void UpdateRevolution(Planet planet, Dictionary<Empire, int> newTotalRevIndex)
     {
         var owner = planet.Owner;
 
         // Decrease revolution index (UPDATE.PAS:698-703).
-        var empRevAdj = RndVar(TotalRevIndex(owner), 50);
+        var empRevAdj = Jitter(TotalRevIndex(owner), 50);
         if (planet.Type == WorldType.Capital)
             ChangeRevIndex(planet, -Rnd(20, 30));
         else
@@ -928,9 +944,9 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
             return;
 
         // Military presence affects revolution (UPDATE.PAS:705-735).
-        var optimumMilitary = ThgLmt(RndVar(
+        var optimumMilitary = ClampResource(Jitter(
             PascalRound(planet.Population / 150.0 * _optimumMilitaryByType[planet.Type]), 10));
-        var military = ThgLmt(planet.Cargo.Legions + 5.0 * planet.Cargo.NinjaLegions);
+        var military = ClampResource(planet.Cargo.Legions + 5.0 * planet.Cargo.NinjaLegions);
 
         if (military > optimumMilitary) {
             if (planet.RevolutionIndex > 30) {
@@ -951,7 +967,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     private void Rebellion(Planet planet, int military, Dictionary<Empire, int> newTotalRevIndex)
     {
         var owner = planet.Owner;
-        var rebels = Math.Max(1, ThgLmt(Math.Sqrt(planet.Population) * 65));
+        var rebels = Math.Max(1, ClampResource(Math.Sqrt(planet.Population) * 65));
         var menLost = rebels / 5;
         var chanceToEndRebel = military / Math.Sqrt(rebels) * 1.414213;
 
@@ -980,7 +996,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
             newTotalRevIndex[owner] = newTotalRevIndex.GetValueOrDefault(owner) + Rnd(5, 10);
         }
 
-        planet.Population = ThgLmt(planet.Population - military / 1000.0);
+        planet.Population = ClampResource(planet.Population - military / 1000.0);
         planet.Efficiency = Math.Max(0, planet.Efficiency - Rnd(5, 15));
     }
 
@@ -1013,8 +1029,8 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     private static void ChangeRevIndex(Planet planet, int change) =>
         planet.RevolutionIndex = Math.Clamp(planet.RevolutionIndex + change, 0, 100);
 
-    /// <summary>Clamps a produced/consumed quantity to [0,MaxResources], truncating (MISC.PAS:ThgLmt).</summary>
-    private static int ThgLmt(double x) => x > MaxResources ? MaxResources : x < 0 ? 0 : (int)x;
+    /// <summary>Clamps a produced/consumed quantity to [0,MaxResources], truncating (Pascal source: MISC.PAS's ThgLmt).</summary>
+    private static int ClampResource(double x) => x > MaxResources ? MaxResources : x < 0 ? 0 : (int)x;
 
     /// <summary>Pascal's Round: nearest integer, halves away from zero (not banker's rounding).</summary>
     private static int PascalRound(double x) => x >= 0 ? (int)(x + 0.5) : (int)(x - 0.5);
@@ -1022,8 +1038,8 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// <summary>Random integer in [min,max] inclusive; returns min if the range is empty or inverted (INT.PAS:Rnd).</summary>
     private int Rnd(int min, int max) => max <= min ? min : random.Next(max - min + 1) + min;
 
-    /// <summary>Value +/- variation% of itself (INT.PAS:RndVar).</summary>
-    private int RndVar(int value, int variation)
+    /// <summary>Randomly varies a value by up to variation% in either direction (Pascal source: INT.PAS's RndVar).</summary>
+    private int Jitter(int value, int variation)
     {
         var spread = (int)(value * (variation / 100.0));
         return Rnd(value - spread, value + spread);

@@ -1,0 +1,6 @@
+case=BelowOptimumGrows;legions=7
+case=AboveOptimumNoOp;legions=1000
+case=ExactlyAtOptimumNoOp;legions=45
+case=TinyPopulationGrowthTruncatesToZero;legions=0
+case=HighOptimumPercentClamps;legions=3000
+case=RandomOffsetShiftsOptimum;legions=7

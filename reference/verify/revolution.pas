@@ -67,7 +67,12 @@ procedure RebellionScenario(Pop,Eff,Military,CargoMenStart,CargoNnjStart: LongIn
    CargoNnjFinal:=CargoNnj;
    end;
 
-{ UPDATE.PAS:681-755. }
+{ UPDATE.PAS:681-755. UpdateMilitary (UPDATE.PAS:1386) always runs immediately before
+  UpdateRevolution (UPDATE.PAS:1388) in the real UpdateWorld pipeline, so this scenario chains
+  UpdateMilitaryScenario first and uses its OUTPUT (CargoMen, not CargoMenStart) as both the
+  Military figure below and Rebellion's starting Cargo[men] -- CargoMenStart is preserved
+  unmodified only as the "no rebellion" fallback value below, matching Cargo[men] otherwise being
+  left at whatever UpdateMilitary already grew it to. }
 procedure UpdateRevolutionScenario(Pop,Eff,RevIndexStart,EmpTotalRevIndex,EmpRevFactor,
                                    CargoMenStart,CargoNnjStart: LongInt;
                                    Typ: WorldTypes;
@@ -77,11 +82,14 @@ procedure UpdateRevolutionScenario(Pop,Eff,RevIndexStart,EmpTotalRevIndex,EmpRev
    var
       EmpRevAdj,Factor: LongInt;
       RevIndex: LongInt;
-      Military,OptimumMil: LongInt;
+      Military,OptimumMil,CargoMen: LongInt;
       TotalRevIdx: LongInt;
    begin
    RevIndex:=RevIndexStart;
    TotalRevDelta:=0;
+
+   CargoMen:=CargoMenStart;
+   UpdateMilitaryScenario(Pop,Typ,CargoMen);
 
    TotalRevIdx:=EmpTotalRevIndex+EmpRevFactor;
    EmpRevAdj:=RndVar(TotalRevIdx,50);
@@ -92,7 +100,7 @@ procedure UpdateRevolutionScenario(Pop,Eff,RevIndexStart,EmpTotalRevIndex,EmpRev
       ChangeRevIndexV(RevIndex,EmpRevAdj+Rnd(-5,2));
 
    OptimumMil:=ThgLmt(RndVar(PascalRound((Pop/150)*OptMilitary[Typ]),10));
-   Military:=ThgLmt(CargoMenStart+5.0*CargoNnjStart);
+   Military:=ThgLmt(CargoMen+5.0*CargoNnjStart);
 
    if Military>OptimumMil then
       begin
@@ -110,14 +118,14 @@ procedure UpdateRevolutionScenario(Pop,Eff,RevIndexStart,EmpTotalRevIndex,EmpRev
 
    if (RevIndex>75) and (Rnd(1,100)<RevIndex) and (Typ<>CapTyp) then
       begin
-      RebellionScenario(Pop,Eff,Military,CargoMenStart,CargoNnjStart,RevIndex,
+      RebellionScenario(Pop,Eff,Military,CargoMen,CargoNnjStart,RevIndex,
                         Rebelled,CargoMenFinal,CargoNnjFinal,PopFinal,EffFinal,TotalRevDelta);
       RevIndexFinal:=RevIndex;
       end
    else
       begin
       Rebelled:=False;
-      CargoMenFinal:=CargoMenStart;
+      CargoMenFinal:=CargoMen;
       CargoNnjFinal:=CargoNnjStart;
       PopFinal:=Pop;
       EffFinal:=Eff;

@@ -35,6 +35,11 @@ public class GoldenFileTests
             c => $"{c.HarnessPop},{c.Efficiency},{c.RevIndex},0,0,{c.Legions},{c.Ninja},{(int)c.Type}");
 
     [Test, Explicit, Category("PascalGroundTruth")]
+    public void RegenerateMilitaryGoldenFile() =>
+        GoldenFile.Regenerate("military", MilitaryCases.All,
+            c => $"{c.HarnessPop},{c.Legions},{(int)c.Type},{c.RngFixedValue}");
+
+    [Test, Explicit, Category("PascalGroundTruth")]
     public void RegenerateProductionGoldenFile() =>
         GoldenFile.Regenerate("production", ProductionCases.All,
             c => $"{(int)c.Class},{(int)c.Type},{c.Population},{c.Efficiency},{(int)c.Tech},{(c.AmbAddict ? 1 : 0)}," +

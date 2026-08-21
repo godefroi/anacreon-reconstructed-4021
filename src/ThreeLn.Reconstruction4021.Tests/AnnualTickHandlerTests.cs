@@ -135,9 +135,12 @@ public class AnnualTickHandlerTests
 /// reference/verify/revolution.pas (GoldenFileTests), not hand-typed. revolution.pas's
 /// UpdateRevolutionScenario starts exactly where UpdateRevolution itself starts — it does NOT run
 /// UpdatePopulation/UpdateEfficiency first, unlike RunAnnualTick — so RevolutionCases tracks two
-/// population values per case; see its doc comment. The two tests below stay hardcoded: they assert
-/// cross-tick bookkeeping behavior (an accumulator resets each year; an inverted Rnd range from a
-/// prior tick's negative accumulator must not throw), not a single tick's Pascal arithmetic.
+/// population values per case; see its doc comment. It DOES chain UpdateMilitary first (matching
+/// UPDATE.PAS:1386-1388's real call order), since Commit 2c's landing means Cargo.Legions can already
+/// differ from its starting value by the time UpdateRevolution reads it — see RevolutionCases's doc
+/// comment for how that's modeled. The two tests below stay hardcoded: they assert cross-tick
+/// bookkeeping behavior (an accumulator resets each year; an inverted Rnd range from a prior tick's
+/// negative accumulator must not throw), not a single tick's Pascal arithmetic.
 /// </summary>
 public class AnnualTickHandlerRevolutionTests
 {
@@ -262,12 +265,13 @@ public class AnnualTickHandlerRevolutionTests
 /// Pop=1000, Class=EthCls, and Tech=Gate cases deliberately exercise the sqrt/pow cascade in
 /// GetIndustrialDistribution, infeasible to hand-trace reliably — against
 /// reference/verify/golden/production.golden, computed by a real FreePascal run of
-/// reference/verify/production.pas's FullPipeline (GoldenFileTests), not hand-typed. Cargo.Supplies
-/// and Cargo.Ambrosia are excluded from that comparison: UseUpFood/UseUpAmbrosia run later in the
-/// same tick and consume them based on post-growth Population, which production.pas's ground truth
-/// (computed on the pre-growth Population the pipeline actually sees) doesn't model — see
+/// reference/verify/production.pas's FullPipeline (GoldenFileTests), not hand-typed. Cargo.Supplies,
+/// Cargo.Ambrosia, and Cargo.Legions are excluded from that comparison: UseUpFood/UseUpAmbrosia/
+/// UpdateMilitary all run later in the same tick and mutate them based on post-growth Population (and,
+/// for Legions, world Type), which production.pas's ground truth (computed on the pre-growth
+/// Population the pipeline actually sees, and not modeling UpdateMilitary at all) doesn't model — see
 /// NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction for the one case that actually exercises
-/// that gap. See production.pas's header comment for its one known deviation (the split
+/// the Ambrosia gap. See production.pas's header comment for its one known deviation (the split
 /// ProductionShips/ProductionCargo loops), which none of ProductionCases's cases trigger.
 /// </summary>
 public class AnnualTickHandlerProductionTests
@@ -346,7 +350,6 @@ public class AnnualTickHandlerProductionTests
         await Assert.That(planet.Ships.Starships).IsEqualTo(int.Parse(expected["ssp"]));
         await Assert.That(planet.Ships.Transports).IsEqualTo(int.Parse(expected["trn"]));
 
-        await Assert.That(planet.Cargo.Legions).IsEqualTo(int.Parse(expected["cargomen"]));
         await Assert.That(planet.Cargo.NinjaLegions).IsEqualTo(int.Parse(expected["cargonnj"]));
         await Assert.That(planet.Cargo.Chemicals).IsEqualTo(int.Parse(expected["cargoche"]));
         await Assert.That(planet.Cargo.Metals).IsEqualTo(int.Parse(expected["cargomet"]));
@@ -487,5 +490,52 @@ public class AnnualTickHandlerAmbrosiaTests
         await Assert.That(planet.Cargo.Ambrosia).IsEqualTo(0);
         await Assert.That(planet.Population).IsEqualTo(1007);
         await Assert.That(planet.Efficiency).IsEqualTo(100);
+    }
+}
+
+/// <summary>
+/// Verifies Commit 2c of the economy phase: UpdateMilitary (UPDATE.PAS:606-617), the growth of a
+/// world's military (Cargo.Legions) toward the population/type-derived optimum. MatchesGoldenFile
+/// checks the real Pascal arithmetic against reference/verify/golden/military.golden, computed by a
+/// real FreePascal run of reference/verify/military.pas (GoldenFileTests), not hand-typed.
+/// military.pas's UpdateMilitaryScenario starts exactly where UpdateMilitary itself starts — it does
+/// NOT run UpdatePopulation first, unlike RunAnnualTick — so MilitaryCases tracks two population
+/// values per case; see its doc comment.
+/// </summary>
+public class AnnualTickHandlerMilitaryTests
+{
+    private static Game BuildGame(params Planet[] planets)
+    {
+        var game = new Game(new Core.Galaxy.Galaxy(size: 20));
+        game.Galaxy.Planets.AddRange(planets);
+        return game;
+    }
+
+    [Test]
+    [MethodDataSource(typeof(PascalGroundTruth.MilitaryCases), nameof(PascalGroundTruth.MilitaryCases.AsDataSource))]
+    public async Task MatchesGoldenFile(PascalGroundTruth.MilitaryCase c)
+    {
+        var golden = PascalGroundTruth.GoldenFile.Load("military.golden");
+
+        var owner = new Empire { Name = "Test" };
+        var planet = new Planet {
+            Location = new Coordinate(0, 0),
+            Owner = owner,
+            Population = c.PlanetPop,
+            Class = c.Class,
+            TechLevel = c.Tech,
+            Efficiency = 100,
+            Type = c.Type,
+        };
+        planet.Cargo.Legions = c.Legions;
+        planet.Cargo.Supplies = 9999;
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(c.RngFixedValue));
+
+        handler.RunAnnualTick(game);
+
+        var expected = golden[c.Name];
+        await Assert.That(planet.Cargo.Legions).IsEqualTo(int.Parse(expected["legions"]));
     }
 }
