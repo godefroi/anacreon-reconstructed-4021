@@ -179,11 +179,11 @@ Deferred multiplayer option — sequential mode (already built) is the only mode
 Not scheduled, pull in only if/when needed: v2 gameplay changes and new features from
 `PASCAL_V1_VS_V2_DIFF.md` (all opt-in, none are baseline).
 
-## Ground-truth harness generation: patch-vs-transcribe (prototyped, validated)
+## Ground-truth harness generation: patch-vs-transcribe (second lane added)
 
 Current practice (`reference/verify/*.pas`) transcribes each procedure into a fresh file, hand-read
-from source every time (`[[feedback_transcribe_pascal_harness_from_source]]`). Prototyped an
-alternative in `reference/verify/patch-prototype/`: maintain small patches against the real
+from source every time (`[[feedback_transcribe_pascal_harness_from_source]]`). Added an alternative
+in `reference/verify/patch-based/`: maintain small patches against the real
 `reference/DOSAnacreonSource131/*.PAS` files, apply them to a disposable copy at build time
 (`build.ps1`), and call the real, only-minimally-touched `UpdateWorld` directly against a
 hand-assembled `Universe^` instead of a simplified/parameterized stand-in.
@@ -202,7 +202,7 @@ matching), and one pure-math procedure (`GetIndustrialDistribution`) relocated v
 Also surfaced a genuine landmine: `DATASTRC.PAS:235`'s `GlobalSets ABSOLUTE SetOfActiveFleets` overlay
 compiles cleanly under fpc but doesn't preserve Turbo Pascal's declaration-order memory layout it
 depends on — writing through it silently corrupted the `Universe` pointer (a real access-violation
-crash, not a compile error). Full writeup: `reference/verify/patch-prototype/README.md`.
+crash, not a compile error). Full writeup: `reference/verify/patch-based/README.md`.
 
 **Recommendation.** Transcription stays the default for new isolated-procedure golden cases — cheap,
 bounded, proven across four commits. Reach for the patch-based real-`Universe^` approach only when a

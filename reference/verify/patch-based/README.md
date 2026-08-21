@@ -1,4 +1,4 @@
-# Patch-based Pascal ground truth: prototype and findings
+# Patch-based Pascal ground truth
 
 ## What this is
 
@@ -10,8 +10,9 @@ procedure into a fresh file, this maintains small patches against the real
 copy at build time, and calls the real, only-minimally-touched Pascal code
 directly against a hand-assembled `Universe^`.
 
-**Status: validated proof of concept, not a replacement for the existing
-harnesses.** See "Recommendation" below.
+**Status: a second, narrower lane alongside `reference/verify/*.pas`'s
+per-procedure transcription — not a replacement for it.** See
+"Recommendation" below.
 
 ## Layout
 
@@ -88,7 +89,7 @@ worth remembering if this pattern gets reused elsewhere in the source.
 
 ## The save/load angle
 
-The original question this prototype answered: could test fixtures be built
+The original question this approach answered: could test fixtures be built
 by driving Pascal's *own* save/load machinery instead of hand-writing field
 assignments? Two things worth knowing, found but not used yet:
 
@@ -97,7 +98,7 @@ assignments? Two things worth knowing, found but not used yet:
   than a hand-rolled `FillChar`, but `LOADSAVE.PAS`'s own dependency list
   (`Dos2, Intrface->Fleet/Orders/NPE, News, Mess, TMA, Environ, NPETypes,
   NPE, Galaxy, Orders, Fleet`) is much larger than what `UpdateWorld` alone
-  needs, so pulling it in wasn't justified for this prototype's scope.
+  needs, so pulling it in wasn't justified for this scope.
 - `LOADSAVE.PAS`'s `LoadGame`/`SaveGame` are the real binary `.SAV` format
   round-trip (`SFSignature = 'Anacreon save file v1.3'`). No `.SAV` file
   ships with the source, so building fixtures this way would mean either
@@ -105,7 +106,7 @@ assignments? Two things worth knowing, found but not used yet:
   binary layout — not obviously cheaper than direct field assignment for
   small scenarios.
 
-Neither was pulled into this prototype; `runworld.pas` does its own minimal
+Neither was pulled into this harness; `runworld.pas` does its own minimal
 `New(Universe); FillChar(Universe^,SizeOf(Universe^),0);` instead. Revisit if
 a future scenario needs a much larger/more realistic starting `Universe^`
 than a couple of hand-set fields can reasonably cover.

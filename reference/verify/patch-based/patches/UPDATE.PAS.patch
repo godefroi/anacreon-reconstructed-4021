@@ -4,11 +4,11 @@
  
  INTERFACE
  
-+{ PATCH (fpc/prototype): UpdateUniverse (the whole-galaxy tick loop, screen
++{ PATCH (fpc): UpdateUniverse (the whole-galaxy tick loop, screen
 +  progress window) deleted -- Crt/EIO/WND/Intrface/Mess were only needed by it
 +  and by ReportPlanetLack/ConstructStarbase/ConstructStargate/UpdateConstruction/
 +  UpdateEmpire, none of which UpdateWorld calls; all deleted below too.
-+  UpdateWorld itself is promoted here from IMPLEMENTATION so this prototype can
++  UpdateWorld itself is promoted here from IMPLEMENTATION so this harness can
 +  call it directly -- same procedure, only its visibility changed. }
  USES Strg,
 -     Crt,                                       { Standard CRT library. }
@@ -36,11 +36,11 @@
     NewTotalRevIndex: ARRAY [Empire] of Integer;
  
 -PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber; 
-+{ PATCH (fpc/prototype): ConstructStarbase/ConstructStargate/UpdateConstruction/
++{ PATCH (fpc): ConstructStarbase/ConstructStargate/UpdateConstruction/
 +  UpdateEmpire (+ its nested NewTechLevel/GetChanceForNewTech/GetNewTech)
 +  deleted -- none of them are reachable from UpdateWorld; they belong to
 +  Commits 4/5 (starbase construction, empire-level tech research), out of
-+  scope for this prototype. ReportPlanetLack IS reachable (SupplyLink/
++  scope here. ReportPlanetLack IS reachable (SupplyLink/
 +  SurplusLink/ProduceRawMaterial all call it) -- kept, restored below after an
 +  earlier pass wrongly deleted it as unreachable. }
 +
@@ -67,7 +67,7 @@
 -      SetEfficiency(ID,Rnd(10,20));
 -      GetEmpireTechnology(Emp,EmpTech,EmpTechnology);
 -      SetTech(ID,EmpTech);
-+{ PATCH (fpc/prototype): GetIndustrialDistribution relocated verbatim from
++{ PATCH (fpc): GetIndustrialDistribution relocated verbatim from
 +  INTRFACE.PAS (its real home) -- pure economy math (only calls PrimIntr
 +  getters and Misc/DataCnst tables already in this unit's USES), but pulling
 +  in the real Intrface unit for it would drag in Fleet/Orders/NPE (fleet
@@ -608,9 +608,9 @@
 -
 -   CloseWindow;
 -   END;  { UpdateUniverse }
-+{ PATCH (fpc/prototype): UpdateUniverse deleted -- whole-galaxy tick loop plus
++{ PATCH (fpc): UpdateUniverse deleted -- whole-galaxy tick loop plus
 +  screen progress window (ClrScr/OpenWindow/WriteString/CloseWindow, the only
-+  Crt/EIO/WND usage in this unit); this prototype calls UpdateWorld directly
++  Crt/EIO/WND usage in this unit); this harness calls UpdateWorld directly
 +  per-planet instead. Note for later: it does confirm Year:=Year+1 is real
 +  global state (Environ's Year), matching Game.Year in the C# port. }
  

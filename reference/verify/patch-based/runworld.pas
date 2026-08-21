@@ -1,5 +1,5 @@
 (* runworld.pas -----------------------------------------------------------
-   Prototype driver: assembles a minimal but real Universe^ (via the actual
+   Driver: assembles a minimal but real Universe^ (via the actual
    DataStrc/Galaxy globals, not a simplified stand-in), then calls the real,
    unmodified (only relocated/lifted, never behavior-changed) UpdateWorld
    from the patched UPDATE.PAS unit. Hardcoded to reproduce the
@@ -19,7 +19,7 @@ VAR
    ID, CapID: IDNumber;
 
 BEGIN
-{ PATCH note (prototype): never write through GlobalSets (DATASTRC.PAS:235's
+{ PATCH note: never write through GlobalSets (DATASTRC.PAS:235's
   "ABSOLUTE SetOfActiveFleets" overlay) -- it assumes TP's declaration-order
   memory layout for the standalone vars in TYPES.PAS:180-188, which fpc does
   not guarantee; writing through it here corrupted the Universe pointer
