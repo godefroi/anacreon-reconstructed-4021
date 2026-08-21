@@ -10,9 +10,10 @@ procedure into a fresh file, this maintains small patches against the real
 copy at build time, and calls the real, only-minimally-touched Pascal code
 directly against a hand-assembled `Universe^`.
 
-**Status: a second, narrower lane alongside `reference/verify/*.pas`'s
-per-procedure transcription — not a replacement for it.** See
-"Recommendation" below.
+**Status: in production for one domain (`techlevel.golden`, see
+`docs/ROADMAP.md`'s "Ground-truth harness generation" section), alongside
+`reference/verify/*.pas`'s per-procedure transcription for everything else —
+not a wholesale replacement.** See "Recommendation" below.
 
 ## Layout
 
@@ -21,10 +22,16 @@ per-procedure transcription — not a replacement for it.** See
   `reference/DOSAnacreonSource131/` itself is never edited.
 - `runworld.pas` — a driver program (not a patch target, a genuinely new
   file): assembles a minimal 2-planet `Universe^` and calls the real
-  `UpdateWorld`.
+  `UpdateWorld`. Machine-parseable CLI, one case per argument (see the
+  file's own header comment) — currently `TechLevelCases`' 4-field shape,
+  since techlevel is this driver's first real use.
 - `build.ps1` — deletes and regenerates `pascal/` from pristine source +
   patches, then compiles `runworld.pas`. Run it, then run
-  `.\pascal\runworld.exe`.
+  `.\pascal\runworld.exe case ...` for manual iteration. The C# test suite
+  doesn't shell out to this script — `PatchHarness.cs` (in
+  `src/ThreeLn.Reconstruction4021.Tests/PascalGroundTruth/`) does the same
+  copy/patch/compile/run steps directly, so `GoldenFileTests` can call it
+  like any other harness.
 - `pascal/` — disposable build output, gitignored, never a source of truth.
   If you need to iterate on a patch: run `build.ps1`, edit the file directly
   under `pascal/`, verify it compiles/runs, then regenerate that file's
@@ -113,38 +120,44 @@ than a couple of hand-set fields can reasonably cover.
 
 ## Validation
 
-`runworld.pas` reproduces `TechLevelCases.OwnedWorldBehindCapitalAdvances`
-(Tech=Warp, owned, capital ahead at Jump, `RngFixedValue=0`) by calling the
-real `UpdateWorld` against a hand-assembled 2-planet `Universe^`:
+Original proof of concept: `runworld.pas` reproduced
+`TechLevelCases.OwnedWorldBehindCapitalAdvances` (Tech=Warp, owned, capital
+ahead at Jump, `RngFixedValue=0`) by calling the real `UpdateWorld` against a
+hand-assembled 2-planet `Universe^` — `techlevel=6`, matching
+`techlevel.golden`. Rebuilt from scratch (`build.ps1` deletes `pascal/`,
+reapplies every patch, recompiles) and reran with identical results — the
+patches are complete and sufficient on their own, not dependent on whatever
+`pascal/` happened to contain from prior manual edits.
 
-```
-techlevel=6        # matches techlevel.golden's OwnedWorldBehindCapitalAdvances exactly
-population=12      # Pop 10 -> 12: UpdatePopulation's "<75" branch, Rnd(2,5) forced to 2
-legions=0
-revindex=0
-```
-
-Rebuilt from scratch (`build.ps1` deletes `pascal/`, reapplies every patch,
-recompiles) and reran with identical results — the patches are complete and
-sufficient on their own, not dependent on whatever `pascal/` happened to
-contain from prior manual edits.
+Generalized from that one case into a CLI driver taking all of
+`TechLevelCases`' 8 cases, all 8 reproduced byte-identical to the
+already-committed, transcription-based `techlevel.golden` — confirming the
+extra fidelity (real `GetCapital`/`GetTech`, real `Emp=Indep` check) didn't
+silently change any of the previously-verified outcomes, before wiring it in
+as `techlevel.golden`'s new source of truth via `PatchHarness.cs` and
+`GoldenFileTests.RegenerateTechLevelGoldenFile`.
 
 ## Recommendation
 
-Keep this as a **second, narrower lane**, not a replacement for
-`reference/verify/*.pas`'s per-procedure transcription:
+Reach for this approach whenever it would improve testing fidelity, with an
+eye toward eventually building up a maximum-fidelity harness — the
+per-harness patch-authoring cost is accepted deliberately, in exchange for
+being able to run the real Pascal code against known states across wide
+slices of the game systems as those slices grow, not just the one procedure
+under test:
 
-- Transcription stays the default for new isolated-procedure golden cases —
-  it's cheap, bounded, and already proven across four roadmap commits.
-- This patch-based, real-`Universe^` approach is worth reaching for when a
-  procedure's fidelity risk is high enough to justify it: many state-shaped
-  lookups (`GetCapital`/`GetTech`-style calls that transcription would
-  otherwise have to simplify into plain parameters), or when the thing worth
-  testing is call *ordering* across multiple steps in the same real pipeline
-  — exactly the "cross-cutting field" bug class hit twice this session with
-  transcription (`UpdateMilitary` mutating `Cargo.Legions` before
-  `UpdateRevolution` reads it, discovered only because the isolated harnesses
-  didn't model the mutation).
+- That's most clearly the case when a procedure's fidelity risk is high
+  enough to justify it: many state-shaped lookups (`GetCapital`/`GetTech`-style
+  calls that transcription would otherwise have to simplify into plain
+  parameters), or when the thing worth testing is call *ordering* across
+  multiple steps in the same real pipeline — exactly the "cross-cutting
+  field" bug class hit twice with transcription (`UpdateMilitary` mutating
+  `Cargo.Legions` before `UpdateRevolution` reads it, discovered only because
+  the isolated harnesses didn't model the mutation).
+- Transcription (`reference/verify/*.pas`'s per-procedure pattern) is still
+  fine for genuinely isolated, parameter-only procedures with no real-state
+  dependency — cheap and bounded, and already proven across four roadmap
+  commits.
 - Don't expand this into combat/fleet movement/NPE AI territory by default.
   `Intrface`'s `Fleet`/`Orders`/`NPE` dependency was dodged here by relocating
   one function; the next subsystem's dependency web is an open question, not

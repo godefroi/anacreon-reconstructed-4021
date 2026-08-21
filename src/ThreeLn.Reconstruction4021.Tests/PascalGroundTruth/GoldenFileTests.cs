@@ -2,13 +2,16 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
 /// <summary>
 /// Regenerates every committed golden file (reference/verify/golden/*.golden) from a real
-/// FreePascal run of the matching reference/verify/*.pas harness — the source of every expected
-/// value the always-on AnnualTickHandler*Tests.MatchesGoldenFile tests assert against. Each method
-/// just supplies its domain's harness name, case list, and per-case CLI arg format to
-/// GoldenFile.Regenerate, which does the actual compile/run/write/verify work — see there.
-/// [Explicit] + [Category("PascalGroundTruth")]: requires fpc on PATH, so these are excluded from
-/// the default `dotnet test` run (see PascalHarness). Run one, review the diff, and commit the
-/// result whenever its Cases list or its harness's transcription changes.
+/// FreePascal run of the matching reference/verify/*.pas harness (or, for a domain that's moved to
+/// the higher-fidelity patch-based lane, reference/verify/patch-based/*.pas — see
+/// RegenerateTechLevelGoldenFile) — the source of every expected value the always-on
+/// AnnualTickHandler*Tests.MatchesGoldenFile tests assert against. Each method just supplies its
+/// domain's harness name, case list, and per-case CLI arg format to GoldenFile.Regenerate, which does
+/// the actual compile/run/write/verify work — see there.
+/// [Explicit] + [Category("PascalGroundTruth")]: requires fpc (and, for the patch-based lane, git) on
+/// PATH, so these are excluded from the default `dotnet test` run (see PascalHarness/PatchHarness).
+/// Run one, review the diff, and commit the result whenever its Cases list or its harness's
+/// transcription/patches change.
 /// </summary>
 public class GoldenFileTests
 {
@@ -39,10 +42,16 @@ public class GoldenFileTests
         GoldenFile.Regenerate("military", MilitaryCases.All,
             c => $"{c.HarnessPop},{c.Legions},{(int)c.Type},{c.RngFixedValue}");
 
+    // Patch-based, not transcribed: runs the real, only-minimally-touched UpdateWorld against a
+    // hand-assembled Universe^ (reference/verify/patch-based/runworld.pas) instead of an isolated
+    // transcription of UpdateTechLevel alone, so the ground truth includes the real GetCapital/GetTech
+    // lookups and Emp=Indep check rather than TechLevelCase's CapitalTech/IsIndependent standing in for
+    // them. See reference/verify/patch-based/README.md.
     [Test, Explicit, Category("PascalGroundTruth")]
     public void RegenerateTechLevelGoldenFile() =>
         GoldenFile.Regenerate("techlevel", TechLevelCases.All,
-            c => $"{(int)c.Tech},{(c.IsIndependent ? 1 : 0)},{(int)c.CapitalTech},{c.RngFixedValue}");
+            c => $"{(int)c.Tech},{(c.IsIndependent ? 1 : 0)},{(int)c.CapitalTech},{c.RngFixedValue}",
+            args => PatchHarness.CompileAndRun("runworld", args));
 
     [Test, Explicit, Category("PascalGroundTruth")]
     public void RegenerateProductionGoldenFile() =>

@@ -544,8 +544,11 @@ public class AnnualTickHandlerMilitaryTests
 /// Verifies Commit 3 of the economy phase: UpdateTechLevel (UPDATE.PAS:1032-1072), tech-level
 /// advancement/regression toward an owned world's empire's capital (or a 1-in-50 independent drift
 /// for unowned worlds). MatchesGoldenFile checks the real Pascal arithmetic against
-/// reference/verify/golden/techlevel.golden, computed by a real FreePascal run of
-/// reference/verify/techlevel.pas (GoldenFileTests), not hand-typed. Unlike Revolution/MilitaryCase,
+/// reference/verify/golden/techlevel.golden, computed patch-based (GoldenFileTests): the real,
+/// only-minimally-touched UpdateWorld run against a hand-assembled Universe^
+/// (reference/verify/patch-based/runworld.pas), not a per-procedure transcription — this is the one
+/// domain where the ground truth includes a real GetCapital/GetTech lookup and Emp=Indep check rather
+/// than CapitalTech/IsIndependent standing in for them. Unlike Revolution/MilitaryCase,
 /// UpdateTechLevel's formula never reads Population, so every case here uses a tiny Population(10)
 /// that always takes UpdatePopulation's "&lt;75" branch — whatever that grows to under a given
 /// RngFixedValue doesn't matter, since only TechLevel is asserted. The one guard test below (no

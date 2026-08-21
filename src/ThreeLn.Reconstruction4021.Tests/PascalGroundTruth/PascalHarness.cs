@@ -19,6 +19,11 @@ internal static class PascalHarness
 
     public static bool IsFpcAvailable => FpcPathLazy.Value is not null;
 
+    /// <summary>Resolved fpc path, shared with PatchHarness (which compiles a different driver in a
+    /// different directory, but needs the same fpc binary).</summary>
+    internal static string FpcPath => FpcPathLazy.Value
+        ?? throw new InvalidOperationException("fpc not found on PATH — install FreePascal to run PascalGroundTruth tests.");
+
     /// <summary>Repo root (the directory containing reference/verify), for locating harness sources
     /// and the golden files under reference/verify/golden/. Throws if it can't be found — every
     /// caller needs it to do anything useful, so there's no value in returning null here too.</summary>
@@ -29,15 +34,12 @@ internal static class PascalHarness
     /// executes it with the given arguments, returning captured stdout.</summary>
     public static string CompileAndRun(string harnessName, params string[] args)
     {
-        var fpc = FpcPathLazy.Value
-            ?? throw new InvalidOperationException("fpc not found on PATH — install FreePascal to run PascalGroundTruth tests.");
-
         var verifyDir = Path.Combine(RepoRoot, "reference", "verify");
         var sourcePath = Path.Combine(verifyDir, harnessName + ".pas");
         if (!File.Exists(sourcePath))
             throw new FileNotFoundException($"Harness source not found: {sourcePath}");
 
-        RunProcess(fpc, [sourcePath], verifyDir);
+        RunProcess(FpcPath, [sourcePath], verifyDir);
 
         var exePath = Path.Combine(verifyDir, harnessName + ".exe");
         return RunProcess(exePath, args, verifyDir);
@@ -57,7 +59,9 @@ internal static class PascalHarness
         return fields;
     }
 
-    private static string RunProcess(string fileName, IReadOnlyList<string> args, string workingDirectory)
+    /// <summary>Shared with PatchHarness, which shells out to git and fpc from a different working
+    /// directory but needs the same process-running/error-reporting behavior.</summary>
+    internal static string RunProcess(string fileName, IReadOnlyList<string> args, string workingDirectory)
     {
         var startInfo = new ProcessStartInfo(fileName) {
             WorkingDirectory = workingDirectory,

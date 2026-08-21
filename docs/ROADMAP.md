@@ -115,9 +115,12 @@ follow once that's working.
    or down (1-in-15/tick) — `Empire.Capital` already existed as a `Planet?` from the data-model phase,
    so no new state was needed. A null `Owner.Capital` (a state Pascal's `GetCapital` can't produce for
    a real, founded empire) is a defensive no-op, covered by one hardcoded guard test; every other
-   branch is golden-file-backed (`techlevel.pas`/`techlevel.golden`,
-   `TechLevelCases`/`AnnualTickHandlerTechLevelTests`) since UpdateTechLevel's own formula never reads
-   Population, unlike Revolution/Military — no `PlanetPop`/`HarnessPop` split was needed here.
+   branch is golden-file-backed (`techlevel.golden`, `TechLevelCases`/`AnnualTickHandlerTechLevelTests`)
+   since UpdateTechLevel's own formula never reads Population, unlike Revolution/Military — no
+   `PlanetPop`/`HarnessPop` split was needed here. `techlevel.golden` was the first domain moved to the
+   patch-based lane (below) once it landed — the real `GetCapital`/`GetTech` lookup and `Emp=Indep`
+   check it depends on are exactly the kind of real-state dependency a per-procedure transcription has
+   to fake.
 4. **Starbase economy** — same `UpdateWorld` sequence, but with `SupplyLink`/`SurplusLink`
    (UPDATE.PAS:1408,1413 — raw-material redistribution across the empire) and industrial-complex-only
    production and economy (`STyp=cmp` branches, lines 1403-1415 for production and 1420-1427 for
@@ -212,12 +215,28 @@ compiles cleanly under fpc but doesn't preserve Turbo Pascal's declaration-order
 depends on — writing through it silently corrupted the `Universe` pointer (a real access-violation
 crash, not a compile error). Full writeup: `reference/verify/patch-based/README.md`.
 
-**Recommendation.** Transcription stays the default for new isolated-procedure golden cases — cheap,
-bounded, proven across four commits. Reach for the patch-based real-`Universe^` approach only when a
-procedure's fidelity risk is high enough to justify it: many state-shaped lookups transcription would
-otherwise have to simplify into plain parameters (`GetCapital`/`GetTech`-style calls), or call
-*ordering* across a real pipeline is the thing worth checking — the exact "cross-cutting field" bug
-class hit twice this session with transcription (`UpdateMilitary` mutating `Cargo.Legions` before
-`UpdateRevolution` reads it). Don't expand into combat/fleet movement/NPE AI by default — `Intrface`'s
-`Fleet`/`Orders`/`NPE` dependency was dodged here by relocating one function; the next subsystem's
+**Recommendation (updated 2026-08-21).** Reach for the patch-based, real-`Universe^` approach whenever
+it would improve testing fidelity, with an eye toward eventually building up a maximum-fidelity
+harness — the per-harness patch-authoring cost is accepted deliberately, in exchange for being able to
+run the real Pascal code against known states across wide slices of the game systems as those slices
+grow, not just the one procedure under test. That's most clearly the case whenever a procedure touches
+real state transcription would otherwise have to fake (`GetCapital`/`GetTech`-style lookups, other
+empires/planets) or where call *ordering* across a real pipeline is what's actually being checked — the
+exact "cross-cutting field" bug class hit twice with transcription (`UpdateMilitary` mutating
+`Cargo.Legions` before `UpdateRevolution` reads it). Transcription is still fine for genuinely isolated,
+parameter-only procedures with no real-state dependency. Dependency-blast-radius judgment still
+applies — don't drag combat/fleet movement/NPE AI into scope prematurely; `Intrface`'s
+`Fleet`/`Orders`/`NPE` dependency was dodged here by relocating one function, and the next subsystem's
 dependency web is an open question, not something this result generalizes to.
+
+**In production (2026-08-21): `techlevel.golden`.** First domain actually moved off transcription:
+`runworld.pas` was generalized from the one hardcoded validation case into a proper CLI driver
+(`TechOrd,IsIndependent,CapitalTechOrd,RngFixedValue`, matching `TechLevelCases`' own shape exactly) and
+wired into `GoldenFileTests.RegenerateTechLevelGoldenFile` via a new `PatchHarness.CompileAndRun` (same
+contract as `PascalHarness.CompileAndRun`, so `GoldenFile.Regenerate` just took an optional runner
+parameter rather than needing a parallel code path). All 8 `TechLevelCases` reproduced byte-identical to
+the prior transcription-based `techlevel.golden` — meaning the extra fidelity (real `GetCapital`/`GetTech`,
+real `Emp=Indep` check, running inside the real full `UpdateWorld` rather than an isolated procedure) cost
+nothing in this case, but is now backing every future change to this logic. `reference/verify/techlevel.pas`
+and common.pas's now-unused `TechLvlInc` were deleted rather than kept alongside as a second, unmaintained
+implementation of the same check. Ambrosia/Revolution/Military/Production are next.

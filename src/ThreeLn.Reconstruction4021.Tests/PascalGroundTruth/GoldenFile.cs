@@ -20,12 +20,17 @@ internal static class GoldenFile
     /// <summary>Runs harnessName in "case" mode with one arg per case (via argFormatter), writes the
     /// result to reference/verify/golden/{harnessName}.golden keyed by each case's Name, and
     /// verifies the file round-trips. Shared by every domain's regenerator test in GoldenFileTests —
-    /// only the harness name, case list, and per-case arg format differ between domains.</summary>
-    public static void Regenerate<TCase>(string harnessName, IReadOnlyList<TCase> cases, Func<TCase, string> argFormatter)
+    /// only the harness name, case list, and per-case arg format differ between domains. runHarness
+    /// defaults to PascalHarness.CompileAndRun(harnessName, args) (the per-procedure transcription
+    /// pattern); pass PatchHarness.CompileAndRun for a domain whose ground truth instead comes from
+    /// the real, patched UpdateWorld (see reference/verify/patch-based/README.md).</summary>
+    public static void Regenerate<TCase>(string harnessName, IReadOnlyList<TCase> cases, Func<TCase, string> argFormatter,
+        Func<string[], string>? runHarness = null)
         where TCase : INamedCase
     {
+        runHarness ??= args => PascalHarness.CompileAndRun(harnessName, args);
         var args = cases.Select(argFormatter).Prepend("case").ToArray();
-        var output = PascalHarness.CompileAndRun(harnessName, args);
+        var output = runHarness(args);
         var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (lines.Length != cases.Count)
             throw new InvalidOperationException(
