@@ -1,6 +1,6 @@
 namespace ThreeLn.Reconstruction4021.Core.Entities;
 
-/// <summary>Percentage (0-100) of each ship type assigned somewhere — same shape as ShipCounts, different unit.</summary>
+/// <summary>Percentage (0-100) of each ship type assigned somewhere — same shape as <see cref="ShipCounts"/>, different unit.</summary>
 public sealed class ShipDistribution
 {
     public int Fighters { get; set; }

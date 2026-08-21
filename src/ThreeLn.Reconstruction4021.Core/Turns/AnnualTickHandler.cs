@@ -439,11 +439,13 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
         // (UPDATE.PAS:699) testable already.
         var newTotalRevIndex = new Dictionary<Empire, int>();
 
-        foreach (var planet in game.Galaxy.Planets)
+        foreach (var planet in game.Galaxy.Planets) {
             UpdateWorld(planet, newTotalRevIndex);
+        }
 
-        foreach (var empire in game.Empires)
+        foreach (var empire in game.Empires) {
             empire.TotalRevolutionIndex = newTotalRevIndex.GetValueOrDefault(empire, 0);
+        }
     }
 
     /// <summary>
@@ -497,11 +499,11 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
 
     /// <summary>
     /// The Technology set gating which resources a world can currently produce (UPDATE.PAS:1359-1369).
-    /// Independent worlds are capped one tech level behind their nominal TechLevel; owned worlds use
-    /// their own TechLevel directly, further gated per-ship by <see cref="ShipTechAvailable"/> against
+    /// Independent worlds are capped one tech level behind their nominal <see cref="TechLevel"/>; owned worlds use
+    /// their own <see cref="TechLevel"/> directly, further gated per-ship by <see cref="ShipTechAvailable"/> against
     /// the empire's individually-researched ships (raw materials/cargo aren't individually researched
     /// — see <see cref="UnlockedTechnology"/>'s own doc comment — so no further empire-level gate
-    /// applies to them beyond TechLevel).
+    /// applies to them beyond <see cref="TechLevel"/>).
     /// </summary>
     private static TechLevel EffectiveTechnologyLevel(Planet planet) =>
         planet.Owner.IsIndependent && planet.TechLevel > TechLevel.PreTech

@@ -3,7 +3,7 @@ using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Core.Entities;
 
-/// <summary>A starbase — command bases and fortresses are mobile (IMovable); industrial complexes and outposts stay put but still carry the same fields.</summary>
+/// <summary>A starbase — command bases and fortresses are mobile (<see cref="IMovable"/>); industrial complexes and outposts stay put but still carry the same fields.</summary>
 public sealed class Starbase : IMovable
 {
     public required Coordinate Location { get; set; }
