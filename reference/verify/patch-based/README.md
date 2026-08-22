@@ -10,11 +10,16 @@ procedure into a fresh file, this maintains small patches against the real
 copy at build time, and calls the real, only-minimally-touched Pascal code
 directly against a hand-assembled `Universe^`.
 
-**Status: in production for five domains (`techlevel.golden`, `military.golden`,
-`starbase.golden`, `ambrosia.golden`, `revolution.golden` — see `docs/ROADMAP.md`'s
-"Ground-truth harness generation" section), alongside `reference/verify/*.pas`'s
-per-procedure transcription for everything else — not a wholesale replacement.**
-See "Recommendation" below.
+**Status: in production for all six ground-truth domains that exist so far
+(`techlevel.golden`, `military.golden`, `starbase.golden`, `ambrosia.golden`,
+`revolution.golden`, `production.golden` — see `docs/ROADMAP.md`'s "Ground-truth
+harness generation" section). `reference/verify/*.pas`'s per-procedure
+transcription pattern has no domains left on it as of `production.golden`'s
+migration — `production.pas` was the last file using it, and `common.pas`
+(its only remaining shared dependency) was deleted alongside it. The pattern
+itself isn't retired: it's still the right call for a genuinely isolated,
+parameter-only procedure (see "Recommendation" below) — there's just nothing
+currently using it.**
 
 ## Layout
 
@@ -25,7 +30,7 @@ See "Recommendation" below.
   file): assembles a minimal `Universe^` and calls the real `UpdateWorld`.
   Machine-parseable CLI: `case <domain> <case1> <case2> ...`, where `<domain>`
   selects the case shape/output line (`techlevel`, `military`, `starbase`,
-  `ambrosia`, or `revolution` so far — see the file's own header comment). One driver, not one per domain, so
+  `ambrosia`, `revolution`, or `production` so far — see the file's own header comment). One driver, not one per domain, so
   `PatchHarness.CompileAndRun` only has to copy/patch/compile the whole
   patched tree once per `dotnet test` run regardless of how many domains use it.
 - `build.ps1` — deletes and regenerates `pascal/` from pristine source +
@@ -196,6 +201,38 @@ second bug (values compounding across cases) until this fixed it. All 4
 `revolution.golden` except `revindex` (+1 in every case, the real fix, not a
 regression).
 
+Sixth domain, `production`: retired `production.pas`'s isolated `FullPipeline`
+(`ProduceRawMaterial`/`GetIndustrialDistribution`/`UpdateIndustry`/`Production`
+only) for the real `UpdateWorld` — the last domain still on the transcription
+pattern, so `common.pas` (its only remaining shared dependency) was deleted
+alongside it. This one caught two bugs, but both were in the *harness*, not
+the C# port or the old transcription: `runworld.pas` initially left the
+planet's owning empire with an empty `TechnologySet`, which — because
+`UpdateWorld` intersects it with `TechDev[Tech]` to gate production
+(`UPDATE.PAS:1367-1368`) — silently zeroed out raw-material production
+entirely; and it left the planet's ISSP dial (`ImpExp`) at its
+`FillChar`-zeroed value instead of `DefaultISSP` (`$5555`,
+`DATACNST.PAS:516`), which every real planet gets at settlement
+(`PRIMINTR.PAS:631`) and which `GetIndustrialDistribution`'s sqrt-based
+formulas are sensitive to. Both states are unreachable in real gameplay
+(`CreateEmpire` always seeds a new empire's `Technology` from
+`TechDev[Pred(Tech)]`, `NEWGAME.PAS:1203,1240`) — confirmed before trusting
+the fix, not assumed. Once both were set unconditionally, industry levels,
+ship counts, and `Cargo.Trillum`/`TrillumReserve` reproduced byte-identical to
+the prior transcription-based `production.golden` for all 4 `ProductionCases`.
+
+It also surfaced a real, previously-invisible gap in the *C# port*: the real
+`UpdateWorld` calls `UpdateDefenses` (`UPDATE.PAS:1278-1351`), which draws down
+`Cargo[che..tri]` building defenses toward a population-driven target —
+something the old isolated `FullPipeline` never modeled (it never called
+`UpdateDefenses` at all) and `AnnualTickHandler.RunAnnualTick` doesn't call yet
+(`UpdateDefenses` is still on the roadmap, unimplemented). This widened
+`AnnualTickHandlerProductionTests.MatchesGoldenFile`'s exclusion list:
+`Cargo.Chemicals` and `Cargo.Metals` join the already-excluded
+`Cargo.Supplies`/`Cargo.Ambrosia`/`Cargo.Legions`, for the same reason each of
+those was already excluded — a real UpdateWorld step this tick that the C#
+port doesn't yet run.
+
 ## Recommendation
 
 Reach for this approach whenever it would improve testing fidelity, with an
@@ -215,10 +252,19 @@ under test:
   the isolated harnesses didn't model the mutation).
 - Transcription (`reference/verify/*.pas`'s per-procedure pattern) is still
   fine for genuinely isolated, parameter-only procedures with no real-state
-  dependency — cheap and bounded, and already proven across four roadmap
-  commits.
+  dependency — cheap and bounded, and proven across four roadmap commits
+  before `production.golden`'s migration retired its last domain. Nothing
+  currently uses it, but reach for it again if a future case fits that
+  description better than a hand-assembled `Universe^` would.
 - Don't expand this into combat/fleet movement/NPE AI territory by default.
   `Intrface`'s `Fleet`/`Orders`/`NPE` dependency was dodged here by relocating
   one function; the next subsystem's dependency web is an open question, not
   something this session's results generalize to. Treat each new area as its
   own exploration, not an assumed extension of this one.
+- A hand-assembled `Universe^` is still only as faithful as the fields it
+  remembers to set. `production.golden`'s two harness bugs (an empty
+  `TechnologySet`, an unset `ImpExp`) were both "field defaults to zero
+  instead of what `CreateEmpire`/settlement actually initializes it to" —
+  worth a deliberate check against real init code (`CreateEmpire`,
+  `PRIMINTR.PAS`'s `Set*` procedures) for any new domain's setup, not just
+  trusting `FillChar` zero to be a reachable state.

@@ -66,9 +66,15 @@ public class GoldenFileTests
             c => $"{c.StarbaseChemicals},{c.NeighborChemicals},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "starbase", .. args.Skip(1)]));
 
+        // Patch-based, not transcribed: runs the real UpdateWorld through runworld.pas's production
+        // domain instead of the old isolated FullPipeline (ProduceRawMaterial/GetIndustrialDistribution/
+        // UpdateIndustry/Production only). See ProductionCases's doc comment for the two harness bugs
+        // this caught (Technology-set and ISSP-dial defaults) and the real UpdateDefenses gap it
+        // surfaced (not yet ported) that widened the golden comparison's exclusion list.
         GoldenFile.Regenerate("production", ProductionCases.All,
             c => $"{(int)c.Class},{(int)c.Type},{c.Population},{c.Efficiency},{(int)c.Tech},{(c.AmbAddict ? 1 : 0)}," +
                  $"{c.IndusBio},{c.IndusChe},{c.IndusMin},{c.IndusSYG},{c.IndusSYJ},{c.IndusSYS},{c.IndusSYT},{c.IndusSup},{c.IndusTri}," +
-                 $"{c.CargoMen},{c.CargoNnj},{c.CargoAmb},{c.CargoChe},{c.CargoMet},{c.CargoSup},{c.CargoTri},{c.TrillumReserve}");
+                 $"{c.CargoMen},{c.CargoNnj},{c.CargoAmb},{c.CargoChe},{c.CargoMet},{c.CargoSup},{c.CargoTri},{c.TrillumReserve}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "production", .. args.Skip(1)]));
     }
 }

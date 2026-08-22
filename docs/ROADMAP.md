@@ -66,11 +66,13 @@ follow once that's working.
    `NewTechLevel`'s per-tick research rolls, Commit 5 below), so ship production is correct but inert
    until those land. `AnnualTickHandlerProductionTests` — Pop=1000/Class=EthCls/Tech=Gate cases
    deliberately exercise the sqrt/pow cascade in `GetIndustrialDistribution`, infeasible to hand-trace
-   reliably — is golden-file-backed via `reference/verify/production.pas`'s `FullPipeline` (see
-   below); this originally caught two real bugs: `SelfSufficiencySettings` defaulted to 0 instead of
-   Pascal's `InitializeISSP` default of 5 (badly distorting `GetIndustrialDistribution`'s sqrt terms),
-   and FreePascal's built-in `Round()` is banker's rounding, not Turbo Pascal's round-half-away-from-
-   zero (fixed with a `PascalRound` helper in `common.pas`) — both missed by hand-tracing.
+   reliably — is golden-file-backed (see below), originally via `reference/verify/production.pas`'s
+   `FullPipeline`, migrated to the patch-based lane 2026-08-22 (see below) once it was the only domain
+   left on transcription. The original transcription-based setup caught two real bugs:
+   `SelfSufficiencySettings` defaulted to 0 instead of Pascal's `InitializeISSP` default of 5 (badly
+   distorting `GetIndustrialDistribution`'s sqrt terms), and FreePascal's built-in `Round()` is banker's
+   rounding, not Turbo Pascal's round-half-away-from-zero (fixed with a `PascalRound` helper) — both
+   missed by hand-tracing.
    - ✅ **Commit 2b, ambrosia addiction** — `UseUpAmbrosia` (UPDATE.PAS:1163-1276), inserted between
      `UseUpFood` and `UpdateRevolution`. Makes `IsAddictedToAmbrosia` real state instead of a
      permanently-false flag Commit 2's own production pipeline already read (`AmbrosiaAdj` in
@@ -83,22 +85,23 @@ follow once that's working.
      `RunProductionPipeline`'s own industry growth earlier in the same tick is infeasible to
      hand-trace on top of the shortage math (same reason the production tests lean on the Pascal
      harness instead of hand-derivation) — add coverage if it's ever touched.
-   - ✅ **Golden-file ground truth.** `reference/verify/{revolution,production}.pas` are from-source
-     transcriptions (not copied from the C# port — an early `ambrosia.pas` draft slipped into doing
-     that, caught before landing, see the "Ground-truth harness generation" section below) of
-     `UpdateRevolution`/`Rebellion` and the production pipeline (`FullPipeline`), sharing tables/
-     helpers in `common.pas`. `ambrosia.pas` itself was later retired for the patch-based lane (see
-     below). `GoldenFileTests` (runs in the default `dotnet test` suite, dynamically skipped when fpc/
-     git aren't on PATH) runs each harness via a shared `GoldenFile.Regenerate` helper and writes a
-     committed `reference/verify/golden/*.golden` file (`case=Name;key=value;...` lines). The
-     always-on `AnnualTickHandler{Ambrosia,Revolution,Production}Tests.MatchesGoldenFile` tests
-     (data-driven via each domain's `*Cases.AsDataSource` and TUnit's `[MethodDataSource]`) read that
-     file and assert the C# port against it — so no hand-typed expected value can silently agree with
-     the same mistake on both sides of a check. Regenerate a golden file (review the diff, then commit)
-     whenever its `*Cases.All` or its
-     harness's transcription changes. `production.golden` excludes `Cargo.Supplies`/`Cargo.Ambrosia`/
-     `Cargo.Legions` (all mutated later in the same tick by steps `FullPipeline` doesn't model) — see
-     each domain's test-class doc comment for the exact scope.
+   - ✅ **Golden-file ground truth.** All six ground-truth domains (`techlevel`, `military`, `starbase`,
+     `ambrosia`, `revolution`, `production`) now run through the patch-based lane's real `UpdateWorld`
+     (`reference/verify/patch-based/`, see the "Ground-truth harness generation" section below) rather
+     than a from-source transcription — `production.golden` was the last domain migrated (2026-08-22),
+     retiring `reference/verify/production.pas`'s `FullPipeline` and its shared `common.pas` dependency.
+     `GoldenFileTests` (runs in the default `dotnet test` suite, dynamically skipped when fpc/git aren't
+     on PATH) runs each domain via a shared `GoldenFile.Regenerate` helper and writes a committed
+     `reference/verify/golden/*.golden` file (`case=Name;key=value;...` lines). The always-on
+     `AnnualTickHandler{Ambrosia,Revolution,Production,...}Tests.MatchesGoldenFile` tests (data-driven
+     via each domain's `*Cases.AsDataSource` and TUnit's `[MethodDataSource]`) read that file and assert
+     the C# port against it — so no hand-typed expected value can silently agree with the same mistake
+     on both sides of a check. Regenerate a golden file (review the diff, then commit) whenever its
+     `*Cases.All` or the patch-based driver's relevant domain changes. `production.golden` excludes
+     `Cargo.Supplies`/`Cargo.Ambrosia`/`Cargo.Legions`/`Cargo.Chemicals`/`Cargo.Metals` (all mutated
+     later in the same real `UpdateWorld` tick by steps `AnnualTickHandler.RunAnnualTick` doesn't run,
+     or doesn't run yet — the last two because `UpdateDefenses`, UPDATE.PAS:1278-1351, isn't ported) —
+     see each domain's test-class doc comment for the exact scope.
    - ✅ **Commit 2c, military buildup** — `UpdateMilitary` (UPDATE.PAS:606-617), inserted between
      `UseUpAmbrosia` and `UpdateRevolution` (runs unconditionally for planets — the same insertion
      point `AnnualTickHandler.UpdateWorld`'s doc comment already marks). Small and self-contained:
@@ -310,4 +313,37 @@ CLI invocation (only Pascal's own `UpdateUniverse`, never called here, zeroes it
 reads it before and after `UpdateWorld` and reports the difference, sidestepping the need for a reset
 hook entirely. All 4 `RevolutionCases` reproduced byte-identical to the prior transcription-based
 `revolution.golden` except `revindex` (+1 in every case, the just-fixed bug) — `total_rev_delta` matched
-immediately once the before/after delta replaced a naive absolute read. Production is next.
+immediately once the before/after delta replaced a naive absolute read.
+
+**Sixth and final domain: `production.golden`** (2026-08-22) — the last one still on transcription, so
+retiring `reference/verify/production.pas`'s isolated `FullPipeline` also deleted `common.pas`, its
+last remaining consumer. Unlike every prior migration, the bugs this one caught were in the *new*
+patch-based harness, not the old transcription or the C# port: `runworld.pas` initially left the
+planet's owning empire with an empty Pascal `TechnologySet`, which — because `UpdateWorld` intersects
+it with `TechDev[Tech]` to gate production (UPDATE.PAS:1367-1368) — silently zeroed out raw-material
+production entirely; and it left the planet's ISSP dial (`ImpExp`) at its `FillChar`-zeroed value
+instead of `DefaultISSP` (`$5555`, DATACNST.PAS:516), which every real planet gets at settlement
+(PRIMINTR.PAS:631) and which `GetIndustrialDistribution`'s sqrt terms are sensitive to. Both looked at
+first like real C#-port/architecture gaps (an empty `TechnologySet` would mean per-empire research
+gates raw-material production, contradicting the C# port's `CargoTechAvailable` comment that it
+doesn't) — checked against source before acting rather than assumed: `che`/`met`/`sup`/`tri` genuinely
+sit inside the individually-researched range (`TYPES.PAS:63`'s `TechnologyTypes` enum, walked by
+`GetNewTech`'s `LAM TO dis` loop), but `CreateEmpire` always seeds a new empire's `Technology` from the
+*full* `TechDev[Pred(Tech)]` set (`NEWGAME.PAS:1203,1240`), so the empty-set state this harness had
+constructed is unreachable in real gameplay — the C# port's simplification (already documented in
+Commit 2's bullet above) stands. Once both fields were set unconditionally, industry levels, ship
+counts, and `Cargo.Trillum`/`TrillumReserve` reproduced byte-identical to the prior transcription-based
+`production.golden` for all 4 `ProductionCases`.
+
+It did catch one real, previously-invisible C# port gap: the real `UpdateWorld` calls `UpdateDefenses`
+(UPDATE.PAS:1278-1351), which draws down `Cargo[che..tri]` building defenses toward a
+population-driven target — something the old isolated `FullPipeline` never modeled (it never called
+`UpdateDefenses` at all) and `AnnualTickHandler.RunAnnualTick` doesn't call yet (`UpdateDefenses` is
+still unimplemented, deferred to the combat phase per Commit 4's bullet above). This widened
+`AnnualTickHandlerProductionTests.MatchesGoldenFile`'s exclusion list: `Cargo.Chemicals` and
+`Cargo.Metals` join the already-excluded `Cargo.Supplies`/`Cargo.Ambrosia`/`Cargo.Legions`, for the
+same reason each of those was already excluded.
+
+With `production.golden` migrated, all six ground-truth domains now run through the patch-based lane;
+the transcription pattern (`reference/verify/*.pas`) has no domains left on it, though it's still the
+right tool for a future genuinely-isolated, parameter-only procedure (see "Recommendation" above).

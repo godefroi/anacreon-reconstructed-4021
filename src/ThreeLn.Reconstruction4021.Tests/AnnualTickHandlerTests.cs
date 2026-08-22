@@ -266,15 +266,19 @@ public class AnnualTickHandlerRevolutionTests
 /// AnnualTickHandler.RunProductionPipeline). MatchesGoldenFile checks the real Pascal arithmetic —
 /// Pop=1000, Class=EthCls, and Tech=Gate cases deliberately exercise the sqrt/pow cascade in
 /// GetIndustrialDistribution, infeasible to hand-trace reliably — against
-/// reference/verify/golden/production.golden, computed by a real FreePascal run of
-/// reference/verify/production.pas's FullPipeline (GoldenFileTests), not hand-typed. Cargo.Supplies,
-/// Cargo.Ambrosia, and Cargo.Legions are excluded from that comparison: UseUpFood/UseUpAmbrosia/
-/// UpdateMilitary all run later in the same tick and mutate them based on post-growth Population (and,
-/// for Legions, world Type), which production.pas's ground truth (computed on the pre-growth
-/// Population the pipeline actually sees, and not modeling UpdateMilitary at all) doesn't model — see
-/// NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction for the one case that actually exercises
-/// the Ambrosia gap. See production.pas's header comment for its one known deviation (the split
-/// ProductionShips/ProductionCargo loops), which none of ProductionCases's cases trigger.
+/// reference/verify/golden/production.golden, computed by a real FreePascal run of the real, patched
+/// UpdateWorld (GoldenFileTests; see ProductionCases's doc comment for the harness bugs that migration
+/// caught), not the old isolated FullPipeline transcription and not hand-typed.
+///
+/// Cargo.Supplies, Cargo.Ambrosia, Cargo.Legions, Cargo.Chemicals, and Cargo.Metals are excluded from
+/// that comparison — each is mutated by a real UpdateWorld step this tick that RunAnnualTick either
+/// runs on different (post-growth) state or doesn't run at all: UseUpFood/UseUpAmbrosia/UpdateMilitary
+/// all act on post-growth Population (and, for Legions, world Type), and UpdateDefenses
+/// (UPDATE.PAS:1278-1351) — not yet ported — draws down Cargo.Chemicals/Metals building defenses
+/// toward a population-driven target. See NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction for
+/// the one case that actually exercises the Ambrosia gap. None of ProductionCases's cases exercise a
+/// defense type that would touch Cargo.Trillum the same way (UpdateDefenses's raw-material loop also
+/// covers tri), so Cargo.Trillum stays asserted — revisit this exclusion list if a future case does.
 /// </summary>
 public class AnnualTickHandlerProductionTests
 {
@@ -354,8 +358,6 @@ public class AnnualTickHandlerProductionTests
         await Assert.That(planet.Ships.Transports).IsEqualTo(int.Parse(expected["trn"]));
 
         await Assert.That(planet.Cargo.NinjaLegions).IsEqualTo(int.Parse(expected["cargonnj"]));
-        await Assert.That(planet.Cargo.Chemicals).IsEqualTo(int.Parse(expected["cargoche"]));
-        await Assert.That(planet.Cargo.Metals).IsEqualTo(int.Parse(expected["cargomet"]));
         await Assert.That(planet.Cargo.Trillum).IsEqualTo(int.Parse(expected["cargotri"]));
         await Assert.That(planet.TrillumReserve).IsEqualTo(int.Parse(expected["trillumreserve"]));
     }

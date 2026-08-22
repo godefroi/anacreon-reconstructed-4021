@@ -16,6 +16,12 @@
      ambrosia   Addicted,Ambrosia,RngFixedValue                    -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
      revolution PlanetPop,ClassOrd,TechOrd,Efficiency,RevIndex,Legions,RngFixedValue
                 -> "rebelled=<TRUE|FALSE>;legions=<v>;ninja=<v>;population=<v>;efficiency=<v>;revindex=<v>;total_rev_delta=<v>"
+     production ClassOrd,TypeOrd,Population,Efficiency,TechOrd,AmbAddict,
+                IndusBio,IndusChe,IndusMin,IndusSYG,IndusSYJ,IndusSYS,IndusSYT,IndusSup,IndusTri,
+                CargoMen,CargoNnj,CargoAmb,CargoChe,CargoMet,CargoSup,CargoTri,TrillumReserve
+                -> "bio,che,min,syg,syj,sys,syt,sup,tri,fgt,hkr,jmp,jtn,pen,ssp,trn,cargomen,
+                    cargonnj,cargoamb,cargoche,cargomet,cargosup,cargotri,trillumreserve,
+                    population,efficiency,techlevel,revindex (all <key>=<value>)"
    One output line per case, in order, to stdout -- consumed by PatchHarness
    in the C# test project via GoldenFile.Regenerate's runHarness override.
    With no arguments, runs a single hardcoded techlevel case as a
@@ -367,6 +373,119 @@ procedure RunRevolutionCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunProductionCase(const arg: String);
+   { Owned by Empire1 with its capital set to itself (same rationale as
+     RunMilitaryCase/RunAmbrosiaCase/RunRevolutionCase). EmpireData.Technology
+     is set to every TechnologyTypes value unconditionally: UpdateWorld
+     intersects it with TechDev[Tech] (UPDATE.PAS:1367-1368) to get the
+     Technology set production is actually gated on, so a full input set
+     reduces that intersection to exactly TechDev[Tech] -- matching both the
+     old isolated production.pas harness (which hardcoded Technology:=
+     TechDev[Tech] directly, bypassing the per-empire set entirely) and
+     CargoTechAvailable's C# model (gates purely on TechLevel, no per-empire
+     cargo-research tracking). A partially-populated Technology set (e.g. only
+     when some "AllShipsUnlocked" case flag was set) would model an empire
+     that hasn't finished individually researching every item unlocked by its
+     own tech level -- a real Pascal mechanic (UPDATE.PAS's NewTechLevel/
+     GetNewTech), but one no reachable game state exercises for the resource
+     types (che/met/sup/tri) production depends on: CreateEmpire always seeds
+     a new empire with the full TechDev[Pred(Tech)] set (NEWGAME.PAS:1203,
+     1240), so this harness's Technology set should always be "full" too.
+     Runs the real UpdateWorld, not just the production sub-pipeline, so
+     unlike the old isolated FullPipeline this also computes genuine post-tick
+     Population/Efficiency/TechLevel/RevolutionIndex and Cargo.Supplies/
+     Ambrosia/Legions values -- unlike production.pas, nothing here needs
+     excluding from the golden comparison. }
+   var
+      parts: array[0..22] of LongInt;
+      ID, CapID: IDNumber;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   NoOfPlanets:=1;
+
+   Universe^.Planet[1].Cls:=WorldClass(parts[0]);
+   Universe^.Planet[1].Typ:=WorldTypes(parts[1]);
+   Universe^.Planet[1].Pop:=parts[2];
+   Universe^.Planet[1].Eff:=parts[3];
+   Universe^.Planet[1].Tech:=TechLevel(parts[4]);
+   if parts[5]<>0 then
+      Universe^.Planet[1].Special:=[AmbAddict]
+   else
+      Universe^.Planet[1].Special:=[];
+
+   Universe^.Planet[1].Indus[BioInd]:=parts[6];
+   Universe^.Planet[1].Indus[CheInd]:=parts[7];
+   Universe^.Planet[1].Indus[MinInd]:=parts[8];
+   Universe^.Planet[1].Indus[SYGInd]:=parts[9];
+   Universe^.Planet[1].Indus[SYJInd]:=parts[10];
+   Universe^.Planet[1].Indus[SYSInd]:=parts[11];
+   Universe^.Planet[1].Indus[SYTInd]:=parts[12];
+   Universe^.Planet[1].Indus[SupInd]:=parts[13];
+   Universe^.Planet[1].Indus[TriInd]:=parts[14];
+
+   Universe^.Planet[1].Cargo[men]:=parts[15];
+   Universe^.Planet[1].Cargo[nnj]:=parts[16];
+   Universe^.Planet[1].Cargo[amb]:=parts[17];
+   Universe^.Planet[1].Cargo[che]:=parts[18];
+   Universe^.Planet[1].Cargo[met]:=parts[19];
+   Universe^.Planet[1].Cargo[sup]:=parts[20];
+   Universe^.Planet[1].Cargo[tri]:=parts[21];
+
+   Universe^.Planet[1].TriReserve:=parts[22];
+   Universe^.Planet[1].Emp:=Empire1;
+   Universe^.Planet[1].ImpExp:=DefaultISSP;  { every real planet gets this at settlement (PRIMINTR.PAS:631) --
+                                               GetISSP reads it as four 4-bit dials (Che/Min/Sup/Tri), and a
+                                               FillChar-zeroed planet would otherwise read ISSP index 0 (0.01)
+                                               for all four instead of the real default index 5 (1.00). }
+
+   SetOfActivePlanets:=[1];
+   SetOfPlanetsOf[Empire1]:=[1];
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire1].IsAPlayer:=False;
+   CapID.ObjTyp:=Pln;  CapID.Index:=1;
+   Universe^.EmpireData[Empire1].Capital:=CapID;
+   Universe^.EmpireData[Empire1].Technology:=[Low(TechnologyTypes)..High(TechnologyTypes)];
+
+   ForcedRandomValue:=0;
+
+   ID.ObjTyp:=Pln;  ID.Index:=1;
+   UpdateWorld(ID);
+
+   WriteLn('bio=',Universe^.Planet[1].Indus[BioInd],
+           ';che=',Universe^.Planet[1].Indus[CheInd],
+           ';min=',Universe^.Planet[1].Indus[MinInd],
+           ';syg=',Universe^.Planet[1].Indus[SYGInd],
+           ';syj=',Universe^.Planet[1].Indus[SYJInd],
+           ';sys=',Universe^.Planet[1].Indus[SYSInd],
+           ';syt=',Universe^.Planet[1].Indus[SYTInd],
+           ';sup=',Universe^.Planet[1].Indus[SupInd],
+           ';tri=',Universe^.Planet[1].Indus[TriInd],
+           ';fgt=',Universe^.Planet[1].Ships[fgt],
+           ';hkr=',Universe^.Planet[1].Ships[hkr],
+           ';jmp=',Universe^.Planet[1].Ships[jmp],
+           ';jtn=',Universe^.Planet[1].Ships[jtn],
+           ';pen=',Universe^.Planet[1].Ships[pen],
+           ';ssp=',Universe^.Planet[1].Ships[ssp],
+           ';trn=',Universe^.Planet[1].Ships[trn],
+           ';cargomen=',Universe^.Planet[1].Cargo[men],
+           ';cargonnj=',Universe^.Planet[1].Cargo[nnj],
+           ';cargoamb=',Universe^.Planet[1].Cargo[amb],
+           ';cargoche=',Universe^.Planet[1].Cargo[che],
+           ';cargomet=',Universe^.Planet[1].Cargo[met],
+           ';cargosup=',Universe^.Planet[1].Cargo[sup],
+           ';cargotri=',Universe^.Planet[1].Cargo[tri],
+           ';trillumreserve=',Universe^.Planet[1].TriReserve,
+           ';population=',Universe^.Planet[1].Pop,
+           ';efficiency=',Universe^.Planet[1].Eff,
+           ';techlevel=',Ord(Universe^.Planet[1].Tech),
+           ';revindex=',Universe^.Planet[1].RevIndex);
+
+   Dispose(Universe);
+   end;
+
 procedure RunCaseMode;
    var
       domain: String;
@@ -384,6 +503,8 @@ procedure RunCaseMode;
          RunAmbrosiaCase(ParamStr(i))
       else if domain='revolution' then
          RunRevolutionCase(ParamStr(i))
+      else if domain='production' then
+         RunProductionCase(ParamStr(i))
       else
          begin
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');

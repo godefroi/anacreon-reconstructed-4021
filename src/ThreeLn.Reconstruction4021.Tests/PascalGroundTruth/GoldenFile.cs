@@ -19,7 +19,7 @@ internal interface INamedCase
 /// </summary>
 internal static class GoldenFile
 {
-    /// <summary>Runs harnessName in "case" mode with one arg per case (via argFormatter), writes the
+    /// <summary>Runs <paramref name="harnessName"/> in "case" mode with one arg per case (via <paramref name="argFormatter"/>), writes the
     /// result to reference/verify/golden/{harnessName}.golden keyed by each case's Name, and
     /// verifies the file round-trips. Shared by every domain's regenerator test in GoldenFileTests —
     /// only the harness name, case list, and per-case arg format differ between domains. runHarness

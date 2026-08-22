@@ -3,21 +3,38 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
 /// <summary>
-/// Named inputs shared between the golden-file generator (GoldenFileTests, requires fpc — dynamically
-/// skipped otherwise) and the always-on AnnualTickHandlerProductionTests.MatchesGoldenFile. Only inputs live here
-/// — expected outputs live exclusively in reference/verify/golden/production.golden, computed by a
-/// real FreePascal run of reference/verify/production.pas's FullPipeline (the same
-/// ProduceRawMaterial/GetIndustrialDistribution/UpdateIndustry/Production call sequence
-/// RunProductionPipeline uses), never hand-typed.
+/// Named inputs shared between the golden-file generator (GoldenFileTests, requires fpc and git —
+/// dynamically skipped otherwise) and the always-on AnnualTickHandlerProductionTests.MatchesGoldenFile.
+/// Only inputs live here — expected outputs live exclusively in reference/verify/golden/
+/// production.golden, computed by a real FreePascal run of the real, patched UpdateWorld (via
+/// reference/verify/patch-based/runworld.pas's production domain), not the old isolated
+/// reference/verify/production.pas transcription (deleted — see
+/// reference/verify/patch-based/README.md).
 ///
-/// Every case here has at most one developed industry within BioInd..SYTInd at a time —
-/// production.pas's KNOWN DEVIATION (its header comment) only matters when two are simultaneously
-/// developed AND raw materials are scarce, so this holds for every case without needing to merge
-/// ProductionShips/ProductionCargo back into one loop.
+/// That migration caught two bugs in the harness itself (not the C# port): runworld.pas originally
+/// left the planet's owning empire with an empty Pascal TechnologySet, which — because UPDATE.PAS
+/// intersects it with TechDev[Tech] to decide what a world can produce (UPDATE.PAS:1367-1368) —
+/// silently gated off all raw-material production; and it left the planet's ISSP dial (ImpExp) at
+/// its FillChar-zeroed value instead of DefaultISSP ($5555, DATACNST.PAS:516), which every real
+/// planet gets at settlement (PRIMINTR.PAS:631) and which GetIndustrialDistribution's sqrt-based
+/// formulas are sensitive to. Both are now set unconditionally in runworld.pas, matching what any
+/// reachable game state actually has.
+///
+/// It also surfaced a real, not-yet-ported gap: UpdateDefenses (UPDATE.PAS:1278-1351, called from
+/// UpdateWorld at :1387) draws down Cargo[che..tri] to build defenses toward a population-driven
+/// target — something the old isolated FullPipeline never modeled and RunAnnualTick doesn't call yet.
+/// See AnnualTickHandlerProductionTests's doc comment for how that widened the golden comparison's
+/// exclusion list.
+///
+/// Every case here has at most one developed industry within BioInd..SYTInd at a time — the old
+/// production.pas's KNOWN DEVIATION (split ProductionShips/ProductionCargo loops) only mattered when
+/// two were simultaneously developed AND raw materials were scarce; moot now that the real Production
+/// procedure's single loop is what runs, but the cases were never widened since nothing needed it.
 ///
 /// AllShipsUnlocked doesn't reach the harness — it isn't a Pascal concept, it's the C# port's
 /// per-empire ship-research gate (ShipTechAvailable), needed only so Owner.Technology.Ships can be
-/// populated before RunAnnualTick; production.pas's Technology set is unconditionally TechDev[Tech].
+/// populated before RunAnnualTick; runworld.pas's Technology set is unconditionally the full
+/// TechnologyTypes range (reducing to TechDev[Tech] once intersected), regardless of this flag.
 /// </summary>
 public sealed record ProductionCase(
     string Name, WorldClass Class, WorldType Type, int Population, int Efficiency, TechLevel Tech,
