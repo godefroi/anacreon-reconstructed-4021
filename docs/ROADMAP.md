@@ -121,11 +121,29 @@ follow once that's working.
    patch-based lane (below) once it landed — the real `GetCapital`/`GetTech` lookup and `Emp=Indep`
    check it depends on are exactly the kind of real-state dependency a per-procedure transcription has
    to fake.
-4. **Starbase economy** — same `UpdateWorld` sequence, but with `SupplyLink`/`SurplusLink`
-   (UPDATE.PAS:1408,1413 — raw-material redistribution across the empire) and industrial-complex-only
-   production and economy (`STyp=cmp` branches, lines 1403-1415 for production and 1420-1427 for
-   population/food/ambrosia/military/revolution — starbases gate the *entire* economy pipeline,
-   including Commit 2c's `UpdateMilitary`, on being an industrial complex, not just production).
+4. ✅ **Starbase economy** — same `UpdateWorld` sequence, but with `SupplyLink`/`SurplusLink`
+   (UPDATE.PAS:517-604 — raw-material redistribution with adjacent same-empire raw-material planets)
+   and industrial-complex-only production and economy (`STyp=cmp` branches, lines 1403-1415 for
+   production and 1420-1427 for population/food/ambrosia/military/revolution — starbases gate the
+   *entire* economy pipeline, including Commit 2c's `UpdateMilitary`, on being an industrial complex,
+   not just production). `UpdateDefenses` stays deferred to the combat phase (see there). Landing this
+   resolved the planet/starbase overlap question flagged above: introduced `IEconomicWorld`
+   (`Entities/IEconomicWorld.cs`), implemented by both `Planet` and `Starbase`, so
+   `AnnualTickHandler`'s ~15 private pipeline methods run either through the same code — as its own
+   pure-mechanical commit first (103/103 green, golden files diffed empty) before adding starbase
+   behavior. Four members are explicit-interface-only, each encoding one PRIMINTR.PAS accessor's
+   Base-case behavior a shared property can't express: `EffectiveClass` (ArtCls, no world-class field),
+   `SelfSufficiencyIndex` (always index 0, no ImpExp field), `TrillumReserve` (MaxResources, writes
+   discarded, no TriReserve field), `InitializeSelfSufficiency` (InitializeISSP's CASE has no Base
+   branch). `AnnualTickHandlerStarbaseTests` covers `SupplyLink`/`SurplusLink` (adjacency, ownership,
+   world-type eligibility, the >250/>MaxResources boundaries), `Kind`-gating, and Rebellion turning a
+   complex independent while it keeps its `Kind` — all hardcoded/hand-verified, since neither Link
+   procedure has a sqrt/pow cascade and `Cargo.Metals` starting at 0 makes `GetIndustrialDistribution`'s
+   own cascade irrelevant to what these tests check. Not golden-file-backed yet: a patch-based
+   `runworld.pas` starbase domain would need `Galaxy.InitializeSector`/direct `Sector[x]^[y].Obj`
+   writes (confirmed cheap — no new patches needed, `InitializeSector` is already exported from the
+   already-`USES`d `Galaxy` unit) to make `GetObject` resolve neighbor planets; spiked but not landed
+   this pass, deferred alongside ambrosia/revolution/production's own patch-based migration.
 5. **Construction and empire-level updates** — `UpdateConstruction` (UPDATE.PAS:103-220, countdown
    and completion) and `UpdateEmpire` (UPDATE.PAS:222+, applies accumulated revolution index). This
    is also the earliest point `NewTechLevel`/`GetChanceForNewTech` (empire-level research: rolls a

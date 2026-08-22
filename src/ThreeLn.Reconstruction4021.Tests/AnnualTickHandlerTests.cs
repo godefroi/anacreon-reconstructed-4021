@@ -624,3 +624,201 @@ public class AnnualTickHandlerTechLevelTests
         await Assert.That(planet.TechLevel).IsEqualTo(TechLevel.Warp);
     }
 }
+
+/// <summary>
+/// Verifies Commit 4 of the economy phase: the starbase branch of UpdateWorld (UPDATE.PAS:1392-1430)
+/// — UpdateEfficiency/UpdateTechLevel running unconditionally, the rest of the pipeline (including
+/// SupplyLink/SurplusLink, UPDATE.PAS:517-604) gated on Kind == IndustrialComplex. All tests use
+/// FixedRandom(0) and Cargo.Chemicals (rather than Metals) as the SupplyLink/SurplusLink test
+/// resource — UpdateIndustry only ever consumes Metals to grow industry from zero, so Chemicals stays
+/// untouched by anything except the two Link procedures themselves when Cargo.Metals starts at 0 (its
+/// default), letting these tests skip GetIndustrialDistribution's sqrt/pow cascade entirely rather
+/// than hand-tracing it.
+/// </summary>
+public class AnnualTickHandlerStarbaseTests
+{
+    private static Game BuildGame(Starbase starbase, params Planet[] planets)
+    {
+        var game = new Game(new Core.Galaxy.Galaxy(size: 20));
+        game.Galaxy.Starbases.Add(starbase);
+        game.Galaxy.Planets.AddRange(planets);
+        return game;
+    }
+
+    private static Starbase MakeComplex(Coordinate location, Empire owner) => new() {
+        Location = location,
+        Owner = owner,
+        Kind = StarbaseKind.IndustrialComplex,
+        Type = WorldType.BaseStarbase,
+        TechLevel = TechLevel.Warp,
+        Efficiency = 100,
+        Population = 0,
+    };
+
+    private static Planet MakeRawMaterialPlanet(Coordinate location, Empire owner, int chemicals) => new() {
+        Location = location,
+        Owner = owner,
+        Class = WorldClass.ClassM,
+        Type = WorldType.Agricultural,
+        Population = 0,
+        Cargo = { Chemicals = chemicals },
+    };
+
+    [Test]
+    public async Task SupplyLinkPullsFromAdjacentSameEmpireRawMaterialPlanet()
+    {
+        var owner = new Empire { Name = "Test" };
+        var starbase = MakeComplex(new Coordinate(5, 5), owner);
+        var neighbor = MakeRawMaterialPlanet(new Coordinate(5, 6), owner, chemicals: 1000);
+        var game = BuildGame(starbase, neighbor);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        // Cargo[che]>250 -> transfer = 1000 - Rnd(200,250) = 1000 - 200 = 800 (Rnd(200,250) at
+        // FixedRandom(0) = 200 + 0).
+        await Assert.That(starbase.Cargo.Chemicals).IsEqualTo(800);
+        await Assert.That(neighbor.Cargo.Chemicals).IsEqualTo(200);
+    }
+
+    [Test]
+    public async Task NeighborAtOrBelow250TransfersNothing()
+    {
+        var owner = new Empire { Name = "Test" };
+        var starbase = MakeComplex(new Coordinate(5, 5), owner);
+        var neighbor = MakeRawMaterialPlanet(new Coordinate(5, 6), owner, chemicals: 250);
+        var game = BuildGame(starbase, neighbor);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        // Cargo[che](250)>250 is false -> the strict ">" boundary, not ">=".
+        await Assert.That(starbase.Cargo.Chemicals).IsEqualTo(0);
+        await Assert.That(neighbor.Cargo.Chemicals).IsEqualTo(250);
+    }
+
+    [Test]
+    public async Task IneligibleNeighborsAreSkipped()
+    {
+        var owner = new Empire { Name = "Test" };
+        var otherOwner = new Empire { Name = "Other" };
+        var starbase = MakeComplex(new Coordinate(5, 5), owner);
+        var wrongEmpire = MakeRawMaterialPlanet(new Coordinate(5, 6), otherOwner, chemicals: 1000);
+        var wrongType = MakeRawMaterialPlanet(new Coordinate(6, 5), owner, chemicals: 1000);
+        wrongType.Type = WorldType.Capital;
+        var game = BuildGame(starbase, wrongEmpire, wrongType);
+        game.Empires.Add(owner);
+        game.Empires.Add(otherOwner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(starbase.Cargo.Chemicals).IsEqualTo(0);
+        await Assert.That(wrongEmpire.Cargo.Chemicals).IsEqualTo(1000);
+        await Assert.That(wrongType.Cargo.Chemicals).IsEqualTo(1000);
+    }
+
+    [Test]
+    public async Task OnlyChebyshevDistance1NeighborsParticipate()
+    {
+        var owner = new Empire { Name = "Test" };
+        var starbase = MakeComplex(new Coordinate(5, 5), owner);
+        var tooFar = MakeRawMaterialPlanet(new Coordinate(7, 5), owner, chemicals: 1000); // distance 2
+        var sameSector = MakeRawMaterialPlanet(new Coordinate(5, 5), owner, chemicals: 1000); // distance 0
+        var game = BuildGame(starbase, tooFar, sameSector);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(starbase.Cargo.Chemicals).IsEqualTo(0);
+        await Assert.That(tooFar.Cargo.Chemicals).IsEqualTo(1000);
+        await Assert.That(sameSector.Cargo.Chemicals).IsEqualTo(1000);
+    }
+
+    [Test]
+    public async Task SurplusLinkReturnsOnlyWhatExceedsMaxResources()
+    {
+        var owner = new Empire { Name = "Test" };
+        var starbase = MakeComplex(new Coordinate(5, 5), owner);
+        starbase.Cargo.Chemicals = 10050; // pre-seeded above MaxResources (9999)
+        // At exactly 250, SupplyLink's own ">250" check is false, so it contributes nothing here --
+        // isolates this case to SurplusLink alone.
+        var neighbor = MakeRawMaterialPlanet(new Coordinate(5, 6), owner, chemicals: 250);
+        var game = BuildGame(starbase, neighbor);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        // transfer = Min(MaxResources(9999) - neighbor(250), starbase(10050) - MaxResources(9999))
+        //          = Min(9749, 51) = 51.
+        await Assert.That(starbase.Cargo.Chemicals).IsEqualTo(9999);
+        await Assert.That(neighbor.Cargo.Chemicals).IsEqualTo(301);
+    }
+
+    [Test]
+    public async Task NonComplexKindSkipsEconomyPipelineButStillAdvancesEfficiency()
+    {
+        var owner = new Empire { Name = "Test" };
+        var starbase = new Starbase {
+            Location = new Coordinate(5, 5),
+            Owner = owner,
+            Kind = StarbaseKind.CommandBase,
+            Type = WorldType.Base,
+            Efficiency = 50,
+            Population = 1000,
+        };
+        starbase.Cargo.Chemicals = 500;
+        starbase.Industry.Mining = 10;
+        var game = BuildGame(starbase);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        // UpdateEfficiency runs unconditionally: Efficiency(50) is in the "<=50" bracket -> Rnd(3,8)=3.
+        await Assert.That(starbase.Efficiency).IsEqualTo(53);
+        // Everything gated on Kind==IndustrialComplex is untouched for a CommandBase.
+        await Assert.That(starbase.Population).IsEqualTo(1000);
+        await Assert.That(starbase.Cargo.Chemicals).IsEqualTo(500);
+        await Assert.That(starbase.Industry.Mining).IsEqualTo(10);
+        await Assert.That(starbase.RevolutionIndex).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task RebellionOnAComplexGoesIndependentButStaysAComplex()
+    {
+        // OptMilitary[Outpost]=0% keeps UpdateMilitary/UpdateRevolution's military figure at exactly 0
+        // (never touching Cargo.Legions before Rebellion), so Rebellion's own chanceToEndRebel term
+        // (proportional to that same military figure) is also exactly 0 -- deterministically taking
+        // the "world rebels" branch instead of "empire puts down rebellion" regardless of RNG.
+        var owner = new Empire { Name = "Test" };
+        var starbase = new Starbase {
+            Location = new Coordinate(5, 5),
+            Owner = owner,
+            Kind = StarbaseKind.IndustrialComplex,
+            Type = WorldType.Outpost,
+            TechLevel = TechLevel.PreTech,
+            Efficiency = 100,
+            Population = 1500,
+            RevolutionIndex = 90,
+        };
+        starbase.Cargo.Supplies = 9999; // keeps UseUpFood from starving Population before Rebellion reads it
+        var game = BuildGame(starbase);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        // RevIndex: 90 -5 (UpdateRevolution's decrease, Rnd(-5,2)=-5) = 85 -> Rebellion fires
+        // (85>75, Rnd(1,100)=1<85, Type<>Capital). rebels=Max(1,(int)(Sqrt(1500)*65))=2517;
+        // chanceToEndRebel=0/Sqrt(2517)*1.414213=0, so Rnd(1,100)=1 is not <0 -> "world rebels".
+        await Assert.That(starbase.Owner).IsEqualTo(Empire.Independent);
+        await Assert.That(starbase.Type).IsEqualTo(WorldType.Independent);
+        await Assert.That(starbase.Kind).IsEqualTo(StarbaseKind.IndustrialComplex);
+        await Assert.That(starbase.Cargo.Legions).IsEqualTo(2517);
+    }
+}

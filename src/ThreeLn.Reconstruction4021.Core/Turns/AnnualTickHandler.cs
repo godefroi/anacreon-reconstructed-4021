@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using ThreeLn.Reconstruction4021.Core.Entities;
+using ThreeLn.Reconstruction4021.Core.Galaxy;
 using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Core.Turns;
@@ -415,6 +416,16 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// <summary>ISSP: how far over/under self-sufficient an industry's dial is set (DATACNST.PAS:524-525).</summary>
     private static readonly double[] _issp = [0.01, 0.10, 0.25, 0.50, 0.75, 1.00, 1.50, 2.00, 3.00, 4.00, 5.00];
 
+    /// <summary>World types SupplyLink/SurplusLink treat as raw-material sources (UPDATE.PAS:541-542,587-588's inline set) — distinct from <see cref="_rawMaterialOnlyTypes"/>, which serves GetIndustrialDistribution and includes types (University, Terraform, and every *Starbase-suffixed type) this set doesn't.</summary>
+    private static readonly FrozenSet<WorldType> _supplyLinkEligibleTypes = new HashSet<WorldType> {
+        WorldType.Agricultural, WorldType.Chemical, WorldType.Mine, WorldType.RawMaterialMine, WorldType.TrillumMine,
+    }.ToFrozenSet();
+
+    /// <summary>The 8 compass directions (DirX/DirY, DATACNST.PAS), excluding the center — SupplyLink/SurplusLink never transfer with a starbase's own sector.</summary>
+    private static readonly (int dx, int dy)[] _eightNeighborOffsets = [
+        (-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1),
+    ];
+
     // Loop ranges matching Pascal's subrange FOR loops, in enum declaration order.
     private static readonly IndustryType[] _rawMaterialIndustries = [
         IndustryType.Chemical, IndustryType.Mining, IndustryType.ShipyardGeneral, IndustryType.ShipyardJump,
@@ -447,14 +458,20 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
             UpdateWorld(planet, newTotalRevIndex);
         }
 
+        // Starbases run after every planet has completed its own full tick (UPDATE.PAS:1450-1466's
+        // planet loop, then starbase loop) — SupplyLink pulls from neighbouring planets' this-year
+        // cargo, not last year's.
+        foreach (var starbase in game.Galaxy.Starbases) {
+            UpdateStarbase(starbase, game.Galaxy, newTotalRevIndex);
+        }
+
         foreach (var empire in game.Empires) {
             empire.TotalRevolutionIndex = newTotalRevIndex.GetValueOrDefault(empire, 0);
         }
     }
 
     /// <summary>
-    /// Full Pascal sequence, for when later commits land (UPDATE.PAS:1371-1390), with insertion
-    /// points relative to what's implemented here:
+    /// UPDATE.PAS:1355-1391, planet branch.
     /// <code>
     /// Production pipeline (ProduceRawMaterial/GetIndustrialDistribution/UpdateIndustry/Production)
     /// UpdateEfficiency
@@ -484,13 +501,46 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     }
 
     /// <summary>
-    /// UPDATE.PAS:1371-1379, planet branch. Pascal stages this through a wider-range TempCargo buffer
-    /// and writes it back via PutTotalCargo's ThgLmt clamp at the end (UPDATE.PAS:436-456); operating
-    /// directly on <see cref="Planet.Cargo"/> and clamping once at the end reproduces the same
-    /// semantics without a redundant temporary.
+    /// UPDATE.PAS:1392-1430, starbase branch. UpdateEfficiency/UpdateTechLevel run unconditionally for
+    /// every starbase (deferred: UpdateDefenses, UPDATE.PAS:1429 — lands with the combat phase, which
+    /// needs it as baseline defensive state); the rest of the economy pipeline — production
+    /// (SupplyLink/SurplusLink-bracketed) and population/food/ambrosia/military/revolution — runs only
+    /// for industrial complexes (STyp=cmp), gating the *entire* pipeline on being a complex, not just
+    /// production (UPDATE.PAS:1420-1427).
     /// </summary>
-    private void RunProductionPipeline(IEconomicWorld world)
+    private void UpdateStarbase(Starbase starbase, Galaxy.Galaxy galaxy, Dictionary<Empire, int> newTotalRevIndex)
     {
+        var isComplex = starbase.Kind == StarbaseKind.IndustrialComplex;
+
+        if (isComplex)
+            RunProductionPipeline(starbase, () => SupplyLink(starbase, galaxy), () => SurplusLink(starbase, galaxy));
+
+        UpdateEfficiency(starbase);
+        UpdateTechLevel(starbase);
+
+        if (isComplex) {
+            UpdatePopulation(starbase);
+            UseUpFood(starbase);
+            UseUpAmbrosia(starbase);
+            UpdateMilitary(starbase);
+            UpdateRevolution(starbase, newTotalRevIndex);
+        }
+    }
+
+    /// <summary>
+    /// UPDATE.PAS:1371-1379 (planet) / :1403-1414 (starbase, STyp=cmp only, bracketed by
+    /// beforeProduce/afterProduce). Pascal stages this through a wider-range TempCargo buffer and
+    /// writes it back via PutTotalCargo's ThgLmt clamp at the end (UPDATE.PAS:436-456); operating
+    /// directly on <see cref="IEconomicWorld.Cargo"/> (a plain unclamped int per field, unlike
+    /// Pascal's clamped 0..9999 CargoArray subrange) and clamping once at the end reproduces the same
+    /// semantics without a redundant temporary — including for a starbase's <see cref="SurplusLink"/>,
+    /// which specifically depends on Cargo holding values above MaxResources mid-pipeline, before that
+    /// final clamp.
+    /// </summary>
+    private void RunProductionPipeline(IEconomicWorld world, Action? beforeProduce = null, Action? afterProduce = null)
+    {
+        beforeProduce?.Invoke();
+
         var effectiveTech = EffectiveTechnologyLevel(world);
         var ip = (_industrialProductionTechAdjustment[world.TechLevel] / 100.0) * ((world.Efficiency + 250) / 100.0) / K6;
 
@@ -499,7 +549,67 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
         UpdateIndustry(world, industryDistribution);
         Production(world, effectiveTech, ip);
 
+        afterProduce?.Invoke();
+
         ClampCargo(world.Cargo);
+    }
+
+    /// <summary>
+    /// Pulls raw materials from adjacent (Chebyshev distance 1), same-empire raw-material worlds into
+    /// a starbase's cargo before it produces this tick (UPDATE.PAS:517-560) — runs before
+    /// ProduceRawMaterial so pulled materials are available to the same tick's production, matching
+    /// Pascal's real call order.
+    /// </summary>
+    private void SupplyLink(Starbase starbase, Galaxy.Galaxy galaxy)
+    {
+        foreach (var neighbor in AdjacentSameEmpireRawMaterialPlanets(starbase, galaxy)) {
+            foreach (var cargo in _rawMaterialCargoTypes) {
+                var transfer = neighbor.Cargo[cargo] > 250 ? neighbor.Cargo[cargo] - Rnd(200, 250) : 0;
+                neighbor.Cargo[cargo] -= transfer;
+                starbase.Cargo[cargo] += transfer;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns whatever raw materials a starbase holds above MaxResources back out to adjacent,
+    /// same-empire raw-material worlds after this tick's production (UPDATE.PAS:562-604) — the
+    /// counterpart to <see cref="SupplyLink"/>. A neighbor's own Cargo is always &lt;=MaxResources
+    /// here: every planet completes its own ClampCargo before any starbase in this tick's
+    /// RunAnnualTick loop runs (see there), so MaxResources-neighbor.Cargo[cargo] can't go negative.
+    /// </summary>
+    private void SurplusLink(Starbase starbase, Galaxy.Galaxy galaxy)
+    {
+        foreach (var neighbor in AdjacentSameEmpireRawMaterialPlanets(starbase, galaxy)) {
+            foreach (var cargo in _rawMaterialCargoTypes) {
+                if (starbase.Cargo[cargo] <= MaxResources)
+                    continue;
+
+                var transfer = Math.Min(MaxResources - neighbor.Cargo[cargo], starbase.Cargo[cargo] - MaxResources);
+                neighbor.Cargo[cargo] += transfer;
+                starbase.Cargo[cargo] -= transfer;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The planets SupplyLink/SurplusLink transfer with: same empire, one of the five raw-material-
+    /// producing world types (UPDATE.PAS:541-542,587-588's inline set), at Chebyshev distance 1 (the
+    /// 8 compass directions, DirX/DirY — never the starbase's own sector).
+    /// </summary>
+    private static IEnumerable<Planet> AdjacentSameEmpireRawMaterialPlanets(Starbase starbase, Galaxy.Galaxy galaxy)
+    {
+        foreach (var (dx, dy) in _eightNeighborOffsets) {
+            var x = starbase.Location.X + dx;
+            var y = starbase.Location.Y + dy;
+            if (x < 0 || x >= galaxy.Size || y < 0 || y >= galaxy.Size)
+                continue;
+
+            var coord = new Coordinate(x, y);
+            foreach (var planet in galaxy.Planets)
+                if (planet.Location == coord && planet.Owner == starbase.Owner && _supplyLinkEligibleTypes.Contains(planet.Type))
+                    yield return planet;
+        }
     }
 
     /// <summary>
