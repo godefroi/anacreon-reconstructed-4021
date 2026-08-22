@@ -392,11 +392,12 @@ public class AnnualTickHandlerProductionTests
 ///
 /// MatchesGoldenFile covers the cases with real Pascal arithmetic to check (addiction onset,
 /// shortage-driven death/efficiency, riot, tech regression) against
-/// reference/verify/golden/ambrosia.golden — computed by a real FreePascal run of
-/// reference/verify/ambrosia.pas (AmbrosiaGoldenFileTests), not hand-typed, so these can never
-/// silently agree with a shared mistake in both the golden values and the C# port. The two guard
-/// tests below stay hardcoded: they assert control flow (a branch never taken, a value staying
-/// exactly at a boundary), not Pascal arithmetic, so there's nothing for a golden file to add.
+/// reference/verify/golden/ambrosia.golden, computed patch-based (GoldenFileTests): the real,
+/// only-minimally-touched UpdateWorld run against a hand-assembled Universe^
+/// (reference/verify/patch-based/runworld.pas's ambrosia domain), not a per-procedure transcription —
+/// see AmbrosiaCases's doc comment for what that replaced. The two guard tests below stay hardcoded:
+/// they assert control flow (a branch never taken, a value staying exactly at a boundary), not Pascal
+/// arithmetic, so there's nothing for a golden file to add.
 ///
 /// The industrial-sabotage random branch (UPDATE.PAS:1226-1234) is faithful to source but not
 /// covered by any case here or in the golden file: Industry starts at 0 on every planet, and

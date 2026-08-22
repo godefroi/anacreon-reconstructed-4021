@@ -13,6 +13,7 @@
      techlevel  TechOrd,IsIndependent,CapitalTechOrd,RngFixedValue -> "techlevel=<ordinal>"
      military   PlanetPop,TechOrd,Legions,TypOrd,RngFixedValue     -> "legions=<value>"
      starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue  -> "starbaseChe=<v>;neighborChe=<v>"
+     ambrosia   Addicted,Ambrosia,RngFixedValue                    -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
    One output line per case, in order, to stdout -- consumed by PatchHarness
    in the C# test project via GoldenFile.Regenerate's runHarness override.
    With no arguments, runs a single hardcoded techlevel case as a
@@ -248,6 +249,58 @@ procedure RunStarbaseCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunAmbrosiaCase(const arg: String);
+   { Owned by Empire1 with its capital set to itself (same rationale as
+     RunMilitaryCase) so UpdateTechLevel can never drift TechLevel mid-tick.
+     PlanetPop=1000, Efficiency=100, Tech=Warp, Class=ClsM, Type=CapTyp are
+     hardcoded -- every AmbrosiaCase uses the same values, so only what
+     actually varies (Addicted, Ambrosia, RngFixedValue) is parametrized.
+     Cargo[sup]=9999 keeps UseUpFood from starving Population before
+     UseUpAmbrosia (which runs right after) reads it. }
+   var
+      parts: array[0..2] of LongInt;
+      ID, CapID: IDNumber;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   NoOfPlanets:=1;
+
+   Universe^.Planet[1].Cls:=ClsM;
+   Universe^.Planet[1].Typ:=CapTyp;
+   Universe^.Planet[1].Tech:=WrpTchLvl;
+   Universe^.Planet[1].Eff:=100;
+   Universe^.Planet[1].Pop:=1000;
+   Universe^.Planet[1].Cargo[sup]:=9999;
+   Universe^.Planet[1].Cargo[amb]:=parts[1];
+   if parts[0]<>0 then
+      Universe^.Planet[1].Special:=[AmbAddict]
+   else
+      Universe^.Planet[1].Special:=[];
+   Universe^.Planet[1].Emp:=Empire1;
+
+   SetOfActivePlanets:=[1];
+   SetOfPlanetsOf[Empire1]:=[1];
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire1].IsAPlayer:=False;
+   CapID.ObjTyp:=Pln;  CapID.Index:=1;
+   Universe^.EmpireData[Empire1].Capital:=CapID;
+
+   ForcedRandomValue:=parts[2];
+
+   ID.ObjTyp:=Pln;  ID.Index:=1;
+   UpdateWorld(ID);
+
+   WriteLn('population=',Universe^.Planet[1].Pop,
+           ';efficiency=',Universe^.Planet[1].Eff,
+           ';techlevel=',Ord(Universe^.Planet[1].Tech),
+           ';ambrosia=',Universe^.Planet[1].Cargo[amb],
+           ';addicted=',(AmbAddict IN Universe^.Planet[1].Special));
+
+   Dispose(Universe);
+   end;
+
 procedure RunCaseMode;
    var
       domain: String;
@@ -261,6 +314,8 @@ procedure RunCaseMode;
          RunMilitaryCase(ParamStr(i))
       else if domain='starbase' then
          RunStarbaseCase(ParamStr(i))
+      else if domain='ambrosia' then
+         RunAmbrosiaCase(ParamStr(i))
       else
          begin
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');

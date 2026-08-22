@@ -3,15 +3,28 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
 /// <summary>
-/// Named inputs shared between the golden-file generator (GoldenFileTests, requires fpc — dynamically
-/// skipped otherwise) and the always-on AnnualTickHandlerAmbrosiaTests.MatchesGoldenFile. Only inputs live here —
-/// expected outputs live exclusively in reference/verify/golden/ambrosia.golden, computed by a real
-/// FreePascal run of ambrosia.pas, never hand-typed.
+/// Named inputs shared between the golden-file generator (GoldenFileTests, requires fpc and git —
+/// dynamically skipped otherwise) and the always-on AnnualTickHandlerAmbrosiaTests.MatchesGoldenFile.
+/// Only inputs live here — expected outputs live exclusively in reference/verify/golden/ambrosia.golden,
+/// computed patch-based: a real run of the actual, only-minimally-touched UpdateWorld against a
+/// hand-assembled Universe^ (reference/verify/patch-based/runworld.pas's ambrosia domain), not a
+/// per-procedure transcription.
+///
+/// Previously (reference/verify/ambrosia.pas, since deleted) this fed a hand-derived post-
+/// UpdatePopulation value to an isolated transcription of UseUpAmbrosia alone — forcing every case to
+/// carry both a PlanetPop (pre-tick, fed to the C# Planet) and a hand-derived HarnessPop (post-
+/// UpdatePopulation, fed to the harness). Running the real UpdateWorld removes the need for that
+/// split: PlanetPop alone is enough, since the same real pipeline order (production, efficiency, tech
+/// level, population, food, ambrosia) now computes the equivalent of the old HarnessPop itself.
+///
+/// Every case uses PlanetPop=1000/Class=ClassM/Type=Capital/Tech=Warp/Efficiency=100 (hardcoded in the
+/// driver, matching every case here) — Type=Capital so Rebellion can never fire (UPDATE.PAS:751), and
+/// Efficiency=100 keeps UpdateEfficiency's own switch (no bracket above 99) a no-op regardless of RNG,
+/// so nothing else in the same tick's pipeline perturbs what these cases check.
 /// </summary>
 public sealed record AmbrosiaCase(
     string Name,
-    int PlanetPop,    // fed to the C# Planet before RunAnnualTick
-    int HarnessPop,   // the post-UpdatePopulation value UseUpAmbrosia actually starts from
+    int PlanetPop,
     TechLevel Tech,
     int Efficiency,
     int StartAmbrosia,
@@ -20,23 +33,18 @@ public sealed record AmbrosiaCase(
 
 internal static class AmbrosiaCases
 {
-    // All cases use Class=ClassM/Type=Capital/Efficiency=100 (see AnnualTickHandlerAmbrosiaTests's
-    // header comment for why that combination makes every other UpdateWorld step this tick a
-    // deterministic no-op except UseUpAmbrosia itself), and Tech=Warp/PlanetPop=1000, which lands
-    // UpdatePopulation in the deterministic "current>basePop" branch: +PascalRound(700/100)=+7,
-    // no RNG involved -> HarnessPop=1007.
     public static readonly IReadOnlyList<AmbrosiaCase> All = [
-        new(Name: "SufficientSupply", PlanetPop: 1000, HarnessPop: 1007, Tech: TechLevel.Warp,
+        new(Name: "SufficientSupply", PlanetPop: 1000, Tech: TechLevel.Warp,
             Efficiency: 100, StartAmbrosia: 200, StartAddicted: true, RngFixedValue: 0),
-        new(Name: "ShortageNoEffect", PlanetPop: 1000, HarnessPop: 1007, Tech: TechLevel.Warp,
+        new(Name: "ShortageNoEffect", PlanetPop: 1000, Tech: TechLevel.Warp,
             Efficiency: 100, StartAmbrosia: 50, StartAddicted: true, RngFixedValue: 0),
-        new(Name: "ShortageRiot", PlanetPop: 1000, HarnessPop: 1007, Tech: TechLevel.Warp,
+        new(Name: "ShortageRiot", PlanetPop: 1000, Tech: TechLevel.Warp,
             Efficiency: 100, StartAmbrosia: 50, StartAddicted: true, RngFixedValue: 4),
-        new(Name: "ShortageTechRegression", PlanetPop: 1000, HarnessPop: 1007, Tech: TechLevel.Warp,
+        new(Name: "ShortageTechRegression", PlanetPop: 1000, Tech: TechLevel.Warp,
             Efficiency: 100, StartAmbrosia: 50, StartAddicted: true, RngFixedValue: 9),
-        new(Name: "BecomesAddicted", PlanetPop: 1000, HarnessPop: 1007, Tech: TechLevel.Warp,
+        new(Name: "BecomesAddicted", PlanetPop: 1000, Tech: TechLevel.Warp,
             Efficiency: 100, StartAmbrosia: 200, StartAddicted: false, RngFixedValue: 0),
-        new(Name: "StaysUnaddicted", PlanetPop: 1000, HarnessPop: 1007, Tech: TechLevel.Warp,
+        new(Name: "StaysUnaddicted", PlanetPop: 1000, Tech: TechLevel.Warp,
             Efficiency: 100, StartAmbrosia: 200, StartAddicted: false, RngFixedValue: 50),
     ];
 

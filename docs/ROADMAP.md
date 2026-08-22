@@ -75,18 +75,19 @@ follow once that's working.
      `RunProductionPipeline`'s own industry growth earlier in the same tick is infeasible to
      hand-trace on top of the shortage math (same reason the production tests lean on the Pascal
      harness instead of hand-derivation) — add coverage if it's ever touched.
-   - ✅ **Golden-file ground truth.** `reference/verify/{ambrosia,revolution,production}.pas` are
-     from-source transcriptions (not copied from the C# port — an early `ambrosia.pas` draft slipped
-     into doing that, caught before landing, see its header comment) of `UseUpAmbrosia`,
-     `UpdateRevolution`/`Rebellion`, and the production pipeline (`FullPipeline`), sharing tables/
-     helpers in `common.pas`. `GoldenFileTests` ([Explicit] + `Category("PascalGroundTruth")`,
-     requires fpc — excluded from the default `dotnet test` run) runs each harness via a shared
-     `GoldenFile.Regenerate` helper and writes a committed `reference/verify/golden/*.golden` file
-     (`case=Name;key=value;...` lines). The always-on `AnnualTickHandler{Ambrosia,Revolution,
-     Production}Tests.MatchesGoldenFile` tests (data-driven via each domain's `*Cases.AsDataSource`
-     and TUnit's `[MethodDataSource]`) read that file and assert the C# port against it — so no
-     hand-typed expected value can silently agree with the same mistake on both sides of a check.
-     Regenerate a golden file (review the diff, then commit) whenever its `*Cases.All` or its
+   - ✅ **Golden-file ground truth.** `reference/verify/{revolution,production}.pas` are from-source
+     transcriptions (not copied from the C# port — an early `ambrosia.pas` draft slipped into doing
+     that, caught before landing, see the "Ground-truth harness generation" section below) of
+     `UpdateRevolution`/`Rebellion` and the production pipeline (`FullPipeline`), sharing tables/
+     helpers in `common.pas`. `ambrosia.pas` itself was later retired for the patch-based lane (see
+     below). `GoldenFileTests` (runs in the default `dotnet test` suite, dynamically skipped when fpc/
+     git aren't on PATH) runs each harness via a shared `GoldenFile.Regenerate` helper and writes a
+     committed `reference/verify/golden/*.golden` file (`case=Name;key=value;...` lines). The
+     always-on `AnnualTickHandler{Ambrosia,Revolution,Production}Tests.MatchesGoldenFile` tests
+     (data-driven via each domain's `*Cases.AsDataSource` and TUnit's `[MethodDataSource]`) read that
+     file and assert the C# port against it — so no hand-typed expected value can silently agree with
+     the same mistake on both sides of a check. Regenerate a golden file (review the diff, then commit)
+     whenever its `*Cases.All` or its
      harness's transcription changes. `production.golden` excludes `Cargo.Supplies`/`Cargo.Ambrosia`/
      `Cargo.Legions` (all mutated later in the same tick by steps `FullPipeline` doesn't model) — see
      each domain's test-class doc comment for the exact scope.
@@ -270,4 +271,17 @@ chains it ahead of its own scenario) in favor of running the real `UpdateWorld`,
 post-`UpdatePopulation` value fed in separately from the C# side's pre-tick `PlanetPop`, plus per-case
 reasoning about whether `UpdateRevolution` could still touch `Cargo.Legions` afterward; the real pipeline
 computes both for free. All 6 `MilitaryCases` reproduced byte-identical to the prior
-transcription-based `military.golden`. Ambrosia/Revolution/Production are next.
+transcription-based `military.golden`.
+
+**Third domain: `starbase.golden`** (landed as part of economy Commit 4, not a standalone migration —
+see that commit's own bullet above for `SupplyLink`/`SurplusLink` detail). First domain needing more
+than one world in the `Universe^`, resolved via `Galaxy.InitializeSector` + a direct
+`Sector[x]^[y].Obj` write for the neighbor planet — no new patches needed.
+
+**Fourth domain: `ambrosia.golden`.** Same `HarnessPop`-elimination pattern as `military`: retired
+`reference/verify/ambrosia.pas`'s isolated `UseUpAmbrosiaScenario` call in favor of the real
+`UpdateWorld`, dropping both `AmbrosiaCase.HarnessPop` and its `RevIndexStart` field (the isolated
+harness's own `revindex` output field became unused once the real pipeline's actual `UpdateRevolution`
+run, not a hand-fed starting value, determines it — not that `MatchesGoldenFile` ever asserted on it).
+All 6 `AmbrosiaCases` reproduced byte-identical to the prior transcription-based `ambrosia.golden`
+(save the dropped `revindex` field). Revolution/Production are next.

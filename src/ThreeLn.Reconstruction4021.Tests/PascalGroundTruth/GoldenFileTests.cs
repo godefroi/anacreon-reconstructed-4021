@@ -24,10 +24,13 @@ public class GoldenFileTests
     [Test, RequiresFpc, RequiresGit]
     public void RegenerateAllGoldenFiles()
     {
-        // RevIndexStart is fixed at 0: UseUpAmbrosia only ever writes to RevIndex, never reads it
-        // back within the procedure, so its starting value can't affect the fields under test.
+        // Patch-based, not transcribed: runs the real UpdateWorld on the case's raw pre-tick
+        // Population (not a hand-derived post-UpdatePopulation value) through runworld.pas's
+        // ambrosia domain. See AmbrosiaCases's doc comment for why this drops the old HarnessPop
+        // field entirely.
         GoldenFile.Regenerate("ambrosia", AmbrosiaCases.All,
-            c => $"{c.HarnessPop},{c.Efficiency},{(int)c.Tech},{(c.StartAddicted ? 1 : 0)},{c.StartAmbrosia},0,{c.RngFixedValue}");
+            c => $"{(c.StartAddicted ? 1 : 0)},{c.StartAmbrosia},{c.RngFixedValue}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "ambrosia", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("revolution", RevolutionCases.All,
             c => $"{c.HarnessPop},{c.Efficiency},{c.RevIndex},0,0,{c.Legions},{c.Ninja},{(int)c.Type}");

@@ -10,10 +10,11 @@ procedure into a fresh file, this maintains small patches against the real
 copy at build time, and calls the real, only-minimally-touched Pascal code
 directly against a hand-assembled `Universe^`.
 
-**Status: in production for three domains (`techlevel.golden`, `military.golden`,
-`starbase.golden` — see `docs/ROADMAP.md`'s "Ground-truth harness generation"
-section), alongside `reference/verify/*.pas`'s per-procedure transcription for
-everything else — not a wholesale replacement.** See "Recommendation" below.
+**Status: in production for four domains (`techlevel.golden`, `military.golden`,
+`starbase.golden`, `ambrosia.golden` — see `docs/ROADMAP.md`'s "Ground-truth
+harness generation" section), alongside `reference/verify/*.pas`'s per-procedure
+transcription for everything else — not a wholesale replacement.** See
+"Recommendation" below.
 
 ## Layout
 
@@ -23,8 +24,8 @@ everything else — not a wholesale replacement.** See "Recommendation" below.
 - `runworld.pas` — a driver program (not a patch target, a genuinely new
   file): assembles a minimal `Universe^` and calls the real `UpdateWorld`.
   Machine-parseable CLI: `case <domain> <case1> <case2> ...`, where `<domain>`
-  selects the case shape/output line (`techlevel`, `military`, or `starbase`
-  so far — see the file's own header comment). One driver, not one per domain, so
+  selects the case shape/output line (`techlevel`, `military`, `starbase`, or
+  `ambrosia` so far — see the file's own header comment). One driver, not one per domain, so
   `PatchHarness.CompileAndRun` only has to copy/patch/compile the whole
   patched tree once per `dotnet test` run regardless of how many domains use it.
 - `build.ps1` — deletes and regenerates `pascal/` from pristine source +
@@ -162,6 +163,16 @@ covers those hardcoded instead (see that class's doc comment). Both cases
 (`SupplyLinkPull`, `SurplusLinkPush`) reproduced byte-identical to this
 session's own hand-derivation of the formula, confirming the C# port against
 the real Pascal source rather than just this session's own reading of it.
+
+Fourth domain, `ambrosia`: same `HarnessPop`-elimination pattern as `military` —
+retired `reference/verify/ambrosia.pas`'s isolated `UseUpAmbrosiaScenario` call
+in favor of the real `UpdateWorld`, which let `AmbrosiaCase` drop both its old
+`HarnessPop` field and its `RevIndexStart` field (the isolated harness's own
+`revindex` output was never asserted on by `MatchesGoldenFile` in the first
+place, and the real pipeline's own `UpdateRevolution` run determines the
+starting value now, not a hand-fed one). All 6 `AmbrosiaCases` reproduced
+byte-identical to the prior transcription-based `ambrosia.golden`, aside from
+that dropped field.
 
 ## Recommendation
 
