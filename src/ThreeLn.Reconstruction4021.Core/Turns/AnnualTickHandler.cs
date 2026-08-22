@@ -489,17 +489,17 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// directly on <see cref="Planet.Cargo"/> and clamping once at the end reproduces the same
     /// semantics without a redundant temporary.
     /// </summary>
-    private void RunProductionPipeline(Planet planet)
+    private void RunProductionPipeline(IEconomicWorld world)
     {
-        var effectiveTech = EffectiveTechnologyLevel(planet);
-        var ip = (_industrialProductionTechAdjustment[planet.TechLevel] / 100.0) * ((planet.Efficiency + 250) / 100.0) / K6;
+        var effectiveTech = EffectiveTechnologyLevel(world);
+        var ip = (_industrialProductionTechAdjustment[world.TechLevel] / 100.0) * ((world.Efficiency + 250) / 100.0) / K6;
 
-        ProduceRawMaterial(planet, effectiveTech, ip);
-        var industryDistribution = GetIndustrialDistribution(planet);
-        UpdateIndustry(planet, industryDistribution);
-        Production(planet, effectiveTech, ip);
+        ProduceRawMaterial(world, effectiveTech, ip);
+        var industryDistribution = GetIndustrialDistribution(world);
+        UpdateIndustry(world, industryDistribution);
+        Production(world, effectiveTech, ip);
 
-        ClampCargo(planet.Cargo);
+        ClampCargo(world.Cargo);
     }
 
     /// <summary>
@@ -510,15 +510,15 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// — see <see cref="UnlockedTechnology"/>'s own doc comment — so no further empire-level gate
     /// applies to them beyond <see cref="TechLevel"/>).
     /// </summary>
-    private static TechLevel EffectiveTechnologyLevel(Planet planet) =>
-        planet.Owner.IsIndependent && planet.TechLevel > TechLevel.PreTech
-            ? planet.TechLevel - 1
-            : planet.TechLevel;
+    private static TechLevel EffectiveTechnologyLevel(IEconomicWorld world) =>
+        world.Owner.IsIndependent && world.TechLevel > TechLevel.PreTech
+            ? world.TechLevel - 1
+            : world.TechLevel;
 
     private static bool CargoTechAvailable(CargoType cargo, TechLevel effectiveTech) =>
         effectiveTech >= _minTechForCargo[cargo];
 
-    private static bool ShipTechAvailable(Planet planet, ShipType ship, TechLevel effectiveTech)
+    private static bool ShipTechAvailable(IEconomicWorld world, ShipType ship, TechLevel effectiveTech)
     {
         if (effectiveTech < _minTechForShip[ship])
             return false;
@@ -526,7 +526,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
         // Independent worlds have no empire research record to check against; owned worlds also need
         // the empire to have individually unlocked this ship (nothing populates this yet — new-game
         // setup, a later phase — so ship production is inert outside tests that seed it directly).
-        return planet.Owner.IsIndependent || planet.Owner.Technology.Ships.Contains(ship);
+        return world.Owner.IsIndependent || world.Owner.Technology.Ships.Contains(ship);
     }
 
     /// <summary>Total Industrial Production of a world given population and tech level (MISC.PAS:247-265).</summary>
@@ -540,10 +540,10 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     }
 
     /// <summary>Produces che/met/sup/tri raw materials from the industries that make them (UPDATE.PAS:797-831).</summary>
-    private void ProduceRawMaterial(Planet planet, TechLevel effectiveTech, double ip)
+    private void ProduceRawMaterial(IEconomicWorld world, TechLevel effectiveTech, double ip)
     {
         foreach (var industry in _rawMaterialIndustries) {
-            var level = planet.Industry[industry];
+            var level = world.Industry[industry];
             if (level <= 0)
                 continue;
 
@@ -558,9 +558,9 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
                 var production = Math.Max(1, ClampResource(prodAdj * adjustment));
 
                 if (cargo == CargoType.Trillum)
-                    production = ProduceTrillum(planet, production, planet.Cargo[CargoType.Trillum]);
+                    production = ProduceTrillum(world, production, world.Cargo[CargoType.Trillum]);
 
-                planet.Cargo[cargo] += production;
+                world.Cargo[cargo] += production;
             }
         }
     }
@@ -568,23 +568,26 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// <summary>
     /// Decrements trillum reserves by the amount produced, throttling production and raising the
     /// revolution index as reserves run low (UPDATE.PAS:757-795). Skips AddNews — no news subsystem yet.
+    /// A starbase's TrillumReserve reads as MaxResources and discards writes (see IEconomicWorld), so
+    /// this is a guaranteed no-op past the first line for one — matching TrillumReserves/
+    /// PutTrillumReserves's Base cases (PRIMINTR.PAS:487,496) exactly.
     /// </summary>
-    private int ProduceTrillum(Planet planet, int production, int currentTrillumCargo)
+    private int ProduceTrillum(IEconomicWorld world, int production, int currentTrillumCargo)
     {
         var availableCapacity = MaxResources - Math.Min(currentTrillumCargo, MaxResources);
         production = Math.Min(production, availableCapacity);
 
-        var reserves = planet.TrillumReserve;
+        var reserves = world.TrillumReserve;
         if (reserves == 0) {
             production = 0;
-            ChangeRevIndex(planet, Rnd(10, 20));
+            ChangeRevIndex(world, Rnd(10, 20));
         } else if (reserves * 20L < production) {
-            ChangeRevIndex(planet, Rnd(5, 10));
+            ChangeRevIndex(world, Rnd(5, 10));
         } else if (reserves * 10L < production && Rnd(1, 2) == 1) {
-            ChangeRevIndex(planet, Rnd(3, 5));
+            ChangeRevIndex(world, Rnd(3, 5));
         }
 
-        planet.TrillumReserve = Math.Max(0, reserves - PascalRound(production / 100.0));
+        world.TrillumReserve = Math.Max(0, reserves - PascalRound(production / 100.0));
         return production;
     }
 
@@ -592,16 +595,16 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// Calculates the optimum industrial distribution for a world (INTRFACE.PAS:223-342). Purely a
     /// function of the world's current stats — computed fresh each tick, not stored.
     /// </summary>
-    private Dictionary<IndustryType, double> GetIndustrialDistribution(Planet planet)
+    private Dictionary<IndustryType, double> GetIndustrialDistribution(IEconomicWorld world)
     {
         var dist = new Dictionary<IndustryType, double>();
         foreach (var industry in Enum.GetValues<IndustryType>())
             dist[industry] = 0;
 
-        var alpha = (_industrialProductionTechAdjustment[planet.TechLevel] / 100.0) * (planet.Efficiency + 250) / K6;
+        var alpha = (_industrialProductionTechAdjustment[world.TechLevel] / 100.0) * (world.Efficiency + 250) / K6;
 
-        double tip = TotalProd(planet.Population, planet.TechLevel);
-        if (planet.IsAddictedToAmbrosia)
+        double tip = TotalProd(world.Population, world.TechLevel);
+        if (world.IsAddictedToAmbrosia)
             tip *= AmbrosiaAdj; // kept as a real value here — UpdateIndustry rounds its own copy instead, see there.
         if (tip > 999)
             tip = 999;
@@ -609,28 +612,28 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
         var temp = tip / 10000.0;
         var beta = new Dictionary<IndustryType, double>();
         foreach (var industry in Enum.GetValues<IndustryType>()) {
-            var value = temp * _classIndustryAdjustment[(planet.Class, industry)];
+            var value = temp * _classIndustryAdjustment[(world.EffectiveClass, industry)];
             beta[industry] = value == 0 ? 1 : value;
         }
 
-        var supplyIssp = _issp[planet.SelfSufficiency.Supply];
+        var supplyIssp = _issp[world.SelfSufficiencyIndex(IndustryType.Supply)];
         var supplyThgAdj = _thgAdjRawMaterial[(IndustryType.Supply, CargoType.Supplies)];
-        var supplyDist = (Math.Sqrt(SafetyAdj * supplyIssp * (SuppliesPerBillion / 100.0) * planet.Population /
+        var supplyDist = (Math.Sqrt(SafetyAdj * supplyIssp * (SuppliesPerBillion / 100.0) * world.Population /
                                     ((supplyThgAdj / 100.0) * alpha)) - K4) / beta[IndustryType.Supply];
-        if (supplyDist > 95 || supplyDist < 0 || planet.Type == WorldType.Agricultural)
+        if (supplyDist > 95 || supplyDist < 0 || world.Type == WorldType.Agricultural)
             supplyDist = 95;
         dist[IndustryType.Supply] = supplyDist;
 
-        if (_rawMaterialOnlyTypes.Contains(planet.Type)) {
+        if (_rawMaterialOnlyTypes.Contains(world.Type)) {
             var remaining = 100 - dist[IndustryType.Supply];
-            dist[IndustryType.Chemical] = remaining * (_typeData[(planet.Type, IndustryType.Chemical)] / 100.0);
-            dist[IndustryType.Mining] = remaining * (_typeData[(planet.Type, IndustryType.Mining)] / 100.0);
-            dist[IndustryType.TrillumMining] = remaining * (_typeData[(planet.Type, IndustryType.TrillumMining)] / 100.0);
+            dist[IndustryType.Chemical] = remaining * (_typeData[(world.Type, IndustryType.Chemical)] / 100.0);
+            dist[IndustryType.Mining] = remaining * (_typeData[(world.Type, IndustryType.Mining)] / 100.0);
+            dist[IndustryType.TrillumMining] = remaining * (_typeData[(world.Type, IndustryType.TrillumMining)] / 100.0);
         } else {
-            var mainIndustry = _principalIndustry[planet.Type];
-            var cheIssp = _issp[planet.SelfSufficiency.Chemical];
-            var minIssp = _issp[planet.SelfSufficiency.Metal];
-            var triIssp = _issp[planet.SelfSufficiency.Trillum];
+            var mainIndustry = _principalIndustry[world.Type];
+            var cheIssp = _issp[world.SelfSufficiencyIndex(IndustryType.Chemical)];
+            var minIssp = _issp[world.SelfSufficiencyIndex(IndustryType.Mining)];
+            var triIssp = _issp[world.SelfSufficiencyIndex(IndustryType.TrillumMining)];
 
             // A is always 0 at K4=0 but written out, like every other K4 term here, so the constant
             // stays visible if the balance data ever changes it (INTRFACE.PAS:311).
@@ -640,7 +643,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
                   + Math.Sqrt(SafetyAdj * triIssp * _gammaTrillum[mainIndustry]) / beta[IndustryType.TrillumMining];
 
             var mainDist = (100 - (dist[IndustryType.Supply] + a + K4 * b)) / (1 + beta[mainIndustry] * b);
-            var mainCap = _typeData[(planet.Type, mainIndustry)];
+            var mainCap = _typeData[(world.Type, mainIndustry)];
             if (mainDist > mainCap)
                 mainDist = mainCap;
             dist[mainIndustry] = mainDist;
@@ -659,10 +662,10 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     }
 
     /// <summary>Moves developed industry level toward the optimum distribution, consuming metal (UPDATE.PAS:927-1005).</summary>
-    private void UpdateIndustry(Planet planet, Dictionary<IndustryType, double> industryDistribution)
+    private void UpdateIndustry(IEconomicWorld world, Dictionary<IndustryType, double> industryDistribution)
     {
-        double tip = TotalProd(planet.Population, planet.TechLevel);
-        if (planet.IsAddictedToAmbrosia)
+        double tip = TotalProd(world.Population, world.TechLevel);
+        if (world.IsAddictedToAmbrosia)
             tip = PascalRound(tip * AmbrosiaAdj); // rounded here — GetIndustrialDistribution keeps its own copy real, see there.
         if (tip > 999)
             tip = 999;
@@ -670,27 +673,27 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
         var temp = tip / 10000.0;
         foreach (var industry in Enum.GetValues<IndustryType>()) {
             var dist = industryDistribution[industry];
-            var optimumLevel = PascalRound(temp * dist * _classIndustryAdjustment[(planet.Class, industry)]);
+            var optimumLevel = PascalRound(temp * dist * _classIndustryAdjustment[(world.EffectiveClass, industry)]);
             if (dist > 0 && optimumLevel == 0)
                 optimumLevel = 1;
 
-            var current = planet.Industry[industry];
+            var current = world.Industry[industry];
             int consRate;
             int rawNeeded;
             var metalCost = _industryMetalCost[industry];
 
             if (current < optimumLevel) {
-                consRate = Math.Max(1, PascalRound(optimumLevel * (planet.Efficiency / 500.0)));
+                consRate = Math.Max(1, PascalRound(optimumLevel * (world.Efficiency / 500.0)));
                 consRate = Math.Min(consRate, optimumLevel - current);
                 rawNeeded = ClampResource(consRate / 100.0 * metalCost);
-                if (rawNeeded > planet.Cargo.Metals) {
+                if (rawNeeded > world.Cargo.Metals) {
                     // Safe from a divide-by-zero on Supply (metalCost=0): that case makes rawNeeded 0
                     // above, so this branch (rawNeeded > Cargo.Metals >= 0) can't be reached for it.
-                    consRate = (int)(100 * (planet.Cargo.Metals / (double)metalCost));
-                    rawNeeded = planet.Cargo.Metals;
+                    consRate = (int)(100 * (world.Cargo.Metals / (double)metalCost));
+                    rawNeeded = world.Cargo.Metals;
                 }
             } else if (current > optimumLevel) {
-                consRate = Math.Min(-1, -PascalRound(planet.Efficiency / 2.0));
+                consRate = Math.Min(-1, -PascalRound(world.Efficiency / 2.0));
                 if (current + consRate < optimumLevel)
                     consRate = optimumLevel - current;
                 rawNeeded = 0;
@@ -707,49 +710,49 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
                 rawNeeded = 0;
             }
 
-            planet.Industry[industry] = current + consRate;
+            world.Industry[industry] = current + consRate;
 
-            rawNeeded = Math.Min(planet.Cargo.Metals, rawNeeded);
-            planet.Cargo.Metals -= rawNeeded;
+            rawNeeded = Math.Min(world.Cargo.Metals, rawNeeded);
+            world.Cargo.Metals -= rawNeeded;
         }
     }
 
     /// <summary>Produces ships, legions, ninjas, and ambrosia from developed industry (UPDATE.PAS:844-925).</summary>
-    private void Production(Planet planet, TechLevel effectiveTech, double ip)
+    private void Production(IEconomicWorld world, TechLevel effectiveTech, double ip)
     {
         foreach (var industry in _productionIndustries) {
-            var level = planet.Industry[industry];
+            var level = world.Industry[industry];
             if (level <= 0)
                 continue;
 
             var prodAdj = ip * (level + K4) * (level + K4);
 
             foreach (var ship in _allShipTypes)
-                ProduceShip(planet, effectiveTech, industry, ship, prodAdj);
+                ProduceShip(world, effectiveTech, industry, ship, prodAdj);
             foreach (var cargo in _productionCargoTypes)
-                ProduceCargo(planet, effectiveTech, industry, cargo, prodAdj);
+                ProduceCargo(world, effectiveTech, industry, cargo, prodAdj);
         }
     }
 
-    private void ProduceShip(Planet planet, TechLevel effectiveTech, IndustryType industry, ShipType ship, double prodAdj)
+    private void ProduceShip(IEconomicWorld world, TechLevel effectiveTech, IndustryType industry, ShipType ship, double prodAdj)
     {
         if (!_thgAdjShips.TryGetValue((industry, ship), out var adjustment) || adjustment == 0)
             return;
-        if (!ShipTechAvailable(planet, ship, effectiveTech))
+        if (!ShipTechAvailable(world, ship, effectiveTech))
             return;
 
         var production = ClampResource(prodAdj * adjustment);
         if (production <= 0)
             production = 1;
 
-        production = Math.Min(production, MaxResources - planet.Ships[ship]);
-        production = ApplyRawMaterialConstraint(planet, production,
+        production = Math.Min(production, MaxResources - world.Ships[ship]);
+        production = ApplyRawMaterialConstraint(world, production,
             _rawMaterialForShips.GetValueOrDefault(ship, FrozenDictionary<CargoType, int>.Empty));
 
-        planet.Ships[ship] = Math.Min(MaxResources, planet.Ships[ship] + production);
+        world.Ships[ship] = Math.Min(MaxResources, world.Ships[ship] + production);
     }
 
-    private void ProduceCargo(Planet planet, TechLevel effectiveTech, IndustryType industry, CargoType cargo, double prodAdj)
+    private void ProduceCargo(IEconomicWorld world, TechLevel effectiveTech, IndustryType industry, CargoType cargo, double prodAdj)
     {
         if (!_thgAdjCargoProduction.TryGetValue((industry, cargo), out var adjustment) || adjustment == 0)
             return;
@@ -759,20 +762,20 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
         var production = ClampResource(prodAdj * adjustment);
 
         // Only ninja/ambrosia-type worlds make ninjas/ambrosia; ambrosia also needs the right class.
-        if (cargo == CargoType.NinjaLegion && planet.Type != WorldType.NinjaWorld)
+        if (cargo == CargoType.NinjaLegion && world.Type != WorldType.NinjaWorld)
             production = 0;
-        else if (cargo == CargoType.Ambrosia && planet.Type != WorldType.Ambrosia)
+        else if (cargo == CargoType.Ambrosia && world.Type != WorldType.Ambrosia)
             production = 0;
-        else if (cargo == CargoType.Ambrosia && planet.Class is not (WorldClass.Ambrosia or WorldClass.Paradise))
+        else if (cargo == CargoType.Ambrosia && world.EffectiveClass is not (WorldClass.Ambrosia or WorldClass.Paradise))
             production = 0;
         else if (production <= 0)
             production = 1;
 
-        production = Math.Min(production, MaxResources - Math.Min(planet.Cargo[cargo], MaxResources));
-        production = ApplyRawMaterialConstraint(planet, production,
+        production = Math.Min(production, MaxResources - Math.Min(world.Cargo[cargo], MaxResources));
+        production = ApplyRawMaterialConstraint(world, production,
             _rawMaterialForCargoProducts.GetValueOrDefault(cargo, FrozenDictionary<CargoType, int>.Empty));
 
-        planet.Cargo[cargo] += production;
+        world.Cargo[cargo] += production;
     }
 
     /// <summary>
@@ -781,7 +784,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// actually deducted from cargo — a faithfully-preserved Pascal quirk, not a translation bug: the
     /// check loop covers amb..tri, the deduction loop only che..tri.
     /// </summary>
-    private static int ApplyRawMaterialConstraint(Planet planet, int production, FrozenDictionary<CargoType, int> rawMaterialCost)
+    private static int ApplyRawMaterialConstraint(IEconomicWorld world, int production, FrozenDictionary<CargoType, int> rawMaterialCost)
     {
         var rawNeeded = new Dictionary<CargoType, int>();
         foreach (var rawMaterial in _rawMaterialCheckOrder) {
@@ -791,16 +794,16 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
             }
 
             var needed = ClampResource(production * (costPer100 / 100.0));
-            if (needed > planet.Cargo[rawMaterial]) {
-                production = ClampResource(planet.Cargo[rawMaterial] / (double)costPer100 * 100);
+            if (needed > world.Cargo[rawMaterial]) {
+                production = ClampResource(world.Cargo[rawMaterial] / (double)costPer100 * 100);
                 needed = ClampResource(production * (costPer100 / 100.0));
             }
             rawNeeded[rawMaterial] = needed;
         }
 
         foreach (var rawMaterial in _rawMaterialDeductOrder) {
-            var needed = Math.Min(planet.Cargo[rawMaterial], rawNeeded.GetValueOrDefault(rawMaterial));
-            planet.Cargo[rawMaterial] -= needed;
+            var needed = Math.Min(world.Cargo[rawMaterial], rawNeeded.GetValueOrDefault(rawMaterial));
+            world.Cargo[rawMaterial] -= needed;
         }
 
         return production;
@@ -813,11 +816,11 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
             cargo[type] = ClampResource(cargo[type]);
     }
 
-    private void UpdateEfficiency(Planet planet)
+    private void UpdateEfficiency(IEconomicWorld world)
     {
-        var inc = planet.Owner.IsIndependent
+        var inc = world.Owner.IsIndependent
             ? Rnd(0, 1)
-            : planet.Efficiency switch {
+            : world.Efficiency switch {
                 <= 25 => Rnd(5, 12),
                 <= 50 => Rnd(3, 8),
                 <= 75 => Rnd(2, 5),
@@ -826,7 +829,7 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
                 _ => 0,
             };
 
-        planet.Efficiency = Math.Min(100, planet.Efficiency + inc);
+        world.Efficiency = Math.Min(100, world.Efficiency + inc);
     }
 
     /// <summary>
@@ -837,67 +840,67 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// produce for a real empire — every empire is founded with one — so this is purely a defensive
     /// no-op for incomplete test/setup state, not a modeled game rule.
     /// </summary>
-    private void UpdateTechLevel(Planet planet)
+    private void UpdateTechLevel(IEconomicWorld world)
     {
-        if (planet.TechLevel == TechLevel.Gate)
+        if (world.TechLevel == TechLevel.Gate)
             return;
 
-        if (planet.Owner.IsIndependent) {
+        if (world.Owner.IsIndependent) {
             if (Rnd(1, 50) == 1)
-                planet.TechLevel++;
+                world.TechLevel++;
             return;
         }
 
-        var capitalTech = planet.Owner.Capital?.TechLevel;
+        var capitalTech = world.Owner.Capital?.TechLevel;
         if (capitalTech is null)
             return;
 
-        if (capitalTech > planet.TechLevel) {
+        if (capitalTech > world.TechLevel) {
             if (Rnd(1, 100) <= TechLevelIncreaseChance)
-                planet.TechLevel++;
-        } else if (capitalTech < planet.TechLevel) {
+                world.TechLevel++;
+        } else if (capitalTech < world.TechLevel) {
             if (Rnd(1, 15) == 1)
-                planet.TechLevel--;
+                world.TechLevel--;
         }
     }
 
-    private void UpdatePopulation(Planet planet)
+    private void UpdatePopulation(IEconomicWorld world)
     {
-        var maxPop = _maxPopulationByClass[planet.Class];
-        var basePop = _basePopulationByTech[planet.TechLevel];
+        var maxPop = _maxPopulationByClass[world.EffectiveClass];
+        var basePop = _basePopulationByTech[world.TechLevel];
 
         double increase;
-        if (planet.Population > maxPop)
+        if (world.Population > maxPop)
             increase = Rnd(-10, 10);
-        else if (planet.Population < 75)
+        else if (world.Population < 75)
             increase = Rnd(2, 5);
-        else if (planet.Population > basePop)
+        else if (world.Population > basePop)
             increase = basePop / 100.0;
         else
-            increase = 128.0 * planet.Population / maxPop;
+            increase = 128.0 * world.Population / maxPop;
 
-        planet.Population += PascalRound(increase);
+        world.Population += PascalRound(increase);
     }
 
-    private void UseUpFood(Planet planet)
+    private void UseUpFood(IEconomicWorld world)
     {
-        var foodNeeded = ClampResource((planet.Population / 100.0) * SuppliesPerBillion);
+        var foodNeeded = ClampResource((world.Population / 100.0) * SuppliesPerBillion);
 
-        if (foodNeeded > planet.Cargo.Supplies) {
-            var lack = foodNeeded - planet.Cargo.Supplies;
-            planet.Cargo.Supplies = 0;
+        if (foodNeeded > world.Cargo.Supplies) {
+            var lack = foodNeeded - world.Cargo.Supplies;
+            world.Cargo.Supplies = 0;
 
-            var starve = Math.Min(lack / 6, planet.Population / 10);
-            planet.Population -= starve;
+            var starve = Math.Min(lack / 6, world.Population / 10);
+            world.Population -= starve;
 
             if (starve > 0) {
                 var revInc = Math.Min(
-                    (int)(_starvationRevoltAdjustmentByTech[planet.TechLevel] * (starve / 10.0)),
+                    (int)(_starvationRevoltAdjustmentByTech[world.TechLevel] * (starve / 10.0)),
                     45);
-                ChangeRevIndex(planet, revInc);
+                ChangeRevIndex(world, revInc);
             }
         } else {
-            planet.Cargo.Supplies -= foodNeeded;
+            world.Cargo.Supplies -= foodNeeded;
         }
     }
 
@@ -906,51 +909,51 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// UpdateRevolution above) — but every state effect (population, efficiency, revolution index,
     /// tech level, industry, addiction flag) is kept.
     /// </summary>
-    private void UseUpAmbrosia(Planet planet)
+    private void UseUpAmbrosia(IEconomicWorld world)
     {
-        var ambNeeded = ClampResource((planet.Population / 100.0) * DrugsPerBillion);
+        var ambNeeded = ClampResource((world.Population / 100.0) * DrugsPerBillion);
 
-        if (planet.IsAddictedToAmbrosia) {
-            if (ambNeeded <= planet.Cargo.Ambrosia) {
-                planet.Cargo.Ambrosia -= ambNeeded;
+        if (world.IsAddictedToAmbrosia) {
+            if (ambNeeded <= world.Cargo.Ambrosia) {
+                world.Cargo.Ambrosia -= ambNeeded;
                 return;
             }
 
             // Not enough ambrosia: people die, efficiency and revolution index suffer, and one of
             // four random side effects (nothing / riots / industrial sabotage / tech regression) fires.
-            var lack = ambNeeded - planet.Cargo.Ambrosia;
-            planet.Cargo.Ambrosia = 0;
+            var lack = ambNeeded - world.Cargo.Ambrosia;
+            world.Cargo.Ambrosia = 0;
 
-            var die = Math.Min(ClampResource(AddictDeathCoeff * lack), planet.Population / 7);
-            planet.Population -= die;
+            var die = Math.Min(ClampResource(AddictDeathCoeff * lack), world.Population / 7);
+            world.Population -= die;
 
-            var effChange = Math.Min((int)(AddictEffCoeff * die), planet.Efficiency);
-            planet.Efficiency -= effChange;
+            var effChange = Math.Min((int)(AddictEffCoeff * die), world.Efficiency);
+            world.Efficiency -= effChange;
 
-            ChangeRevIndex(planet, (int)(AddictRevICoeff * die));
+            ChangeRevIndex(world, (int)(AddictRevICoeff * die));
 
             switch (Rnd(1, 10)) {
                 case >= 5 and <= 7:
-                    planet.Population -= ClampResource((Rnd(50, 120) / 100.0) * die);
+                    world.Population -= ClampResource((Rnd(50, 120) / 100.0) * die);
                     break;
                 case 8 or 9:
                     foreach (var industry in Enum.GetValues<IndustryType>())
-                        planet.Industry[industry] -= (int)(planet.Industry[industry] * Rnd(0, 20) / 100.0);
+                        world.Industry[industry] -= (int)(world.Industry[industry] * Rnd(0, 20) / 100.0);
                     break;
                 case 10:
-                    if (planet.TechLevel > TechLevel.PreTech)
-                        planet.TechLevel--;
+                    if (world.TechLevel > TechLevel.PreTech)
+                        world.TechLevel--;
                     break;
             }
 
             if (Rnd(1, 100) <= ChanceToAddict)
-                planet.IsAddictedToAmbrosia = false;
-        } else if (planet.Cargo.Ambrosia > 0) {
-            if (ambNeeded <= planet.Cargo.Ambrosia && Rnd(1, 100) < ChanceToAddict)
-                planet.IsAddictedToAmbrosia = true;
+                world.IsAddictedToAmbrosia = false;
+        } else if (world.Cargo.Ambrosia > 0) {
+            if (ambNeeded <= world.Cargo.Ambrosia && Rnd(1, 100) < ChanceToAddict)
+                world.IsAddictedToAmbrosia = true;
 
             ambNeeded /= 2;
-            planet.Cargo.Ambrosia = Math.Max(0, planet.Cargo.Ambrosia - ambNeeded);
+            world.Cargo.Ambrosia = Math.Max(0, world.Cargo.Ambrosia - ambNeeded);
         }
     }
 
@@ -959,84 +962,82 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
     /// and population; only ever grows it, never shrinks it — an already-above-optimum world (e.g.
     /// one being reinforced ahead of an attack) is left alone here, not walked back down.
     /// </summary>
-    private void UpdateMilitary(Planet planet)
+    private void UpdateMilitary(IEconomicWorld world)
     {
         var optimumMilitary = ClampResource(Jitter(
-            PascalRound(planet.Population / 150.0 * _optimumMilitaryByType[planet.Type]), 10));
-        if (optimumMilitary > planet.Cargo.Legions)
-            planet.Cargo.Legions = ClampResource(
-                planet.Cargo.Legions + planet.Population / 10.0 * (_optimumMilitaryByType[planet.Type] / 100.0));
+            PascalRound(world.Population / 150.0 * _optimumMilitaryByType[world.Type]), 10));
+        if (optimumMilitary > world.Cargo.Legions)
+            world.Cargo.Legions = ClampResource(
+                world.Cargo.Legions + world.Population / 10.0 * (_optimumMilitaryByType[world.Type] / 100.0));
     }
 
-    private void UpdateRevolution(Planet planet, Dictionary<Empire, int> newTotalRevIndex)
+    private void UpdateRevolution(IEconomicWorld world, Dictionary<Empire, int> newTotalRevIndex)
     {
-        var owner = planet.Owner;
+        var owner = world.Owner;
 
         // Decrease revolution index (UPDATE.PAS:698-703).
         var empRevAdj = Jitter(TotalRevIndex(owner), 50);
-        if (planet.Type == WorldType.Capital)
-            ChangeRevIndex(planet, -Rnd(20, 30));
+        if (world.Type == WorldType.Capital)
+            ChangeRevIndex(world, -Rnd(20, 30));
         else
-            ChangeRevIndex(planet, empRevAdj + Rnd(-5, 2));
+            ChangeRevIndex(world, empRevAdj + Rnd(-5, 2));
 
         if (owner.IsIndependent)
             return;
 
         // Military presence affects revolution (UPDATE.PAS:705-735).
         var optimumMilitary = ClampResource(Jitter(
-            PascalRound(planet.Population / 150.0 * _optimumMilitaryByType[planet.Type]), 10));
-        var military = ClampResource(planet.Cargo.Legions + 5.0 * planet.Cargo.NinjaLegions);
+            PascalRound(world.Population / 150.0 * _optimumMilitaryByType[world.Type]), 10));
+        var military = ClampResource(world.Cargo.Legions + 5.0 * world.Cargo.NinjaLegions);
 
         if (military > optimumMilitary) {
-            if (planet.RevolutionIndex > 30) {
+            if (world.RevolutionIndex > 30) {
                 var factor = Rnd(1, (military - optimumMilitary) / 100);
-                ChangeRevIndex(planet, -factor);
-            } else if (planet.Type != WorldType.Capital && planet.Type != WorldType.Base) {
+                ChangeRevIndex(world, -factor);
+            } else if (world.Type != WorldType.Capital && world.Type != WorldType.Base) {
                 if (Rnd(1, 5) == 1)
-                    ChangeRevIndex(planet, Rnd(5, 15));
+                    ChangeRevIndex(world, Rnd(5, 15));
             }
         }
 
         // Rebellion trigger (UPDATE.PAS:737-753). The news-only threshold tiers below 75 (RebelW1-4)
         // have no state effect and are skipped — no news subsystem yet.
-        if (planet.RevolutionIndex > 75 && Rnd(1, 100) < planet.RevolutionIndex && planet.Type != WorldType.Capital)
-            Rebellion(planet, military, newTotalRevIndex);
+        if (world.RevolutionIndex > 75 && Rnd(1, 100) < world.RevolutionIndex && world.Type != WorldType.Capital)
+            Rebellion(world, military, newTotalRevIndex);
     }
 
-    private void Rebellion(Planet planet, int military, Dictionary<Empire, int> newTotalRevIndex)
+    private void Rebellion(IEconomicWorld world, int military, Dictionary<Empire, int> newTotalRevIndex)
     {
-        var owner = planet.Owner;
-        var rebels = Math.Max(1, ClampResource(Math.Sqrt(planet.Population) * 65));
+        var owner = world.Owner;
+        var rebels = Math.Max(1, ClampResource(Math.Sqrt(world.Population) * 65));
         var menLost = rebels / 5;
         var chanceToEndRebel = military / Math.Sqrt(rebels) * 1.414213;
 
-        var lost = Math.Min(planet.Cargo.Legions, menLost);
-        planet.Cargo.Legions -= lost;
+        var lost = Math.Min(world.Cargo.Legions, menLost);
+        world.Cargo.Legions -= lost;
         menLost -= lost;
-        lost = Math.Min(planet.Cargo.NinjaLegions, menLost / 5);
-        planet.Cargo.NinjaLegions -= lost;
+        lost = Math.Min(world.Cargo.NinjaLegions, menLost / 5);
+        world.Cargo.NinjaLegions -= lost;
 
         if (Rnd(1, 100) < chanceToEndRebel) {
             // Empire puts down the rebellion.
-            ChangeRevIndex(planet, Rnd(-15, 5));
+            ChangeRevIndex(world, Rnd(-15, 5));
             newTotalRevIndex[owner] = newTotalRevIndex.GetValueOrDefault(owner) - Rnd(1, 5);
         } else {
             // World rebels and goes independent.
-            planet.Owner = Empire.Independent;
-            planet.Type = WorldType.Independent;
-            // InitializeISSP resets self-sufficiency to DefaultISSP ($5555 — all four dials at the
-            // midpoint of the 0-10 range, DATACNST.PAS:516).
-            planet.SelfSufficiency.Chemical = 5;
-            planet.SelfSufficiency.Metal = 5;
-            planet.SelfSufficiency.Supply = 5;
-            planet.SelfSufficiency.Trillum = 5;
-            ChangeRevIndex(planet, -Rnd(40, 50));
-            planet.Cargo.Legions = rebels;
+            world.Owner = Empire.Independent;
+            world.Type = WorldType.Independent;
+            // InitializeISSP resets a planet's self-sufficiency to DefaultISSP ($5555 — all four
+            // dials at the midpoint of the 0-10 range, DATACNST.PAS:516); a no-op for a starbase
+            // (PRIMINTR.PAS:627-633 has no Base case) — see IEconomicWorld.
+            world.InitializeSelfSufficiency();
+            ChangeRevIndex(world, -Rnd(40, 50));
+            world.Cargo.Legions = rebels;
             newTotalRevIndex[owner] = newTotalRevIndex.GetValueOrDefault(owner) + Rnd(5, 10);
         }
 
-        planet.Population = ClampResource(planet.Population - military / 1000.0);
-        planet.Efficiency = Math.Max(0, planet.Efficiency - Rnd(5, 15));
+        world.Population = ClampResource(world.Population - military / 1000.0);
+        world.Efficiency = Math.Max(0, world.Efficiency - Rnd(5, 15));
     }
 
     private void HostileLife(Planet planet)
@@ -1065,8 +1066,8 @@ public sealed class AnnualTickHandler(Random random) : IAnnualTickHandler
         empire.IsIndependent ? 0 : empire.TotalRevolutionIndex + empire.RevolutionFactor;
 
     /// <summary>Clamps a world's revolution index to [0,100] (PRIMINTR.PAS:ChangeRevIndex).</summary>
-    private static void ChangeRevIndex(Planet planet, int change) =>
-        planet.RevolutionIndex = Math.Clamp(planet.RevolutionIndex + change, 0, 100);
+    private static void ChangeRevIndex(IEconomicWorld world, int change) =>
+        world.RevolutionIndex = Math.Clamp(world.RevolutionIndex + change, 0, 100);
 
     /// <summary>Clamps a produced/consumed quantity to [0,MaxResources], truncating (Pascal source: MISC.PAS's ThgLmt).</summary>
     private static int ClampResource(double x) => x > MaxResources ? MaxResources : x < 0 ? 0 : (int)x;
