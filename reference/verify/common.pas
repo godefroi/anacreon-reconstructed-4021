@@ -129,13 +129,6 @@ const
         SYJInd, MinInd, BioInd, SYGInd, MinInd, MinInd, SYSInd, SYSInd,
         SYTInd, SYTInd, MinInd, MinInd, TriInd );
 
-   { %population in military at 50 military index, by world type (DATACNST.PAS:351-356). }
-   OptMilitary: array[WorldTypes] of Integer =
-      {  Agr Amb Bse BseS Cap  Che  Ind Jmp JmpS Min Nnj Out }
-      (   5,100,200, 200,200,  10,  80,100,100, 20,150,  0,
-      {  Raw RawS Str StrS Trn TrnS Rsr Ter Tri }
-         20,  20,150, 150, 80,  80,  1, 10, 30 );
-
    { ThgAdj[IndusTypes][fgt..tri] , columns: fgt hkr jmp jtn pen ssp trn men nnj amb che met sup tri }
    ThgAdjFgtTrn: array[IndusTypes,ShipTypes] of Integer =
       (  (   0,  0,  0,  0,  0,  0,  0 ),
@@ -204,7 +197,6 @@ procedure ChangeRevIndexV(var RevIndex: LongInt; Chg: LongInt);
 function PascalRound(x: Real): LongInt;
 function Expnt(Base,Exponent: Real): Real;
 function TotalProd(Pop: LongInt; Tech: TechLevel): LongInt;
-procedure UpdateMilitaryScenario(Pop: LongInt; Typ: WorldTypes; var MPop: LongInt);
 
 implementation
 
@@ -256,20 +248,6 @@ function TotalProd(Pop: LongInt; Tech: TechLevel): LongInt;
    if temp1>999 then temp1:=999
    else if temp1<0 then temp1:=0;
    TotalProd:=PascalRound(temp1);
-   end;
-
-{ UPDATE.PAS:606-617, verbatim. Used by revolution.pas, which chains it before
-  UpdateRevolutionScenario, matching UpdateWorld's real call order at UPDATE.PAS:1386-1388:
-  UpdateMilitary always runs immediately before UpdateRevolution. (military.pas itself was retired in
-  favor of the patch-based runworld.pas driver's military domain, which runs the real UpdateWorld
-  instead of this isolated transcription — see MilitaryCases's doc comment.) }
-procedure UpdateMilitaryScenario(Pop: LongInt; Typ: WorldTypes; var MPop: LongInt);
-   var
-      OptimumMilitary: LongInt;
-   begin
-   OptimumMilitary:=ThgLmt(RndVar(PascalRound((Pop/150)*OptMilitary[Typ]),10));
-   if OptimumMilitary>MPop then
-      MPop:=ThgLmt(MPop+(Pop/10)*(OptMilitary[Typ]/100));
    end;
 
 end.

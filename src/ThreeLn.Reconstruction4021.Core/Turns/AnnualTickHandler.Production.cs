@@ -358,14 +358,33 @@ public sealed partial class AnnualTickHandler
         var effectiveTech = EffectiveTechnologyLevel(world);
         var ip = (_industrialProductionTechAdjustment[world.TechLevel] / 100.0) * ((world.Efficiency + 250) / 100.0) / K6;
 
+        // OtherReports (UPDATE.PAS:1131,1133): one per-tick set, shared across UpdateIndustry and
+        // Production (and, once implemented, UpdateDefenses) — each resource type's shortfall report
+        // (see ReportResourceShortfall) fires at most once per tick, not once per call site that hits it.
+        var reportedShortfalls = new HashSet<CargoType>();
+
         ProduceRawMaterial(world, effectiveTech, ip);
         var industryDistribution = GetIndustrialDistribution(world);
-        UpdateIndustry(world, industryDistribution);
-        Production(world, effectiveTech, ip);
+        UpdateIndustry(world, industryDistribution, reportedShortfalls);
+        Production(world, effectiveTech, ip, reportedShortfalls);
 
         afterProduce?.Invoke();
 
         ClampCargo(world.Cargo);
+    }
+
+    /// <summary>
+    /// ReportPlanetLack (UPDATE.PAS:39-56): the first time a given resource type is reported lacking
+    /// in a tick, bumps RevolutionIndex by 1 — real state, not just a notification, so it's kept even
+    /// though AddNews itself is skipped (no news subsystem yet, same precedent as elsewhere).
+    /// reportedShortfalls mirrors Pascal's OtherReports (a ResourceSet threaded through the whole
+    /// per-tick UpdateWorld call, not reset between call sites) — <see cref="HashSet{T}.Add"/> already
+    /// returns whether the item was new, so the guard and the insert are one call.
+    /// </summary>
+    private static void ReportResourceShortfall(IEconomicWorld world, CargoType resource, HashSet<CargoType> reportedShortfalls)
+    {
+        if (reportedShortfalls.Add(resource))
+            ChangeRevIndex(world, 1);
     }
 
     /// <summary>
@@ -586,7 +605,7 @@ public sealed partial class AnnualTickHandler
     }
 
     /// <summary>Moves developed industry level toward the optimum distribution, consuming metal (UPDATE.PAS:927-1005).</summary>
-    private void UpdateIndustry(IEconomicWorld world, Dictionary<IndustryType, double> industryDistribution)
+    private void UpdateIndustry(IEconomicWorld world, Dictionary<IndustryType, double> industryDistribution, HashSet<CargoType> reportedShortfalls)
     {
         double tip = TotalProd(world.Population, world.TechLevel);
         if (world.IsAddictedToAmbrosia)
@@ -615,6 +634,7 @@ public sealed partial class AnnualTickHandler
                     // above, so this branch (rawNeeded > Cargo.Metals >= 0) can't be reached for it.
                     consRate = (int)(100 * (world.Cargo.Metals / (double)metalCost));
                     rawNeeded = world.Cargo.Metals;
+                    ReportResourceShortfall(world, CargoType.Metals, reportedShortfalls);
                 }
             } else if (current > optimumLevel) {
                 consRate = Math.Min(-1, -PascalRound(world.Efficiency / 2.0));
@@ -642,7 +662,7 @@ public sealed partial class AnnualTickHandler
     }
 
     /// <summary>Produces ships, legions, ninjas, and ambrosia from developed industry (UPDATE.PAS:844-925).</summary>
-    private void Production(IEconomicWorld world, TechLevel effectiveTech, double ip)
+    private void Production(IEconomicWorld world, TechLevel effectiveTech, double ip, HashSet<CargoType> reportedShortfalls)
     {
         foreach (var industry in _productionIndustries) {
             var level = world.Industry[industry];
@@ -652,13 +672,13 @@ public sealed partial class AnnualTickHandler
             var prodAdj = ip * (level + K4) * (level + K4);
 
             foreach (var ship in _allShipTypes)
-                ProduceShip(world, effectiveTech, industry, ship, prodAdj);
+                ProduceShip(world, effectiveTech, industry, ship, prodAdj, reportedShortfalls);
             foreach (var cargo in _productionCargoTypes)
-                ProduceCargo(world, effectiveTech, industry, cargo, prodAdj);
+                ProduceCargo(world, effectiveTech, industry, cargo, prodAdj, reportedShortfalls);
         }
     }
 
-    private void ProduceShip(IEconomicWorld world, TechLevel effectiveTech, IndustryType industry, ShipType ship, double prodAdj)
+    private void ProduceShip(IEconomicWorld world, TechLevel effectiveTech, IndustryType industry, ShipType ship, double prodAdj, HashSet<CargoType> reportedShortfalls)
     {
         if (!_thgAdjShips.TryGetValue((industry, ship), out var adjustment) || adjustment == 0)
             return;
@@ -671,12 +691,12 @@ public sealed partial class AnnualTickHandler
 
         production = Math.Min(production, MaxResources - world.Ships[ship]);
         production = ApplyRawMaterialConstraint(world, production,
-            _rawMaterialForShips.GetValueOrDefault(ship, FrozenDictionary<CargoType, int>.Empty));
+            _rawMaterialForShips.GetValueOrDefault(ship, FrozenDictionary<CargoType, int>.Empty), reportedShortfalls);
 
         world.Ships[ship] = Math.Min(MaxResources, world.Ships[ship] + production);
     }
 
-    private void ProduceCargo(IEconomicWorld world, TechLevel effectiveTech, IndustryType industry, CargoType cargo, double prodAdj)
+    private void ProduceCargo(IEconomicWorld world, TechLevel effectiveTech, IndustryType industry, CargoType cargo, double prodAdj, HashSet<CargoType> reportedShortfalls)
     {
         if (!_thgAdjCargoProduction.TryGetValue((industry, cargo), out var adjustment) || adjustment == 0)
             return;
@@ -697,7 +717,7 @@ public sealed partial class AnnualTickHandler
 
         production = Math.Min(production, MaxResources - Math.Min(world.Cargo[cargo], MaxResources));
         production = ApplyRawMaterialConstraint(world, production,
-            _rawMaterialForCargoProducts.GetValueOrDefault(cargo, FrozenDictionary<CargoType, int>.Empty));
+            _rawMaterialForCargoProducts.GetValueOrDefault(cargo, FrozenDictionary<CargoType, int>.Empty), reportedShortfalls);
 
         world.Cargo[cargo] += production;
     }
@@ -706,9 +726,11 @@ public sealed partial class AnnualTickHandler
     /// Reduces production if there isn't enough raw material on hand, and deducts what's consumed
     /// (UPDATE.PAS:895-916). Ambrosia's requirement is checked (and can throttle production) but never
     /// actually deducted from cargo — a faithfully-preserved Pascal quirk, not a translation bug: the
-    /// check loop covers amb..tri, the deduction loop only che..tri.
+    /// check loop covers amb..tri, the deduction loop only che..tri. A shortfall here only bumps
+    /// RevolutionIndex for a planet (UPDATE.PAS:904's "IF ID.ObjTyp&lt;&gt;Base THEN" guards this
+    /// specific ReportPlanetLack call, unlike UpdateIndustry's) — see <see cref="IEconomicWorld.IsPlanet"/>.
     /// </summary>
-    private static int ApplyRawMaterialConstraint(IEconomicWorld world, int production, FrozenDictionary<CargoType, int> rawMaterialCost)
+    private static int ApplyRawMaterialConstraint(IEconomicWorld world, int production, FrozenDictionary<CargoType, int> rawMaterialCost, HashSet<CargoType> reportedShortfalls)
     {
         var rawNeeded = new Dictionary<CargoType, int>();
         foreach (var rawMaterial in _rawMaterialCheckOrder) {
@@ -721,6 +743,8 @@ public sealed partial class AnnualTickHandler
             if (needed > world.Cargo[rawMaterial]) {
                 production = ClampResource(world.Cargo[rawMaterial] / (double)costPer100 * 100);
                 needed = ClampResource(production * (costPer100 / 100.0));
+                if (world.IsPlanet)
+                    ReportResourceShortfall(world, rawMaterial, reportedShortfalls);
             }
             rawNeeded[rawMaterial] = needed;
         }

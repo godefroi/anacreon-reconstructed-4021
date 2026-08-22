@@ -103,11 +103,15 @@ public class AnnualTickHandlerTests
     [Test]
     public async Task StarvationReducesPopulationAndRaisesRevolutionIndex()
     {
+        // RunProductionPipeline first: Type=Agricultural (default) takes GetIndustrialDistribution's
+        // raw-material-only branch with a nonzero Chemical optimum, but Cargo.Metals=0 can't afford
+        // to grow it -> ReportResourceShortfall's first-shortfall-this-tick bump fires once (UPDATE.PAS's
+        // ReportPlanetLack, UPDATE.PAS:971) -> RevolutionIndex=0+1=1.
         // Population(1000) > BasePop[Warp](700) -> linear growth to 1007 (UpdatePopulation).
         // Cargo.Supplies=0 -> UseUpFood starves: foodNeeded=ThgLmt(1007/100*25)=251, lack=251,
         // starve=min(251/6, 1007/10)=min(41,100)=41 -> Population=1007-41=966.
-        // revInc=min((int)(TechAdj[Warp]=13 * 41/10.0=4.1)=53, 45)=45 -> RevolutionIndex=45.
-        // UpdateRevolution then applies ChangeRevIndex(0 + Rnd(-5,2)=-5) -> RevolutionIndex=40.
+        // revInc=min((int)(TechAdj[Warp]=13 * 41/10.0=4.1)=53, 45)=45 -> RevolutionIndex=1+45=46.
+        // UpdateRevolution then applies ChangeRevIndex(0 + Rnd(-5,2)=-5) -> RevolutionIndex=41.
         var planet = new Planet {
             Location = new Coordinate(0, 0),
             Owner = new Empire { Name = "Test" },
@@ -122,7 +126,7 @@ public class AnnualTickHandlerTests
         handler.RunAnnualTick(game);
 
         await Assert.That(planet.Population).IsEqualTo(966);
-        await Assert.That(planet.RevolutionIndex).IsEqualTo(40);
+        await Assert.That(planet.RevolutionIndex).IsEqualTo(41);
     }
 
 }
@@ -131,16 +135,14 @@ public class AnnualTickHandlerTests
 /// Verifies revolution/rebellion for planets (UPDATE.PAS's UpdateRevolution/Rebellion pair, economy
 /// phase Commit 1). MatchesGoldenFile checks the real Pascal arithmetic across a case matrix
 /// (including the previously-untested military-suppression branch, UPDATE.PAS:715-735) against
-/// reference/verify/golden/revolution.golden — computed by a real FreePascal run of
-/// reference/verify/revolution.pas (GoldenFileTests), not hand-typed. revolution.pas's
-/// UpdateRevolutionScenario starts exactly where UpdateRevolution itself starts — it does NOT run
-/// UpdatePopulation/UpdateEfficiency first, unlike RunAnnualTick — so RevolutionCases tracks two
-/// population values per case; see its doc comment. It DOES chain UpdateMilitary first (matching
-/// UPDATE.PAS:1386-1388's real call order), since Commit 2c's landing means Cargo.Legions can already
-/// differ from its starting value by the time UpdateRevolution reads it — see RevolutionCases's doc
-/// comment for how that's modeled. The two tests below stay hardcoded: they assert cross-tick
-/// bookkeeping behavior (an accumulator resets each year; an inverted Rnd range from a prior tick's
-/// negative accumulator must not throw), not a single tick's Pascal arithmetic.
+/// reference/verify/golden/revolution.golden, computed patch-based (GoldenFileTests): the real,
+/// only-minimally-touched UpdateWorld run against a hand-assembled Universe^
+/// (reference/verify/patch-based/runworld.pas's revolution domain), not a per-procedure transcription
+/// — see RevolutionCases's doc comment for what that replaced, including a real production-pipeline
+/// gap (ReportPlanetLack's RevolutionIndex bump) this migration caught. Every case uses Ninja=0
+/// (hardcoded in the driver, matching every case here). The two tests below stay hardcoded: they
+/// assert cross-tick bookkeeping behavior (an accumulator resets each year; an inverted Rnd range
+/// from a prior tick's negative accumulator must not throw), not a single tick's Pascal arithmetic.
 /// </summary>
 public class AnnualTickHandlerRevolutionTests
 {
@@ -170,7 +172,6 @@ public class AnnualTickHandlerRevolutionTests
             Type = c.Type,
         };
         planet.Cargo.Legions = c.Legions;
-        planet.Cargo.NinjaLegions = c.Ninja;
         // UseUpFood runs between UpdatePopulation and UpdateRevolution; foodNeeded is
         // ThgLmt((Population/100)*25), which ThgLmt itself caps at MaxResources (9999) no matter how
         // large Population is — so Supplies=9999 guarantees no starvation for any case here.

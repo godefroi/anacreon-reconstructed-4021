@@ -14,6 +14,8 @@
      military   PlanetPop,TechOrd,Legions,TypOrd,RngFixedValue     -> "legions=<value>"
      starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue  -> "starbaseChe=<v>;neighborChe=<v>"
      ambrosia   Addicted,Ambrosia,RngFixedValue                    -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
+     revolution PlanetPop,ClassOrd,TechOrd,Efficiency,RevIndex,Legions,RngFixedValue
+                -> "rebelled=<TRUE|FALSE>;legions=<v>;ninja=<v>;population=<v>;efficiency=<v>;revindex=<v>;total_rev_delta=<v>"
    One output line per case, in order, to stdout -- consumed by PatchHarness
    in the C# test project via GoldenFile.Regenerate's runHarness override.
    With no arguments, runs a single hardcoded techlevel case as a
@@ -301,6 +303,70 @@ procedure RunAmbrosiaCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunRevolutionCase(const arg: String);
+   { Owned by Empire1 with its capital set to itself (same rationale as
+     RunMilitaryCase/RunAmbrosiaCase). Type=AgrTyp and Ninja=0 are hardcoded
+     -- every RevolutionCase uses them; Class/Tech/Efficiency/RevIndex/Legions
+     vary and are parametrized. Cargo[sup]=9999 keeps UseUpFood from starving
+     Population before UpdateRevolution (which runs right after) reads it.
+
+     total_rev_delta reads GetNewTotalRevIndex (a UPDATE.PAS patch, see there)
+     -- the accumulator Rebellion writes to, normally committed to (and reset
+     for the next year by) UpdateEmpire/UpdateUniverse (a later commit, not
+     reachable from UpdateWorld), so calling UpdateWorld alone leaves it
+     sitting in that private accumulator with no other way to read it back
+     out, AND never zeroed between cases in the same batched CLI invocation.
+     Reporting before/after and taking the difference sidesteps needing a
+     reset hook entirely, and is exactly what "one year's worth of delta"
+     means regardless of what an earlier case in this same process left
+     sitting in the accumulator. }
+   var
+      parts: array[0..6] of LongInt;
+      ID, CapID: IDNumber;
+      RevDeltaBefore: Integer;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   NoOfPlanets:=1;
+
+   Universe^.Planet[1].Cls:=WorldClass(parts[1]);
+   Universe^.Planet[1].Typ:=AgrTyp;
+   Universe^.Planet[1].Tech:=TechLevel(parts[2]);
+   Universe^.Planet[1].Eff:=parts[3];
+   Universe^.Planet[1].Pop:=parts[0];
+   Universe^.Planet[1].RevIndex:=parts[4];
+   Universe^.Planet[1].Cargo[sup]:=9999;
+   Universe^.Planet[1].Cargo[men]:=parts[5];
+   Universe^.Planet[1].Cargo[nnj]:=0;
+   Universe^.Planet[1].Emp:=Empire1;
+
+   SetOfActivePlanets:=[1];
+   SetOfPlanetsOf[Empire1]:=[1];
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire1].IsAPlayer:=False;
+   CapID.ObjTyp:=Pln;  CapID.Index:=1;
+   Universe^.EmpireData[Empire1].Capital:=CapID;
+
+   ForcedRandomValue:=parts[6];
+
+   RevDeltaBefore:=GetNewTotalRevIndex(Empire1);
+
+   ID.ObjTyp:=Pln;  ID.Index:=1;
+   UpdateWorld(ID);
+
+   WriteLn('rebelled=',(Universe^.Planet[1].Emp=Indep),
+           ';legions=',Universe^.Planet[1].Cargo[men],
+           ';ninja=',Universe^.Planet[1].Cargo[nnj],
+           ';population=',Universe^.Planet[1].Pop,
+           ';efficiency=',Universe^.Planet[1].Eff,
+           ';revindex=',Universe^.Planet[1].RevIndex,
+           ';total_rev_delta=',GetNewTotalRevIndex(Empire1)-RevDeltaBefore);
+
+   Dispose(Universe);
+   end;
+
 procedure RunCaseMode;
    var
       domain: String;
@@ -316,6 +382,8 @@ procedure RunCaseMode;
          RunStarbaseCase(ParamStr(i))
       else if domain='ambrosia' then
          RunAmbrosiaCase(ParamStr(i))
+      else if domain='revolution' then
+         RunRevolutionCase(ParamStr(i))
       else
          begin
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');

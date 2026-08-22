@@ -1,6 +1,6 @@
 --- a/UPDATE.PAS
 +++ b/UPDATE.PAS
-@@ -11,22 +11,23 @@
+@@ -11,22 +11,33 @@ UNIT Update;
  
  INTERFACE
  
@@ -28,14 +28,29 @@
  
 -PROCEDURE UpdateUniverse;
 +PROCEDURE UpdateWorld(World: IDNumber);
++
++{ PATCH (fpc): test-only observability hook, mirroring the ForcedRandomValue
++  pattern in INT.PAS -- NewTotalRevIndex is written only by Rebellion and
++  normally committed to an empire's real TotalRevIndex by UpdateEmpire
++  (UPDATE.PAS:512, deleted above as unreachable from UpdateWorld -- it's a
++  later commit). This harness calls UpdateWorld directly, never UpdateEmpire,
++  so without this getter the accumulator would be unreadable from outside the
++  unit (it's declared in IMPLEMENTATION, below). Read-only; behavior of
++  UpdateWorld/Rebellion is unchanged. }
++FUNCTION GetNewTotalRevIndex(Emp: Empire): Integer;
  
  IMPLEMENTATION
  
-@@ -36,7 +37,15 @@
+@@ -36,7 +47,20 @@ USES
  VAR
     NewTotalRevIndex: ARRAY [Empire] of Integer;
  
 -PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber; 
++FUNCTION GetNewTotalRevIndex(Emp: Empire): Integer;
++   BEGIN
++   GetNewTotalRevIndex:=NewTotalRevIndex[Emp];
++   END;  { GetNewTotalRevIndex }
++
 +{ PATCH (fpc): ConstructStarbase/ConstructStargate/UpdateConstruction/
 +  UpdateEmpire (+ its nested NewTechLevel/GetChanceForNewTech/GetNewTech)
 +  deleted -- none of them are reachable from UpdateWorld; they belong to
@@ -48,25 +63,11 @@
                             Headline: NewsTypes; P1,P2,P3: Integer;
                             VAR OtherReports: ResourceSet);
     VAR
-@@ -55,383 +64,131 @@
+@@ -55,383 +79,131 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
        END;
     END;  { ReportPlanetLack }
  
 -PROCEDURE ConstructStarbase(Emp: Empire; STyp: StarbaseTypes; XY: XYCoord; VAR ID: IDNumber);
--   VAR
--      EmpTech: TechLevel;
--      EmpTechnology: TechnologySet;
--      Indus: IndusArray;
--
--   BEGIN
--   ID.ObjTyp:=Base;
--   ID.Index:=NextStarbaseSlot;
--   IF ID.Index>0 THEN
--      BEGIN
--      CreateStarbase(ID,Emp,XY,STyp);
--      SetEfficiency(ID,Rnd(10,20));
--      GetEmpireTechnology(Emp,EmpTech,EmpTechnology);
--      SetTech(ID,EmpTech);
 +{ PATCH (fpc): GetIndustrialDistribution relocated verbatim from
 +  INTRFACE.PAS (its real home) -- pure economy math (only calls PrimIntr
 +  getters and Misc/DataCnst tables already in this unit's USES), but pulling
@@ -90,6 +91,45 @@
 +{ SYT }        (        0,    0,    0,       0,       0,       0,       0,    0,    0 ),
 +{ Sup }        (        0,    0,    0,       0,       0,       0,       0,    0,    0 ),
 +{ Tri }        (  0.10000,    0,    0, 0.07627, 0.20400, 0.16667, 0.08000,    0,    0 )  );
++
+    VAR
+-      EmpTech: TechLevel;
+-      EmpTechnology: TechnologySet;
+-      Indus: IndusArray;
++      X: IndusRArray;
++      Alpha: Real;         { Alpha = T2(tech)(Eff+250)/K6 }
++      Beta: IndusRArray;   { Beta = (TIP)(ClsAdj)(AmbAdj)/100 }
++      A,B,I: Real;
++      TIP: Real;           { TIP = Total Industrial Production }
+ 
++      MainInd,IndI: IndusTypes;
++      Special: SetOfSpecialConditions;
++
++      Tech: TechLevel;
++      Eff: Index;
++      Typ: WorldTypes;
++      Cls: WorldClass;
++      Pop: Population;
++      AmbAdd: Boolean;
++      Temp: Real;
++
++   { MAIN PROCEDURE: GetIndustrialDistribution }
+    BEGIN
+-   ID.ObjTyp:=Base;
+-   ID.Index:=NextStarbaseSlot;
+-   IF ID.Index>0 THEN
+-      BEGIN
+-      CreateStarbase(ID,Emp,XY,STyp);
+-      SetEfficiency(ID,Rnd(10,20));
+-      GetEmpireTechnology(Emp,EmpTech,EmpTechnology);
+-      SetTech(ID,EmpTech);
++   Tech:=GetTech(Obj);
++   Cls:=GetClass(Obj);
++   Pop:=GetPopulation(Obj);
++   Typ:=GetType(Obj);
++   Eff:=GetEfficiency(Obj);
++   GetSpecial(Obj,Special);
++   AmbAdd:=(AmbAddict IN Special);
  
 -      IF STyp=out THEN
 -         BEGIN
@@ -108,9 +148,26 @@
 -         SetPopulation(ID,Rnd(10,20));
 -         SetType(ID,BseTyp);
 -         END;
--      END;
++   { initialize arrays }
++   FillChar(IndDist,SizeOf(IndDist),0);
++
++   Alpha:=(TechAdj2[Tech]/100)*(Eff+250)/K6;
++   TIP:=TotalProd(Pop,Tech);
++   IF AmbAdd THEN
++      TIP:=TIP*AmbrosiaAdj;
++   IF TIP>999 THEN
++      TIP:=999;
++
++   { Calculate Beta array:   Beta[IndI] = TIP * ClassIndAdj[Cls,IndI]/10000 }
++   Temp:=TIP/10000;
++   FOR IndI:=BioInd TO TriInd DO
++      BEGIN
++      Beta[IndI]:=Temp*ClassIndAdj[Cls,IndI];
++      IF Beta[IndI]=0 THEN
++         Beta[IndI]:=1;
+       END;
 -   END;  { ConstructStarbase }
--
+ 
 -PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR ID: IDNumber);
 -   BEGIN
 -   ID.ObjTyp:=Gate;
@@ -118,11 +175,17 @@
 -   IF ID.Index>0 THEN
 -      CreateStargate(ID,Emp,GTyp,XY);
 -   END;  { ConstructStargate }
--
++   { calculate sup industry }
++   I:=( Sqrt( (SafetyAdj*ISSP[GetISSP(Obj,SupInd)]*(SuppliesPerBillion/100)*Pop) /
++              ((ThgAdj[SupInd,sup]/100)*Alpha) ) - K4) / Beta[SupInd];
++   IF (I>95) OR (I<0) OR (Typ=AgrTyp) THEN
++      I:=95;
++   IndDist[SupInd]:=I;
+ 
 -{ MAIN PROCEDURES }
 -PROCEDURE UpdateConstruction(i: Byte);
 -{ INTERFACE PROCEDURE: UpdateConstruction: }   
-    VAR
+-   VAR
 -      ConstrFleets: FleetSet;
 -      EnoughRawMaterial,Error: Boolean;
 -      ID: IDnumber;
@@ -145,12 +208,7 @@
 -         Cargo: array[1..MaxNoOfFleets] of CargoArray;
 -         CargoToUse,RawNeeded: Resources;
 -         Loc: Location;
-+      X: IndusRArray;
-+      Alpha: Real;         { Alpha = T2(tech)(Eff+250)/K6 }
-+      Beta: IndusRArray;   { Beta = (TIP)(ClsAdj)(AmbAdj)/100 }
-+      A,B,I: Real;
-+      TIP: Real;           { TIP = Total Industrial Production }
- 
+-
 -      begin
 -      EnoughRawMaterial:=True;
 -      FOR i:=1 TO MaxNoOfFleets DO
@@ -159,9 +217,7 @@
 -            ID.ObjTyp:=Flt;  ID.Index:=i;
 -            GetCargo(ID,Cargo[i]);
 -            END;
-+      MainInd,IndI: IndusTypes;
-+      Special: SetOfSpecialConditions;
- 
+-
 -      for ThgI:=amb TO tri do
 -         begin
 -         RawNeeded:=ConsCargoNeeded[Typ,ThgI];
@@ -195,19 +251,13 @@
 -      { if loop ends here, then not enough material to build }
 -      ExitLoop:
 -      end;  { UseUpRawMaterial }
-+      Tech: TechLevel;
-+      Eff: Index;
-+      Typ: WorldTypes;
-+      Cls: WorldClass;
-+      Pop: Population;
-+      AmbAdd: Boolean;
-+      Temp: Real;
- 
+-
 -   { UpdateConstruction: MAIN PROCEDURE }
-+   { MAIN PROCEDURE: GetIndustrialDistribution }
-    BEGIN
+-   BEGIN
 -   WITH Universe^.Constr[i] DO
--      BEGIN
++   IF Typ IN [AgrTyp,CheTyp,MinTyp,RawTyp,RawSTyp,RsrTyp..TriTyp] THEN
++      { ASSERT: all values of PI = 0 }
+       BEGIN
 -      GetFleets(XY,ConstrFleets);
 -      ConstrFleets:=ConstrFleets * SetOfFleetsOf[Emp];
 -      ID.ObjTyp:=Con;  ID.Index:=i;
@@ -414,44 +464,8 @@
 -
 -         NewTech:=Tech[Rnd(1,TechNumber)];
 -         END;  { GetNewTech }
-+   Tech:=GetTech(Obj);
-+   Cls:=GetClass(Obj);
-+   Pop:=GetPopulation(Obj);
-+   Typ:=GetType(Obj);
-+   Eff:=GetEfficiency(Obj);
-+   GetSpecial(Obj,Special);
-+   AmbAdd:=(AmbAddict IN Special);
-+
-+   { initialize arrays }
-+   FillChar(IndDist,SizeOf(IndDist),0);
-+
-+   Alpha:=(TechAdj2[Tech]/100)*(Eff+250)/K6;
-+   TIP:=TotalProd(Pop,Tech);
-+   IF AmbAdd THEN
-+      TIP:=TIP*AmbrosiaAdj;
-+   IF TIP>999 THEN
-+      TIP:=999;
-+
-+   { Calculate Beta array:   Beta[IndI] = TIP * ClassIndAdj[Cls,IndI]/10000 }
-+   Temp:=TIP/10000;
-+   FOR IndI:=BioInd TO TriInd DO
-+      BEGIN
-+      Beta[IndI]:=Temp*ClassIndAdj[Cls,IndI];
-+      IF Beta[IndI]=0 THEN
-+         Beta[IndI]:=1;
-+      END;
- 
+-
 -      { NewTechLevel: MAIN PROCEDURE }
-+   { calculate sup industry }
-+   I:=( Sqrt( (SafetyAdj*ISSP[GetISSP(Obj,SupInd)]*(SuppliesPerBillion/100)*Pop) /
-+              ((ThgAdj[SupInd,sup]/100)*Alpha) ) - K4) / Beta[SupInd];
-+   IF (I>95) OR (I<0) OR (Typ=AgrTyp) THEN
-+      I:=95;
-+   IndDist[SupInd]:=I;
-+
-+   IF Typ IN [AgrTyp,CheTyp,MinTyp,RawTyp,RawSTyp,RsrTyp..TriTyp] THEN
-+      { ASSERT: all values of PI = 0 }
-+      BEGIN
 +      I:=100-IndDist[SupInd];
 +      IndDist[CheInd]:=I*(TypeData[Typ,CheInd]/100);
 +      IndDist[MinInd]:=I*(TypeData[Typ,MinInd]/100);
@@ -488,7 +502,12 @@
 -               Tech:=Succ(Tech);
 -               SetEmpireTechnology(Emp,Tech,TechSet);
 -               SetTech(LabID,Tech);
--
++      { calculate temporaries }
++      A:=-K4*(1/Beta[CheInd]+1/Beta[MinInd]+1/Beta[TriInd]);
++      B:=(Sqrt(SafetyAdj*ISSP[GetISSP(Obj,CheInd)]*Gamma[CheInd,MainInd])/Beta[CheInd] +
++          Sqrt(SafetyAdj*ISSP[GetISSP(Obj,MinInd)]*Gamma[MinInd,MainInd])/Beta[MinInd] +
++          Sqrt(SafetyAdj*ISSP[GetISSP(Obj,TriInd)]*Gamma[TriInd,MainInd])/Beta[TriInd] );
+ 
 -               { Make all other university worlds go up also. }
 -               ID.ObjTyp:=Pln;
 -               FOR i:=1 TO NoOfPlanets DO
@@ -499,32 +518,24 @@
 -                        AND (GetTech(ID)=Pred(Tech)) THEN
 -                        SetTech(ID,Tech);
 -                     END;
--
++      { calculate I(MainInd) }
++      I:=(100-(IndDist[SupInd]+A+(K4*B)))/(1+(Beta[MainInd]*B));
++      IF I>TypeData[Typ,MainInd] THEN
++         I:=TypeData[Typ,MainInd];
+ 
 -               Loc.ID:=LabID;  Loc.XY:=Limbo;
 -               AddNews(Emp,NCapLvl,Loc,Ord(Tech),0,0);
 -               END;  { if }
 -            END;  { if }
 -         END;  { if }
 -      END;  { NewTechLevel }
--
++      IndDist[MainInd]:=I;
+ 
 -   { UpdateEmpire: MAIN PROCEDURE }
 -   BEGIN
 -   SetTotalRevIndex(Emp,NewTotalRevIndex[Emp]);
 -   NewTechLevel(Emp)
 -   END;  { UpdateEmpire }
-+      { calculate temporaries }
-+      A:=-K4*(1/Beta[CheInd]+1/Beta[MinInd]+1/Beta[TriInd]);
-+      B:=(Sqrt(SafetyAdj*ISSP[GetISSP(Obj,CheInd)]*Gamma[CheInd,MainInd])/Beta[CheInd] +
-+          Sqrt(SafetyAdj*ISSP[GetISSP(Obj,MinInd)]*Gamma[MinInd,MainInd])/Beta[MinInd] +
-+          Sqrt(SafetyAdj*ISSP[GetISSP(Obj,TriInd)]*Gamma[TriInd,MainInd])/Beta[TriInd] );
-+
-+      { calculate I(MainInd) }
-+      I:=(100-(IndDist[SupInd]+A+(K4*B)))/(1+(Beta[MainInd]*B));
-+      IF I>TypeData[Typ,MainInd] THEN
-+         I:=TypeData[Typ,MainInd];
-+
-+      IndDist[MainInd]:=I;
-+
 +      { calculate RI industries }
 +      I:=( (IndDist[MainInd]*Beta[MainInd]+K4) *
 +           Sqrt(SafetyAdj*ISSP[GetISSP(Obj,CheInd)]*Gamma[CheInd,MainInd]) - K4 )/Beta[CheInd];
@@ -548,7 +559,7 @@
  
  PROCEDURE GetTotalCargo(WorldID: IDNumber; VAR Cargo: TotalCargoArray);
     VAR
-@@ -1430,61 +1187,10 @@
+@@ -1430,61 +1202,10 @@ PROCEDURE UpdateWorld(World: IDNumber);
           END;  { with scope }
     END;  { UpdateWorld }
  

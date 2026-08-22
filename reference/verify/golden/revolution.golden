@@ -1,4 +1,4 @@
-case=SanityAnchor;rebelled=TRUE;legions=3144;ninja=0;population=2339;efficiency=75;revindex=50;total_rev_delta=5
-case=TinyPopulation;rebelled=TRUE;legions=225;ninja=0;population=12;efficiency=95;revindex=50;total_rev_delta=5
-case=MilitarySuppression;rebelled=FALSE;legions=3001;ninja=0;population=9999;efficiency=75;revindex=74;total_rev_delta=-1
-case=LowRevIndexNoRebellion;rebelled=FALSE;legions=0;ninja=0;population=52;efficiency=100;revindex=45;total_rev_delta=0
+case=SanityAnchor;rebelled=TRUE;legions=3144;ninja=0;population=2339;efficiency=75;revindex=51;total_rev_delta=5
+case=TinyPopulation;rebelled=TRUE;legions=225;ninja=0;population=12;efficiency=95;revindex=51;total_rev_delta=5
+case=MilitarySuppression;rebelled=FALSE;legions=3001;ninja=0;population=9999;efficiency=75;revindex=75;total_rev_delta=-1
+case=LowRevIndexNoRebellion;rebelled=FALSE;legions=0;ninja=0;population=52;efficiency=100;revindex=46;total_rev_delta=0

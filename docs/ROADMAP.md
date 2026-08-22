@@ -48,7 +48,15 @@ follow once that's working.
    (hardcoded — no sqrt/pow cascade or other formula that's error-prone to hand-verify);
    `AnnualTickHandlerRevolutionTests` covers revolution/rebellion, golden-file-backed (see below),
    including the previously-untested military-suppression path (`Military>OptimumMilitary`,
-   UPDATE.PAS:715-735).
+   UPDATE.PAS:715-735). Migrating `revolution.golden` to the patch-based lane (2026-08-22, see below)
+   surfaced a real gap here, dormant since this commit shipped: `UpdateIndustry`/`Production`'s
+   raw-material-shortfall checks call Pascal's `ReportPlanetLack` (UPDATE.PAS:39-56), which bumps
+   `RevolutionIndex` by 1 the first time a given resource type is reported short in a tick (a real
+   state mutation, not just a skipped `AddNews` call) — never implemented in the port. Fixed via
+   `ReportResourceShortfall` (`AnnualTickHandler.Production.cs`), a per-tick `HashSet<CargoType>`
+   mirroring Pascal's `OtherReports`, threaded through `UpdateIndustry` (fires for both planets and
+   starbases) and `ApplyRawMaterialConstraint`/`Production` (planets only, per `IEconomicWorld.IsPlanet`
+   — UPDATE.PAS:904's guard on that specific call site).
 2. ✅ **Industry and production** (planets only) — `ProduceRawMaterial`, `GetIndustrialDistribution`,
    `UpdateIndustry`, `Production` (UPDATE.PAS:1375-1379; production formula at 844-925), inserted
    before `UpdateEfficiency` in `UpdateWorld` (Pascal runs the whole production pipeline first).
@@ -284,4 +292,22 @@ than one world in the `Universe^`, resolved via `Galaxy.InitializeSector` + a di
 harness's own `revindex` output field became unused once the real pipeline's actual `UpdateRevolution`
 run, not a hand-fed starting value, determines it — not that `MatchesGoldenFile` ever asserted on it).
 All 6 `AmbrosiaCases` reproduced byte-identical to the prior transcription-based `ambrosia.golden`
-(save the dropped `revindex` field). Revolution/Production are next.
+(save the dropped `revindex` field).
+
+**Fifth domain: `revolution.golden`.** Same `HarnessPop`-elimination pattern again, retiring
+`reference/verify/revolution.pas`'s isolated `UpdateRevolutionScenario`/`RebellionScenario` pair (which
+chained `common.pas`'s `UpdateMilitaryScenario` first to match `UpdateMilitary`'s real call order —
+now dead code, deleted alongside its now-unused `OptMilitary` table) in favor of the real `UpdateWorld`.
+This is the domain that actually caught a real gap (see Commit 1's own bullet above for the
+`ReportPlanetLack`/`RevolutionIndex` fix) — the isolated harness shared the same blind spot the C# port
+did, since neither modeled `UpdateIndustry`/`Production`'s raw-material-shortfall reporting. Needed a
+new `UPDATE.PAS` patch hunk, `GetNewTotalRevIndex(Emp)`: `NewTotalRevIndex` (the accumulator `Rebellion`
+writes to) is declared in `UPDATE.PAS`'s own `IMPLEMENTATION` section and normally committed by
+`UpdateEmpire` (a later commit, unreachable from `UpdateWorld`), so calling `UpdateWorld` alone leaves
+it unreadable from outside the unit without an explicit getter — a read-only observability hook, same
+category as `ForcedRandomValue`. That accumulator is also never reset between cases in the same batched
+CLI invocation (only Pascal's own `UpdateUniverse`, never called here, zeroes it) — `RunRevolutionCase`
+reads it before and after `UpdateWorld` and reports the difference, sidestepping the need for a reset
+hook entirely. All 4 `RevolutionCases` reproduced byte-identical to the prior transcription-based
+`revolution.golden` except `revindex` (+1 in every case, the just-fixed bug) — `total_rev_delta` matched
+immediately once the before/after delta replaced a naive absolute read. Production is next.

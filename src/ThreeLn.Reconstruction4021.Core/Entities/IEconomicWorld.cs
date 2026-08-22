@@ -46,4 +46,10 @@ public interface IEconomicWorld
     /// independent: resets a planet's dials to DefaultISSP (index 5); a no-op for a starbase, which
     /// InitializeISSP's own Base-less CASE statement never touches.</summary>
     void InitializeSelfSufficiency();
+
+    /// <summary>WorldID.ObjTyp=Pln, read at the one call site that actually branches on it:
+    /// ReportPlanetLack's ship/cargo-shortfall call from Production (UPDATE.PAS:904, "IF
+    /// ID.ObjTyp&lt;&gt;Base THEN") only bumps RevolutionIndex for a planet. UpdateIndustry's own
+    /// ReportPlanetLack call (UPDATE.PAS:971) has no such guard — it fires for both.</summary>
+    bool IsPlanet { get; }
 }

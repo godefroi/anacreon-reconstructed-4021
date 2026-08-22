@@ -32,8 +32,14 @@ public class GoldenFileTests
             c => $"{(c.StartAddicted ? 1 : 0)},{c.StartAmbrosia},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "ambrosia", .. args.Skip(1)]));
 
+        // Patch-based, not transcribed: runs the real UpdateWorld on the case's raw pre-tick
+        // Population through runworld.pas's revolution domain. See RevolutionCases's doc comment for
+        // why this drops the old HarnessPop field and what real-pipeline gap it caught along the way.
+        // RngFixedValue is always 0 (matching AnnualTickHandlerRevolutionTests.MatchesGoldenFile's own
+        // hardcoded FixedRandom(0) — RevolutionCase has no per-case field for it).
         GoldenFile.Regenerate("revolution", RevolutionCases.All,
-            c => $"{c.HarnessPop},{c.Efficiency},{c.RevIndex},0,0,{c.Legions},{c.Ninja},{(int)c.Type}");
+            c => $"{c.PlanetPop},{(int)c.Class},{(int)c.Tech},{c.Efficiency},{c.RevIndex},{c.Legions},0",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "revolution", .. args.Skip(1)]));
 
         // Patch-based, not transcribed: runs the real UpdateWorld on the case's raw pre-tick
         // Population (not a hand-derived post-UpdatePopulation value) through runworld.pas's

@@ -48,4 +48,6 @@ public sealed class Starbase : IMovable, IEconomicWorld
 
     /// <summary>InitializeISSP's CASE statement has no Base branch (PRIMINTR.PAS:627-633) — a no-op for a starbase.</summary>
     void IEconomicWorld.InitializeSelfSufficiency() { }
+
+    bool IEconomicWorld.IsPlanet => false;
 }

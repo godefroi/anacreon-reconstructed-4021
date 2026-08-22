@@ -53,4 +53,6 @@ public sealed class Planet : IEconomicWorld
         SelfSufficiency.Supply = 5;
         SelfSufficiency.Trillum = 5;
     }
+
+    bool IEconomicWorld.IsPlanet => true;
 }

@@ -10,11 +10,11 @@ procedure into a fresh file, this maintains small patches against the real
 copy at build time, and calls the real, only-minimally-touched Pascal code
 directly against a hand-assembled `Universe^`.
 
-**Status: in production for four domains (`techlevel.golden`, `military.golden`,
-`starbase.golden`, `ambrosia.golden` — see `docs/ROADMAP.md`'s "Ground-truth
-harness generation" section), alongside `reference/verify/*.pas`'s per-procedure
-transcription for everything else — not a wholesale replacement.** See
-"Recommendation" below.
+**Status: in production for five domains (`techlevel.golden`, `military.golden`,
+`starbase.golden`, `ambrosia.golden`, `revolution.golden` — see `docs/ROADMAP.md`'s
+"Ground-truth harness generation" section), alongside `reference/verify/*.pas`'s
+per-procedure transcription for everything else — not a wholesale replacement.**
+See "Recommendation" below.
 
 ## Layout
 
@@ -24,8 +24,8 @@ transcription for everything else — not a wholesale replacement.** See
 - `runworld.pas` — a driver program (not a patch target, a genuinely new
   file): assembles a minimal `Universe^` and calls the real `UpdateWorld`.
   Machine-parseable CLI: `case <domain> <case1> <case2> ...`, where `<domain>`
-  selects the case shape/output line (`techlevel`, `military`, `starbase`, or
-  `ambrosia` so far — see the file's own header comment). One driver, not one per domain, so
+  selects the case shape/output line (`techlevel`, `military`, `starbase`,
+  `ambrosia`, or `revolution` so far — see the file's own header comment). One driver, not one per domain, so
   `PatchHarness.CompileAndRun` only has to copy/patch/compile the whole
   patched tree once per `dotnet test` run regardless of how many domains use it.
 - `build.ps1` — deletes and regenerates `pascal/` from pristine source +
@@ -173,6 +173,28 @@ place, and the real pipeline's own `UpdateRevolution` run determines the
 starting value now, not a hand-fed one). All 6 `AmbrosiaCases` reproduced
 byte-identical to the prior transcription-based `ambrosia.golden`, aside from
 that dropped field.
+
+Fifth domain, `revolution`: same pattern again, retiring `revolution.pas`'s
+isolated `UpdateRevolutionScenario`/`RebellionScenario` pair (which chained
+`common.pas`'s `UpdateMilitaryScenario` to match `UpdateMilitary`'s real call
+order — now dead, deleted along with its `OptMilitary` table). This is the
+domain that actually earned its keep: it caught a real gap shared by both the
+isolated harness and the C# port (neither modeled `UpdateIndustry`/
+`Production`'s `ReportPlanetLack` calls, a real +1 `RevolutionIndex` bump —
+see `docs/ROADMAP.md`'s Commit 1 bullet for the fix). Needed a second
+test-only observability hook alongside `ForcedRandomValue`:
+`GetNewTotalRevIndex(Emp)`, exposing `NewTotalRevIndex` (an `Empire`-indexed
+accumulator `Rebellion` writes to, declared in `UPDATE.PAS`'s own
+`IMPLEMENTATION` section and normally committed by `UpdateEmpire`, a later
+commit unreachable from `UpdateWorld`) — read-only, no behavior change. That
+accumulator is also never reset between cases in the same batched CLI
+invocation (only the never-called `UpdateUniverse` zeroes it), so
+`RunRevolutionCase` reads it before and after `UpdateWorld` and reports the
+difference rather than the raw value — a naive absolute read looked like a
+second bug (values compounding across cases) until this fixed it. All 4
+`RevolutionCases` reproduced byte-identical to the prior transcription-based
+`revolution.golden` except `revindex` (+1 in every case, the real fix, not a
+regression).
 
 ## Recommendation
 
