@@ -10,8 +10,8 @@ procedure into a fresh file, this maintains small patches against the real
 copy at build time, and calls the real, only-minimally-touched Pascal code
 directly against a hand-assembled `Universe^`.
 
-**Status: in production for one domain (`techlevel.golden`, see
-`docs/ROADMAP.md`'s "Ground-truth harness generation" section), alongside
+**Status: in production for two domains (`techlevel.golden`, `military.golden`
+— see `docs/ROADMAP.md`'s "Ground-truth harness generation" section), alongside
 `reference/verify/*.pas`'s per-procedure transcription for everything else —
 not a wholesale replacement.** See "Recommendation" below.
 
@@ -21,10 +21,12 @@ not a wholesale replacement.** See "Recommendation" below.
   `reference/DOSAnacreonSource131/`. This is the maintained artifact.
   `reference/DOSAnacreonSource131/` itself is never edited.
 - `runworld.pas` — a driver program (not a patch target, a genuinely new
-  file): assembles a minimal 2-planet `Universe^` and calls the real
-  `UpdateWorld`. Machine-parseable CLI, one case per argument (see the
-  file's own header comment) — currently `TechLevelCases`' 4-field shape,
-  since techlevel is this driver's first real use.
+  file): assembles a minimal `Universe^` and calls the real `UpdateWorld`.
+  Machine-parseable CLI: `case <domain> <case1> <case2> ...`, where `<domain>`
+  selects the case shape/output line (`techlevel` or `military` so far — see
+  the file's own header comment). One driver, not one per domain, so
+  `PatchHarness.CompileAndRun` only has to copy/patch/compile the whole
+  patched tree once per `dotnet test` run regardless of how many domains use it.
 - `build.ps1` — deletes and regenerates `pascal/` from pristine source +
   patches, then compiles `runworld.pas`. Run it, then run
   `.\pascal\runworld.exe case ...` for manual iteration. The C# test suite
@@ -135,7 +137,17 @@ already-committed, transcription-based `techlevel.golden` — confirming the
 extra fidelity (real `GetCapital`/`GetTech`, real `Emp=Indep` check) didn't
 silently change any of the previously-verified outcomes, before wiring it in
 as `techlevel.golden`'s new source of truth via `PatchHarness.cs` and
-`GoldenFileTests.RegenerateTechLevelGoldenFile`.
+`GoldenFileTests.RegenerateAllGoldenFiles`.
+
+Second domain, `military`: added a domain selector to the same `runworld.pas`
+rather than a second driver (see "Layout" above), retiring
+`reference/verify/military.pas`'s isolated `UpdateMilitaryScenario` call in
+favor of running the real `UpdateWorld` end to end. This also removed
+`MilitaryCase`'s old `HarnessPop` field — the isolated harness needed a
+hand-derived post-`UpdatePopulation` value fed in separately from the C#
+side's pre-tick `PlanetPop` (and per-case reasoning about whether
+`UpdateRevolution` could still touch `Cargo.Legions` afterward); running the
+real pipeline computes both for free.
 
 ## Recommendation
 

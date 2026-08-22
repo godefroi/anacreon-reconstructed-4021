@@ -258,9 +258,11 @@ function TotalProd(Pop: LongInt; Tech: TechLevel): LongInt;
    TotalProd:=PascalRound(temp1);
    end;
 
-{ UPDATE.PAS:606-617, verbatim. Shared by military.pas (standalone) and revolution.pas (which chains
-  it before UpdateRevolutionScenario, matching UpdateWorld's real call order at UPDATE.PAS:1386-1388:
-  UpdateMilitary always runs immediately before UpdateRevolution). }
+{ UPDATE.PAS:606-617, verbatim. Used by revolution.pas, which chains it before
+  UpdateRevolutionScenario, matching UpdateWorld's real call order at UPDATE.PAS:1386-1388:
+  UpdateMilitary always runs immediately before UpdateRevolution. (military.pas itself was retired in
+  favor of the patch-based runworld.pas driver's military domain, which runs the real UpdateWorld
+  instead of this isolated transcription — see MilitaryCases's doc comment.) }
 procedure UpdateMilitaryScenario(Pop: LongInt; Typ: WorldTypes; var MPop: LongInt);
    var
       OptimumMilitary: LongInt;

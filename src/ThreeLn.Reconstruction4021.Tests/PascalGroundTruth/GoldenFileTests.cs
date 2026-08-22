@@ -32,8 +32,14 @@ public class GoldenFileTests
         GoldenFile.Regenerate("revolution", RevolutionCases.All,
             c => $"{c.HarnessPop},{c.Efficiency},{c.RevIndex},0,0,{c.Legions},{c.Ninja},{(int)c.Type}");
 
+        // Patch-based, not transcribed: runs the real UpdateWorld on the case's raw pre-tick
+        // Population (not a hand-derived post-UpdatePopulation value) through runworld.pas's
+        // military domain, sharing that driver with techlevel via a domain selector rather than
+        // recompiling the whole patched tree a second time. See MilitaryCases's doc comment for
+        // why this drops the old HarnessPop field entirely.
         GoldenFile.Regenerate("military", MilitaryCases.All,
-            c => $"{c.HarnessPop},{c.Legions},{(int)c.Type},{c.RngFixedValue}");
+            c => $"{c.PlanetPop},{(int)c.Tech},{c.Legions},{(int)c.Type},{c.RngFixedValue}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "military", .. args.Skip(1)]));
 
         // Patch-based, not transcribed: runs the real, only-minimally-touched UpdateWorld against a
         // hand-assembled Universe^ (reference/verify/patch-based/runworld.pas) instead of an isolated
@@ -42,7 +48,7 @@ public class GoldenFileTests
         // standing in for them. See reference/verify/patch-based/README.md.
         GoldenFile.Regenerate("techlevel", TechLevelCases.All,
             c => $"{(int)c.Tech},{(c.IsIndependent ? 1 : 0)},{(int)c.CapitalTech},{c.RngFixedValue}",
-            args => PatchHarness.CompileAndRun("runworld", args));
+            args => PatchHarness.CompileAndRun("runworld", ["case", "techlevel", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("production", ProductionCases.All,
             c => $"{(int)c.Class},{(int)c.Type},{c.Population},{c.Efficiency},{(int)c.Tech},{(c.AmbAddict ? 1 : 0)}," +

@@ -499,11 +499,10 @@ public class AnnualTickHandlerAmbrosiaTests
 /// <summary>
 /// Verifies Commit 2c of the economy phase: UpdateMilitary (UPDATE.PAS:606-617), the growth of a
 /// world's military (Cargo.Legions) toward the population/type-derived optimum. MatchesGoldenFile
-/// checks the real Pascal arithmetic against reference/verify/golden/military.golden, computed by a
-/// real FreePascal run of reference/verify/military.pas (GoldenFileTests), not hand-typed.
-/// military.pas's UpdateMilitaryScenario starts exactly where UpdateMilitary itself starts — it does
-/// NOT run UpdatePopulation first, unlike RunAnnualTick — so MilitaryCases tracks two population
-/// values per case; see its doc comment.
+/// checks the real Pascal arithmetic against reference/verify/golden/military.golden, computed
+/// patch-based (GoldenFileTests): the real, only-minimally-touched UpdateWorld run against a
+/// hand-assembled Universe^ (reference/verify/patch-based/runworld.pas's military domain), not a
+/// per-procedure transcription — see MilitaryCases's doc comment for what that replaced.
 /// </summary>
 public class AnnualTickHandlerMilitaryTests
 {

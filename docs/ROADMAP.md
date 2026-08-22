@@ -239,4 +239,15 @@ the prior transcription-based `techlevel.golden` — meaning the extra fidelity 
 real `Emp=Indep` check, running inside the real full `UpdateWorld` rather than an isolated procedure) cost
 nothing in this case, but is now backing every future change to this logic. `reference/verify/techlevel.pas`
 and common.pas's now-unused `TechLvlInc` were deleted rather than kept alongside as a second, unmaintained
-implementation of the same check. Ambrosia/Revolution/Military/Production are next.
+implementation of the same check.
+
+**Second domain: `military.golden`.** `runworld.pas` grew a domain selector (`case <domain> ...`) rather
+than becoming a second driver, so `PatchHarness.CompileAndRun` still only copies/patches/compiles the
+patched tree once per test run regardless of domain count. Retired `reference/verify/military.pas`'s
+isolated `UpdateMilitaryScenario` call (kept in `common.pas` — still used by `revolution.pas`, which
+chains it ahead of its own scenario) in favor of running the real `UpdateWorld`, which also let
+`MilitaryCase` drop its `HarnessPop` field: the isolated harness needed a hand-derived
+post-`UpdatePopulation` value fed in separately from the C# side's pre-tick `PlanetPop`, plus per-case
+reasoning about whether `UpdateRevolution` could still touch `Cargo.Legions` afterward; the real pipeline
+computes both for free. All 6 `MilitaryCases` reproduced byte-identical to the prior
+transcription-based `military.golden`. Ambrosia/Revolution/Production are next.
