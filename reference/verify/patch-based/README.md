@@ -10,10 +10,10 @@ procedure into a fresh file, this maintains small patches against the real
 copy at build time, and calls the real, only-minimally-touched Pascal code
 directly against a hand-assembled `Universe^`.
 
-**Status: in production for two domains (`techlevel.golden`, `military.golden`
-— see `docs/ROADMAP.md`'s "Ground-truth harness generation" section), alongside
-`reference/verify/*.pas`'s per-procedure transcription for everything else —
-not a wholesale replacement.** See "Recommendation" below.
+**Status: in production for three domains (`techlevel.golden`, `military.golden`,
+`starbase.golden` — see `docs/ROADMAP.md`'s "Ground-truth harness generation"
+section), alongside `reference/verify/*.pas`'s per-procedure transcription for
+everything else — not a wholesale replacement.** See "Recommendation" below.
 
 ## Layout
 
@@ -23,8 +23,8 @@ not a wholesale replacement.** See "Recommendation" below.
 - `runworld.pas` — a driver program (not a patch target, a genuinely new
   file): assembles a minimal `Universe^` and calls the real `UpdateWorld`.
   Machine-parseable CLI: `case <domain> <case1> <case2> ...`, where `<domain>`
-  selects the case shape/output line (`techlevel` or `military` so far — see
-  the file's own header comment). One driver, not one per domain, so
+  selects the case shape/output line (`techlevel`, `military`, or `starbase`
+  so far — see the file's own header comment). One driver, not one per domain, so
   `PatchHarness.CompileAndRun` only has to copy/patch/compile the whole
   patched tree once per `dotnet test` run regardless of how many domains use it.
 - `build.ps1` — deletes and regenerates `pascal/` from pristine source +
@@ -148,6 +148,20 @@ hand-derived post-`UpdatePopulation` value fed in separately from the C#
 side's pre-tick `PlanetPop` (and per-case reasoning about whether
 `UpdateRevolution` could still touch `Cargo.Legions` afterward); running the
 real pipeline computes both for free.
+
+Third domain, `starbase`: the first domain needing more than one world in the
+`Universe^`. `SupplyLink`/`SurplusLink` resolve neighbors via `GetObject`
+(`Sector[x]^[y].Obj`), which techlevel/military's scenarios never touched —
+`Galaxy.InitializeSector` (already exported from the already-`USES`d `Galaxy`
+unit) plus a direct `Sector[x]^[y].Obj` write for the neighbor planet was
+enough, no new patches needed. Covers only `SupplyLink`/`SurplusLink`'s own
+arithmetic, not every branch of the starbase economy pipeline — the rest
+(eligibility filtering, `Kind`-gating, Rebellion) is pure C# logic with no
+separate Pascal formula to cross-check, so `AnnualTickHandlerStarbaseTests`
+covers those hardcoded instead (see that class's doc comment). Both cases
+(`SupplyLinkPull`, `SurplusLinkPush`) reproduced byte-identical to this
+session's own hand-derivation of the formula, confirming the C# port against
+the real Pascal source rather than just this session's own reading of it.
 
 ## Recommendation
 

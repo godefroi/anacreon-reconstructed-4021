@@ -1,0 +1,2 @@
+case=SupplyLinkPull;starbaseChe=800;neighborChe=200
+case=SurplusLinkPush;starbaseChe=9999;neighborChe=301

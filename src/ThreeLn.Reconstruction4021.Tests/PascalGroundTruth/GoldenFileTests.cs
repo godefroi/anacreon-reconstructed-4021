@@ -50,6 +50,13 @@ public class GoldenFileTests
             c => $"{(int)c.Tech},{(c.IsIndependent ? 1 : 0)},{(int)c.CapitalTech},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "techlevel", .. args.Skip(1)]));
 
+        // Patch-based, not transcribed: only SupplyLink/SurplusLink's arithmetic (the one part of
+        // Commit 4 with real Pascal-transcription risk) needs this — see StarbaseCases's doc comment
+        // for why the rest of Commit 4 stays covered by hardcoded tests alone.
+        GoldenFile.Regenerate("starbase", StarbaseCases.All,
+            c => $"{c.StarbaseChemicals},{c.NeighborChemicals},{c.RngFixedValue}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "starbase", .. args.Skip(1)]));
+
         GoldenFile.Regenerate("production", ProductionCases.All,
             c => $"{(int)c.Class},{(int)c.Type},{c.Population},{c.Efficiency},{(int)c.Tech},{(c.AmbAddict ? 1 : 0)}," +
                  $"{c.IndusBio},{c.IndusChe},{c.IndusMin},{c.IndusSYG},{c.IndusSYJ},{c.IndusSYS},{c.IndusSYT},{c.IndusSup},{c.IndusTri}," +

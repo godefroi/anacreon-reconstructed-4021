@@ -12,6 +12,7 @@
    Each <caseN> is a comma-separated tuple, shape depends on <domain>:
      techlevel  TechOrd,IsIndependent,CapitalTechOrd,RngFixedValue -> "techlevel=<ordinal>"
      military   PlanetPop,TechOrd,Legions,TypOrd,RngFixedValue     -> "legions=<value>"
+     starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue  -> "starbaseChe=<v>;neighborChe=<v>"
    One output line per case, in order, to stdout -- consumed by PatchHarness
    in the C# test project via GoldenFile.Regenerate's runHarness override.
    With no arguments, runs a single hardcoded techlevel case as a
@@ -177,6 +178,76 @@ procedure RunMilitaryCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunStarbaseCase(const arg: String);
+   { Complex (STyp=cmp) at (5,5), one eligible neighbor planet (AgrTyp, same
+     empire) at (6,6) -- Chebyshev distance 1, matching
+     AnnualTickHandlerStarbaseTests' own MakeComplex/MakeRawMaterialPlanet
+     fixtures exactly, so this cross-checks SupplyLink/SurplusLink's
+     arithmetic against the real Pascal formula instead of just this
+     session's own reading of it. Population=0 on both (as in those C#
+     tests) keeps UpdatePopulation/UseUpFood/UseUpAmbrosia from perturbing
+     Cargo[che] -- see AnnualTickHandlerStarbaseTests' class doc comment for
+     why che specifically is safe to check this way (Cargo.Metals starts at
+     0, so GetIndustrialDistribution/UpdateIndustry's own growth never
+     touches it). Capital points at the neighbor planet itself, purely so
+     GetCapital/GetTech has something valid to read -- UpdateTechLevel's
+     outcome isn't part of what this case checks.
+
+     Requires InitializeSector (Galaxy unit) plus a direct Sector[x]^[y].Obj
+     write for the neighbor -- SupplyLink/SurplusLink resolve neighbors via
+     GetObject, unlike techlevel/military's own scenarios, which never call
+     it. Never route through Intrface's PutObject for this (same reasoning
+     as the GlobalSets note above: stay on the real standalone state this
+     driver already owns, not a heavier unit pulled in for one write). }
+   var
+      parts: array[0..2] of LongInt;
+      ID, PlanetID: IDNumber;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   InitializeSector(20);
+   NoOfPlanets:=1;
+
+   Universe^.Planet[1].XY.x:=6;  Universe^.Planet[1].XY.y:=6;
+   Universe^.Planet[1].Emp:=Empire1;
+   Universe^.Planet[1].Cls:=ClsM;
+   Universe^.Planet[1].Typ:=AgrTyp;
+   Universe^.Planet[1].Pop:=0;
+   Universe^.Planet[1].Cargo[che]:=parts[1];
+
+   PlanetID.ObjTyp:=Pln;  PlanetID.Index:=1;
+   Sector[6]^[6].Obj:=PlanetID;
+
+   Universe^.Starbase[1].XY.x:=5;  Universe^.Starbase[1].XY.y:=5;
+   Universe^.Starbase[1].Emp:=Empire1;
+   Universe^.Starbase[1].STyp:=cmp;
+   Universe^.Starbase[1].Typ:=BseSTyp;
+   Universe^.Starbase[1].Tech:=WrpTchLvl;
+   Universe^.Starbase[1].Eff:=100;
+   Universe^.Starbase[1].Pop:=0;
+   Universe^.Starbase[1].Cargo[che]:=parts[0];
+
+   SetOfActivePlanets:=[1];
+   SetOfPlanetsOf[Empire1]:=[1];
+   SetOfActiveStarbases:=[1];
+   SetOfStarbasesOf[Empire1]:=[1];
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire1].IsAPlayer:=False;
+   Universe^.EmpireData[Empire1].Capital:=PlanetID;
+
+   ForcedRandomValue:=parts[2];
+
+   ID.ObjTyp:=Base;  ID.Index:=1;
+   UpdateWorld(ID);
+
+   WriteLn('starbaseChe=',Universe^.Starbase[1].Cargo[che],
+           ';neighborChe=',Universe^.Planet[1].Cargo[che]);
+
+   Dispose(Universe);
+   end;
+
 procedure RunCaseMode;
    var
       domain: String;
@@ -188,6 +259,8 @@ procedure RunCaseMode;
          RunTechLevelCase(ParamStr(i))
       else if domain='military' then
          RunMilitaryCase(ParamStr(i))
+      else if domain='starbase' then
+         RunStarbaseCase(ParamStr(i))
       else
          begin
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');

@@ -139,11 +139,13 @@ follow once that's working.
    world-type eligibility, the >250/>MaxResources boundaries), `Kind`-gating, and Rebellion turning a
    complex independent while it keeps its `Kind` — all hardcoded/hand-verified, since neither Link
    procedure has a sqrt/pow cascade and `Cargo.Metals` starting at 0 makes `GetIndustrialDistribution`'s
-   own cascade irrelevant to what these tests check. Not golden-file-backed yet: a patch-based
-   `runworld.pas` starbase domain would need `Galaxy.InitializeSector`/direct `Sector[x]^[y].Obj`
-   writes (confirmed cheap — no new patches needed, `InitializeSector` is already exported from the
-   already-`USES`d `Galaxy` unit) to make `GetObject` resolve neighbor planets; spiked but not landed
-   this pass, deferred alongside ambrosia/revolution/production's own patch-based migration.
+   own cascade irrelevant to what these tests check. `SupplyLink`/`SurplusLink`'s own arithmetic — the
+   one part of Commit 4 with real Pascal-transcription risk — is additionally golden-file-backed via
+   `runworld.pas`'s `starbase` domain (`Galaxy.InitializeSector` + a direct `Sector[x]^[y].Obj` write
+   for the neighbor planet, so `GetObject` can resolve it; no new patches needed, `InitializeSector` was
+   already exported from the already-`USES`d `Galaxy` unit): both cases (`SupplyLinkPull`,
+   `SurplusLinkPush`) reproduced byte-identical to this session's own hand-derivation, confirming the
+   C# translation against the real Pascal formula rather than just this session's reading of it.
 5. **Construction and empire-level updates** — `UpdateConstruction` (UPDATE.PAS:103-220, countdown
    and completion) and `UpdateEmpire` (UPDATE.PAS:222+, applies accumulated revolution index). This
    is also the earliest point `NewTechLevel`/`GetChanceForNewTech` (empire-level research: rolls a

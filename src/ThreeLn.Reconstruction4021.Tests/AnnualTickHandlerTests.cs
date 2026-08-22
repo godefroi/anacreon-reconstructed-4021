@@ -633,7 +633,11 @@ public class AnnualTickHandlerTechLevelTests
 /// resource — UpdateIndustry only ever consumes Metals to grow industry from zero, so Chemicals stays
 /// untouched by anything except the two Link procedures themselves when Cargo.Metals starts at 0 (its
 /// default), letting these tests skip GetIndustrialDistribution's sqrt/pow cascade entirely rather
-/// than hand-tracing it.
+/// than hand-tracing it. MatchesGoldenFile covers SupplyLink/SurplusLink's own arithmetic
+/// patch-based (reference/verify/golden/starbase.golden, via runworld.pas's starbase domain) — the one
+/// part of this class with real Pascal-transcription risk; every other test here (eligibility,
+/// distance, Kind-gating, Rebellion) is pure C#-side filtering logic checked directly, no separate
+/// Pascal formula to cross-check.
 /// </summary>
 public class AnnualTickHandlerStarbaseTests
 {
@@ -665,21 +669,25 @@ public class AnnualTickHandlerStarbaseTests
     };
 
     [Test]
-    public async Task SupplyLinkPullsFromAdjacentSameEmpireRawMaterialPlanet()
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [MethodDataSource(typeof(PascalGroundTruth.StarbaseCases), nameof(PascalGroundTruth.StarbaseCases.AsDataSource))]
+    public async Task MatchesGoldenFile(PascalGroundTruth.StarbaseCase c)
     {
+        var golden = PascalGroundTruth.GoldenFile.Load("starbase.golden");
+
         var owner = new Empire { Name = "Test" };
         var starbase = MakeComplex(new Coordinate(5, 5), owner);
-        var neighbor = MakeRawMaterialPlanet(new Coordinate(5, 6), owner, chemicals: 1000);
+        starbase.Cargo.Chemicals = c.StarbaseChemicals;
+        var neighbor = MakeRawMaterialPlanet(new Coordinate(5, 6), owner, chemicals: c.NeighborChemicals);
         var game = BuildGame(starbase, neighbor);
         game.Empires.Add(owner);
-        var handler = new AnnualTickHandler(new FixedRandom(0));
+        var handler = new AnnualTickHandler(new FixedRandom(c.RngFixedValue));
 
         handler.RunAnnualTick(game);
 
-        // Cargo[che]>250 -> transfer = 1000 - Rnd(200,250) = 1000 - 200 = 800 (Rnd(200,250) at
-        // FixedRandom(0) = 200 + 0).
-        await Assert.That(starbase.Cargo.Chemicals).IsEqualTo(800);
-        await Assert.That(neighbor.Cargo.Chemicals).IsEqualTo(200);
+        var expected = golden[c.Name];
+        await Assert.That(starbase.Cargo.Chemicals).IsEqualTo(int.Parse(expected["starbaseChe"]));
+        await Assert.That(neighbor.Cargo.Chemicals).IsEqualTo(int.Parse(expected["neighborChe"]));
     }
 
     [Test]
@@ -736,27 +744,6 @@ public class AnnualTickHandlerStarbaseTests
         await Assert.That(starbase.Cargo.Chemicals).IsEqualTo(0);
         await Assert.That(tooFar.Cargo.Chemicals).IsEqualTo(1000);
         await Assert.That(sameSector.Cargo.Chemicals).IsEqualTo(1000);
-    }
-
-    [Test]
-    public async Task SurplusLinkReturnsOnlyWhatExceedsMaxResources()
-    {
-        var owner = new Empire { Name = "Test" };
-        var starbase = MakeComplex(new Coordinate(5, 5), owner);
-        starbase.Cargo.Chemicals = 10050; // pre-seeded above MaxResources (9999)
-        // At exactly 250, SupplyLink's own ">250" check is false, so it contributes nothing here --
-        // isolates this case to SurplusLink alone.
-        var neighbor = MakeRawMaterialPlanet(new Coordinate(5, 6), owner, chemicals: 250);
-        var game = BuildGame(starbase, neighbor);
-        game.Empires.Add(owner);
-        var handler = new AnnualTickHandler(new FixedRandom(0));
-
-        handler.RunAnnualTick(game);
-
-        // transfer = Min(MaxResources(9999) - neighbor(250), starbase(10050) - MaxResources(9999))
-        //          = Min(9749, 51) = 51.
-        await Assert.That(starbase.Cargo.Chemicals).IsEqualTo(9999);
-        await Assert.That(neighbor.Cargo.Chemicals).IsEqualTo(301);
     }
 
     [Test]
