@@ -3,8 +3,8 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
 /// <summary>
-/// Named inputs shared between the golden-file generator (GoldenFileTests, [Explicit], requires
-/// fpc) and the always-on AnnualTickHandlerRevolutionTests.MatchesGoldenFile. Only inputs
+/// Named inputs shared between the golden-file generator (GoldenFileTests, requires fpc — dynamically
+/// skipped otherwise) and the always-on AnnualTickHandlerRevolutionTests.MatchesGoldenFile. Only inputs
 /// live here — expected outputs live exclusively in reference/verify/golden/revolution.golden,
 /// computed by a real FreePascal run of reference/verify/revolution.pas, never hand-typed.
 ///

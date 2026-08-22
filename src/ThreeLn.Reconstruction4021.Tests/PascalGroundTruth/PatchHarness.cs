@@ -31,7 +31,7 @@ internal static class PatchHarness
 
         var patchesDir = Path.Combine(patchBasedDir, "patches");
         foreach (var patch in Directory.EnumerateFiles(patchesDir, "*.patch").OrderBy(p => p, StringComparer.Ordinal))
-            PascalHarness.RunProcess("git", ["apply", "-p1", patch], outDir);
+            PascalHarness.RunProcess(PascalHarness.GitPath, ["apply", "-p1", patch], outDir);
 
         PascalHarness.RunProcess(PascalHarness.FpcPath, ["-Mtp", driverName + ".pas"], outDir);
 

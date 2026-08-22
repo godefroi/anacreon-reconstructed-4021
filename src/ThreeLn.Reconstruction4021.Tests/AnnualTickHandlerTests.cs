@@ -151,7 +151,8 @@ public class AnnualTickHandlerRevolutionTests
         return game;
     }
 
-    [Test]
+    [Test, PascalGroundTruth.RequiresFpc]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
     [MethodDataSource(typeof(PascalGroundTruth.RevolutionCases), nameof(PascalGroundTruth.RevolutionCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.RevolutionCase c)
     {
@@ -315,7 +316,8 @@ public class AnnualTickHandlerProductionTests
         return planet;
     }
 
-    [Test]
+    [Test, PascalGroundTruth.RequiresFpc]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
     [MethodDataSource(typeof(PascalGroundTruth.ProductionCases), nameof(PascalGroundTruth.ProductionCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.ProductionCase c)
     {
@@ -423,7 +425,8 @@ public class AnnualTickHandlerAmbrosiaTests
         Population = population,
     };
 
-    [Test]
+    [Test, PascalGroundTruth.RequiresFpc]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
     [MethodDataSource(typeof(PascalGroundTruth.AmbrosiaCases), nameof(PascalGroundTruth.AmbrosiaCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.AmbrosiaCase c)
     {
@@ -511,7 +514,8 @@ public class AnnualTickHandlerMilitaryTests
         return game;
     }
 
-    [Test]
+    [Test, PascalGroundTruth.RequiresFpc]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
     [MethodDataSource(typeof(PascalGroundTruth.MilitaryCases), nameof(PascalGroundTruth.MilitaryCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.MilitaryCase c)
     {
@@ -573,7 +577,8 @@ public class AnnualTickHandlerTechLevelTests
         Efficiency = 100,
     };
 
-    [Test]
+    [Test, PascalGroundTruth.RequiresFpc, PascalGroundTruth.RequiresGit]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
     [MethodDataSource(typeof(PascalGroundTruth.TechLevelCases), nameof(PascalGroundTruth.TechLevelCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.TechLevelCase c)
     {

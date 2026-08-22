@@ -9,11 +9,13 @@ internal interface INamedCase
 
 /// <summary>
 /// Reads/writes the golden files committed under reference/verify/golden/ — one "case=Name;key=
-/// value;..." line per named scenario, each value computed once by a real FreePascal run (an
-/// [Explicit]-gated generator test in GoldenFileTests) and read back by an always-on test that
-/// drives the same scenario through the C# port. This is what makes the always-on assertions trace
-/// to the real Pascal source instead of a hand-typed literal that could silently agree with a
-/// shared mistake on both sides.
+/// value;..." line per named scenario. Each committed file is a cache: a GoldenFileTests regenerator
+/// refreshes it from a real FreePascal run once per test run when the required tools are available
+/// (dynamically skipping itself otherwise, see RequiresFpcAttribute/RequiresGitAttribute), and a
+/// separate always-on test reads whatever is on disk — freshly regenerated this run, or the
+/// last-committed snapshot — to drive the same scenario through the C# port. This is what makes those
+/// assertions trace to the real Pascal source instead of a hand-typed literal that could silently
+/// agree with a shared mistake on both sides.
 /// </summary>
 internal static class GoldenFile
 {
@@ -53,7 +55,8 @@ internal static class GoldenFile
         var path = Path.Combine(DirectoryPath, fileName);
         if (!File.Exists(path))
             throw new FileNotFoundException(
-                $"Golden file not found: {path} — run the matching [Explicit] PascalGroundTruth generator test to create it.", path);
+                $"Golden file not found: {path} — commit one from a machine with fpc (and, for a patch-based " +
+                "domain, git) on PATH by running the matching GoldenFileTests regenerator.", path);
 
         var result = new Dictionary<string, IReadOnlyDictionary<string, string>>();
         foreach (var line in File.ReadAllLines(path)) {
@@ -65,11 +68,18 @@ internal static class GoldenFile
         return result;
     }
 
-    /// <summary>Overwrites a golden file with one line per row, each prefixed with its case name.</summary>
+    /// <summary>Overwrites a golden file with one line per row, each prefixed with its case name.
+    /// Writes to a temp file and moves it into place so anything reading the same file concurrently
+    /// sees either the old or the new content, never a torn write — belt-and-suspenders alongside
+    /// [DependsOn] (see GoldenFileTests), which already orders every MatchesGoldenFile test after
+    /// RegenerateAllGoldenFiles.</summary>
     public static void Write(string fileName, IEnumerable<(string Name, string HarnessOutput)> rows)
     {
         Directory.CreateDirectory(DirectoryPath);
         var lines = rows.Select(r => $"case={r.Name};{r.HarnessOutput.Trim()}");
-        File.WriteAllLines(Path.Combine(DirectoryPath, fileName), lines);
+        var path = Path.Combine(DirectoryPath, fileName);
+        var tempPath = path + ".tmp";
+        File.WriteAllLines(tempPath, lines);
+        File.Move(tempPath, path, overwrite: true);
     }
 }

@@ -3,8 +3,8 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
 /// <summary>
-/// Named inputs shared between the golden-file generator (GoldenFileTests, [Explicit], requires fpc
-/// and git) and the always-on AnnualTickHandlerTechLevelTests.MatchesGoldenFile. Only inputs live
+/// Named inputs shared between the golden-file generator (GoldenFileTests, requires fpc and git —
+/// dynamically skipped otherwise) and the always-on AnnualTickHandlerTechLevelTests.MatchesGoldenFile. Only inputs live
 /// here — expected outputs live exclusively in reference/verify/golden/techlevel.golden, computed
 /// patch-based: a real run of the actual, only-minimally-touched UpdateWorld against a hand-assembled
 /// Universe^ (reference/verify/patch-based/runworld.pas), not a per-procedure transcription — never

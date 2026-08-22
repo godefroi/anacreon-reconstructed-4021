@@ -6,23 +6,29 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// Shells out to FreePascal (fpc) to compile and run the harnesses in reference/verify/, computing
 /// ground truth from the real Pascal source instead of via hand-transcribed/pasted expected values.
 /// Some tests in this namespace assert directly against a live harness run; others (see GoldenFile)
-/// use it to regenerate a committed golden file that the always-on suite reads from, so a fast
-/// `dotnet test` run never needs fpc installed. Either way, this class's callers are [Explicit] +
-/// [Category("PascalGroundTruth")]-gated — never invoked by the default `dotnet test` run. Run that
-/// category with:
-///   dotnet test --no-build -- --treenode-filter "/*/*/*/*[Category=PascalGroundTruth]"
+/// use it to regenerate a committed golden file that the always-on suite reads from. GoldenFileTests'
+/// regenerator tests run in the default `dotnet test` suite and dynamically skip themselves (see
+/// RequiresFpcAttribute/RequiresGitAttribute) when fpc — or, for the patch-based lane, git — isn't on
+/// PATH, rather than needing [Explicit] + manual category selection to opt into fresh ground truth.
 /// </summary>
 internal static class PascalHarness
 {
     private static readonly Lazy<string?> RepoRootLazy = new(FindRepoRoot);
-    private static readonly Lazy<string?> FpcPathLazy = new(TryLocateFpc);
+    private static readonly Lazy<string?> FpcPathLazy = new(() => TryLocateOnPath("fpc"));
+    private static readonly Lazy<string?> GitPathLazy = new(() => TryLocateOnPath("git"));
 
     public static bool IsFpcAvailable => FpcPathLazy.Value is not null;
+    public static bool IsGitAvailable => GitPathLazy.Value is not null;
 
     /// <summary>Resolved fpc path, shared with PatchHarness (which compiles a different driver in a
     /// different directory, but needs the same fpc binary).</summary>
     internal static string FpcPath => FpcPathLazy.Value
         ?? throw new InvalidOperationException("fpc not found on PATH — install FreePascal to run PascalGroundTruth tests.");
+
+    /// <summary>Resolved git path, needed only by PatchHarness (to apply patches/*.patch) — exposed
+    /// here since it shares TryLocateOnPath with FpcPath rather than duplicating the PATH search.</summary>
+    internal static string GitPath => GitPathLazy.Value
+        ?? throw new InvalidOperationException("git not found on PATH — required for the patch-based ground-truth lane.");
 
     /// <summary>Repo root (the directory containing reference/verify), for locating harness sources
     /// and the golden files under reference/verify/golden/. Throws if it can't be found — every
@@ -96,7 +102,7 @@ internal static class PascalHarness
         return null;
     }
 
-    private static string? TryLocateFpc()
+    private static string? TryLocateOnPath(string toolName)
     {
         var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
         var pathExt = (Environment.GetEnvironmentVariable("PATHEXT") ?? ".exe").Split(';');
@@ -105,12 +111,12 @@ internal static class PascalHarness
             if (string.IsNullOrWhiteSpace(dir))
                 continue;
 
-            var plain = Path.Combine(dir, "fpc");
+            var plain = Path.Combine(dir, toolName);
             if (File.Exists(plain))
                 return plain;
 
             foreach (var ext in pathExt) {
-                var candidate = Path.Combine(dir, "fpc" + ext);
+                var candidate = Path.Combine(dir, toolName + ext);
                 if (File.Exists(candidate))
                     return candidate;
             }
