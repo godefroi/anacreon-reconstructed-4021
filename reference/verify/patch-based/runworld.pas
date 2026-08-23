@@ -22,6 +22,11 @@
                 -> "bio,che,min,syg,syj,sys,syt,sup,tri,fgt,hkr,jmp,jtn,pen,ssp,trn,cargomen,
                     cargonnj,cargoamb,cargoche,cargomet,cargosup,cargotri,trillumreserve,
                     population,efficiency,techlevel,revindex (all <key>=<value>)"
+     empire     TechOrd,TechnologyBitmask,RngFixedValue,
+                Lab1Present,Lab1TypeOrd,Lab1ClassOrd,Lab1TechOrd,Lab1Eff,
+                Lab2Present,Lab2TypeOrd,Lab2ClassOrd,Lab2TechOrd,Lab2Eff,
+                Lab3Present,Lab3TypeOrd,Lab3TechOrd,Lab3Eff (Lab3 is a starbase, no class)
+                -> "techlevel=<ordinal>;technology=<26-bit mask, bit i = TechnologyTypes(i+1)>"
    One output line per case, in order, to stdout -- consumed by PatchHarness
    in the C# test project via GoldenFile.Regenerate's runHarness override.
    With no arguments, runs a single hardcoded techlevel case as a
@@ -486,6 +491,107 @@ procedure RunProductionCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunEmpireCase(const arg: String);
+   { Calls UpdateEmpire directly, not UpdateWorld -- NewTechLevel is empire-level,
+     not per-world, so there's no need to run a full per-planet tick to exercise it.
+
+     Empire.Technology is encoded as a 26-bit mask, bit i = TechnologyTypes(i+1)
+     (i.e. LAM..dis in enum-declaration order, skipping NoRes) -- ParseFields
+     only handles plain integers, and 26 bits fits a LongInt trivially. Up to
+     two planet labs and one starbase lab, covering every GetChanceForNewTech
+     branch (Capital; University at exactly EmpTech, with/without Ruins class;
+     Ruins-only fallback; the same two branches again for a starbase) without
+     needing Pascal's full 20-lab array -- a *Present flag of 0 leaves that
+     slot out of SetOfPlanetsOf/SetOfStarbasesOf entirely, matching a real
+     empire that simply doesn't have that many owned worlds. }
+   var
+      parts: array[0..16] of LongInt;
+      CapID: IDNumber;
+      techSet: TechnologySet;
+      i: Integer;
+      mask: LongInt;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   NoOfPlanets:=2;
+
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire1].IsAPlayer:=False;
+   Universe^.EmpireData[Empire1].TechnologyLevel:=TechLevel(parts[0]);
+
+   techSet:=[];
+   for i:=0 to 25 do
+      if ((parts[1] shr i) and 1)=1 then
+         techSet:=techSet+[TechnologyTypes(i+1)];
+   Universe^.EmpireData[Empire1].Technology:=techSet;
+
+   ForcedRandomValue:=parts[2];
+
+   SetOfActivePlanets:=[];
+   SetOfPlanetsOf[Empire1]:=[];
+
+   if parts[3]<>0 then
+      begin
+      Universe^.Planet[1].Emp:=Empire1;
+      Universe^.Planet[1].Typ:=WorldTypes(parts[4]);
+      Universe^.Planet[1].Cls:=WorldClass(parts[5]);
+      Universe^.Planet[1].Tech:=TechLevel(parts[6]);
+      Universe^.Planet[1].Eff:=parts[7];
+      SetOfActivePlanets:=SetOfActivePlanets+[1];
+      SetOfPlanetsOf[Empire1]:=SetOfPlanetsOf[Empire1]+[1];
+      if Universe^.Planet[1].Typ=CapTyp then
+         begin
+         CapID.ObjTyp:=Pln;  CapID.Index:=1;
+         Universe^.EmpireData[Empire1].Capital:=CapID;
+         end;
+      end;
+
+   if parts[8]<>0 then
+      begin
+      Universe^.Planet[2].Emp:=Empire1;
+      Universe^.Planet[2].Typ:=WorldTypes(parts[9]);
+      Universe^.Planet[2].Cls:=WorldClass(parts[10]);
+      Universe^.Planet[2].Tech:=TechLevel(parts[11]);
+      Universe^.Planet[2].Eff:=parts[12];
+      SetOfActivePlanets:=SetOfActivePlanets+[2];
+      SetOfPlanetsOf[Empire1]:=SetOfPlanetsOf[Empire1]+[2];
+      if Universe^.Planet[2].Typ=CapTyp then
+         begin
+         CapID.ObjTyp:=Pln;  CapID.Index:=2;
+         Universe^.EmpireData[Empire1].Capital:=CapID;
+         end;
+      end;
+
+   if parts[13]<>0 then
+      begin
+      Universe^.Starbase[1].Emp:=Empire1;
+      Universe^.Starbase[1].Typ:=WorldTypes(parts[14]);
+      Universe^.Starbase[1].Tech:=TechLevel(parts[15]);
+      Universe^.Starbase[1].Eff:=parts[16];
+      SetOfActiveStarbases:=[1];
+      SetOfStarbasesOf[Empire1]:=[1];
+      end
+   else
+      begin
+      SetOfActiveStarbases:=[];
+      SetOfStarbasesOf[Empire1]:=[];
+      end;
+
+   UpdateEmpire(Empire1);
+
+   mask:=0;
+   for i:=0 to 25 do
+      if TechnologyTypes(i+1) in Universe^.EmpireData[Empire1].Technology then
+         mask:=mask or (1 shl i);
+
+   WriteLn('techlevel=',Ord(Universe^.EmpireData[Empire1].TechnologyLevel),
+           ';technology=',mask);
+
+   Dispose(Universe);
+   end;
+
 procedure RunCaseMode;
    var
       domain: String;
@@ -505,6 +611,8 @@ procedure RunCaseMode;
          RunRevolutionCase(ParamStr(i))
       else if domain='production' then
          RunProductionCase(ParamStr(i))
+      else if domain='empire' then
+         RunEmpireCase(ParamStr(i))
       else
          begin
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');

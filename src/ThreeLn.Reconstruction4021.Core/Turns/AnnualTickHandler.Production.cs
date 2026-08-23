@@ -313,6 +313,30 @@ public sealed partial class AnnualTickHandler
         [ShipType.Starship] = TechLevel.Starship,
     }.ToFrozenDictionary();
 
+    /// <summary>
+    /// Minimum tech level at which each defense type appears in TechDev (DATACNST.PAS:359-370). See
+    /// <see cref="_minTechForCargo"/>. Used by NewTechLevel (AnnualTickHandler.Empire.cs), not by
+    /// production — no defense-tech gate exists in the production pipeline itself.
+    /// </summary>
+    private static readonly FrozenDictionary<DefenseType, TechLevel> _minTechForDefense = new Dictionary<DefenseType, TechLevel> {
+        [DefenseType.Gdm] = TechLevel.Atomic,
+        [DefenseType.IonCannon] = TechLevel.Jump,
+        [DefenseType.DefenseSatellite] = TechLevel.Bio,
+        [DefenseType.Lam] = TechLevel.Starship,
+    }.ToFrozenDictionary();
+
+    /// <summary>Minimum tech level at which each construction type appears in TechDev (DATACNST.PAS:359-370). See <see cref="_minTechForCargo"/>. Used by NewTechLevel (AnnualTickHandler.Empire.cs).</summary>
+    private static readonly FrozenDictionary<ConstructionType, TechLevel> _minTechForConstruction = new Dictionary<ConstructionType, TechLevel> {
+        [ConstructionType.Outpost] = TechLevel.Bio,
+        [ConstructionType.Minefield] = TechLevel.Starship,
+        [ConstructionType.CommandBase] = TechLevel.Starship,
+        [ConstructionType.IndustrialComplex] = TechLevel.Starship,
+        [ConstructionType.Fortress] = TechLevel.PreGate,
+        [ConstructionType.WarpLink] = TechLevel.PreGate,
+        [ConstructionType.Disrupter] = TechLevel.PreGate,
+        [ConstructionType.Gate] = TechLevel.Gate,
+    }.ToFrozenDictionary();
+
     /// <summary>ISSP: how far over/under self-sufficient an industry's dial is set (DATACNST.PAS:524-525).</summary>
     private static readonly double[] _issp = [0.01, 0.10, 0.25, 0.50, 0.75, 1.00, 1.50, 2.00, 3.00, 4.00, 5.00];
 

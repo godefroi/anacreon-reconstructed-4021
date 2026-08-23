@@ -15,11 +15,13 @@ namespace ThreeLn.Reconstruction4021.Core.Turns;
 /// ships/cargo) and SupplyLink/SurplusLink.</item>
 /// <item>AnnualTickHandler.Population.cs — efficiency, tech level, population, food, ambrosia.</item>
 /// <item>AnnualTickHandler.Revolution.cs — military buildup, revolution/rebellion, hostile life.</item>
+/// <item>AnnualTickHandler.Empire.cs — empire-level tech research (NewTechLevel/GetChanceForNewTech).</item>
 /// </list>
-/// Covers planets (Commits 1-3: population/efficiency/revolution, production, tech level) and
+/// Covers planets (Commits 1-3: population/efficiency/revolution, production, tech level),
 /// industrial-complex starbases (Commit 4: SupplyLink/SurplusLink, the rest of the pipeline gated on
-/// Kind==IndustrialComplex). Construction and empire-level updates are a later commit (see
-/// docs/ROADMAP.md and the insertion-point maps on <see cref="UpdateWorld"/>/<see cref="UpdateStarbase"/>).
+/// Kind==IndustrialComplex), and per-empire tech research (Commit 5a). Construction
+/// (Commit 5b, UPDATE.PAS's UpdateConstruction) is a later commit (see docs/ROADMAP.md and the
+/// insertion-point maps on <see cref="UpdateWorld"/>/<see cref="UpdateStarbase"/>).
 /// </summary>
 public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandler
 {
@@ -51,6 +53,7 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
 
         foreach (var empire in game.Empires) {
             empire.TotalRevolutionIndex = newTotalRevIndex.GetValueOrDefault(empire, 0);
+            NewTechLevel(empire, game);
         }
     }
 

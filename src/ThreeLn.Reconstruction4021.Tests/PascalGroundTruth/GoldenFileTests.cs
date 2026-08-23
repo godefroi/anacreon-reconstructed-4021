@@ -76,5 +76,16 @@ public class GoldenFileTests
                  $"{c.IndusBio},{c.IndusChe},{c.IndusMin},{c.IndusSYG},{c.IndusSYJ},{c.IndusSYS},{c.IndusSYT},{c.IndusSup},{c.IndusTri}," +
                  $"{c.CargoMen},{c.CargoNnj},{c.CargoAmb},{c.CargoChe},{c.CargoMet},{c.CargoSup},{c.CargoTri},{c.TrillumReserve}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "production", .. args.Skip(1)]));
+
+        // Patch-based, not transcribed: runworld.pas's empire domain calls UpdateEmpire directly
+        // (restored in UPDATE.PAS.patch — Commit 5a) against a hand-assembled Universe^, exercising
+        // the real GetChanceForNewTech lab cascade and GetNewTech's TechDev-membership pick instead of
+        // parameterizing them away. See EmpireCases's doc comment for the 26-bit Technology encoding.
+        GoldenFile.Regenerate("empire", EmpireCases.All,
+            c => $"{(int)c.TechLevel},{c.TechnologyBitmask},{c.RngFixedValue}," +
+                 $"{(c.Planet1 is not null ? 1 : 0)},{(int)(c.Planet1?.Type ?? 0)},{(int)(c.Planet1?.Class ?? 0)},{(int)(c.Planet1?.Tech ?? 0)},{c.Planet1?.Efficiency ?? 0}," +
+                 $"{(c.Planet2 is not null ? 1 : 0)},{(int)(c.Planet2?.Type ?? 0)},{(int)(c.Planet2?.Class ?? 0)},{(int)(c.Planet2?.Tech ?? 0)},{c.Planet2?.Efficiency ?? 0}," +
+                 $"{(c.Starbase is not null ? 1 : 0)},{(int)(c.Starbase?.Type ?? 0)},{(int)(c.Starbase?.Tech ?? 0)},{c.Starbase?.Efficiency ?? 0}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "empire", .. args.Skip(1)]));
     }
 }

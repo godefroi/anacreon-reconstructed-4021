@@ -10,16 +10,16 @@ procedure into a fresh file, this maintains small patches against the real
 copy at build time, and calls the real, only-minimally-touched Pascal code
 directly against a hand-assembled `Universe^`.
 
-**Status: in production for all six ground-truth domains that exist so far
+**Status: in production for all seven ground-truth domains that exist so far
 (`techlevel.golden`, `military.golden`, `starbase.golden`, `ambrosia.golden`,
-`revolution.golden`, `production.golden` — see `docs/ROADMAP.md`'s "Ground-truth
-harness generation" section). `reference/verify/*.pas`'s per-procedure
-transcription pattern has no domains left on it as of `production.golden`'s
-migration — `production.pas` was the last file using it, and `common.pas`
-(its only remaining shared dependency) was deleted alongside it. The pattern
-itself isn't retired: it's still the right call for a genuinely isolated,
-parameter-only procedure (see "Recommendation" below) — there's just nothing
-currently using it.**
+`revolution.golden`, `production.golden`, `empire.golden` — see
+`docs/ROADMAP.md`'s "Ground-truth harness generation" section). `reference/verify/*.pas`'s
+per-procedure transcription pattern has had no domains on it since
+`production.golden`'s migration — `production.pas` was the last file using
+it, and `common.pas` (its only remaining shared dependency) was deleted
+alongside it. The pattern itself isn't retired: it's still the right call for
+a genuinely isolated, parameter-only procedure (see "Recommendation" below) —
+there's just nothing currently using it.**
 
 ## Layout
 
@@ -30,7 +30,7 @@ currently using it.**
   file): assembles a minimal `Universe^` and calls the real `UpdateWorld`.
   Machine-parseable CLI: `case <domain> <case1> <case2> ...`, where `<domain>`
   selects the case shape/output line (`techlevel`, `military`, `starbase`,
-  `ambrosia`, `revolution`, or `production` so far — see the file's own header comment). One driver, not one per domain, so
+  `ambrosia`, `revolution`, `production`, or `empire` so far — see the file's own header comment). One driver, not one per domain, so
   `PatchHarness.CompileAndRun` only has to copy/patch/compile the whole
   patched tree once per `dotnet test` run regardless of how many domains use it.
 - `build.ps1` — deletes and regenerates `pascal/` from pristine source +
@@ -232,6 +232,36 @@ something the old isolated `FullPipeline` never modeled (it never called
 `Cargo.Supplies`/`Cargo.Ambrosia`/`Cargo.Legions`, for the same reason each of
 those was already excluded — a real UpdateWorld step this tick that the C#
 port doesn't yet run.
+
+Seventh domain, `empire`: the first domain that isn't a `UpdateWorld` sub-branch — `UpdateEmpire`
+(and its nested `NewTechLevel`/`GetChanceForNewTech`/`GetNewTech`) had been deleted from the patched
+`UPDATE.PAS` entirely, back when the patch-based lane first stood up `UpdateWorld` as callable,
+since nothing reachable from `UpdateWorld` needed it. Restoring it required regenerating the whole
+`UPDATE.PAS.patch` (not hand-splicing hunks — safer to diff the pristine source against a fully
+hand-edited target and let `git diff --no-index` produce the new patch, then strip its two
+extended-format header lines per the `git apply` gotcha noted elsewhere in this session's memory)
+rather than adding a new domain to an unchanged patch set, since this domain's target procedure
+wasn't exported yet. `runworld.pas`'s `empire` domain calls the now-exported `UpdateEmpire` directly
+— not `UpdateWorld` — since `NewTechLevel` is empire-level, not per-world, so there's no need to run
+a full per-planet tick to exercise it. `Empire.Technology` is encoded as a 26-bit mask (bit *i* =
+`TechnologyTypes(i+1)`, matching Pascal's own enum-declaration order) since the CLI's field parser
+only handles plain integers.
+
+All 5 `EmpireCases` reproduced exactly what hand-derivation against the real `Trunc`/`Rnd` formulas
+predicted before any code ran — confirmed case by case against a manually-invoked, freshly-compiled
+`runworld.exe` before wiring the C# side, catching one thing along the way: a static-field
+initialization-order bug on the C# side (a lazy-vs-eager field-initializer issue across two partial
+class files), not a Pascal-side finding, but exactly the kind of thing this session's "verify against
+real behavior before trusting a golden value" discipline is meant to catch either direction. Also
+surfaced a genuine harness-design limit: a fractional lab `Efficiency` (needed to tell `Trunc` from
+`Round` in `GetChanceForNewTech`'s formula — every other case uses `Efficiency=100`, where the two
+are indistinguishable) can't be a shared golden-file case, because the C# test can only reach the
+private `NewTechLevel` via the full `RunAnnualTick` — which runs Commit 3's `UpdateEfficiency` on
+every lab planet first, growing a non-100 `Efficiency` by an RNG-dependent amount before
+`NewTechLevel` reads it — while `runworld.pas`'s `empire` domain calls `UpdateEmpire` directly and
+never touches `Efficiency` at all. Landed as a hardcoded C# test instead, with its expected value
+still confirmed against a real Pascal run first (see `AnnualTickHandlerEmpireTests.
+FractionalLabChanceTruncatesNotRounds`), rather than silently trusting the C# formula alone.
 
 ## Recommendation
 

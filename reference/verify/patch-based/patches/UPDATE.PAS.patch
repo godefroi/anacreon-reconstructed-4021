@@ -1,6 +1,6 @@
 --- a/UPDATE.PAS
 +++ b/UPDATE.PAS
-@@ -11,22 +11,33 @@ UNIT Update;
+@@ -11,22 +11,39 @@ UNIT Update;
  
  INTERFACE
  
@@ -29,6 +29,12 @@
 -PROCEDURE UpdateUniverse;
 +PROCEDURE UpdateWorld(World: IDNumber);
 +
++{ PATCH (fpc): UpdateEmpire promoted here from IMPLEMENTATION (Commit 5a) so this
++  harness can call it directly, same as UpdateWorld above -- same procedure,
++  only its visibility changed. ConstructStarbase/ConstructStargate/
++  UpdateConstruction stay deleted (Commit 5b, not yet ported). }
++PROCEDURE UpdateEmpire(Emp: Empire);
++
 +{ PATCH (fpc): test-only observability hook, mirroring the ForcedRandomValue
 +  pattern in INT.PAS -- NewTotalRevIndex is written only by Rebellion and
 +  normally committed to an empire's real TotalRevIndex by UpdateEmpire
@@ -41,7 +47,7 @@
  
  IMPLEMENTATION
  
-@@ -36,7 +47,20 @@ USES
+@@ -36,7 +53,21 @@ USES
  VAR
     NewTotalRevIndex: ARRAY [Empire] of Integer;
  
@@ -51,19 +57,20 @@
 +   GetNewTotalRevIndex:=NewTotalRevIndex[Emp];
 +   END;  { GetNewTotalRevIndex }
 +
-+{ PATCH (fpc): ConstructStarbase/ConstructStargate/UpdateConstruction/
-+  UpdateEmpire (+ its nested NewTechLevel/GetChanceForNewTech/GetNewTech)
-+  deleted -- none of them are reachable from UpdateWorld; they belong to
-+  Commits 4/5 (starbase construction, empire-level tech research), out of
-+  scope here. ReportPlanetLack IS reachable (SupplyLink/
-+  SurplusLink/ProduceRawMaterial all call it) -- kept, restored below after an
-+  earlier pass wrongly deleted it as unreachable. }
++{ PATCH (fpc): ConstructStarbase/ConstructStargate/UpdateConstruction deleted
++  -- none of them are reachable from UpdateWorld; they belong to Commit 5b
++  (starbase/stargate construction), out of scope here. UpdateEmpire (+ nested
++  NewTechLevel/GetChanceForNewTech/GetNewTech) is RESTORED below, unchanged
++  from source, and exported above (Commit 5a) -- this harness calls it
++  directly, the same way it calls UpdateWorld. ReportPlanetLack IS reachable
++  (SupplyLink/SurplusLink/ProduceRawMaterial all call it) -- kept, restored
++  below after an earlier pass wrongly deleted it as unreachable. }
 +
 +PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
                             Headline: NewsTypes; P1,P2,P3: Integer;
                             VAR OtherReports: ResourceSet);
     VAR
-@@ -55,383 +79,131 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
+@@ -55,169 +86,131 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
        END;
     END;  { ReportPlanetLack }
  
@@ -269,7 +276,17 @@
 -            BEGIN
 -            SetOfActiveConstructionSites:=SetOfActiveConstructionSites-[i];
 -            SetOfConstructionSitesOf[Emp]:=SetOfConstructionSitesOf[Emp]-[i];
--
++      I:=100-IndDist[SupInd];
++      IndDist[CheInd]:=I*(TypeData[Typ,CheInd]/100);
++      IndDist[MinInd]:=I*(TypeData[Typ,MinInd]/100);
++      IndDist[TriInd]:=I*(TypeData[Typ,TriInd]/100);
++      END
++   ELSE
++      { ASSERT: at least one value of PI is >0 }
++      BEGIN
++      { get main PI }
++      MainInd:=PrincipalIndustry[Typ];
+ 
 -            Loc.XY:=Limbo;  Loc.ID:=ID;
 -            Location2Index(Emp,Loc,ConNamePtr);
 -            IF ConNamePtr<>Nil THEN
@@ -279,9 +296,18 @@
 -               END
 -            ELSE
 -               ConName:='';
--
++      { calculate temporaries }
++      A:=-K4*(1/Beta[CheInd]+1/Beta[MinInd]+1/Beta[TriInd]);
++      B:=(Sqrt(SafetyAdj*ISSP[GetISSP(Obj,CheInd)]*Gamma[CheInd,MainInd])/Beta[CheInd] +
++          Sqrt(SafetyAdj*ISSP[GetISSP(Obj,MinInd)]*Gamma[MinInd,MainInd])/Beta[MinInd] +
++          Sqrt(SafetyAdj*ISSP[GetISSP(Obj,TriInd)]*Gamma[TriInd,MainInd])/Beta[TriInd] );
+ 
 -            Sector[XY.x]^[XY.y].Obj:=EmptyQuadrant;
--
++      { calculate I(MainInd) }
++      I:=(100-(IndDist[SupInd]+A+(K4*B)))/(1+(Beta[MainInd]*B));
++      IF I>TypeData[Typ,MainInd] THEN
++         I:=TypeData[Typ,MainInd];
+ 
 -            Loc.XY:=Limbo;
 -            CASE CTyp OF
 -               SRM: PutMine(XY,Emp);
@@ -296,246 +322,14 @@
 -                     AddName(Emp,Loc,ConName,Error);
 -                  END;
 -               END;  { case }
--
++      IndDist[MainInd]:=I;
+ 
 -            Loc.ID:=EmptyQuadrant;  Loc.XY:=XY;
 -            AddNews(Emp,ConsDone,Loc,Integer(CTyp),0,0);
 -            END;
 -         END;
 -      END;  { with scope }
 -   END;  { UpdateConstruction }
--
--PROCEDURE UpdateEmpire(Emp: Empire);
--
--   PROCEDURE NewTechLevel(Emp: Empire);
--      VAR
--         Tech: TechLevel;
--         TechSet: TechnologySet;
--         NewTech: TechnologyTypes;
--         Chance: Index;
--         LabID,ID: IDNumber;
--         i: Word;
--         Loc: Location;
--
--      PROCEDURE GetChanceForNewTech(Emp: Empire; EmpTech: TechLevel;
--                                    VAR TotalChance: Index; VAR LabID: IDNumber);
--      { GetChanceForNewTech:
--         This procedure returns the per cent chance that the capital will 
--         gain a new technology (or increase in level) this year.  University, 
--         ruins, etc. are taken into account.  Out of all the places that 
--         research is possible, it chooses a random place to be the lab at 
--         which the technology was discovered. }
--
--         LABEL
--            ExitLoop;
--
--         TYPE
--            LabRecord = RECORD
--               WorldID: IDNumber;
--               Chance: Index;
--            END;  { LabRecord }
--
--         VAR
--            Lab: ARRAY [1..20] OF LabRecord;
--            Roll,i,NoOfLabs: Integer;
--            Typ: WorldTypes;
--            Cls: WorldClass;
--            Tch: TechLevel;
--            Eff: Index;
--            ID: IDNumber;
--
--         BEGIN
--         { get labs }
--         NoOfLabs:=0;
--
--         ID.ObjTyp:=Pln;
--         FOR i:=1 TO NoOfPlanets DO
--            IF i IN SetOfPlanetsOf[Emp] THEN
--               IF NoOfLabs<20 THEN
--                  BEGIN
--                  ID.Index:=i;
--                  Typ:=GetType(ID);
--                  Cls:=GetClass(ID);
--                  Eff:=GetEfficiency(ID);
--                  Tch:=GetTech(ID);
--                  IF Typ=CapTyp THEN
--                     BEGIN
--                     NoOfLabs:=NoOfLabs+1;
--                     Lab[NoOfLabs].WorldID:=ID;
--                     Lab[NoOfLabs].Chance:=Trunc(TechIncCap*Eff/100);
--                     END
--                  ELSE IF (Typ=RsrTyp) AND (Tch=EmpTech) THEN
--                     BEGIN
--                     NoOfLabs:=NoOfLabs+1;
--                     Lab[NoOfLabs].WorldID:=ID;
--                     IF Cls=RnsCls THEN
--                        BEGIN
--                        Lab[NoOfLabs].Chance:=Trunc(TechIncUnvRns*Eff/100);
--                        END
--                     ELSE
--                        BEGIN
--                        Lab[NoOfLabs].Chance:=Trunc(TechIncUnv*Eff/100);
--                        END;
--                     END
--                  ELSE IF (Tch>EmpTech) THEN
--                     BEGIN
--                     Inc(NoOfLabs);
--                     Lab[NoOfLabs].WorldID:=ID;
--                     Lab[NoOfLabs].Chance:=Trunc(TechIncUnv*Eff/100);
--                     END
--                  ELSE IF Cls=RnsCls THEN
--                     BEGIN
--                     NoOfLabs:=NoOfLabs+1;
--                     Lab[NoOfLabs].WorldID:=ID;
--                     Lab[NoOfLabs].Chance:=Trunc(TechIncRns*Eff/100);
--                     END;
--                  END;  { loop and if }
--
--         ID.ObjTyp:=Base;
--         FOR i:=1 TO MaxNoOfStarbases DO
--            IF i IN SetOfStarbasesOf[Emp] THEN
--               IF NoOfLabs<20 THEN
--                  BEGIN
--                  ID.Index:=i;
--                  Typ:=GetType(ID);
--                  Eff:=GetEfficiency(ID);
--                  Tch:=GetTech(ID);
--                  IF Typ=CapTyp THEN
--                     BEGIN
--                     NoOfLabs:=NoOfLabs+1;
--                     Lab[NoOfLabs].WorldID:=ID;
--                     Lab[NoOfLabs].Chance:=Trunc(TechIncCap*Eff/100);
--                     END
--                  ELSE IF (Typ=RsrTyp) AND (Tch=EmpTech) THEN
--                     BEGIN
--                     NoOfLabs:=NoOfLabs+1;
--                     Lab[NoOfLabs].WorldID:=ID;
--                     Lab[NoOfLabs].Chance:=Trunc(TechIncUnv*Eff/100);
--                     END;
--                  END;  { loop and if }
--
--         { get total chance }
--         TotalChance:=0;
--         FOR i:=1 TO NoOfLabs DO
--            WITH Lab[i] DO
--               TotalChance:=TotalChance+Chance;
--
--         { get lab }
--         Roll:=Rnd(1,TotalChance);
--         FOR i:=1 TO NoOfLabs DO
--            WITH Lab[i] DO
--               IF Roll<=Chance THEN
--                  BEGIN
--                  LabID:=WorldID;
--                  GOTO ExitLoop;
--                  END
--               ELSE
--                  BEGIN
--                  Roll:=Roll-Chance;
--                  END;
--
--         { loop should never exit here, but nothing bad happens if it does. }
--         GetCapital(Emp,LabID);
--
--         ExitLoop:
--
--         END;  { GetChanceForNewTech }
--
--      PROCEDURE GetNewTech(TechSet,PossibleTechSet: TechnologySet;
--                           VAR NewTech: TechnologyTypes);
--      { GetNewTech:
--         This procedure returns a technology that is in PossibleTechSet but
--         not in TechSet.  Returns the answer in NewTech. }
--
--         VAR
--            Tech: ARRAY [1..30] OF TechnologyTypes;
--            TechNumber: Integer;
--            TchI: TechnologyTypes;
--
--         BEGIN
--         PossibleTechSet:=PossibleTechSet-TechSet;
--
--         TechNumber:=0;
--         FOR TchI:=LAM TO dis DO
--            IF TchI IN PossibleTechSet THEN
--               BEGIN
--               TechNumber:=TechNumber+1;
--               Tech[TechNumber]:=TchI;
--               END;
--
--         NewTech:=Tech[Rnd(1,TechNumber)];
--         END;  { GetNewTech }
--
--      { NewTechLevel: MAIN PROCEDURE }
-+      I:=100-IndDist[SupInd];
-+      IndDist[CheInd]:=I*(TypeData[Typ,CheInd]/100);
-+      IndDist[MinInd]:=I*(TypeData[Typ,MinInd]/100);
-+      IndDist[TriInd]:=I*(TypeData[Typ,TriInd]/100);
-+      END
-+   ELSE
-+      { ASSERT: at least one value of PI is >0 }
-       BEGIN
--      GetEmpireTechnology(Emp,Tech,TechSet);
--      IF TechSet<>TechDev[GteTchLvl] THEN
--         BEGIN
--         IF TechSet<>TechDev[Tech] THEN
--            { new technology }
--            BEGIN
--            GetChanceForNewTech(Emp,Tech,Chance,LabID);
--            IF Rnd(1,100)<=Chance THEN
--               BEGIN
--               GetNewTech(TechSet,TechDev[Tech],NewTech);
--               TechSet:=TechSet+[NewTech];
--               SetEmpireTechnology(Emp,Tech,TechSet);
-+      { get main PI }
-+      MainInd:=PrincipalIndustry[Typ];
- 
--               Loc.ID:=LabID;  Loc.XY:=Limbo;
--               AddNews(Emp,NCapTech,Loc,Ord(NewTech),0,0);
--               END;  { if }
--            END
--         ELSE
--            { new tech level }
--            BEGIN
--            GetChanceForNewTech(Emp,Tech,Chance,LabID);
--            IF Rnd(1,100)<=Chance THEN
--               BEGIN
--               Tech:=Succ(Tech);
--               SetEmpireTechnology(Emp,Tech,TechSet);
--               SetTech(LabID,Tech);
-+      { calculate temporaries }
-+      A:=-K4*(1/Beta[CheInd]+1/Beta[MinInd]+1/Beta[TriInd]);
-+      B:=(Sqrt(SafetyAdj*ISSP[GetISSP(Obj,CheInd)]*Gamma[CheInd,MainInd])/Beta[CheInd] +
-+          Sqrt(SafetyAdj*ISSP[GetISSP(Obj,MinInd)]*Gamma[MinInd,MainInd])/Beta[MinInd] +
-+          Sqrt(SafetyAdj*ISSP[GetISSP(Obj,TriInd)]*Gamma[TriInd,MainInd])/Beta[TriInd] );
- 
--               { Make all other university worlds go up also. }
--               ID.ObjTyp:=Pln;
--               FOR i:=1 TO NoOfPlanets DO
--                  IF i IN SetOfPlanetsOf[Emp] THEN
--                     BEGIN
--                     ID.Index:=i;
--                     IF (GetType(ID) IN [RsrTyp,CapTyp])
--                        AND (GetTech(ID)=Pred(Tech)) THEN
--                        SetTech(ID,Tech);
--                     END;
-+      { calculate I(MainInd) }
-+      I:=(100-(IndDist[SupInd]+A+(K4*B)))/(1+(Beta[MainInd]*B));
-+      IF I>TypeData[Typ,MainInd] THEN
-+         I:=TypeData[Typ,MainInd];
- 
--               Loc.ID:=LabID;  Loc.XY:=Limbo;
--               AddNews(Emp,NCapLvl,Loc,Ord(Tech),0,0);
--               END;  { if }
--            END;  { if }
--         END;  { if }
--      END;  { NewTechLevel }
-+      IndDist[MainInd]:=I;
- 
--   { UpdateEmpire: MAIN PROCEDURE }
--   BEGIN
--   SetTotalRevIndex(Emp,NewTotalRevIndex[Emp]);
--   NewTechLevel(Emp)
--   END;  { UpdateEmpire }
 +      { calculate RI industries }
 +      I:=( (IndDist[MainInd]*Beta[MainInd]+K4) *
 +           Sqrt(SafetyAdj*ISSP[GetISSP(Obj,CheInd)]*Gamma[CheInd,MainInd]) - K4 )/Beta[CheInd];
@@ -557,9 +351,24 @@
 +      END;
 +   END;  { GetIndustrialDistribution }
  
- PROCEDURE GetTotalCargo(WorldID: IDNumber; VAR Cargo: TotalCargoArray);
-    VAR
-@@ -1430,61 +1202,10 @@ PROCEDURE UpdateWorld(World: IDNumber);
+ PROCEDURE UpdateEmpire(Emp: Empire);
+ 
+@@ -234,10 +227,10 @@ PROCEDURE UpdateEmpire(Emp: Empire);
+       PROCEDURE GetChanceForNewTech(Emp: Empire; EmpTech: TechLevel;
+                                     VAR TotalChance: Index; VAR LabID: IDNumber);
+       { GetChanceForNewTech:
+-         This procedure returns the per cent chance that the capital will 
+-         gain a new technology (or increase in level) this year.  University, 
+-         ruins, etc. are taken into account.  Out of all the places that 
+-         research is possible, it chooses a random place to be the lab at 
++         This procedure returns the per cent chance that the capital will
++         gain a new technology (or increase in level) this year.  University,
++         ruins, etc. are taken into account.  Out of all the places that
++         research is possible, it chooses a random place to be the lab at
+          which the technology was discovered. }
+ 
+          LABEL
+@@ -1430,61 +1423,10 @@ PROCEDURE UpdateWorld(World: IDNumber);
           END;  { with scope }
     END;  { UpdateWorld }
  

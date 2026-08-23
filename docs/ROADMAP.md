@@ -34,6 +34,14 @@ follow once that's working.
   snapshot/accumulate/commit pattern across the whole world loop, not something a live sum could
   reproduce (reading a "current total" partway through would be order-dependent on which worlds had
   already been processed). Implement `TotalRevolutionIndex` as real state updated the same way.
+- **`Empire.Technology` (`UnlockedTechnology`) gains a `Resources` bucket (Commit 5a).** Originally
+  split into `Ships`/`Defenses`/`Constructions` only, on the reasoning that "a cargo type is
+  produced, not unlocked." That was true only because nothing yet grew the set incrementally —
+  `NewTechLevel`'s outer guard is a real equality check against Pascal's `TechSet`, which spans
+  resource types too, so a 4th bucket (`HashSet<CargoType>`) is required for that guard to ever be
+  correct, not a speculative widening. Production's own `ShipTechAvailable`/`CargoTechAvailable`
+  still use the pre-existing TechLevel-derived heuristic, deliberately not rewired to this set yet —
+  see Commit 5a's own notes below for why.
 
 **Commits, in order:**
 
@@ -158,13 +166,49 @@ follow once that's working.
    already exported from the already-`USES`d `Galaxy` unit): both cases (`SupplyLinkPull`,
    `SurplusLinkPush`) reproduced byte-identical to this session's own hand-derivation, confirming the
    C# translation against the real Pascal formula rather than just this session's reading of it.
-5. **Construction and empire-level updates** — `UpdateConstruction` (UPDATE.PAS:103-220, countdown
-   and completion) and `UpdateEmpire` (UPDATE.PAS:222+, applies accumulated revolution index). This
-   is also the earliest point `NewTechLevel`/`GetChanceForNewTech` (empire-level research: rolls a
-   chance each tick to unlock one more `TechnologyTypes` item into `Empire.Technology`, then a
-   separate roll to advance `Empire.TechnologyLevel` once the current level's full `TechDev` set is
-   unlocked — UPDATE.PAS:~320-420) can land; nothing populates `Empire.Technology.Ships` before this,
-   so Commit 2's ship production stays correct-but-inert until it's implemented.
+5. **Construction and empire-level updates** — `UpdateConstruction` and `UpdateEmpire`
+   (UPDATE.PAS:103-434). Split into two sub-commits once investigation showed they bundle very
+   different dependency risk: `UpdateEmpire` is landable with existing infra, same shape as every
+   prior commit; `UpdateConstruction` needs new entity-creation helpers (Starbase/Stargate) that
+   nothing before it required.
+   - ✅ **Commit 5a, empire-level tech research** — `UpdateEmpire`'s other line
+     (`SetTotalRevIndex(Emp,NewTotalRevIndex[Emp])`) was already pulled forward into Commit 1's
+     `RunAnnualTick`; this commit lands `UpdateEmpire`'s only remaining behavior, `NewTechLevel`
+     (nested `GetChanceForNewTech`/`GetNewTech`, UPDATE.PAS:224-428) — a per-empire roll each tick to
+     unlock one more item into `Empire.Technology`, then a separate roll to advance
+     `Empire.TechnologyLevel` once the current level's full `TechDev` set is unlocked.
+     `Empire.Technology` (`UnlockedTechnology`) gained a 4th bucket, `HashSet<CargoType> Resources` —
+     Pascal's `TechSet` spans ships/defenses/constructions *and* resource types in one set, and
+     `NewTechLevel`'s outer guard is a real equality check across all four; without a resource bucket
+     the guard could never detect "still missing a resource-type unlock," a genuine correctness gap,
+     not a speculative widening. `TechDev[Tech]` per category is reconstructed from two new min-tech-
+     level tables (`_minTechForDefense`/`_minTechForConstruction`, `AnnualTickHandler.Production.cs`,
+     alongside the existing `_minTechForCargo`/`_minTechForShip`) rather than storing all 11 raw
+     Pascal sets — valid only because `TechDev` is genuinely monotonic in `TechLevel`, verified by
+     expanding all 11 rows to explicit enum-position membership (not assumed; an earlier pass
+     mis-expanded one range and got `ion`'s first appearance wrong as a result — recomputed
+     rigorously and cross-checked against the two tables that already existed). Deliberately does
+     **not** rewire the existing `ShipTechAvailable`/`CargoTechAvailable` production gating
+     (`AnnualTickHandler.Production.cs`) to consume this new real set — they stay on the TechLevel-
+     derived heuristic for now, so `Empire.Technology.Ships`/`Defenses`/`Constructions` grow via real
+     research but production doesn't read them yet; a legitimate, explicitly deferred follow-up, kept
+     out of this commit to avoid re-touching Commits 2-4's already golden-file-verified code.
+     Golden-file-backed (`empire.golden`, `EmpireCases`/`AnnualTickHandlerEmpireTests`) via a new
+     `empire` domain in `runworld.pas` that calls the now-restored, exported `UpdateEmpire` directly
+     (restored in `UPDATE.PAS.patch` — it had been deleted as unreachable from `UpdateWorld` back when
+     `techlevel.golden` first established the patch-based lane). One hardcoded test
+     (`FractionalLabChanceTruncatesNotRounds`) covers the one thing the golden-file harness
+     structurally can't: a non-100 lab `Efficiency`, needed to tell `Trunc` from `Round` in
+     `GetChanceForNewTech`'s `Trunc(percent*eff/100)` — `runworld.pas`'s `empire` domain calls
+     `UpdateEmpire` directly and never runs `UpdateEfficiency`, but the C# test can only reach the
+     private `NewTechLevel` via the full `RunAnnualTick`, which *does* run `UpdateEfficiency` on every
+     lab planet first, growing a non-100 starting `Efficiency` by a RNG-dependent amount before
+     `NewTechLevel` ever reads it — makes a shared Pascal-CLI-arg/C#-fixture `Efficiency` field
+     impossible for that one scenario, so it's hardcoded instead (its expected value still confirmed
+     against a real Pascal run, independently, before being asserted).
+   - **Commit 5b, construction** — not yet started. `UpdateConstruction` (UPDATE.PAS:103-220,
+     countdown/completion, drawing raw material from co-located same-empire fleets) and
+     `ConstructStarbase`/`ConstructStargate` (UPDATE.PAS:58-100, entity creation on completion).
 
 **Constants to extract:** `MaxPop` array (UPDATE.PAS:1077-1098), `BasePop` lookup, `TechAdj[]`,
 `TechAdj2[]`, `K6`, `SuppliesPerBillion`, `DrugsPerBillion`, `ThgLmt()` clamp function.

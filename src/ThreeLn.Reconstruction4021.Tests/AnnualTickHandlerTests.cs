@@ -630,6 +630,179 @@ public class AnnualTickHandlerTechLevelTests
 }
 
 /// <summary>
+/// Verifies Commit 5a of the economy phase: empire-level tech research (UPDATE.PAS's
+/// UpdateEmpire/NewTechLevel/GetChanceForNewTech/GetNewTech, called via AnnualTickHandler's
+/// per-empire loop in RunAnnualTick). MatchesGoldenFile checks the real Pascal arithmetic — the
+/// Trunc(percent*eff/100) lab-chance formula and GetNewTech's TechDev-membership pick — against
+/// reference/verify/golden/empire.golden, computed by runworld.pas's empire domain calling
+/// UpdateEmpire directly (see EmpireCases's doc comment for the 26-bit Technology encoding). Every
+/// lab planet/starbase leaves Owner.Capital unset (null) — a defensive no-op for Commit 3's
+/// UpdateTechLevel (see AnnualTickHandlerTechLevelTests.OwnedWorldWithNoCapitalIsANoOp), which also
+/// runs during the same RunAnnualTick call, before the per-empire loop reads these worlds'
+/// TechLevel; leaving it null is simpler than matching capital/lab TechLevel by hand and gives the
+/// same guarantee (no drift) since GetChanceForNewTech's own lab classification never reads
+/// Owner.Capital at all — only Empire.TechnologyLevel.
+/// </summary>
+public class AnnualTickHandlerEmpireTests
+{
+    private static Game BuildGame(Empire owner, List<Planet> planets, List<Starbase> starbases)
+    {
+        var game = new Core.Galaxy.Galaxy(size: 20);
+        var result = new Game(game);
+        result.Galaxy.Planets.AddRange(planets);
+        result.Galaxy.Starbases.AddRange(starbases);
+        result.Empires.Add(owner);
+        return result;
+    }
+
+    private static Planet MakePlanet(PascalGroundTruth.EmpireLab lab, Empire owner, int x) => new() {
+        Location = new Coordinate(x, 0),
+        Owner = owner,
+        Population = 10,
+        Type = lab.Type,
+        Class = lab.Class,
+        TechLevel = lab.Tech,
+        Efficiency = lab.Efficiency,
+    };
+
+    private static Starbase MakeStarbase(PascalGroundTruth.EmpireLab lab, Empire owner, int x) => new() {
+        Location = new Coordinate(x, 0),
+        Owner = owner,
+        Kind = StarbaseKind.CommandBase, // non-complex: only Efficiency/TechLevel run unconditionally (Commit 4)
+        Type = lab.Type,
+        TechLevel = lab.Tech,
+        Efficiency = lab.Efficiency,
+    };
+
+    /// <summary>Encodes/decodes Empire.Technology as the same 26-bit mask runworld.pas's empire domain
+    /// uses (see EmpireCases's doc comment) — deliberately independent of AnnualTickHandler.Empire.cs's
+    /// own _techCatalog ordering, not shared with it, so a bug in that ordering can't hide on both
+    /// sides of the golden-file comparison.</summary>
+    private static void ApplyTechnologyBitmask(UnlockedTechnology tech, int mask)
+    {
+        var bit = 0;
+        foreach (var d in Enum.GetValues<DefenseType>()) { if (((mask >> bit) & 1) != 0) tech.Defenses.Add(d); bit++; }
+        foreach (var s in Enum.GetValues<ShipType>()) { if (((mask >> bit) & 1) != 0) tech.Ships.Add(s); bit++; }
+        foreach (var c in Enum.GetValues<CargoType>()) { if (((mask >> bit) & 1) != 0) tech.Resources.Add(c); bit++; }
+        foreach (var k in Enum.GetValues<ConstructionType>()) { if (((mask >> bit) & 1) != 0) tech.Constructions.Add(k); bit++; }
+    }
+
+    private static int ComputeTechnologyBitmask(UnlockedTechnology tech)
+    {
+        var bit = 0;
+        var mask = 0;
+        foreach (var d in Enum.GetValues<DefenseType>()) { if (tech.Defenses.Contains(d)) mask |= 1 << bit; bit++; }
+        foreach (var s in Enum.GetValues<ShipType>()) { if (tech.Ships.Contains(s)) mask |= 1 << bit; bit++; }
+        foreach (var c in Enum.GetValues<CargoType>()) { if (tech.Resources.Contains(c)) mask |= 1 << bit; bit++; }
+        foreach (var k in Enum.GetValues<ConstructionType>()) { if (tech.Constructions.Contains(k)) mask |= 1 << bit; bit++; }
+        return mask;
+    }
+
+    [Test]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [MethodDataSource(typeof(PascalGroundTruth.EmpireCases), nameof(PascalGroundTruth.EmpireCases.AsDataSource))]
+    public async Task MatchesGoldenFile(PascalGroundTruth.EmpireCase c)
+    {
+        var golden = PascalGroundTruth.GoldenFile.Load("empire.golden");
+
+        var owner = new Empire { Name = "Test", TechnologyLevel = c.TechLevel };
+        ApplyTechnologyBitmask(owner.Technology, c.TechnologyBitmask);
+
+        var planets = new List<Planet>();
+        if (c.Planet1 is not null)
+            planets.Add(MakePlanet(c.Planet1, owner, x: 0));
+        if (c.Planet2 is not null)
+            planets.Add(MakePlanet(c.Planet2, owner, x: 1));
+
+        var starbases = new List<Starbase>();
+        if (c.Starbase is not null)
+            starbases.Add(MakeStarbase(c.Starbase, owner, x: 2));
+
+        var game = BuildGame(owner, planets, starbases);
+        var handler = new AnnualTickHandler(new FixedRandom(c.RngFixedValue));
+
+        handler.RunAnnualTick(game);
+
+        var expected = golden[c.Name];
+        await Assert.That((int)owner.TechnologyLevel).IsEqualTo(int.Parse(expected["techlevel"]));
+        await Assert.That(ComputeTechnologyBitmask(owner.Technology)).IsEqualTo(int.Parse(expected["technology"]));
+    }
+
+    [Test]
+    public async Task TechLevelAdvanceSweepOnlyBumpsCapitalAndUniversityPlanets()
+    {
+        // Same scenario as EmpireCases.TechLevelAdvanceRollSucceeds, plus a third, non-lab planet
+        // (Agricultural) at the same starting TechLevel, to prove the post-advance sweep
+        // (UPDATE.PAS:412-421) only bumps Capital/University-type planets, not every owned planet.
+        // Can't fit a third planet into the Pascal CLI's fixed-width case shape, so this stays
+        // hardcoded rather than golden-file-backed.
+        var owner = new Empire { Name = "Test", TechnologyLevel = TechLevel.PreTech };
+        owner.Technology.Resources.Add(CargoType.Supplies); // TechSet = TechDev[PreTech] exactly
+
+        var capital = new Planet {
+            Location = new Coordinate(0, 0), Owner = owner, Population = 10,
+            Type = WorldType.Capital, Class = WorldClass.ClassM, TechLevel = TechLevel.PreTech, Efficiency = 100,
+        };
+        capital.Cargo.Supplies = 9999;
+        var university = new Planet {
+            Location = new Coordinate(1, 0), Owner = owner, Population = 10,
+            Type = WorldType.University, Class = WorldClass.ClassM, TechLevel = TechLevel.PreTech, Efficiency = 100,
+        };
+        university.Cargo.Supplies = 9999;
+        var bystander = new Planet {
+            Location = new Coordinate(2, 0), Owner = owner, Population = 10,
+            Type = WorldType.Agricultural, Class = WorldClass.ClassM, TechLevel = TechLevel.PreTech, Efficiency = 100,
+        };
+        bystander.Cargo.Supplies = 9999;
+
+        var game = BuildGame(owner, [capital, university, bystander], []);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(owner.TechnologyLevel).IsEqualTo(TechLevel.Primitive);
+        await Assert.That(capital.TechLevel).IsEqualTo(TechLevel.Primitive);
+        await Assert.That(university.TechLevel).IsEqualTo(TechLevel.Primitive);
+        await Assert.That(bystander.TechLevel).IsEqualTo(TechLevel.PreTech);
+    }
+
+    [Test]
+    public async Task FractionalLabChanceTruncatesNotRounds()
+    {
+        // Every EmpireCases.MatchesGoldenFile case uses Efficiency=100, where
+        // Trunc(percent*eff/100) is always an exact whole-number pass-through of the percent
+        // constant and can't distinguish a real Trunc from an accidental Round — not a golden-file
+        // case for the reason EmpireCases's doc comment gives (Efficiency=100 can't discriminate,
+        // and the growth mismatch between this test's full RunAnnualTick and runworld.pas's direct
+        // UpdateEmpire call makes a shared Efficiency field impossible for a non-100 starting value).
+        //
+        // Population=10 starts Efficiency at 58 (the "<=75" UpdateEfficiency band); FixedRandom(10)
+        // forces that band's Rnd(2,5) to 2+10=12, growing Efficiency to 58+12=70 before NewTechLevel
+        // ever reads it — the same 70 confirmed by directly invoking a real, freshly-compiled
+        // runworld.exe with Efficiency=70 fed straight in (bypassing UpdateEfficiency entirely, since
+        // runworld.pas's empire domain calls UpdateEmpire directly): TechIncUnv*70/100 = 10.5,
+        // Trunc -> 10. FixedRandom(10) forces the accept gate to Rnd(1,100)=11, and 11>10 rejects —
+        // the empire's Technology set is left untouched. Had Trunc been wrongly Round (10.5->11), the
+        // same roll would succeed (11<=11) and add Supplies instead.
+        var owner = new Empire { Name = "Test", TechnologyLevel = TechLevel.PreTech };
+        var university = new Planet {
+            Location = new Coordinate(0, 0), Owner = owner, Population = 10,
+            Type = WorldType.University, Class = WorldClass.ClassM, TechLevel = TechLevel.PreTech, Efficiency = 58,
+        };
+        university.Cargo.Supplies = 9999;
+
+        var game = BuildGame(owner, [university], []);
+        var handler = new AnnualTickHandler(new FixedRandom(10));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(university.Efficiency).IsEqualTo(70);
+        await Assert.That(owner.TechnologyLevel).IsEqualTo(TechLevel.PreTech);
+        await Assert.That(ComputeTechnologyBitmask(owner.Technology)).IsEqualTo(0);
+    }
+}
+
+/// <summary>
 /// Verifies Commit 4 of the economy phase: the starbase branch of UpdateWorld (UPDATE.PAS:1392-1430)
 /// — UpdateEfficiency/UpdateTechLevel running unconditionally, the rest of the pipeline (including
 /// SupplyLink/SurplusLink, UPDATE.PAS:517-604) gated on Kind == IndustrialComplex. All tests use

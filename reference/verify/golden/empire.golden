@@ -1,0 +1,5 @@
+case=NewTechnologyRollSucceeds;techlevel=0;technology=65536
+case=TechLevelAdvanceRollSucceeds;techlevel=1;technology=65536
+case=AlreadyFullyResearchedNoOp;techlevel=10;technology=67108863
+case=ZeroLabsNoOp;techlevel=0;technology=0
+case=StarbaseAsLabContributes;techlevel=0;technology=65536
