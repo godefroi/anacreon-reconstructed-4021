@@ -242,7 +242,7 @@ follow once that's working. Next up: Phase 2, Galaxy / new-game setup, below.
 **Constants to extract:** `MaxPop` array (UPDATE.PAS:1077-1098), `BasePop` lookup, `TechAdj[]`,
 `TechAdj2[]`, `K6`, `SuppliesPerBillion`, `DrugsPerBillion`, `ThgLmt()` clamp function.
 
-## 2. Galaxy / new-game setup — in progress, 2a-2b landed
+## 2. Galaxy / new-game setup — in progress, 2a-2c landed
 
 Nothing in the port creates a `Game`/`Galaxy`/`Empire` from scratch yet — every existing test
 hand-builds fixtures. Pascal has no procedural galaxy generator: `NEWGAME.PAS`'s `LoadScenario`
@@ -285,11 +285,27 @@ Broken into five sub-commits:
   dropped) — every value confirmed against a real compiled `runworld.exe` run before being wired into
   the C# test. `TechLevel.PreTech` itself (no valid `Pred`) is hardcoded instead, since Pascal itself
   can't safely execute that case (an out-of-range array index, not a well-defined empty set).
-- ⬜ **2c, explicit-coordinate placement** — `SetUpWorld`/`CreateWorld`/`CreateBase`/`CreateGate`/
-  `CreateSRMs`/`CreateNebula`, reusing `IEconomicWorld.InitializeSelfSufficiency()` and the existing
-  `GetIndustrialDistribution` industry-population helper.
+- ✅ **2c, explicit-coordinate placement** (`Core/NewGame/GalaxySetup.cs`). Ports `SetUpWorld`/
+  `CreateWorld`/`CreateBase`/`CreateGate`/`CreateSRMs`/`CreateNebula`, reusing
+  `IEconomicWorld.InitializeSelfSufficiency()` and the existing `GetOptimumIndustry`/
+  `GetIndustrialDistribution` helpers (both widened from `private` to `internal static` — no instance
+  state involved, and new-game setup is a genuine second consumer). Faithfully preserves `CreateBase`'s
+  real `WorldType` dispatch (`Outpost`/`CommandBase`/`Fortress` derive it; every other kind —
+  `IndustrialComplex` included — reads it straight from an explicit parameter, matching
+  `NEWGAME.PAS:1079-1084` exactly rather than hardcoding `Base` for every starbase kind). Surfaced a
+  real type-modeling gap while doing so: Pascal's `CreateBase` can make a *starbase* the empire's
+  capital (`NEWGAME.PAS:1095-1096`), which `Empire.Capital: Planet?` couldn't represent — widened to
+  `Empire.Capital: IEconomicWorld?` (plus a `Location` getter on `IEconomicWorld`, since both `Planet`
+  and `Starbase` already had it concretely) rather than silently dropping that case. Hardcoded tests
+  only for this commit — `SetUpWorld`/`RndShips`/`RndCargo`/`RndDefns`/`RandomTrillumReserves` live in
+  `NEWGAME.PAS`, whose `USES` clause is far larger than any patch has needed to reach into so far;
+  relocating just those five procedures is deferred to 2d, which needs the identical relocation anyway
+  (`CreateRndPlanet` calls `SetUpWorld` too) — one relocation covering both commits' golden-file needs
+  beats doing it twice.
 - ⬜ **2d, randomized placement** — `GetRandomXY`/`CreateRndPlanet`/`CreateRandomWorlds`/the nebula
-  generators, via a transient per-generation occupancy set (no permanent `Galaxy` spatial index).
+  generators, via a transient per-generation occupancy set (no permanent `Galaxy` spatial index). Also
+  where `SetUpWorld`/`RndShips`/`RndCargo`/`RndDefns`/`RandomTrillumReserves` get relocated into the
+  patched tree and 2c's own golden-file coverage lands alongside 2d's.
 - ⬜ **2e, `.SCN` scenario file loading** — the capstone integration test: `LoadScenario`'s
   tokenizer/dispatch loop minus its DOS UI, golden-file-verified against real `dos_131/*.SCN` files
   run through the real, patched `LoadScenario`.

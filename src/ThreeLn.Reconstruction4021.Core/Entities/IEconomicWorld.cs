@@ -1,3 +1,4 @@
+using ThreeLn.Reconstruction4021.Core.Galaxy;
 using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Core.Entities;
@@ -13,6 +14,7 @@ namespace ThreeLn.Reconstruction4021.Core.Entities;
 /// </summary>
 public interface IEconomicWorld
 {
+    Coordinate Location { get; }
     Empire Owner { get; set; }
     WorldType Type { get; set; }
     TechLevel TechLevel { get; set; }

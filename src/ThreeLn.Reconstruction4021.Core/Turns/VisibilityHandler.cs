@@ -44,16 +44,19 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
     private static void ScoutFleets(Empire empire, Game game)
     {
         // Own fleets are always scouted.
-        foreach (var fleet in game.Galaxy.Fleets)
-            if (fleet.Owner == empire)
+        foreach (var fleet in game.Galaxy.Fleets) {
+            if (fleet.Owner == empire) {
                 empire.Fleets.MarkScouted(fleet);
+            }
+        }
 
         // Enemy fleets are scouted if:
         // - NOT a Hunter-Killer and adjacent to an empire world or fleet, or
         // - within base scan range.
         foreach (var fleet in game.Galaxy.Fleets) {
-            if (fleet.Owner == empire)
+            if (fleet.Owner == empire) {
                 continue;
+            }
 
             var isHk = fleet.Type == Types.FleetType.HunterKillerFleet;
 
@@ -80,13 +83,17 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
     private void ScoutObjects(Empire empire, Game game)
     {
         // Scout around each of the empire's owned planets and fleets (INTRFACE.PAS:1565-1582).
-        foreach (var planet in game.Galaxy.Planets)
-            if (planet.Owner == empire)
+        foreach (var planet in game.Galaxy.Planets) {
+            if (planet.Owner == empire) {
                 ScoutAdjacent(planet.Location, empire, game);
+            }
+        }
 
-        foreach (var fleet in game.Galaxy.Fleets)
-            if (fleet.Owner == empire && fleet.Status != Types.FleetStatus.Lost)
+        foreach (var fleet in game.Galaxy.Fleets) {
+            if (fleet.Owner == empire && fleet.Status != Types.FleetStatus.Lost) {
                 ScoutAdjacent(fleet.Location, empire, game);
+            }
+        }
 
         // Determine scouted status for all existing entities (INTRFACE.PAS:1584-1610). Construction
         // sites are deliberately excluded: Pascal's ScoutObjects only runs this range/roll check for
@@ -105,27 +112,36 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
             var y = center.Y + dy;
 
             // Skip out-of-bounds.
-            if (x < 0 || x >= game.Galaxy.Size || y < 0 || y >= game.Galaxy.Size)
+            if (x < 0 || x >= game.Galaxy.Size || y < 0 || y >= game.Galaxy.Size) {
                 continue;
+            }
 
             var adj = new Coordinate(x, y);
 
             // Scout all objects at this location.
-            foreach (var planet in game.Galaxy.Planets)
-                if (planet.Location == adj)
+            foreach (var planet in game.Galaxy.Planets) {
+                if (planet.Location == adj) {
                     empire.Planets.MarkScouted(planet);
+                }
+            }
 
-            foreach (var starbase in game.Galaxy.Starbases)
-                if (starbase.Location == adj)
+            foreach (var starbase in game.Galaxy.Starbases) {
+                if (starbase.Location == adj) {
                     empire.Starbases.MarkScouted(starbase);
+                }
+            }
 
-            foreach (var stargate in game.Galaxy.Stargates)
-                if (stargate.Location == adj)
+            foreach (var stargate in game.Galaxy.Stargates) {
+                if (stargate.Location == adj) {
                     empire.Stargates.MarkScouted(stargate);
+                }
+            }
 
-            foreach (var constr in game.Galaxy.ConstructionSites)
-                if (constr.Location == adj)
+            foreach (var constr in game.Galaxy.ConstructionSites) {
+                if (constr.Location == adj) {
                     empire.ConstructionSites.MarkScouted(constr);
+                }
+            }
 
             // Dark nebula blocks further adjacent scouting (INTRFACE.PAS:Scout line 132-133).
             // TODO: implement when nebula mechanics are added.

@@ -52,16 +52,21 @@ public static class EmpireFactory
     /// </summary>
     private static void SeedTechnology(UnlockedTechnology technology, TechLevel techLevel, IReadOnlyList<Action<UnlockedTechnology>> extraTechs)
     {
-        if (techLevel > TechLevel.PreTech)
-            foreach (var unlock in TechCatalog.MissingTechAt(new UnlockedTechnology(), techLevel - 1))
+        if (techLevel > TechLevel.PreTech) {
+            foreach (var unlock in TechCatalog.MissingTechAt(new UnlockedTechnology(), techLevel - 1)) {
                 unlock(technology);
+            }
+        }
 
-        foreach (var grant in extraTechs)
+        foreach (var grant in extraTechs) {
             grant(technology);
+        }
 
         var allowedAtTech = new UnlockedTechnology();
-        foreach (var unlock in TechCatalog.MissingTechAt(new UnlockedTechnology(), techLevel))
+
+        foreach (var unlock in TechCatalog.MissingTechAt(new UnlockedTechnology(), techLevel)) {
             unlock(allowedAtTech);
+        }
 
         technology.Defenses.IntersectWith(allowedAtTech.Defenses);
         technology.Ships.IntersectWith(allowedAtTech.Ships);

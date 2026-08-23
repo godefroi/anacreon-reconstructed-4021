@@ -20,14 +20,16 @@ public sealed partial class AnnualTickHandler
         var tech = emp.TechnologyLevel;
 
         // TechSet=TechDev[GteTchLvl]: every category fully researched, nothing left to ever roll for.
-        if (TechCatalog.MissingTechAt(emp.Technology, TechLevel.Gate).Count == 0)
+        if (TechCatalog.MissingTechAt(emp.Technology, TechLevel.Gate).Count == 0) {
             return;
+        }
 
         var missingAtCurrentLevel = TechCatalog.MissingTechAt(emp.Technology, tech);
         var (chance, lab) = GetChanceForNewTech(emp, tech, game);
 
-        if (Rnd(1, 100) > chance)
+        if (Rnd(1, 100) > chance) {
             return;
+        }
 
         if (missingAtCurrentLevel.Count > 0) {
             // "new technology" branch (UPDATE.PAS:388-401): TechSet<>TechDev[Tech] still.
@@ -44,8 +46,7 @@ public sealed partial class AnnualTickHandler
         // A null lab only happens when GetChanceForNewTech found zero labs (chance=0), which already
         // returned above via the Rnd(1,100)>chance check — defensive, not a modeled game state, same
         // category as UpdateTechLevel's null-capital no-op.
-        if (lab is not null)
-            lab.TechLevel = newTech;
+        lab?.TechLevel = newTech;
 
         // Make all other university/capital worlds at the old level go up too (UPDATE.PAS:412-421) —
         // planets only, matching Pascal exactly; starbases are excluded from this specific sweep.

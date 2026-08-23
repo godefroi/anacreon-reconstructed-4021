@@ -19,7 +19,11 @@ public sealed class Empire
     public bool IsIndependent { get; init; }
     public bool IsEmpress { get; set; }
 
-    public Planet? Capital { get; set; }
+    /// <summary>
+    /// A capital can be a planet or a starbase in real Pascal (NEWGAME.PAS's CreateBase calls
+    /// SetCapital too, not just CreateWorld) — IEconomicWorld, not Planet, so both are representable.
+    /// </summary>
+    public IEconomicWorld? Capital { get; set; }
     public DefenseSettings DefenseSettings { get; } = new();
     public List<Probe> Probes { get; } = [];
     public List<LocationBookmark> Bookmarks { get; } = [];

@@ -86,8 +86,9 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
         UpdateMilitary(planet);
         UpdateRevolution(planet, newTotalRevIndex);
 
-        if (planet.Class == WorldClass.Hostile)
+        if (planet.Class == WorldClass.Hostile) {
             HostileLife(planet);
+        }
     }
 
     /// <summary>
@@ -102,8 +103,9 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
     {
         var isComplex = starbase.Kind == StarbaseKind.IndustrialComplex;
 
-        if (isComplex)
+        if (isComplex) {
             RunProductionPipeline(starbase, () => SupplyLink(starbase, galaxy), () => SurplusLink(starbase, galaxy));
+        }
 
         UpdateEfficiency(starbase);
         UpdateTechLevel(starbase);

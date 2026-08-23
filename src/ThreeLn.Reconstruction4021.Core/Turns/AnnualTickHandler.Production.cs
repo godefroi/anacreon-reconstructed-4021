@@ -525,9 +525,11 @@ public sealed partial class AnnualTickHandler
 
     /// <summary>
     /// Calculates the optimum industrial distribution for a world (INTRFACE.PAS:223-342). Purely a
-    /// function of the world's current stats — computed fresh each tick, not stored.
+    /// function of the world's current stats — computed fresh each tick, not stored. Internal (not
+    /// private) and static (no instance state involved): new-game world placement (Core/NewGame/) is
+    /// a second real consumer, via GetOptimumIndustry below.
     /// </summary>
-    private Dictionary<IndustryType, double> GetIndustrialDistribution(IEconomicWorld world)
+    internal static Dictionary<IndustryType, double> GetIndustrialDistribution(IEconomicWorld world)
     {
         var dist = new Dictionary<IndustryType, double>();
         foreach (var industry in Enum.GetValues<IndustryType>())

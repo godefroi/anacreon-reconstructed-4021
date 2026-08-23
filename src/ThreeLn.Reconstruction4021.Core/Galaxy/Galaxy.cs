@@ -19,8 +19,8 @@ public sealed class Galaxy(int size)
 {
     public int Size { get; } = size;
 
-    private readonly Dictionary<Coordinate, NebulaType> _nebulae = new();
-    private readonly Dictionary<Coordinate, Empire> _minefields = new();
+    private readonly Dictionary<Coordinate, NebulaType> _nebulae = [];
+    private readonly Dictionary<Coordinate, Empire> _minefields = [];
 
     public List<Planet> Planets { get; } = [];
     public List<Starbase> Starbases { get; } = [];

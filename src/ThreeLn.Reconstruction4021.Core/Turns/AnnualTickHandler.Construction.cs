@@ -120,9 +120,11 @@ public sealed partial class AnnualTickHandler
     /// <summary>
     /// GetOptimumIndus (INTRFACE.PAS:1264-1287). Unlike GetIndustrialDistribution/UpdateIndustry,
     /// this does NOT clamp TIP to 999 — a real Pascal asymmetry (the 999 cap only bounds the internal
-    /// distribution-percentage math those two use), preserved here rather than "fixed" into consistency.
+    /// distribution-percentage math those two use), preserved here rather than "fixed" into
+    /// consistency. Internal (not private) and static (no instance state involved): new-game world
+    /// placement (Core/NewGame/) is a second real consumer.
     /// </summary>
-    private IndustryLevels GetOptimumIndustry(IEconomicWorld world)
+    internal static IndustryLevels GetOptimumIndustry(IEconomicWorld world)
     {
         var dist = GetIndustrialDistribution(world);
         double tip = TotalProd(world.Population, world.TechLevel);
