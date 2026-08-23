@@ -267,6 +267,50 @@ public class GalaxySetupTests
             .Throws<InvalidOperationException>();
     }
 
+    /// <summary>
+    /// GetRandomXY's occupancy check consults EnemyMine(XY)=Indep, not "is there any mine at all" —
+    /// real Pascal can't tell "never mined" apart from "mined, but by Indep" (both are the same
+    /// NoSRMField sentinel bit pattern, see IsGoodForRandomWorld's own doc comment), so an
+    /// Independent-owned mine does not block placement.
+    /// </summary>
+    [Test]
+    public async Task GetRandomXY_IndependentOwnedMineDoesNotBlockPlacement()
+    {
+        var setup = new GalaxySetup(new FixedRandom(0));
+        var galaxy = new Galaxy(size: 10);
+        galaxy.SetMine(new Coordinate(2, 3), Empire.Independent);
+
+        var coord = setup.GetRandomXY(galaxy, new Coordinate(2, 3), new Coordinate(8, 9), checkOccupancy: true);
+
+        await Assert.That(coord).IsEqualTo(new Coordinate(2, 3));
+    }
+
+    /// <summary>Unlike an Independent-owned one, a player-owned mine is a real EnemyMine(XY)&lt;&gt;Indep and does block placement.</summary>
+    [Test]
+    public async Task GetRandomXY_PlayerOwnedMineBlocksPlacement()
+    {
+        var setup = new GalaxySetup(new FixedRandom(0));
+        var galaxy = new Galaxy(size: 10);
+        galaxy.SetMine(new Coordinate(2, 3), new Empire { Name = "Terra" });
+
+        await Assert.That(() => setup.GetRandomXY(galaxy, new Coordinate(2, 3), new Coordinate(8, 9), checkOccupancy: true))
+            .Throws<InvalidOperationException>();
+    }
+
+    /// <summary>CreateSRMs's own occupancy check (GetObject(...).ObjTyp=Void alone) never consults EnemyMine — re-mining an already-mined cell is real, allowed Pascal behavior.</summary>
+    [Test]
+    public async Task CreateSRMs_CanReMineAnAlreadyMinedCell()
+    {
+        var galaxy = new Galaxy(size: 10);
+        var firstOwner = new Empire { Name = "Terra" };
+        var secondOwner = new Empire { Name = "Mars" };
+        galaxy.SetMine(new Coordinate(1, 1), firstOwner);
+
+        GalaxySetup.CreateSRMs(galaxy, new Coordinate(1, 1), new Coordinate(1, 1), secondOwner);
+
+        await Assert.That(galaxy.GetMineOwner(new Coordinate(1, 1))).IsSameReferenceAs(secondOwner);
+    }
+
     /// <summary>Dense nebula blocks random placement even though it doesn't block CreateSRMs/CreateNebula's own occupancy checks (NEWGAME.PAS:249).</summary>
     [Test]
     public async Task GetRandomXY_ThrowsWhenOnlyReachableCellHasDenseNebula()

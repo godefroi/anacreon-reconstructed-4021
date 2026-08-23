@@ -180,9 +180,21 @@ public sealed class GalaxySetup(Random random)
         return xy;
     }
 
-    /// <summary>GetRandomXY's own acceptance predicate (NEWGAME.PAS:246-249) — unlike <see cref="IsOccupied"/>, also rejects dense nebula.</summary>
+    /// <summary>
+    /// GetRandomXY's own acceptance predicate (NEWGAME.PAS:246-249): GetObject(...).ObjTyp=Void AND
+    /// EnemyMine(XY)=Indep AND GetNebula(XY)&lt;&gt;DenseNebula. The EnemyMine check is real Pascal's own
+    /// mine-owner sentinel quirk, not a simplification: PRIMINTR.PAS packs a sector's mine owner into
+    /// one nibble (Special div 16), and GALAXY.PAS:50/133 seeds every sector's default with
+    /// NoSRMField=Ord(Indep)*16 — the same bit pattern PutMine writes for an explicitly Indep-owned
+    /// mine. So "never mined" and "mined, but by Indep" are indistinguishable in real Pascal, and
+    /// EnemyMine(XY)=Indep is true (passes) for both; only a mine owned by an actual player empire
+    /// blocks placement. <see cref="IsPhysicallyOccupied"/> alone (no mine check at all) is
+    /// CreateSRMs's own, different occupancy check — see its doc comment.
+    /// </summary>
     private static bool IsGoodForRandomWorld(Galaxy.Galaxy galaxy, Coordinate c) =>
-        !IsOccupied(galaxy, c) && galaxy.GetNebula(c) != NebulaType.DenseNebula;
+        !IsPhysicallyOccupied(galaxy, c) &&
+        galaxy.GetMineOwner(c) is null or { IsIndependent: true } &&
+        galaxy.GetNebula(c) != NebulaType.DenseNebula;
 
     /// <summary>
     /// NEWGAME.PAS:924-951 (CreateRndPlanet) — an independent, unowned world seeded from a random
@@ -303,13 +315,20 @@ public sealed class GalaxySetup(Random random)
         return stargate;
     }
 
-    /// <summary>NEWGAME.PAS:1351-1370 (CreateSRMs) — only places a mine on a cell with nothing else in it. No RNG.</summary>
+    /// <summary>
+    /// NEWGAME.PAS:1351-1370 (CreateSRMs) — only places a mine on a cell with nothing else in it. No
+    /// RNG. Its occupancy check is GetObject(...).ObjTyp=Void alone (PRIMINTR.PAS:202-206) — unlike
+    /// GetRandomXY's own occupancy check (see IsGoodForRandomWorld), it does not consult EnemyMine at
+    /// all, so re-mining an already-mined-but-otherwise-empty cell is real, allowed Pascal behavior,
+    /// not an oversight — matches PutMine's own body (PRIMINTR.PAS:187-191), which unconditionally
+    /// overwrites with no existing-mine guard.
+    /// </summary>
     public static void CreateSRMs(Galaxy.Galaxy galaxy, Coordinate upperLeft, Coordinate lowerRight, Empire owner)
     {
         for (var x = upperLeft.X; x <= lowerRight.X; x++)
         for (var y = upperLeft.Y; y <= lowerRight.Y; y++) {
             var location = new Coordinate(x, y);
-            if (IsInGalaxy(galaxy, location) && !IsOccupied(galaxy, location))
+            if (IsInGalaxy(galaxy, location) && !IsPhysicallyOccupied(galaxy, location))
                 galaxy.SetMine(location, owner);
         }
     }
@@ -335,11 +354,15 @@ public sealed class GalaxySetup(Random random)
 
     /// <summary>
     /// GetObject(XY,ObjID).ObjTyp&lt;&gt;Void — no permanent occupancy index exists (Galaxy's own doc
-    /// comment defers that to the movement phase), so scan the handful of collections directly;
-    /// CreateSRMs only ever checks a bounded explicit rectangle, not a whole galaxy, so a linear scan
+    /// comment defers that to the movement phase), so scan the handful of collections directly; every
+    /// call site only ever checks a bounded explicit rectangle, not a whole galaxy, so a linear scan
     /// per cell is cheap here (unlike 2d's random-retry case, which needs a transient set instead).
+    /// Deliberately does not check Galaxy.Fleets — real ObjectTypes includes Flt, but nothing in
+    /// scenario loading (2e) ever creates one before this runs (confirmed: NEWGAME.PAS never spawns a
+    /// starting fleet, per this phase's own "explicitly out of scope" design note), so it can't be
+    /// reachably non-empty here.
     /// </summary>
-    private static bool IsOccupied(Galaxy.Galaxy galaxy, Coordinate c) =>
+    private static bool IsPhysicallyOccupied(Galaxy.Galaxy galaxy, Coordinate c) =>
         galaxy.Planets.Any(p => p.Location == c) || galaxy.Starbases.Any(s => s.Location == c) ||
-        galaxy.Stargates.Any(g => g.Location == c) || galaxy.GetMineOwner(c) is not null;
+        galaxy.Stargates.Any(g => g.Location == c);
 }
