@@ -53,6 +53,9 @@
                 -> "grid=<SizeOfGalaxy*SizeOfGalaxy chars, row-major y=1..Size then x=1..Size,
                     '1'=Nebula '0'=None>" -- GetRandomXY/CreateRandomWorlds have no domain here; see
                 the UPDATE.PAS patch's own relocation note for why
+     rng        Seed,Range,Count -> "values=<Count comma-joined Random(Range) draws after
+                RandSeed:=Seed>" -- not a UpdateWorld/GalaxySetup domain; a standing regression fixture
+                for the C# test project's PascalRandom (see RunRngCase's own comment)
    One output line per case, in order, to stdout -- consumed by PatchHarness
    in the C# test project via GoldenFile.Regenerate's runHarness override.
    With no arguments, runs a single hardcoded techlevel case as a
@@ -877,6 +880,43 @@ procedure RunNebulaCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunRngCase(const arg: String);
+   { Not a UpdateWorld/GalaxySetup domain at all -- a permanent regression fixture for the C# test
+     project's own PascalRandom (a from-scratch port of this fpc runtime's real Random/RandSeed
+     algorithm, empirically reverse-engineered against this exact toolchain: it's a Mersenne Twister
+     variant with fpc-specific reseed/tempering behavior, not the classic Turbo Pascal LCG one might
+     expect and not the newer Xoshiro128** generator later fpc releases moved to -- verified by probing
+     this project's own installed fpc 3.2.2, not by trusting any RTL source line in isolation). Real
+     (non-ForcedRandomValue) Random is otherwise never golden-file-covered anywhere in this harness,
+     since every other domain needs a single repeatable Rnd() value, not a real sequence -- this domain
+     exists so that whenever a future domain genuinely needs a real, non-degenerate multi-call RNG
+     sequence (e.g. Phase 2 commit 2e's CREATERANDOMWORLDS, whose retry-on-collision loop breaks under
+     ForcedRandomValue's fixed-offset convention), PascalRandom is already proven correct against real
+     Pascal output before anything is built on top of it. }
+   var
+      parts: array[0..2] of LongInt;
+      i: Integer;
+      { AnsiString, not the default 255-char-capped String -- StateBlockBoundary's 701 comma-joined
+        draws need well over 255 characters. }
+      Values, Piece: AnsiString;
+   begin
+   ParseFields(arg,parts);
+
+   RandSeed:=parts[0];
+   ForcedRandomValue:=-1;
+
+   Values:='';
+   for i:=1 to parts[2] do
+      begin
+      if i>1 then
+         Values:=Values+',';
+      Str(Random(parts[1]),Piece);
+      Values:=Values+Piece;
+      end;
+
+   WriteLn('values=',Values);
+   end;
+
 procedure RunCaseMode;
    var
       domain: String;
@@ -908,6 +948,8 @@ procedure RunCaseMode;
          RunRandomPlanetCase(ParamStr(i))
       else if domain='nebula' then
          RunNebulaCase(ParamStr(i))
+      else if domain='rng' then
+         RunRngCase(ParamStr(i))
       else
          begin
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');

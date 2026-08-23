@@ -10,11 +10,11 @@ procedure into a fresh file, this maintains small patches against the real
 copy at build time, and calls the real, only-minimally-touched Pascal code
 directly against a hand-assembled `Universe^`.
 
-**Status: in production for all twelve ground-truth domains that exist so far
+**Status: in production for all ground-truth domains that exist so far
 (`techlevel.golden`, `military.golden`, `starbase.golden`, `ambrosia.golden`,
 `revolution.golden`, `production.golden`, `empire.golden`, `construction.golden`,
 `empirecreate.golden`, `trillumreserves.golden`, `randomplanet.golden`,
-`nebula.golden` — see `docs/ROADMAP.md`'s "Ground-truth harness generation" section).
+`nebula.golden`, `rng.golden` — see `docs/ROADMAP.md`'s "Ground-truth harness generation" section).
 `reference/verify/*.pas`'s
 per-procedure transcription pattern has had no domains on it since
 `production.golden`'s migration — `production.pas` was the last file using
@@ -357,6 +357,37 @@ against a fixed `ARRAY[1..30]`) never crashes on this, it just reads a stale slo
 statically over-provisioned; a C# `List` has no such slack. Confirmed empirically (four pre-existing
 Phase-1 tests broke instantly when this alternate fix was tried) before reverting it in favor of the
 `INT.PAS` reorder above.
+
+## A real Pascal RNG, not a stand-in: `rng.golden` and `PascalRandom`
+
+Every domain above needs only one `Rnd()` value per case, so `ForcedRandomValue` (a fixed offset every
+call resolves to) has always been enough. Phase 2 commit 2e's `CREATERANDOMWORLDS` breaks that: it
+retries a random coordinate on collision, and a fixed offset always re-rolls the *same* coordinate, so
+placing a second world in a zone that already has one always blows through the 100-retry cap on both
+sides. Comparing real `.SCN` scenario files end to end needs a real, non-degenerate multi-call sequence
+instead — which means matching this project's actual fpc runtime's `Random`/`RandSeed` algorithm, not
+a fixed stand-in.
+
+That algorithm isn't the classic Turbo Pascal LCG a DOS-era codebase might suggest, and guessing at it
+from memory would have been exactly the kind of unverified recall this project avoids: fpc's RNG
+implementation changed over its history, and which one a given installed compiler uses has to be
+checked, not assumed. A quick probe program (`RandSeed:=12345; WriteLn(Random(100));` a few times)
+compiled with this repo's actual installed fpc (3.2.2) and compared against candidate algorithms pulled
+from fpc's own RTL source at matching tags settled it empirically: fpc's `main`/trunk source now uses a
+SplitMix64-seeded Xoshiro128** generator (didn't match); the `release_3_2_2` tag's `rtl/inc/system.inc`
+uses a Mersenne Twister (MT19937) variant with its own reseed/tempering convention (`mtwist_init`/
+`mtwist_update_state`/`mtwist_u32rand` — matched exactly, including a mid-run reseed, a fresh-seed
+replay, and a draw crossing the generator's 624-word internal state refill).
+
+`src/ThreeLn.Reconstruction4021.Tests/PascalRandom.cs` is a from-scratch `System.Random` subclass
+porting that exact algorithm, test-only (production code has no need for Pascal-bit-exact randomness —
+only a golden-file comparison does). `rng.golden`/`RngCases.cs`/`PascalRandomTests.cs` are a standing
+regression fixture for it: `runworld.pas`'s `RunRngCase` sets a real `RandSeed` and draws a real
+sequence via `Random()` (no `ForcedRandomValue` involved at all), and `PascalRandomTests.MatchesGoldenFile`
+checks the C# port reproduces it exactly, including a 701-draw case that crosses the state refill
+boundary. This isn't a `UpdateWorld`/`GalaxySetup` domain — it exists so that any future domain needing
+a real RNG sequence (2e's `CREATERANDOMWORLDS`, and potentially a genuine end-to-end `.SCN` file load)
+can build on an already-verified foundation instead of re-deriving it under pressure.
 
 ## Recommendation
 

@@ -319,7 +319,14 @@ Broken into five sub-commits:
   `git status` on `reference/verify/golden/` that no other domain's committed values moved.
 - ⬜ **2e, `.SCN` scenario file loading** — the capstone integration test: `LoadScenario`'s
   tokenizer/dispatch loop minus its DOS UI, golden-file-verified against real `dos_131/*.SCN` files
-  run through the real, patched `LoadScenario`.
+  run through the real, patched `LoadScenario`. In progress: every real `dos_131` fixture uses
+  `CREATERANDOMWORLDS`, whose collision-retry loop degenerates under the `ForcedRandomValue`
+  convention (a fixed offset always re-rolls the same blocked coordinate) — full end-to-end fixture
+  comparison needs a real, non-degenerate RNG sequence instead. Landed the foundation for that first:
+  `PascalRandom` (`src/ThreeLn.Reconstruction4021.Tests/PascalRandom.cs`), a from-scratch, empirically
+  verified port of this project's actual fpc runtime's `Random`/`RandSeed` algorithm (a Mersenne
+  Twister variant, not the classic Turbo Pascal LCG a DOS-era codebase might suggest), backed by a new
+  `rng.golden` standing regression fixture — see `reference/verify/README.md`'s own section on it.
 
 ## 3. NPE AI
 
