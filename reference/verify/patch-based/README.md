@@ -10,9 +10,9 @@ procedure into a fresh file, this maintains small patches against the real
 copy at build time, and calls the real, only-minimally-touched Pascal code
 directly against a hand-assembled `Universe^`.
 
-**Status: in production for all seven ground-truth domains that exist so far
+**Status: in production for all eight ground-truth domains that exist so far
 (`techlevel.golden`, `military.golden`, `starbase.golden`, `ambrosia.golden`,
-`revolution.golden`, `production.golden`, `empire.golden` — see
+`revolution.golden`, `production.golden`, `empire.golden`, `construction.golden` — see
 `docs/ROADMAP.md`'s "Ground-truth harness generation" section). `reference/verify/*.pas`'s
 per-procedure transcription pattern has had no domains on it since
 `production.golden`'s migration — `production.pas` was the last file using
@@ -30,7 +30,7 @@ there's just nothing currently using it.**
   file): assembles a minimal `Universe^` and calls the real `UpdateWorld`.
   Machine-parseable CLI: `case <domain> <case1> <case2> ...`, where `<domain>`
   selects the case shape/output line (`techlevel`, `military`, `starbase`,
-  `ambrosia`, `revolution`, `production`, or `empire` so far — see the file's own header comment). One driver, not one per domain, so
+  `ambrosia`, `revolution`, `production`, `empire`, or `construction` so far — see the file's own header comment). One driver, not one per domain, so
   `PatchHarness.CompileAndRun` only has to copy/patch/compile the whole
   patched tree once per `dotnet test` run regardless of how many domains use it.
 - `build.ps1` — deletes and regenerates `pascal/` from pristine source +
@@ -262,6 +262,28 @@ every lab planet first, growing a non-100 `Efficiency` by an RNG-dependent amoun
 never touches `Efficiency` at all. Landed as a hardcoded C# test instead, with its expected value
 still confirmed against a real Pascal run first (see `AnnualTickHandlerEmpireTests.
 FractionalLabChanceTruncatesNotRounds`), rather than silently trusting the C# formula alone.
+
+Eighth domain, `construction`: `UpdateConstruction` (nested `UseUpRawMaterial`) plus
+`ConstructStarbase`/`ConstructStargate` had been deleted from the patched `UPDATE.PAS` for the same
+reason `UpdateEmpire` had — unreachable from `UpdateWorld` when the patch-based lane first stood up.
+Restoring them required a second whole-`UPDATE.PAS.patch` regeneration, same technique as `empire`'s:
+diff the pristine source against a fully hand-edited target, strip the two extended-format header
+lines, verify the new patch reapplies byte-identical to the hand-edited target before installing it.
+This restoration also relocated five small `Intrface`-only helpers (`NextStarbaseSlot`,
+`CreateStarbase`(Pascal), `NextStargateSlot`, `CreateStargate`(Pascal), `GetOptimumIndus`) verbatim
+into `UPDATE.PAS`, the same dodge `GetIndustrialDistribution` used earlier to avoid pulling in
+`Fleet`/`Orders`/`NPE` via the real `Intrface` unit. `runworld.pas`'s `construction` domain calls the
+now-exported `UpdateConstruction` directly, assembling a `Constr[1]` site plus up to two fleets at the
+same location. First run crashed with a runtime error 216 (access violation): `PutMine`/
+`CreateStarbase`/`CreateStargate` all touch `Sector[x]^[y]`, and unlike `starbase`'s domain this one
+never called `Galaxy.InitializeSector` — same class of gotcha `starbase` had already hit and
+documented, fixed the same way.
+
+All 6 `ConstructionCases` reproduced exactly what hand-derivation against `ConsCargoNeeded`'s raw
+material thresholds predicted, confirmed case by case against a manually-invoked, freshly-compiled
+`runworld.exe` before any C# test code was written — including the scratch-copy-discard behavior
+(`InsufficientMaterialLeavesEverythingUnchanged`) and the completion branches for all three dispatch
+targets (mine, starbase, stargate).
 
 ## Recommendation
 

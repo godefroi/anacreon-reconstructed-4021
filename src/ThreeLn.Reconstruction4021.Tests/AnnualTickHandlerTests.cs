@@ -986,3 +986,142 @@ public class AnnualTickHandlerStarbaseTests
         await Assert.That(starbase.Cargo.Legions).IsEqualTo(2517);
     }
 }
+
+/// <summary>
+/// Verifies Commit 5b of the economy phase: construction-site countdown/completion (UPDATE.PAS's
+/// UpdateConstruction, nested UseUpRawMaterial, called via AnnualTickHandler's construction loop in
+/// RunAnnualTick) and entity creation on completion (ConstructStarbase/ConstructStargate).
+/// MatchesGoldenFile checks the real Pascal arithmetic — UseUpRawMaterial's draw-down and, for the
+/// two completion cases, GetOptimumIndus's sqrt/pow cascade — against
+/// reference/verify/golden/construction.golden, computed by runworld.pas's construction domain
+/// calling UpdateConstruction directly (see ConstructionCases's doc comment). Every test uses a game
+/// with no planets/starbases at all, only the construction site and its fleets, so RunAnnualTick's
+/// per-empire loop (NewTechLevel) is a guaranteed no-op (zero labs, same as
+/// AnnualTickHandlerEmpireTests.ZeroLabsNoOp) and can't perturb anything this class checks.
+/// </summary>
+public class AnnualTickHandlerConstructionTests
+{
+    private static readonly Coordinate SiteLocation = new(5, 5);
+
+    private static Game BuildGame(Empire owner, ConstructionSite site, List<Fleet> fleets)
+    {
+        var game = new Game(new Core.Galaxy.Galaxy(size: 20));
+        game.Galaxy.ConstructionSites.Add(site);
+        game.Galaxy.Fleets.AddRange(fleets);
+        game.Empires.Add(owner);
+        return game;
+    }
+
+    private static Fleet MakeFleet(PascalGroundTruth.ConstructionFleet fleet, Empire owner) => new() {
+        Location = SiteLocation,
+        Owner = owner,
+        Cargo = { Chemicals = fleet.Chemicals, Metals = fleet.Metals, Trillum = fleet.Trillum },
+    };
+
+    [Test]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [MethodDataSource(typeof(PascalGroundTruth.ConstructionCases), nameof(PascalGroundTruth.ConstructionCases.AsDataSource))]
+    public async Task MatchesGoldenFile(PascalGroundTruth.ConstructionCase c)
+    {
+        var golden = PascalGroundTruth.GoldenFile.Load("construction.golden");
+
+        var owner = new Empire { Name = "Test", TechnologyLevel = c.OwnerTechLevel };
+        var site = new ConstructionSite { Location = SiteLocation, Owner = owner, Building = c.Building, YearsToCompletion = c.YearsToCompletion };
+
+        var fleets = new List<Fleet>();
+        if (c.Fleet1 is not null)
+            fleets.Add(MakeFleet(c.Fleet1, owner));
+        if (c.Fleet2 is not null)
+            fleets.Add(MakeFleet(c.Fleet2, owner));
+
+        var game = BuildGame(owner, site, fleets);
+        var handler = new AnnualTickHandler(new FixedRandom(c.RngFixedValue));
+
+        handler.RunAnnualTick(game);
+
+        var expected = golden[c.Name];
+        var active = game.Galaxy.ConstructionSites.Contains(site);
+        await Assert.That(Convert.ToInt32(active)).IsEqualTo(int.Parse(expected["active"]));
+        // Only checked while active: Pascal keeps Constr[1].TimeToCompletion=0 readable after
+        // completion, but the C# site is removed from the list entirely rather than zeroed in place.
+        if (active)
+            await Assert.That(site.YearsToCompletion).IsEqualTo(int.Parse(expected["timetocompletion"]));
+
+        var fleet1 = fleets.Count > 0 ? fleets[0] : null;
+        var fleet2 = fleets.Count > 1 ? fleets[1] : null;
+        await Assert.That(fleet1?.Cargo.Chemicals ?? 0).IsEqualTo(int.Parse(expected["fleet1che"]));
+        await Assert.That(fleet1?.Cargo.Metals ?? 0).IsEqualTo(int.Parse(expected["fleet1met"]));
+        await Assert.That(fleet1?.Cargo.Trillum ?? 0).IsEqualTo(int.Parse(expected["fleet1tri"]));
+        await Assert.That(fleet2?.Cargo.Chemicals ?? 0).IsEqualTo(int.Parse(expected["fleet2che"]));
+        await Assert.That(fleet2?.Cargo.Metals ?? 0).IsEqualTo(int.Parse(expected["fleet2met"]));
+        await Assert.That(fleet2?.Cargo.Trillum ?? 0).IsEqualTo(int.Parse(expected["fleet2tri"]));
+
+        if (!active) {
+            switch (c.Building) {
+                case ConstructionType.Minefield:
+                    await Assert.That(game.Galaxy.GetMineOwner(SiteLocation)).IsEqualTo(owner);
+                    break;
+                case ConstructionType.Gate or ConstructionType.WarpLink or ConstructionType.Disrupter:
+                    await Assert.That(game.Galaxy.GetMineOwner(SiteLocation)).IsNull();
+                    var stargate = game.Galaxy.Stargates.Single();
+                    // Pascal's StargateTypes ordinals are gte=24,lnk=25,dis=26 (TechnologyTypes'
+                    // own numbering); StargateKind.Gate=0 aligns with gte=24, so +24 converts.
+                    await Assert.That(24 + (int)stargate.Kind).IsEqualTo(int.Parse(expected["stargatekind"]));
+                    await Assert.That(stargate.LinkedTo).IsNull();
+                    break;
+                default:
+                    await Assert.That(game.Galaxy.GetMineOwner(SiteLocation)).IsNull();
+                    var starbase = game.Galaxy.Starbases.Single();
+                    // Pascal's StarbaseTypes ordinals are cmm=20,frt=21,cmp=22,out=23 (TechnologyTypes'
+                    // own numbering); StarbaseKind.CommandBase=0 aligns with cmm=20, so +20 converts.
+                    await Assert.That(20 + (int)starbase.Kind).IsEqualTo(int.Parse(expected["starbasekind"]));
+                    await Assert.That(starbase.Population).IsEqualTo(int.Parse(expected["starbasepop"]));
+                    await Assert.That(starbase.Efficiency).IsEqualTo(int.Parse(expected["starbaseeff"]));
+                    await Assert.That((int)starbase.Type).IsEqualTo(int.Parse(expected["starbasetype"]));
+                    await Assert.That((int)starbase.TechLevel).IsEqualTo(int.Parse(expected["starbasetech"]));
+                    await Assert.That(starbase.Industry.Bioindustry).IsEqualTo(int.Parse(expected["starbasebio"]));
+                    await Assert.That(starbase.Industry.Chemical).IsEqualTo(int.Parse(expected["starbaseche"]));
+                    await Assert.That(starbase.Industry.Mining).IsEqualTo(int.Parse(expected["starbasemin"]));
+                    await Assert.That(starbase.Industry.ShipyardGeneral).IsEqualTo(int.Parse(expected["starbasesyg"]));
+                    await Assert.That(starbase.Industry.ShipyardJump).IsEqualTo(int.Parse(expected["starbasesyj"]));
+                    await Assert.That(starbase.Industry.ShipyardStarship).IsEqualTo(int.Parse(expected["starbasesys"]));
+                    await Assert.That(starbase.Industry.ShipyardTransport).IsEqualTo(int.Parse(expected["starbasesyt"]));
+                    await Assert.That(starbase.Industry.Supply).IsEqualTo(int.Parse(expected["starbasesup"]));
+                    await Assert.That(starbase.Industry.TrillumMining).IsEqualTo(int.Parse(expected["starbasetri"]));
+                    break;
+            }
+        }
+    }
+
+    [Test]
+    public async Task OnlyFleetsAtSameLocationAndOwnerContribute()
+    {
+        // Pure C#-side LINQ filtering (Galaxy.Fleets.Where(location+owner match)), no separate
+        // Pascal formula to cross-check — hardcoded rather than golden-file-backed. A fleet at a
+        // different location and a fleet owned by a different empire both sit right next to a
+        // genuinely-contributing fleet; only the third one's cargo should move.
+        var owner = new Empire { Name = "Test" };
+        var stranger = new Empire { Name = "Stranger" };
+        var site = new ConstructionSite { Location = SiteLocation, Owner = owner, Building = ConstructionType.Minefield, YearsToCompletion = 2 };
+
+        var wrongLocation = new Fleet { Location = new Coordinate(0, 0), Owner = owner };
+        wrongLocation.Cargo.Chemicals = 500;
+        var wrongOwner = new Fleet { Location = SiteLocation, Owner = stranger };
+        wrongOwner.Cargo.Chemicals = 500;
+        var contributor = new Fleet { Location = SiteLocation, Owner = owner };
+        contributor.Cargo.Chemicals = 500;
+        contributor.Cargo.Metals = 600;
+        contributor.Cargo.Trillum = 100;
+
+        var game = BuildGame(owner, site, [wrongLocation, wrongOwner, contributor]);
+        game.Empires.Add(stranger);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(site.YearsToCompletion).IsEqualTo(1);
+        await Assert.That(wrongLocation.Cargo.Chemicals).IsEqualTo(500);
+        await Assert.That(wrongOwner.Cargo.Chemicals).IsEqualTo(500);
+        await Assert.That(contributor.Cargo.Chemicals).IsEqualTo(500 - 110);
+    }
+}

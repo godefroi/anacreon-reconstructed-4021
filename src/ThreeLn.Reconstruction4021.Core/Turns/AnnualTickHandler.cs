@@ -16,12 +16,12 @@ namespace ThreeLn.Reconstruction4021.Core.Turns;
 /// <item>AnnualTickHandler.Population.cs — efficiency, tech level, population, food, ambrosia.</item>
 /// <item>AnnualTickHandler.Revolution.cs — military buildup, revolution/rebellion, hostile life.</item>
 /// <item>AnnualTickHandler.Empire.cs — empire-level tech research (NewTechLevel/GetChanceForNewTech).</item>
+/// <item>AnnualTickHandler.Construction.cs — construction-site countdown/completion (UpdateConstruction),
+/// creating Starbases/Stargates/minefields on completion.</item>
 /// </list>
 /// Covers planets (Commits 1-3: population/efficiency/revolution, production, tech level),
 /// industrial-complex starbases (Commit 4: SupplyLink/SurplusLink, the rest of the pipeline gated on
-/// Kind==IndustrialComplex), and per-empire tech research (Commit 5a). Construction
-/// (Commit 5b, UPDATE.PAS's UpdateConstruction) is a later commit (see docs/ROADMAP.md and the
-/// insertion-point maps on <see cref="UpdateWorld"/>/<see cref="UpdateStarbase"/>).
+/// Kind==IndustrialComplex), per-empire tech research (Commit 5a), and construction (Commit 5b).
 /// </summary>
 public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandler
 {
@@ -49,6 +49,11 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
         // cargo, not last year's.
         foreach (var starbase in game.Galaxy.Starbases) {
             UpdateStarbase(starbase, game.Galaxy, newTotalRevIndex);
+        }
+
+        // Snapshot: UpdateConstruction removes a completed site from this same list mid-iteration.
+        foreach (var site in game.Galaxy.ConstructionSites.ToList()) {
+            UpdateConstruction(site, game);
         }
 
         foreach (var empire in game.Empires) {

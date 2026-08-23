@@ -27,6 +27,20 @@
                 Lab2Present,Lab2TypeOrd,Lab2ClassOrd,Lab2TechOrd,Lab2Eff,
                 Lab3Present,Lab3TypeOrd,Lab3TechOrd,Lab3Eff (Lab3 is a starbase, no class)
                 -> "techlevel=<ordinal>;technology=<26-bit mask, bit i = TechnologyTypes(i+1)>"
+     construction ConstrTypesOrd (pre-offset: SRM=19..dis=26, TechnologyTypes' own
+                ordinals, not a 0-based ConstrTypes-relative one), YearsToCompletion,
+                TechOrd (Empire1's TechnologyLevel), RngFixedValue,
+                Fleet1Present,Fleet1Che,Fleet1Met,Fleet1Tri,
+                Fleet2Present,Fleet2Che,Fleet2Met,Fleet2Tri
+                -> "timetocompletion=<v>;active=<0|1>;
+                    fleet1che=<v>;fleet1met=<v>;fleet1tri=<v>;
+                    fleet2che=<v>;fleet2met=<v>;fleet2tri=<v>;
+                    mineowner=<Empire ordinal, Indep if no mine>;
+                    starbasekind=<StarbaseTypes ordinal>;starbasepop=<v>;starbaseeff=<v>;
+                    starbasetype=<WorldTypes ordinal>;starbasetech=<TechLevel ordinal>;
+                    starbasebio,starbaseche,starbasemin,starbasesyg,starbasesyj,starbasesys,
+                    starbasesyt,starbasesup,starbasetri=<v> (all 9 industries);
+                    stargatekind=<StargateTypes ordinal> (all <key>=<value>)"
    One output line per case, in order, to stdout -- consumed by PatchHarness
    in the C# test project via GoldenFile.Regenerate's runHarness override.
    With no arguments, runs a single hardcoded techlevel case as a
@@ -592,6 +606,98 @@ procedure RunEmpireCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunConstructionCase(const arg: String);
+   { Owned by Empire1, construction site + up to two fleets all at (5,5). NextStarbaseSlot/
+     NextStargateSlot pick the highest available slot counting down from MaxNoOfStarbases/
+     MaxNoOfStargates (INTRFACE.PAS:359-368,399-408); starting with zero active starbases/gates
+     means a completion always lands at exactly MaxNoOfStarbases/MaxNoOfStargates, so those two
+     fixed slots are read back unconditionally below regardless of what this case actually built. }
+   var
+      parts: array[0..11] of LongInt;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   InitializeSector(20); { required before any Sector[x]^[y] access -- PutMine/EnemyMine/
+                           CreateStarbase/CreateStargate all touch it (same requirement as
+                           RunStarbaseCase's own InitializeSector call). }
+
+   Universe^.Constr[1].XY.x:=5;  Universe^.Constr[1].XY.y:=5;
+   Universe^.Constr[1].Emp:=Empire1;
+   Universe^.Constr[1].CTyp:=ConstrTypes(parts[0]);
+   Universe^.Constr[1].TimeToCompletion:=parts[1];
+   SetOfActiveConstructionSites:=[1];
+   SetOfConstructionSitesOf[Empire1]:=[1];
+
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire1].IsAPlayer:=False;
+   Universe^.EmpireData[Empire1].TechnologyLevel:=TechLevel(parts[2]);
+
+   ForcedRandomValue:=parts[3];
+
+   { Both fleet slots always allocated (never nil, so the unconditional Cargo reads below are
+     always safe) -- only added to SetOfActiveFleets/SetOfFleetsOf, hence visible to
+     GetFleets/UpdateConstruction, when the case actually wants that fleet present. }
+   New(Universe^.Fleet[1]);
+   FillChar(Universe^.Fleet[1]^,SizeOf(Universe^.Fleet[1]^),0);
+   New(Universe^.Fleet[2]);
+   FillChar(Universe^.Fleet[2]^,SizeOf(Universe^.Fleet[2]^),0);
+   SetOfActiveFleets:=[];
+   SetOfFleetsOf[Empire1]:=[];
+
+   if parts[4]<>0 then
+      begin
+      Universe^.Fleet[1]^.XY.x:=5;  Universe^.Fleet[1]^.XY.y:=5;
+      Universe^.Fleet[1]^.Emp:=Empire1;
+      Universe^.Fleet[1]^.Cargo[che]:=parts[5];
+      Universe^.Fleet[1]^.Cargo[met]:=parts[6];
+      Universe^.Fleet[1]^.Cargo[tri]:=parts[7];
+      SetOfActiveFleets:=SetOfActiveFleets+[1];
+      SetOfFleetsOf[Empire1]:=SetOfFleetsOf[Empire1]+[1];
+      end;
+
+   if parts[8]<>0 then
+      begin
+      Universe^.Fleet[2]^.XY.x:=5;  Universe^.Fleet[2]^.XY.y:=5;
+      Universe^.Fleet[2]^.Emp:=Empire1;
+      Universe^.Fleet[2]^.Cargo[che]:=parts[9];
+      Universe^.Fleet[2]^.Cargo[met]:=parts[10];
+      Universe^.Fleet[2]^.Cargo[tri]:=parts[11];
+      SetOfActiveFleets:=SetOfActiveFleets+[2];
+      SetOfFleetsOf[Empire1]:=SetOfFleetsOf[Empire1]+[2];
+      end;
+
+   UpdateConstruction(1);
+
+   WriteLn('timetocompletion=',Universe^.Constr[1].TimeToCompletion,
+           ';active=',Ord(1 in SetOfActiveConstructionSites),
+           ';fleet1che=',Universe^.Fleet[1]^.Cargo[che],
+           ';fleet1met=',Universe^.Fleet[1]^.Cargo[met],
+           ';fleet1tri=',Universe^.Fleet[1]^.Cargo[tri],
+           ';fleet2che=',Universe^.Fleet[2]^.Cargo[che],
+           ';fleet2met=',Universe^.Fleet[2]^.Cargo[met],
+           ';fleet2tri=',Universe^.Fleet[2]^.Cargo[tri],
+           ';mineowner=',Ord(EnemyMine(Universe^.Constr[1].XY)),
+           ';starbasekind=',Ord(Universe^.Starbase[MaxNoOfStarbases].STyp),
+           ';starbasepop=',Universe^.Starbase[MaxNoOfStarbases].Pop,
+           ';starbaseeff=',Universe^.Starbase[MaxNoOfStarbases].Eff,
+           ';starbasetype=',Ord(Universe^.Starbase[MaxNoOfStarbases].Typ),
+           ';starbasetech=',Ord(Universe^.Starbase[MaxNoOfStarbases].Tech),
+           ';starbasebio=',Universe^.Starbase[MaxNoOfStarbases].Indus[BioInd],
+           ';starbaseche=',Universe^.Starbase[MaxNoOfStarbases].Indus[CheInd],
+           ';starbasemin=',Universe^.Starbase[MaxNoOfStarbases].Indus[MinInd],
+           ';starbasesyg=',Universe^.Starbase[MaxNoOfStarbases].Indus[SYGInd],
+           ';starbasesyj=',Universe^.Starbase[MaxNoOfStarbases].Indus[SYJInd],
+           ';starbasesys=',Universe^.Starbase[MaxNoOfStarbases].Indus[SYSInd],
+           ';starbasesyt=',Universe^.Starbase[MaxNoOfStarbases].Indus[SYTInd],
+           ';starbasesup=',Universe^.Starbase[MaxNoOfStarbases].Indus[SupInd],
+           ';starbasetri=',Universe^.Starbase[MaxNoOfStarbases].Indus[TriInd],
+           ';stargatekind=',Ord(Universe^.Stargate[MaxNoOfStargates].GTyp));
+
+   Dispose(Universe);
+   end;
+
 procedure RunCaseMode;
    var
       domain: String;
@@ -613,6 +719,8 @@ procedure RunCaseMode;
          RunProductionCase(ParamStr(i))
       else if domain='empire' then
          RunEmpireCase(ParamStr(i))
+      else if domain='construction' then
+         RunConstructionCase(ParamStr(i))
       else
          begin
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');

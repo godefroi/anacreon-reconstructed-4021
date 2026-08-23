@@ -1,13 +1,12 @@
 --- a/UPDATE.PAS
 +++ b/UPDATE.PAS
-@@ -11,22 +11,39 @@ UNIT Update;
+@@ -11,22 +11,46 @@ UNIT Update;
  
  INTERFACE
  
 +{ PATCH (fpc): UpdateUniverse (the whole-galaxy tick loop, screen
-+  progress window) deleted -- Crt/EIO/WND/Intrface/Mess were only needed by it
-+  and by ReportPlanetLack/ConstructStarbase/ConstructStargate/UpdateConstruction/
-+  UpdateEmpire, none of which UpdateWorld calls; all deleted below too.
++  progress window) deleted -- Crt/EIO/WND/Mess were only needed by it; none of
++  it is reachable from UpdateWorld/UpdateEmpire/UpdateConstruction.
 +  UpdateWorld itself is promoted here from IMPLEMENTATION so this harness can
 +  call it directly -- same procedure, only its visibility changed. }
  USES Strg,
@@ -31,9 +30,17 @@
 +
 +{ PATCH (fpc): UpdateEmpire promoted here from IMPLEMENTATION (Commit 5a) so this
 +  harness can call it directly, same as UpdateWorld above -- same procedure,
-+  only its visibility changed. ConstructStarbase/ConstructStargate/
-+  UpdateConstruction stay deleted (Commit 5b, not yet ported). }
++  only its visibility changed. }
 +PROCEDURE UpdateEmpire(Emp: Empire);
++
++{ PATCH (fpc): UpdateConstruction promoted here from IMPLEMENTATION (Commit 5b),
++  same reason as UpdateWorld/UpdateEmpire above. Its own ConstructStarbase/
++  ConstructStargate helpers, and the five Intrface-only procedures they need
++  (NextStarbaseSlot/CreateStarbase/NextStargateSlot/CreateStargate/
++  GetOptimumIndus), are all restored/relocated below too -- see the
++  IMPLEMENTATION-section comment near GetIndustrialDistribution's own
++  relocation note for why relocating rather than importing Intrface. }
++PROCEDURE UpdateConstruction(i: Byte);
 +
 +{ PATCH (fpc): test-only observability hook, mirroring the ForcedRandomValue
 +  pattern in INT.PAS -- NewTotalRevIndex is written only by Rebellion and
@@ -47,7 +54,7 @@
  
  IMPLEMENTATION
  
-@@ -36,7 +53,21 @@ USES
+@@ -36,7 +60,20 @@ USES
  VAR
     NewTotalRevIndex: ARRAY [Empire] of Integer;
  
@@ -57,24 +64,22 @@
 +   GetNewTotalRevIndex:=NewTotalRevIndex[Emp];
 +   END;  { GetNewTotalRevIndex }
 +
-+{ PATCH (fpc): ConstructStarbase/ConstructStargate/UpdateConstruction deleted
-+  -- none of them are reachable from UpdateWorld; they belong to Commit 5b
-+  (starbase/stargate construction), out of scope here. UpdateEmpire (+ nested
-+  NewTechLevel/GetChanceForNewTech/GetNewTech) is RESTORED below, unchanged
-+  from source, and exported above (Commit 5a) -- this harness calls it
-+  directly, the same way it calls UpdateWorld. ReportPlanetLack IS reachable
-+  (SupplyLink/SurplusLink/ProduceRawMaterial all call it) -- kept, restored
-+  below after an earlier pass wrongly deleted it as unreachable. }
++{ PATCH (fpc): UpdateEmpire (+ nested NewTechLevel/GetChanceForNewTech/
++  GetNewTech) and UpdateConstruction (+ ConstructStarbase/ConstructStargate)
++  are RESTORED below, unchanged from source, and exported above (Commits
++  5a/5b) -- this harness calls each directly, the same way it calls
++  UpdateWorld. ReportPlanetLack IS reachable (SupplyLink/SurplusLink/
++  ProduceRawMaterial all call it) -- kept, restored below after an earlier
++  pass wrongly deleted it as unreachable. }
 +
 +PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
                             Headline: NewsTypes; P1,P2,P3: Integer;
                             VAR OtherReports: ResourceSet);
     VAR
-@@ -55,169 +86,131 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
+@@ -55,6 +92,235 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
        END;
     END;  { ReportPlanetLack }
  
--PROCEDURE ConstructStarbase(Emp: Empire; STyp: StarbaseTypes; XY: XYCoord; VAR ID: IDNumber);
 +{ PATCH (fpc): GetIndustrialDistribution relocated verbatim from
 +  INTRFACE.PAS (its real home) -- pure economy math (only calls PrimIntr
 +  getters and Misc/DataCnst tables already in this unit's USES), but pulling
@@ -99,16 +104,13 @@
 +{ Sup }        (        0,    0,    0,       0,       0,       0,       0,    0,    0 ),
 +{ Tri }        (  0.10000,    0,    0, 0.07627, 0.20400, 0.16667, 0.08000,    0,    0 )  );
 +
-    VAR
--      EmpTech: TechLevel;
--      EmpTechnology: TechnologySet;
--      Indus: IndusArray;
++   VAR
 +      X: IndusRArray;
 +      Alpha: Real;         { Alpha = T2(tech)(Eff+250)/K6 }
 +      Beta: IndusRArray;   { Beta = (TIP)(ClsAdj)(AmbAdj)/100 }
 +      A,B,I: Real;
 +      TIP: Real;           { TIP = Total Industrial Production }
- 
++
 +      MainInd,IndI: IndusTypes;
 +      Special: SetOfSpecialConditions;
 +
@@ -121,15 +123,7 @@
 +      Temp: Real;
 +
 +   { MAIN PROCEDURE: GetIndustrialDistribution }
-    BEGIN
--   ID.ObjTyp:=Base;
--   ID.Index:=NextStarbaseSlot;
--   IF ID.Index>0 THEN
--      BEGIN
--      CreateStarbase(ID,Emp,XY,STyp);
--      SetEfficiency(ID,Rnd(10,20));
--      GetEmpireTechnology(Emp,EmpTech,EmpTechnology);
--      SetTech(ID,EmpTech);
++   BEGIN
 +   Tech:=GetTech(Obj);
 +   Cls:=GetClass(Obj);
 +   Pop:=GetPopulation(Obj);
@@ -137,24 +131,7 @@
 +   Eff:=GetEfficiency(Obj);
 +   GetSpecial(Obj,Special);
 +   AmbAdd:=(AmbAddict IN Special);
- 
--      IF STyp=out THEN
--         BEGIN
--         SetPopulation(ID,1);
--         SetType(ID,OutTyp);
--         END
--      ELSE IF STyp=cmp THEN
--         BEGIN
--         SetPopulation(ID,Rnd(400,700));
--         SetType(ID,BseTyp);
--         GetOptimumIndus(ID,Indus);
--         PutIndus(ID,Indus);
--         END
--      ELSE
--         BEGIN
--         SetPopulation(ID,Rnd(10,20));
--         SetType(ID,BseTyp);
--         END;
++
 +   { initialize arrays }
 +   FillChar(IndDist,SizeOf(IndDist),0);
 +
@@ -172,110 +149,18 @@
 +      Beta[IndI]:=Temp*ClassIndAdj[Cls,IndI];
 +      IF Beta[IndI]=0 THEN
 +         Beta[IndI]:=1;
-       END;
--   END;  { ConstructStarbase }
- 
--PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR ID: IDNumber);
--   BEGIN
--   ID.ObjTyp:=Gate;
--   ID.Index:=NextStargateSlot;
--   IF ID.Index>0 THEN
--      CreateStargate(ID,Emp,GTyp,XY);
--   END;  { ConstructStargate }
++      END;
++
 +   { calculate sup industry }
 +   I:=( Sqrt( (SafetyAdj*ISSP[GetISSP(Obj,SupInd)]*(SuppliesPerBillion/100)*Pop) /
 +              ((ThgAdj[SupInd,sup]/100)*Alpha) ) - K4) / Beta[SupInd];
 +   IF (I>95) OR (I<0) OR (Typ=AgrTyp) THEN
 +      I:=95;
 +   IndDist[SupInd]:=I;
- 
--{ MAIN PROCEDURES }
--PROCEDURE UpdateConstruction(i: Byte);
--{ INTERFACE PROCEDURE: UpdateConstruction: }   
--   VAR
--      ConstrFleets: FleetSet;
--      EnoughRawMaterial,Error: Boolean;
--      ID: IDnumber;
--      Loc: Location;
--      ConName: String16;
--      ConNamePtr: NameRecordPtr;
--
--   procedure UseUpRawMaterial(Typ: ConstrTypes;
--                              Sta: Empire;
--                              ConID: IDNumber;
--                              ConstrFleets: FleetSet;
--                              var EnoughRawMaterial: Boolean);
--      label
--         ExitLoop;
--
--      var
--         i: Byte;
--         ThgI: CargoTypes;
--         ID: IDNumber;
--         Cargo: array[1..MaxNoOfFleets] of CargoArray;
--         CargoToUse,RawNeeded: Resources;
--         Loc: Location;
--
--      begin
--      EnoughRawMaterial:=True;
--      FOR i:=1 TO MaxNoOfFleets DO
--         IF i IN ConstrFleets THEN
--            BEGIN
--            ID.ObjTyp:=Flt;  ID.Index:=i;
--            GetCargo(ID,Cargo[i]);
--            END;
--
--      for ThgI:=amb TO tri do
--         begin
--         RawNeeded:=ConsCargoNeeded[Typ,ThgI];
--         for i:=1 to MaxNoOfFleets do
--            begin
--            if i in ConstrFleets then
--               begin
--               CargoToUse:=LesserInt(RawNeeded,Cargo[i][ThgI]);
--               Cargo[i][ThgI]:=Cargo[i][ThgI]-CargoToUse;
--               RawNeeded:=RawNeeded-CargoToUse;
--               end;
--            end;
--
--         if RawNeeded>0 then
--            begin
--            EnoughRawMaterial:=False;
--            Loc.ID:=ConID;  Loc.XY:=Limbo;
--            AddNews(Sta,ConsLack,Loc,Integer(ThgI),0,0);
--            goto ExitLoop;
--            end;
--         end;
--
--      { if loop finishes, then enough material.  Update fleet cargo. }
--      for i:=1 to MaxNoOfFleets do
--         if i in ConstrFleets then
--            begin
--            ID.ObjTyp:=Flt;  ID.Index:=i;
--            PutCargo(ID,Cargo[i]);
--            end;
--
--      { if loop ends here, then not enough material to build }
--      ExitLoop:
--      end;  { UseUpRawMaterial }
--
--   { UpdateConstruction: MAIN PROCEDURE }
--   BEGIN
--   WITH Universe^.Constr[i] DO
++
 +   IF Typ IN [AgrTyp,CheTyp,MinTyp,RawTyp,RawSTyp,RsrTyp..TriTyp] THEN
 +      { ASSERT: all values of PI = 0 }
-       BEGIN
--      GetFleets(XY,ConstrFleets);
--      ConstrFleets:=ConstrFleets * SetOfFleetsOf[Emp];
--      ID.ObjTyp:=Con;  ID.Index:=i;
--      UseUpRawMaterial(CTyp,Emp,ID,ConstrFleets,EnoughRawMaterial);
--      IF EnoughRawMaterial THEN
--         BEGIN
--         TimeToCompletion:=TimeToCompletion-1;
--         IF TimeToCompletion=0 THEN
--            BEGIN
--            SetOfActiveConstructionSites:=SetOfActiveConstructionSites-[i];
--            SetOfConstructionSitesOf[Emp]:=SetOfConstructionSitesOf[Emp]-[i];
++      BEGIN
 +      I:=100-IndDist[SupInd];
 +      IndDist[CheInd]:=I*(TypeData[Typ,CheInd]/100);
 +      IndDist[MinInd]:=I*(TypeData[Typ,MinInd]/100);
@@ -286,50 +171,20 @@
 +      BEGIN
 +      { get main PI }
 +      MainInd:=PrincipalIndustry[Typ];
- 
--            Loc.XY:=Limbo;  Loc.ID:=ID;
--            Location2Index(Emp,Loc,ConNamePtr);
--            IF ConNamePtr<>Nil THEN
--               BEGIN
--               GetDefinedName(Emp,ConNamePtr,ConName,Loc);
--               DeleteName(Emp,ConName);
--               END
--            ELSE
--               ConName:='';
++
 +      { calculate temporaries }
 +      A:=-K4*(1/Beta[CheInd]+1/Beta[MinInd]+1/Beta[TriInd]);
 +      B:=(Sqrt(SafetyAdj*ISSP[GetISSP(Obj,CheInd)]*Gamma[CheInd,MainInd])/Beta[CheInd] +
 +          Sqrt(SafetyAdj*ISSP[GetISSP(Obj,MinInd)]*Gamma[MinInd,MainInd])/Beta[MinInd] +
 +          Sqrt(SafetyAdj*ISSP[GetISSP(Obj,TriInd)]*Gamma[TriInd,MainInd])/Beta[TriInd] );
- 
--            Sector[XY.x]^[XY.y].Obj:=EmptyQuadrant;
++
 +      { calculate I(MainInd) }
 +      I:=(100-(IndDist[SupInd]+A+(K4*B)))/(1+(Beta[MainInd]*B));
 +      IF I>TypeData[Typ,MainInd] THEN
 +         I:=TypeData[Typ,MainInd];
- 
--            Loc.XY:=Limbo;
--            CASE CTyp OF
--               SRM: PutMine(XY,Emp);
--               cmm..out: BEGIN
--                  ConstructStarbase(Emp,CTyp,XY,Loc.ID);
--                  IF ConName<>'' THEN
--                     AddName(Emp,Loc,ConName,Error);
--                  END;
--               gte..dis: BEGIN
--                  ConstructStargate(Emp,CTyp,XY,Loc.ID);
--                  IF ConName<>'' THEN
--                     AddName(Emp,Loc,ConName,Error);
--                  END;
--               END;  { case }
++
 +      IndDist[MainInd]:=I;
- 
--            Loc.ID:=EmptyQuadrant;  Loc.XY:=XY;
--            AddNews(Emp,ConsDone,Loc,Integer(CTyp),0,0);
--            END;
--         END;
--      END;  { with scope }
--   END;  { UpdateConstruction }
++
 +      { calculate RI industries }
 +      I:=( (IndDist[MainInd]*Beta[MainInd]+K4) *
 +           Sqrt(SafetyAdj*ISSP[GetISSP(Obj,CheInd)]*Gamma[CheInd,MainInd]) - K4 )/Beta[CheInd];
@@ -350,10 +205,125 @@
 +      IndDist[TriInd]:=I;
 +      END;
 +   END;  { GetIndustrialDistribution }
++
++{ PATCH (fpc): NextStarbaseSlot/CreateStarbase/NextStargateSlot/CreateStargate/
++  GetOptimumIndus relocated verbatim from INTRFACE.PAS (their real home), same
++  reasoning and same treatment as GetIndustrialDistribution above -- each is
++  pure Universe^/DataStrc/Misc/DataCnst logic (confirmed by reading every
++  body: no calls into Fleet/Orders/NPE, the units Intrface's own
++  IMPLEMENTATION USES pulls in), but importing the real Intrface unit for
++  them would drag those three in for five small helpers. Not a rename or
++  behavior change, just a relocation. }
++FUNCTION NextStarbaseSlot: Word;
++   VAR
++      Slot: Word;
++
++   BEGIN
++   Slot:=MaxNoOfStarbases;
++   WHILE (Slot>0) AND (Slot IN SetOfActiveStarbases) DO
++      Dec(Slot);
++   NextStarbaseSlot:=Slot;
++   END;  { NextStarbaseSlot }
++
++PROCEDURE CreateStarbase(ID: IDNumber; NewEmp: Empire; NewXY: XYCoord; NewTyp: StarbaseTypes);
++   BEGIN
++   WITH Universe^ DO
++      BEGIN
++      WITH Sector[NewXY.x]^[NewXY.y] DO
++         Obj:=ID;
++
++      WITH Starbase[ID.Index] DO
++         BEGIN
++         XY:=NewXY;
++         STyp:=NewTyp;
++         Dest:=XY;
++         Status:=FReady;
++         Emp:=NewEmp;
++         ScoutedBy:=[NewEmp];
++         KnownBy:=[NewEmp];
++         RevIndex:=0;
++
++         FillChar(Ships,SizeOf(Ships),0);
++         FillChar(Cargo,SizeOf(Cargo),0);
++         FillChar(Indus,SizeOf(Indus),0);
++         FillChar(Defns,SizeOf(Defns),0);
++         END;
++      END;  { with scope }
++
++   SetOfActiveStarbases:=SetOfActiveStarbases+[ID.Index];
++   SetOfStarbasesOf[NewEmp]:=SetOfStarbasesOf[NewEmp]+[ID.Index];
++   END;  { CreateStarbase }
++
++FUNCTION NextStargateSlot: Word;
++   VAR
++      Slot: Word;
++
++   BEGIN
++   Slot:=MaxNoOfStargates;
++   WHILE (Slot>0) AND (Slot IN SetOfActiveGates) DO
++      Dec(Slot);
++   NextStargateSlot:=Slot;
++   END;  { NextStargateSlot }
++
++PROCEDURE CreateStargate(ID: IDNumber; NewEmp: Empire; GateType: StargateTypes; Pos: XYCoord);
++   BEGIN
++   SetOfActiveGates:=SetOfActiveGates+[ID.Index];
++   WITH Universe^ DO
++      BEGIN
++      WITH Stargate[ID.Index] DO
++         BEGIN
++         XY:=Pos;
++         Emp:=NewEmp;
++         ScoutedBy:=[NewEmp];
++         KnownBy:=[NewEmp];
++         GTyp:=GateType;
++         Dest:=Limbo;
++         END;
++
++      Sector[Pos.x]^[Pos.y].Obj:=ID;
++      END;  { with scope }
++   END;  { CreateStargate }
++
++PROCEDURE GetOptimumIndus(Obj: IDNumber; VAR Indus: IndusArray);
++   VAR
++      TIP: IndusIndex;
++      IndusDist: IndusDistArray;
++      IndI: IndusTypes;
++      Pop: Population;
++      Class: WorldClass;
++      Tech: TechLevel;
++      Special: SetOfSpecialConditions;
++
++   BEGIN
++   GetIndustrialDistribution(Obj,IndusDist);
++   Pop:=GetPopulation(Obj);
++   Class:=GetClass(Obj);
++   Tech:=GetTech(Obj);
++   GetSpecial(Obj,Special);
++
++   TIP:=TotalProd(Pop,Tech);
++   IF AmbAddict IN Special THEN
++      TIP:=Round(TIP*AmbrosiaAdj);
++
++   FOR IndI:=BioInd TO TriInd DO
++      Indus[IndI]:=Round(TIP*(IndusDist[IndI]/100)*(ClassIndAdj[Class,IndI]/100));
++   END;  { GetOptimumIndus }
++
+ PROCEDURE ConstructStarbase(Emp: Empire; STyp: StarbaseTypes; XY: XYCoord; VAR ID: IDNumber);
+    VAR
+       EmpTech: TechLevel;
+@@ -99,9 +365,8 @@ PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR I
+       CreateStargate(ID,Emp,GTyp,XY);
+    END;  { ConstructStargate }
  
- PROCEDURE UpdateEmpire(Emp: Empire);
- 
-@@ -234,10 +227,10 @@ PROCEDURE UpdateEmpire(Emp: Empire);
+-{ MAIN PROCEDURES }
+ PROCEDURE UpdateConstruction(i: Byte);
+-{ INTERFACE PROCEDURE: UpdateConstruction: }   
++{ INTERFACE PROCEDURE: UpdateConstruction: }
+    VAR
+       ConstrFleets: FleetSet;
+       EnoughRawMaterial,Error: Boolean;
+@@ -234,10 +499,10 @@ PROCEDURE UpdateEmpire(Emp: Empire);
        PROCEDURE GetChanceForNewTech(Emp: Empire; EmpTech: TechLevel;
                                      VAR TotalChance: Index; VAR LabID: IDNumber);
        { GetChanceForNewTech:
@@ -368,7 +338,7 @@
           which the technology was discovered. }
  
           LABEL
-@@ -1430,61 +1423,10 @@ PROCEDURE UpdateWorld(World: IDNumber);
+@@ -1430,61 +1695,10 @@ PROCEDURE UpdateWorld(World: IDNumber);
           END;  { with scope }
     END;  { UpdateWorld }
  

@@ -87,5 +87,17 @@ public class GoldenFileTests
                  $"{(c.Planet2 is not null ? 1 : 0)},{(int)(c.Planet2?.Type ?? 0)},{(int)(c.Planet2?.Class ?? 0)},{(int)(c.Planet2?.Tech ?? 0)},{c.Planet2?.Efficiency ?? 0}," +
                  $"{(c.Starbase is not null ? 1 : 0)},{(int)(c.Starbase?.Type ?? 0)},{(int)(c.Starbase?.Tech ?? 0)},{c.Starbase?.Efficiency ?? 0}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "empire", .. args.Skip(1)]));
+
+        // Patch-based, not transcribed: runworld.pas's construction domain calls UpdateConstruction
+        // directly (restored in UPDATE.PAS.patch, Commit 5b — along with ConstructStarbase/
+        // ConstructStargate and five small Intrface-only helpers relocated verbatim, mirroring
+        // GetIndustrialDistribution's own earlier relocation). See ConstructionCases's doc comment.
+        // ConstrTypesOrd is pre-offset (SRM=19..dis=26, TechnologyTypes' own ordinals) since
+        // ConstructionType's C# ordinals start at 0.
+        GoldenFile.Regenerate("construction", ConstructionCases.All,
+            c => $"{19 + (int)c.Building},{c.YearsToCompletion},{(int)c.OwnerTechLevel},{c.RngFixedValue}," +
+                 $"{(c.Fleet1 is not null ? 1 : 0)},{c.Fleet1?.Chemicals ?? 0},{c.Fleet1?.Metals ?? 0},{c.Fleet1?.Trillum ?? 0}," +
+                 $"{(c.Fleet2 is not null ? 1 : 0)},{c.Fleet2?.Chemicals ?? 0},{c.Fleet2?.Metals ?? 0},{c.Fleet2?.Trillum ?? 0}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "construction", .. args.Skip(1)]));
     }
 }

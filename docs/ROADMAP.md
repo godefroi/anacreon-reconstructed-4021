@@ -4,12 +4,12 @@ Bottom-up order: simulation core first, UI last. Completed phases aren't listed 
 is the record of what's done. Each phase gets its own plan/design pass when it's picked up; this
 file only tracks the sequence and the design decisions/scope calls that need to be made up front.
 
-## 1. Economy / annual tick
+## 1. Economy / annual tick — ✅ done, all 5 commits landed
 
 Implement `IAnnualTickHandler`. `UpdateUniverse` (UPDATE.PAS:1440-1488) runs, in order: `Year++`,
 then `UpdateWorld` over every planet and starbase, then `UpdateConstruction`, then `UpdateEmpire`.
 This phase lands `UpdateWorld` for planets first; starbases, construction, and empire-level updates
-follow once that's working.
+follow once that's working. Next up: Phase 2, Galaxy / new-game setup, below.
 
 **Design decisions, resolved:**
 
@@ -206,9 +206,38 @@ follow once that's working.
      `NewTechLevel` ever reads it — makes a shared Pascal-CLI-arg/C#-fixture `Efficiency` field
      impossible for that one scenario, so it's hardcoded instead (its expected value still confirmed
      against a real Pascal run, independently, before being asserted).
-   - **Commit 5b, construction** — not yet started. `UpdateConstruction` (UPDATE.PAS:103-220,
-     countdown/completion, drawing raw material from co-located same-empire fleets) and
-     `ConstructStarbase`/`ConstructStargate` (UPDATE.PAS:58-100, entity creation on completion).
+   - ✅ **Commit 5b, construction** — `UpdateConstruction` (UPDATE.PAS:103-220, nested
+     `UseUpRawMaterial`, UPDATE.PAS:113-170) plus `ConstructStarbase`/`ConstructStargate`
+     (UPDATE.PAS:58-100, entity creation on completion). Each tick, every `ConstructionSite` draws its
+     `ConsCargoNeeded` raw materials (new `_constructionCargoNeeded` table, DATACNST.PAS:539-548 — only
+     Chemicals/Metals/Trillum ever nonzero) from every fleet co-located with and owned by the site, in
+     Pascal's `amb TO tri` order. `UseUpRawMaterial` preserves a genuine Pascal quirk: it draws against
+     a local scratch copy of each fleet's cargo first, and only commits that copy back to the real
+     fleets if every cargo type clears its threshold — a shortfall partway through consumes *nothing*
+     at all, not even the types already found sufficient (`goto ExitLoop` discards the whole scratch
+     copy). On success the site's countdown decrements; at zero, the site is removed and dispatches on
+     `ConstructionType`: `Minefield` calls the existing `Galaxy.SetMine`; `Gate`/`WarpLink`/`Disrupter`
+     create a `Stargate` (`CreateStargate`); everything else (`CommandBase`/`Fortress`/
+     `IndustrialComplex`/`Outpost`) creates a `Starbase` (`CreateStarbase`), with `IndustrialComplex`
+     additionally populating `Industry` via a new `GetOptimumIndustry` helper (`GetOptimumIndus`,
+     INTRFACE.PAS:1264-1287 — composes the existing `GetIndustrialDistribution`/`TotalProd`, and
+     deliberately does **not** clamp TIP to 999 the way `GetIndustrialDistribution`/`UpdateIndustry` do,
+     a real preserved Pascal asymmetry). `Stargate.LinkedTo` changed from `required Coordinate` to
+     `Coordinate?`, `null` at creation — matches Pascal's `Dest:=Limbo` sentinel; establishing a real
+     link is a separate, not-yet-ported mechanic. `ConstructStarbase`/`ConstructStargate` and their
+     small `NextStarbaseSlot`/`CreateStarbase`(Pascal)/`NextStargateSlot`/`CreateStargate`(Pascal)/
+     `GetOptimumIndus` helpers were relocated (not rewritten) from INTRFACE.PAS into the patched
+     UPDATE.PAS, same rationale as `GetIndustrialDistribution`'s own earlier relocation — avoids
+     pulling in `Fleet`/`Orders`/`NPE` via the real `Intrface` unit for a handful of small,
+     `PrimIntr`/`DataStrc`/`Misc`-only helpers. Golden-file-backed (`construction.golden`,
+     `ConstructionCases`/`AnnualTickHandlerConstructionTests`) via a new `construction` domain in
+     `runworld.pas` that calls the now-restored, exported `UpdateConstruction` directly — required a
+     second whole-`UPDATE.PAS.patch` regeneration (same technique as 5a's) to restore code that had
+     been fully deleted, not just excluded. Hit and fixed a runtime error 216 (access violation) from
+     `PutMine`/`CreateStarbase`/`CreateStargate` touching `Sector[x]^[y]` before `InitializeSector` had
+     been called in the new domain — same class of gotcha the earlier `starbase` domain had already
+     documented. One hardcoded test (`OnlyFleetsAtSameLocationAndOwnerContribute`) covers the pure
+     C#-side LINQ filtering (no separate Pascal formula to cross-check).
 
 **Constants to extract:** `MaxPop` array (UPDATE.PAS:1077-1098), `BasePop` lookup, `TechAdj[]`,
 `TechAdj2[]`, `K6`, `SuppliesPerBillion`, `DrugsPerBillion`, `ThgLmt()` clamp function.

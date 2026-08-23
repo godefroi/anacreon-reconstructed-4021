@@ -287,6 +287,22 @@ public sealed partial class AnnualTickHandler
         entries.ToFrozenDictionary(e => e.material, e => e.amount);
 
     /// <summary>
+    /// ConsCargoNeeded[ConstrTypes,CargoTypes] (DATACNST.PAS:539-548) — raw material needed per year
+    /// to build each construction type. Used by UpdateConstruction (AnnualTickHandler.Construction.cs,
+    /// Commit 5b), not production — kept here alongside the other RawM/ConsCargoNeeded-shaped tables.
+    /// </summary>
+    private static readonly FrozenDictionary<ConstructionType, FrozenDictionary<CargoType, int>> _constructionCargoNeeded = new Dictionary<ConstructionType, FrozenDictionary<CargoType, int>> {
+        [ConstructionType.Minefield] = RawMaterialRow((CargoType.Chemicals, 110), (CargoType.Metals, 500), (CargoType.Trillum, 80)),
+        [ConstructionType.CommandBase] = RawMaterialRow((CargoType.Chemicals, 460), (CargoType.Metals, 2300), (CargoType.Trillum, 180)),
+        [ConstructionType.Fortress] = RawMaterialRow((CargoType.Chemicals, 840), (CargoType.Metals, 2870), (CargoType.Trillum, 250)),
+        [ConstructionType.IndustrialComplex] = RawMaterialRow((CargoType.Chemicals, 590), (CargoType.Metals, 2600), (CargoType.Trillum, 150)),
+        [ConstructionType.Outpost] = RawMaterialRow((CargoType.Chemicals, 350), (CargoType.Metals, 1120), (CargoType.Trillum, 150)),
+        [ConstructionType.Gate] = RawMaterialRow((CargoType.Chemicals, 2530), (CargoType.Metals, 3920), (CargoType.Trillum, 1450)),
+        [ConstructionType.WarpLink] = RawMaterialRow((CargoType.Chemicals, 1560), (CargoType.Metals, 2550), (CargoType.Trillum, 290)),
+        [ConstructionType.Disrupter] = RawMaterialRow((CargoType.Chemicals, 1110), (CargoType.Metals, 1180), (CargoType.Trillum, 1120)),
+    }.ToFrozenDictionary();
+
+    /// <summary>
     /// Minimum tech level at which each cargo type appears in TechDev (DATACNST.PAS:359-370). TechDev
     /// is monotonically increasing in TechLevel — every level's set is a superset of the previous
     /// one's — so "first tech level it appears at" is equivalent to full set membership at every
