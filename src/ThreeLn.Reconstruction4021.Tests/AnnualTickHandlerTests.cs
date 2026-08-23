@@ -675,9 +675,9 @@ public class AnnualTickHandlerEmpireTests
     };
 
     /// <summary>Encodes/decodes Empire.Technology as the same 26-bit mask runworld.pas's empire domain
-    /// uses (see EmpireCases's doc comment) — deliberately independent of AnnualTickHandler.Empire.cs's
-    /// own _techCatalog ordering, not shared with it, so a bug in that ordering can't hide on both
-    /// sides of the golden-file comparison.</summary>
+    /// uses (see EmpireCases's doc comment) — deliberately independent of TechCatalog's own entry
+    /// ordering, not shared with it, so a bug in that ordering can't hide on both sides of the
+    /// golden-file comparison.</summary>
     private static void ApplyTechnologyBitmask(UnlockedTechnology tech, int mask)
     {
         var bit = 0;

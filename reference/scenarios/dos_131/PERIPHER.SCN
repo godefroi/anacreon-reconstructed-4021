@@ -1,0 +1,389 @@
+ANACREON 10
+"The Periphery"
+0     ; random scenario
+1 4   ; 1-4 players
+21    ; 21x21 galaxy
+50    ; 50 planets
+0     ; Difficulty: Beginner
+50 0  ; 50+ years
+4021
+
+BEGINTEXT
+
+                   ÿ     þ Þ
+               ÿ   þ Û ÜÞßÜþ Ü Ü    þ
+         ÿ   þß þßÞßþ ß ÿ.  þ  þÛ Ü        þ
+             Ü ßÞ   .   ú       Þþþß              The Periphery
+           Ü           þ    þ    ßÞþÜ 
+         Þþ       þ     ß. þ    Üßþ         Ü    by George Moromisato
+                              þ  ßÜßÞ        
+                    ßþß Ü     ÿ þ  ÜÝÜþ      þ
+         þ      þ ßÞ   ßþÝßÜÛ      þÜþÜ
+              Ý ÜÞ   ÜßÛÜÛÛÛßþ       Û
+           Ü þÛ      ÛÛÛÛÛÛÞþ   ÞÜþÛ          þ
+             Ü         ÛÛÛßÛ    Ü ßÜ  
+      þ     Û Ý   þ  ßÜþ   ÜßÜþÞ þ
+           Üþßþ   þ    Ûßþ  ÿþ          Ü
+            Üß     þß                 þ             1-4 Players
+     Ü       þß                                   Difficulty: Beginner
+             ßþßßÞ                 þÛþ              Length: 50+ years
+              ßþßÜþ      þ    þ Üß
+          þ       þÛßþßÜþÜ þßÛÞ
+                      þ
+ 
+NEWPAGE
+
+    "The past never relinquishes its grasp on the present until it has been 
+ violently confronted by the future..."
+                                       - Vvs. Alicia Alba Morey
+
+ In this scenario, you and three other emperors are confronted with the 
+ sluggish remains of the First Empire. At the periphery of an Imperial 
+ Sector Capital, you must forge a kingdom out of the outlying worlds that no 
+ longer owe allegiance to the Empire.
+ 
+ENDTEXT
+
+; Define Zones -----------------------------------------------------------------
+
+DefineXY     Center 11,11
+DefineZone   2   3,15   7,19        ; Empire 1 (Player)
+DefineZone   3   15,3   19,7        ; Empire 2 (Player)
+DefineZone   4    1,1    5,5        ; Empire 3 (Player)
+DefineZone   5  17,15  21,19        ; Empire 4 (Player)
+DefineZone   6    8,8  14,14        ; Empire 5 (Non-Player)
+
+; Create Empires ---------------------------------------------------------------
+
+CreatePlayerEmpire 0 0 7 0
+CreatePlayerEmpire 1 0 7 0
+CreatePlayerEmpire 2 0 7 0
+CreatePlayerEmpire 3 0 7 0
+
+CreateNPEmpire 1
+3           ; Aggressor Empire
+RndName     ; Name of the empire
+0           ; (undefined)
+7           ; Bio tech
+0           ; (undefined)
+
+CreateNPEmpire 2
+3           ; Aggressor Empire
+RndName     ; Name of the empire
+0           ; (undefined)
+7           ; Bio tech
+0           ; (undefined)
+
+CreateNPEmpire 3
+3           ; Aggressor Empire
+RndName     ; Name of the empire
+0           ; (undefined)
+7           ; Bio tech
+0           ; (undefined)
+
+CreateNPEmpire 4
+2           ; Kingdom Empire
+Montressor  ; Name of the empire
+0           ; (undefined)
+10          ; Gate Level
+0           ; (undefined)
+
+; Create player capitals -------------------------------------------------------
+
+CreateWorld 1 Z:2                   ; empire 1 capital
+9    ; earth-like
+7    ; bio tech
+4    ; Capital type
+0    ; empire 1
+2200 ; population
+85   ; efficiency
+;  LAM  def  GDM  ion
+     0    0  400  100
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   800    0  200  250    0    0  250
+;  men  nnj  amb  che  met  sup  tri
+  2000    0    0 1000 1500 2000  500
+
+CreateWorld 2 Z:3                   ; empire 2 capital
+9    ; earth-like
+7    ; bio tech
+4    ; Capital
+1    ; Empire 2
+2200 ; population
+85   ; efficiency
+;  LAM  def  GDM  ion
+     0    0  400  100
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   800    0  200  250    0    0  250
+;  men  nnj  amb  che  met  sup  tri
+  2000    0    0 1000 1500 2000  500
+
+CreateWorld 3 Z:4                   ; empire 3 capital
+9    ; earth-like
+7    ; bio tech
+4    ; Capital
+2    ; Empire 3
+2200 ; population
+85   ; efficiency
+;  LAM  def  GDM  ion
+     0    0  400  100
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   800    0  200  250    0    0  250
+;  men  nnj  amb  che  met  sup  tri
+  2000    0    0 1000 1500 2000  500
+
+CreateWorld 4 Z:5                   ; empire 4 capital
+9    ; earth-like
+7    ; bio tech
+4    ; Capital
+3    ; Empire 4
+2200 ; population
+85   ; efficiency
+;  LAM  def  GDM  ion
+     0    0  400  100
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   800    0  200  250    0    0  250
+;  men  nnj  amb  che  met  sup  tri
+  2000    0    0 1000 1500 2000  500
+
+; The Montressor Empire
+; This sector used to be a regional capital of the First Empire but is now
+; an independent kingdom.
+
+CreateWorld 5 Center:0,0            ; empire 5 capital
+9     ; Earth-like
+10    ; Gate
+4     ; Capital
+4     ; Empire 5
+3340  ; population
+100   ; efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+ 1500 2500 5000 3300 5700 6500 7500 6500 4500 1500 5500 
+; men  nnj  amb  che  met  sup  tri
+ 3400 1400    0 5500 6500 4500 2500
+
+CreateWorld 6 Center:-2,-2          ; a base planet
+7     ; Class M
+10    ; Gate
+2     ; Base planet
+4     ; Empire 5
+2300  ; Population
+100   ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+  500 1500 5000 2300 5700 6500 7500 6500 4500 1500 5500 
+; men  nnj  amb  che  met  sup  tri
+ 2400    0    0 4500 6500 3500 2500
+
+CreateWorld 7 Center:1,2            ; a base planet
+14    ; Jungle
+10    ; Gate
+2     ; Base planet
+4     ; Empire 5
+3100  ; Population
+100   ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+ 3500 4500 7400 5600 8400 7500 6500 8500 4500 2500 5500 
+; men  nnj  amb  che  met  sup  tri
+ 5800    0    0 4500 6500 3500 2500
+
+CreateWorld 8 Center:-2,3           ; a jumpship base
+12    ; Hostile Life
+10    ; Gate
+7     ; Jumpship base
+4     ; Empire 5
+2400  ; Population
+95    ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+    0 2200 3400 2600 1200 2500 2500 2500 1500  500 1500 
+; men  nnj  amb  che  met  sup  tri
+ 2400  500    0 3500 2500 3500 1500
+
+CreateWorld 9 Center:1,-2           ; a raw material mine
+9     ; Earth-like  
+9     ; Pre-Gate
+12    ; Raw material mine
+4     ; Empire 5
+1100  ; Population
+82    ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+    0 1200 3400 1600 1200    0 3500 1500    0    0 1500 
+; men  nnj  amb  che  met  sup  tri
+ 1500    0    0 3500 2500 3500 1500
+
+CreateWorld 10 Center:2,0           ; a metal mine
+4     ; Class J
+9     ; Pre-Gate
+9     ; Metal mine
+4     ; Empire 5
+1600  ; Population
+85    ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+    0 1300 3400 1600 5200 1450 1400 1500    0    0 1500 
+; men  nnj  amb  che  met  sup  tri
+ 1700    0    0 3500 2500 3500 1500
+
+CreateWorld 11 Center:-2,1          ; a chemical world
+15    ; Ocean  
+9     ; Pre-Gate
+5     ; Chemical  
+4     ; Empire 5
+1800  ; Population
+85    ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+    0 1300 3400 1600 5200 1450 1400 1500    0    0 1500 
+; men  nnj  amb  che  met  sup  tri
+ 1700  100    0 3500 2500 3500 1500
+
+CreateWorld 12 Center:-7,-3         ; a base planet
+5     ; Class K
+10    ; Gate
+2     ; Base planet
+4     ; Empire 5
+2100  ; Population
+100   ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+ 2500 2500 5000 4300 5700 6500 7500 6500 4500 1500 5500 
+; men  nnj  amb  che  met  sup  tri
+ 5400    0    0 4500 6500 3500 2500
+
+CreateWorld 13 Center:-8,-1         ; an agricultural planet
+10    ; Forest
+7     ; Bio Tech
+0     ; Agricultural
+4     ; Empire 5
+1100  ; Population
+100   ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+    0 1500 3000 1300 9700 1500 1500 1500    0    0 5500 
+; men  nnj  amb  che  met  sup  tri
+ 2400    0    0 4500 6500 3500 2500
+
+CreateWorld 14 Center:-6,-1         ; a jumpship base
+9     ; Earth-like  
+9     ; Pre-Gate
+7     ; Jumpship base
+4     ; Empire 5
+2100  ; Population
+82    ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+    0 1200 3400 1600 1200 2500 2500 2500 1500    0 1500 
+; men  nnj  amb  che  met  sup  tri
+ 2400    0    0 3500 2500 3500 1500
+
+CreateWorld 15 Center:-6,-3         ; a raw material mine
+9     ; Earth-like
+9     ; Pre-Gate
+12    ; Raw material mine
+4     ; Empire 5
+1100  ; Population
+82    ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+    0 1200 3400 1600 1200    0 3500 1500    0    0 1500 
+; men  nnj  amb  che  met  sup  tri
+ 1500    0    0 3500 2500 3500 1500
+
+CreateWorld 16 Center:7,2           ; a raw material mine
+9     ; Earth-like
+6     ; Jump Tech
+12    ; Raw material mine
+4     ; Empire 5
+1100  ; Population
+82    ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+    0    0 1400  600 1100    0  500 3500  500 3500 1500 
+; men  nnj  amb  che  met  sup  tri
+ 1500    0    0 3500 2500 3500 1500
+
+CreateWorld 17 Center:8,-1          ; a base planet
+13    ; Ice   
+10    ; Gate
+2     ; Base planet
+4     ; Empire 5
+3100  ; Population
+100   ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+ 3500 4500 7400 5600 8500 7500 6500 8500 4500 1500 5500 
+; men  nnj  amb  che  met  sup  tri
+ 5800    0    0 4500 6500 3500 2500
+
+CreateWorld 18 Center:9,0           ; a starship base
+3     ; Barren 
+10    ; Gate
+14    ; Starship base
+4     ; Empire 5
+2200  ; Population
+100   ; Efficiency
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn 
+    0 1500 3400 2600 8500 2500 1500    0  500    0 1500 
+; men  nnj  amb  che  met  sup  tri
+ 2100    0    0 4500 6500 3500 2500
+
+; Class Table for all zones ----------------------------------------------------
+ClassTable
+1     ; Ambrosia
+5     ; Arid
+0     ; Artificial
+8     ; Barren
+10    ; Class J
+10    ; Class K
+10    ; Class L
+10    ; Class M
+5     ; Desert
+10    ; Earth
+5     ; Forest
+2     ; Gas Giant
+1     ; Hostile Life
+2     ; Ice world
+4     ; Jungle
+7     ; Ocean
+1     ; Paradise
+2     ; Poisonous
+1     ; Ruins
+3     ; Underground
+3     ; Volcanic
+
+; Tech Table for all world -----------------------------------------------------
+TechTable
+3     ; pre-tech
+7     ; primitive
+20    ; pre-atomic
+30    ; atomic
+23    ; pre-warp
+12    ; warp
+5     ; jump
+0     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+
+CreateRandomWorlds 16 1            ; 16 worlds in zone 1
+CreateRandomWorlds 4 2             ; 4 worlds in zone 2
+CreateRandomWorlds 4 3             ; 4 worlds in zone 3
+CreateRandomWorlds 4 4             ; 4 worlds in zone 4
+CreateRandomWorlds 4 5             ; 4 worlds in zone 5
+
+CreateNebula 1    R:1..4,1      R:9..12,1
+CreateNebula 1    R:3..6,2      R:11..14,2
+CreateNebula 1    R:5..8,3      R:13..16,3
+CreateNebula 1    R:7..10,4     R:15..18,4
+CreateNebula 1    R:9..12,5     R:17..20,5
+CreateNebula 1    R:11..14,6    R:19..21,6
+CreateNebula 1    R:13..16,7    21,7
+CreateNebula 1    R:15..18,8    21,8
+CreateNebula 1    R:16..19,9    21,9
+CreateNebula 1    R:17..20,10   21,10
+CreateNebula 1    R:17..19,11   21,11
+CreateNebula 1    R:17..18,12   21,12
+CreateNebula 1    R:16..17,13   21,13
+CreateNebula 1    R:16..17,14   21,14
+CreateNebula 1    R:15..16,15   21,15
+CreateNebula 1    R:13..14,16   R:19..21,16
+CreateNebula 1    R:12..13,17   R:18..20,17
+CreateNebula 1    R:10..12,18   R:17..19,18
+CreateNebula 1    R:9..11,19    R:16..18,19
+CreateNebula 1    R:8..10,20    R:15..17,20
+CreateNebula 1    R:7..9,21     R:14..16,21
+
+CreateRandomNebula 2 1 3
+
+EndScenario

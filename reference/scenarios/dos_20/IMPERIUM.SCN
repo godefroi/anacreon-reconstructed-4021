@@ -1,0 +1,200 @@
+ANACREON 10
+"Imperium Galactica"
+0 ; random scenario
+3 8 50 200 1 100 0 4021
+BEGINTEXT
+
+
+    ßÛÛß
+     ÛÛ  Ú¿  Ú¿ ÚÄÄ¿ ÚÄÄÄ ÚÄÄ¿ Â Â  Â Ú¿  Ú¿
+     ÛÛ  ³À¿ÚÙ³ ³  ³ ³    ³  ³ ³ ³  ³ ³À¿ÚÙ³
+     ÛÛ  ³ ÀÙ ³ ÃÄÄÙ ÃÄÄ  ÃÄÂÙ ³ ³  ³ ³ ÀÙ ³
+     ÛÛ  ³    ³ ³    ³    ³ À¿ ³ ³  ³ ³    ³
+    ßßßß Á    Á Á    ÀÄÄÄ Á  Á Á ÀÄÄÙ Á    Á
+      ÜÛßßßßÜ
+     ÛÛß       ÚÄÄ¿ Â   ÚÄÄ¿ ÚÄÄÄ ÄÄÂÄÄ Â ÚÄÄÄ ÚÄÄ¿ 
+     ÛÛ    ÜÜÜ ³  ³ ³   ³  ³ ³      ³   ³ ³    ³  ³ 
+     ÛÛ      Û ÃÄÄ´ ³   ÃÄÄ´ ³      ³   ³ ³    ÃÄÄ´ 
+     ßÛÛ    Üß ³  ³ ³   ³  ³ ³      ³   ³ ³    ³  ³
+       ßßßßß   Á  Á ÀÄÄ Á  Á ÀÄÄÄ   Á   Á ÀÄÄÄ Á  Á
+
+                      An Intermediate Scenario for 3 to 8 players by
+                              Brent Fairbanks
+
+
+NEWPAGE
+
+     "   ...the arguement over Professor Davis' theory of parallel
+     developement was finally settled in the year 4021.  In that year,
+     no less than eight planets, totally unknown to each other, 
+     began crusades of Galactic conquest.  Their emergence marked the
+     end of the Second Interegum, which followed the Era of Slight
+     Darkness under Emperor Blindsides..."
+
+                                   From: "Past Theories in a New Light,"
+                                   Professor Walter Rogert Steffen,
+                                   Imperial Archeology Weekly,
+                                   4.56.23.5023, Issue 2391
+NEWPAGE
+ENDTEXT
+;             
+; Define zones for empires -----------------------------------------------------
+;
+DefineZone 2   7,3 14,10       ; Home of empire 1  
+DefineZone 3 36,11 43,18       ; Home of empire 2
+DefineZone 4 36,41 43,48       ; Home of empire 3
+DefineZone 5  4,34 12,42       ; Home of empire 4
+DefineZone 6 17,22 24,29       ; Home of empire 5
+DefineZone 7 21,43 28,50       ; Home of empire 6
+DefineZone 8 27,28 34,35       ; Home of empire 7
+DefineZone 9  24,7 31,14       ; Home of empire 8
+
+; Create player empires ------------------------------------------------------
+
+CreatePlayerEmpire 0 0 7 0
+CreatePlayerEmpire 1 0 7 0
+CreatePlayerEmpire 2 0 7 0
+CreatePlayerEmpire 3 0 7 0
+CreatePlayerEmpire 4 0 7 0
+CreatePlayerEmpire 5 0 7 0
+CreatePlayerEmpire 6 0 7 0
+CreatePlayerEmpire 7 0 7 0
+;
+; Create player capitals -------------------------------------------------------
+;
+CreateWorld 1 Z:2
+9 7 4 0 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 2 Z:3
+9 7 4 1 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 3 Z:4 
+9 7 4 2 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 4 Z:5
+9 7 4 3 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 5 Z:6
+9 7 4 4 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 6 Z:7
+9 7 4 5 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 7 Z:8
+9 7 4 6 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 8 Z:9
+9 7 4 7 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+; Ambrosia world somewhere in the center of the galaxy.
+CreateWorld 9 Z:1
+1 5 6 8 500 70
+0 0 1400 300
+3000 60 130 0 40 0 100
+1000 0 0 1000 1500 2000 500
+;
+; Two random High-Tech worlds, this adds some competition.
+CreateWorld 10 Z:1
+9 7 6 8 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 11 Z:1
+9 7 6 8 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+; Standard Class table for zones around capitals--------------------------------
+ClassTable
+1     ; Ambrosia
+5     ; Arid
+0     ; Artificial
+8     ; Barren
+10    ; Class J
+10    ; Class K
+10    ; Class L
+10    ; Class M
+5     ; Desert
+10    ; Earth
+5     ; Forest
+2     ; Gas Giant
+1     ; Hostile Life
+2     ; Ice world
+4     ; Jungle
+7     ; Ocean
+1     ; Paradise
+2     ; Poisonous
+1     ; Ruins
+3     ; Underground
+3     ; Volcanic
+;
+TechTable
+0     ; pre-tech
+7     ; primitive
+10    ; pre-atomic
+32    ; atomic
+31    ; pre-warp
+15    ; warp
+5     ; jump
+0     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+CreateRandomWorlds 10 2
+CreateRandomWorlds 10 3
+CreateRandomWorlds 10 4
+CreateRandomWorlds 10 5
+CreateRandomWorlds 10 6
+CreateRandomWorlds 10 7
+CreateRandomWorlds 10 8
+CreateRandomWorlds 10 9
+;
+; Create worlds throughout the Galaxy-------------------------------------------
+TechTable 
+5    ;  pre-tech
+10   ;  primitive
+20   ;  pre-atomic
+30   ;  atomic
+23   ;  pre-warp
+12   ;  warp
+0    ;  jump
+0    ;  bio
+0    ;  starship
+0    ;  pre-gate
+0    ;  gate
+;
+CreateRandomWorlds 109 1
+;
+; Create two to four nebula strips
+CreateRandomNebula 1 2 4
+;
+; Create three to six nebula patches
+CreateRandomNebula 2 3 6
+EndScenario
+

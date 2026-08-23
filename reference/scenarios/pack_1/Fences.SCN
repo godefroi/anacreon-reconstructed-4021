@@ -1,0 +1,317 @@
+ANACREON 10
+"Algerian Fences"
+0     ; random scenario
+2 4   ; 2-4 players
+30    ; 30 by 30 galaxy
+100   ; 100 planets
+2     ; Difficulty: Advanced
+100 0 ; 100+ years
+4021
+BEGINTEXT
+
+
+     The last hope for a Galactic consortium died along with the death of 
+   King Frances Fillabian Farnsworth.  When the King died, the Four Princes
+   of Algerius were released from their blood vows to uphold peace.  The 
+   King's political marriages and bethrothals fell apart, and the Princes
+   returned their home worlds, to prepare for conquest.
+     The preparations are now been complete.  Each Prince is ready to spring 
+   upon the worlds surrounding him, as each marchs towards the center of 
+   the Galaxy.  The first steps have already been taken: each Prince has
+   conquered four worlds.
+      What they do with their resources is entirely up to them...
+
+      This will be an interesting case study.
+
+                                  Professor Rendell Laeque, Anthropology
+                                  University of the Centraworlds
+                                  Private Journal;  March 21, 4021
+
+NEWPAGE
+ENDTEXT                                                    
+;                                                           
+; Define zones for empire capitols ---------------------------------------------
+;
+DefineZone  2    6,5   9,8  
+DefineZone  3  22,22 25,25
+DefineZone  4   4,24  7,27
+DefineZone  5   24,7 27,10
+;
+; Define locations of player capitols ------------------------------------------
+;
+DefineXY Cap1 Z:2 
+DefineXY Cap2 Z:3
+DefineXY Cap3 Z:4
+DefineXY Cap4 Z:5
+DefineXY NebBrk R:15,8..23
+;         
+; Create player empires --------------------------------------------------------
+; Note: If there are less than four players, all of the worlds will be created.
+;       The difference is that there will not be a full four empires.
+;
+CreatePlayerEmpire 0 0 9 0
+CreatePlayerEmpire 1 0 9 0
+CreatePlayerEmpire 2 0 9 0
+CreatePlayerEmpire 3 0 9 0 
+;
+; Create player capitals -------------------------------------------------------
+;
+; Capital for empire one 
+CreateWorld 1 Cap1:0,0
+9       ; Earth class planet
+9       ; Pre-gate level technology
+4       ; Capital
+0       ; Empire 1
+3500    ; Population
+90      ; Efficiency
+;
+;  LAM  def  GDM  ion
+  1000 1000 5000 1500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5000 2000 3500 3500  500 1000 2500
+;  men nnj amb  che  met  sup  tri
+  4000  0   0  3000 4500 4000 2000
+;
+; Capital for empire two, this is a forest planet.
+CreateWorld 2 Cap2:0,0
+10      ; Forest world
+9       ; Pre-gate level
+4       ; Capital
+1       ; Empire 1
+3500    ; Population    
+90      ; Efficiency
+;
+;  LAM  def  GDM  ion
+  1000 1000 5000 1500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5000 2000 3500 3500  500 1000 2500
+;  men nnj amb  che  met  sup  tri
+  4000  0   0  3000 4500 4000 2000
+;
+; Capital for empire three
+CreateWorld 3 Cap3:0,0
+9 9 4 2 3500 90
+1000 1000 5000 1500
+5000 2000 3500 3500 500 1000 2500
+4000 0 0 3000 4500 4000 2000
+;
+; Capital for empire four
+CreateWorld 4 Cap4:0,0
+9 9 4 3 3500 90     
+1000 1000 5000 1500
+5000 2000 3500 3500 500 1000 2500
+4000 0 0 3000 4500 4000 2000
+;
+; Worlds for the various empires -----------------------------------------------
+;
+; Each empire starts the game with a pre-gate level capitol, and four 
+; supplicant planets.  Each empire gets one metal mine and one chemical 
+; world, both close to maximum (9999) production.  In addition, each gets 
+; two jumpship bases.
+;
+; Create worlds for empire 1 ---------------------------------------------------
+;
+CreateWorld 5 Cap1:1,1
+;Cls Tech Typ Emp  Pop Eff
+  11    7   5   0 2500  70
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 6 Cap1:-1,2
+;Cls Tech Typ Emp  Pop Eff
+  19    7   9   0 1800  70
+0 0 400 0
+500 0 150 150 0 0 1000
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 7 Cap1:1,0 
+;Cls Tech Typ Emp  Pop Eff
+   4    8   7   0 2200  80
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 8 Cap1:2,-1
+;Cls Tech Typ Emp  Pop Eff
+   7    7   7   0 1800  65
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+; Create worlds for empire 2 ---------------------------------------------------
+;
+CreateWorld 9 Cap2:1,0
+;Cls Tech Typ Emp  Pop Eff
+  11    7   5   1 2500  80
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 10 Cap2:0,1
+;Cls Tech Typ Emp  Pop Eff
+   7    7   7   1 1700  75
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 11 Cap2:-2,2
+;Cls Tech Typ Emp  Pop Eff
+  20    6   9   1 1800  75
+0 0 400 0
+500 0 150 150 0 0 1000
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 12 Cap2:-2,-2
+;Cls Tech Typ Emp  Pop Eff
+   9    6   7   1 1900  80
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+; Create worlds for empire 3 ---------------------------------------------------
+;
+CreateWorld 13 Cap3:2,1
+;Cls Tech Typ Emp  Pop Eff
+   8    8   9   2 2500  80
+0 0 400 0
+500 0 150 150 0 0 1000
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 14 Cap3:0,2  
+;Cls Tech Typ Emp  Pop Eff
+   7    7   7   2 1800  75
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 15 Cap3:-1,0
+;Cls Tech Typ Emp  Pop Eff
+  15    7   5   2 1700  75
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 16 Cap3:-1,-1
+;Cls Tech Typ Emp  Pop Eff
+   7    8   7   2 2000  90
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 17 Cap4:1,0
+;Cls Tech Typ Emp  Pop Eff
+   4    8   7   3 2000  90
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+; Create worlds for empire 4 ---------------------------------------------------
+;
+CreateWorld 18 Cap4:2,2 
+;Cls Tech Typ Emp  Pop Eff
+  15    7   5   3 1700  75
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 19 Cap4:-2,0
+;Cls Tech Typ Emp  Pop Eff
+   7    7   7   3 1800  80
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 20 Cap4:0,-2
+;Cls Tech Typ Emp  Pop Eff
+  20    8   9   3 1600  70
+0 0 400 0
+500 0 150 150 0 0 1000
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 21 Z:1
+0 5 6 8 1000 65
+0 0 400 0
+500 0 100 100 0 0 200
+500 100 0 1000 1000 1000 200  
+; 
+; Create central nebula --------------------------------------------------------
+; This nebula divides the galaxy into two halves.  This hides the impenetrable
+; nebula strips, which have only three crossable points.
+;
+CreateNebula 2 R:11..14,1  R:16..19,1
+CreateNebula 2 R:11..14,2  R:16..19,2
+CreateNebula 2 R:11..14,3  R:16..19,3
+CreateNebula 2 R:11..14,4  R:16..19,4
+CreateNebula 2 R:11..14,5  R:16..19,5
+CreateNebula 2 R:11..14,6  R:16..19,6
+CreateNebula 2 R:11..14,7  R:16..19,7
+CreateNebula 2 R:11..14,8  R:16..19,8
+CreateNebula 2 R:11..14,9  R:16..19,9
+CreateNebula 2 R:11..14,10 R:16..19,10
+CreateNebula 2 R:11..14,11 R:16..19,11
+CreateNebula 2 R:11..14,12 R:16..19,12
+CreateNebula 2 R:11..14,13 R:16..19,13
+CreateNebula 2 R:11..14,14 R:16..19,14
+CreateNebula 2 R:11..14,15 R:16..19,15
+CreateNebula 2 R:11..14,16 R:16..19,16
+CreateNebula 2 R:11..14,17 R:16..19,17
+CreateNebula 2 R:11..14,18 R:16..19,18
+CreateNebula 2 R:11..14,19 R:16..19,19
+CreateNebula 2 R:11..14,20 R:16..19,20
+CreateNebula 2 R:11..14,21 R:16..19,21
+CreateNebula 2 R:11..14,22 R:16..19,22
+CreateNebula 2 R:11..14,23 R:16..19,23
+CreateNebula 2 R:11..14,24 R:16..19,24
+CreateNebula 2 R:11..14,25 R:16..19,25
+CreateNebula 2 R:11..14,26 R:16..19,26
+CreateNebula 2 R:11..14,27 R:16..19,27
+CreateNebula 2 R:11..14,28 R:16..19,28
+CreateNebula 2 R:11..14,29 R:16..19,29
+CreateNebula 2 R:11..14,30 R:16..19,30
+;
+; Create impenertrable nebula strips 
+;
+CreateNebula 3 14,3  NebBrk:-1,0
+CreateNebula 3 NebBrk:1,4  16,28 
+; 
+; Create standard worlds for the Galaxy (79 Total) -----------------------------
+ClassTable
+1     ; Ambrosia
+5     ; Arid
+0     ; Artificial
+3     ; Barren
+10    ; Class J
+10    ; Class K
+10    ; Class L
+10    ; Class M
+4     ; Desert
+8     ; Earth
+5     ; Forest
+3     ; Gas Giant
+3     ; Hostile Life
+1     ; Ice world
+5     ; Jungle
+6     ; Ocean
+2     ; Paradise
+4     ; Poisonous
+2     ; Ruins
+3     ; Underground
+5     ; Volcanic
+;
+TechTable
+0     ; pre-tech
+0     ; primitive
+10    ; pre-atomic
+25    ; atomic
+25    ; pre-warp
+25    ; warp
+10    ; jump
+5     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+;
+CreateRandomWorlds 79 1  ;Create 79 worlds, throughout the galaxy, randomly
+EndScenario 
+

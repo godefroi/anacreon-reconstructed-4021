@@ -25,8 +25,6 @@ namespace ThreeLn.Reconstruction4021.Core.Turns;
 /// </summary>
 public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandler
 {
-    private const int MaxResources = 9999;
-
     public void RunAnnualTick(Game game)
     {
         game.Year++;
@@ -124,18 +122,14 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
         world.RevolutionIndex = Math.Clamp(world.RevolutionIndex + change, 0, 100);
 
     /// <summary>Clamps a produced/consumed quantity to [0,MaxResources], truncating (Pascal source: MISC.PAS's ThgLmt).</summary>
-    private static int ClampResource(double x) => x > MaxResources ? MaxResources : x < 0 ? 0 : (int)x;
+    private static int ClampResource(double x) => PascalMath.ClampResource(x);
 
     /// <summary>Pascal's Round: nearest integer, halves away from zero (not banker's rounding).</summary>
-    private static int PascalRound(double x) => x >= 0 ? (int)(x + 0.5) : (int)(x - 0.5);
+    private static int PascalRound(double x) => PascalMath.PascalRound(x);
 
     /// <summary>Random integer in [min,max] inclusive; returns min if the range is empty or inverted (INT.PAS:Rnd).</summary>
-    private int Rnd(int min, int max) => max <= min ? min : random.Next(max - min + 1) + min;
+    private int Rnd(int min, int max) => PascalMath.Rnd(random, min, max);
 
     /// <summary>Randomly varies a value by up to variation% in either direction (Pascal source: INT.PAS's RndVar).</summary>
-    private int Jitter(int value, int variation)
-    {
-        var spread = (int)(value * (variation / 100.0));
-        return Rnd(value - spread, value + spread);
-    }
+    private int Jitter(int value, int variation) => PascalMath.Jitter(random, value, variation);
 }

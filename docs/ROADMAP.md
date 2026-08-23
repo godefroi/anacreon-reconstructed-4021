@@ -242,11 +242,42 @@ follow once that's working. Next up: Phase 2, Galaxy / new-game setup, below.
 **Constants to extract:** `MaxPop` array (UPDATE.PAS:1077-1098), `BasePop` lookup, `TechAdj[]`,
 `TechAdj2[]`, `K6`, `SuppliesPerBillion`, `DrugsPerBillion`, `ThgLmt()` clamp function.
 
-## 2. Galaxy / new-game setup
+## 2. Galaxy / new-game setup — in progress, 2a landed
 
-Galaxy generation or scenario loading, empire creation, initial fleet/planet placement. Needed
-before the economy and visibility handlers can run against a real game instead of hand-built test
-fixtures.
+Nothing in the port creates a `Game`/`Galaxy`/`Empire` from scratch yet — every existing test
+hand-builds fixtures. Pascal has no procedural galaxy generator: `NEWGAME.PAS`'s `LoadScenario`
+(1650-1812) reads a `.SCN` text scenario file and dispatches world/starbase/stargate/nebula/mine
+placement and empire-creation commands one at a time — the scenario script *is* the generation
+pipeline. `CreateEmpire` itself lives in `PRIMINTR.PAS:982-1016`, not `NEWGAME.PAS`.
+
+Real scenario files exist under `reference/scenarios/` (`dos_131`, `dos_20`, `pack_1`, found
+2026-08-23): `dos_131` is the canonical set for this phase — it matches the DOS 1.31 baseline this
+whole port targets, and every one of its files is `ScenaVersion` 10, 12, or 13, squarely inside
+what `NEWGAME.PAS` (1.31) is confirmed to handle. `dos_20`/`pack_1` are the 2.0 port's own set and
+a later superset of it (versions up to 20, beyond even the 2.0 source's explicit branches) —
+staying out of scope until an opt-in v2-parity pass is taken on. Heavy duplication exists across
+the three sets (13 of ~18 unique scenarios are byte-identical between `dos_131`/`dos_20`), not
+pruned yet — a candidate follow-up once 2e's parser exists to confirm duplicates programmatically.
+
+Broken into five sub-commits:
+
+- ✅ **2a, shared helpers.** Extracted `Rnd`/`Jitter`/`PascalRound`/`ClampResource`
+  (`AnnualTickHandler.cs`) into `Core/PascalMath.cs`, and the tech-catalog (the old
+  `_techCatalog`/`MissingTechAt` plus the four `_minTechFor*` tables) into
+  `Core/Entities/TechCatalog.cs` — both are now genuinely shared between the annual-tick handler
+  and new-game empire creation (2b), not a speculative extraction. Pure refactor, zero behavior
+  change (all 124 existing tests pass, golden files byte-identical).
+- ⬜ **2b, empire creation** — port `CreateEmpire`/`CreatePlayerEmpire`/`CreateNPEmpire`'s starting
+  tech-set seeding (`TechDev[Pred(Tech)]` ∪ extras, ∩ `TechDev[Tech]`, via `TechCatalog`) and
+  `DefenseSettings` initialization from `InitDefenseRecord` (`DATACNST.PAS:373-379`).
+- ⬜ **2c, explicit-coordinate placement** — `SetUpWorld`/`CreateWorld`/`CreateBase`/`CreateGate`/
+  `CreateSRMs`/`CreateNebula`, reusing `IEconomicWorld.InitializeSelfSufficiency()` and the existing
+  `GetIndustrialDistribution` industry-population helper.
+- ⬜ **2d, randomized placement** — `GetRandomXY`/`CreateRndPlanet`/`CreateRandomWorlds`/the nebula
+  generators, via a transient per-generation occupancy set (no permanent `Galaxy` spatial index).
+- ⬜ **2e, `.SCN` scenario file loading** — the capstone integration test: `LoadScenario`'s
+  tokenizer/dispatch loop minus its DOS UI, golden-file-verified against real `dos_131/*.SCN` files
+  run through the real, patched `LoadScenario`.
 
 ## 3. NPE AI
 
@@ -422,3 +453,10 @@ same reason each of those was already excluded.
 With `production.golden` migrated, all six ground-truth domains now run through the patch-based lane;
 the transcription pattern (`reference/verify/*.pas`) has no domains left on it, though it's still the
 right tool for a future genuinely-isolated, parameter-only procedure (see "Recommendation" above).
+
+---
+
+# Long-term future possibilities
+
+- options-based enable/disable v2 features, as well as other future enhancements
+- fleet orders to build a minefield across an entire area, either a list of coordinates, or a bounded area

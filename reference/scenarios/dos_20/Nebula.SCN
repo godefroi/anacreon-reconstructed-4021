@@ -1,0 +1,1498 @@
+ANACREON 14
+"The Nebula"
+0        ;Random Scenario
+1 4      ;One to four players
+40       ;40 x 40 Map Size
+179      ;179 Planets in Galaxy
+3        ;Expert
+100 0    ;100+ Years Long
+1791     ;Starting Year
+
+123456789012345678901234567890123456789012345678901234567890123456789012345678
+
+BEGINTEXT
+
+                           The Nebula, ver 1.0
+                              By Adam Luker
+
+     It is easy to lose one's bearings, deep in the heart of the Forestine 
+ Nebula. It is easy to be blinded by the dust, and lose one's connections
+ to life Outside.
+
+     For the regional governers assigned to this part of the First Great 
+ Empire, it was all too easy to forget their allegiances and turn to 
+ despotism or piracy, leaving behind their noble pasts and allowing wealth
+ and power to displace justice and right. And so they abandoned their roles
+ as protectors of the peace and severed their relations with the galaxial 
+ core.
+
+     And so it was that the Forestine Nebula was not part of the spasmic
+ collapse of the empire. Deep in the heart of the nebula, humanity didn't 
+ undergo the cataclysmic fall. But they dwindled. As blinded by greed and 
+ selfishness as they were by the clouds that surrounded them, the nebulaic
+ planetary systems spent their strength in wars, their wit in intrigue, their
+ intelligence in the undermining of others, until the remnant receded into
+ themselves and retreated from interaction with others.
+
+NEWPAGE
+
+     You control one of the eight empires have risen from the wreckage. 
+ As you explore the nebula around you, you will find resources that will aid
+ you in your expansion. Your goal is to conquer the other empires in the 
+ nebula and forge the seed of a New Great Empire, which must grow past the
+ confines of this nebula and fill the entire galaxy.
+
+     But first things first: become the only viable power in the nebula.
+
+ENDTEXT
+
+BEGINDESCRIPTION
+
+; Rules are processed in order, so the owner will have the 'O' rule match
+; before the wildcard rule matches, so they'll only see that one.
+
+WorldBackgroundIndex
+;ID  Criteria   Text
+3:1  O		1	; Closeup on the central Fortress, for the owner's eyes only
+3:1  E:ALL	2	; Fortress teaser text
+2:42 O		3	; Artificial world 2, displaying Constructions
+2:43 O		4	; Artificial world 1, displaying Capitals
+2:44 O		5	; Artificial world 4, displaying Starbases
+2:45 O		6	; Artificial world 3, displaying Stargates
+2:42 E:ALL	7	; Artificial world teaser text
+2:43 E:ALL	7	; Artificial world teaser text
+2:44 E:ALL	7	; Artificial world teaser text
+2:45 E:ALL	7	; Artificial world teaser text
+2:1  O E:0	8	; Instructions for player 1
+2:9  O E:1	9	; Instructions for player 2
+2:13 O E:2	10	; Instructions for player 3
+2:16 O E:3	11	; Instructions for player 4
+2:1  E:0	12	; Information about empire 1
+2:9  E:1	13	; Information about empire 2
+2:13 E:2	14	; Information about empire 3
+2:16 E:3	15	; Information about empire 4
+2:34 E:4	16	; Information about empire 5
+2:36 E:5	17	; Information about empire 6
+2:37 E:6	17	; Information about empire 7 (Same as for empire 6)
+2:38 E:7	18	; Information about empire 8
+2:6  O E:0	19	; Background info for player 1
+3:2  O E:1	20	; Background info for player 2
+2:15 O E:2	21	; Background info for player 3
+2:22 O E:3	22	; Background info for player 4
+EndIndex
+
+TEXT 1	; Closeup on the central fortress
+Fortress N73A3 is an important asset to the empire, containing records
+which go back nearly 2000 years. 
+
+In these records we find references to four large sensor complexes which 
+have been scanning this part of the galaxy for millennia. These planetoids, 
+at [C2:42], [C2:43], [C2:44], and [C2:45], each have unique data pertaining
+to activities of interest in our quadrant.  Our strategists say they could 
+be of vital importance to Fleet Intelligence. 
+ENDTEXT
+
+TEXT 2	; Fortress teaser text
+This Fortress is said to command interesting information regarding high-
+gain sensor arrays in this region.  Fleet Intelligence recommends that we 
+conquer the base, to discover what we can about this part of the galaxy.
+
+Also, control of this base would give us strong leverage in gaining control
+of the central nebula.  This would probably be our most important tool in 
+subjugating other empires.
+ENDTEXT
+
+TEXT 3	; Artificial world 2, displaying Constructions
+This planet-sized sensor array and production facility has been monitoring
+large-scale movement of resources. Based on these data we are convinced that
+large space-based objects are being constructed at the following locations:
+
+[C1:50]     [C1:49]     [C1:48]     [C1:47]     [C1:46]     [C1:45]
+[C1:44]     [C1:43]     [C1:42]     [C1:41]     [C1:40]     [C1:39]
+[C1:38]     [C1:37]     [C1:36]     [C1:35]     [C1:34]     [C1:33]
+[C1:32]     [C1:31]     [C1:30]     [C1:29]     [C1:28]     [C1:27]
+ENDTEXT
+
+TEXT 4	; Artificial world 1, displaying Capitals
+This planet-sized sensor array and production facility has been monitoring
+fleet movements for centuries. Based on statistical studies of the data, we
+have determined that the following planets are almost certainly of important
+political or military significance:
+
+[C2:1]        [C2:9]        [C2:13]        [C2:16]
+[C2:34]        [C2:36]        [C2:37]        [C2:38]
+ENDTEXT
+
+TEXT 5	; Artificial world 4, displaying Starbases
+This planet-sized sensor array and production facility has been monitoring
+gravimetric signatures from all over the quadrant.  Based on these data, we
+believe that man-made, planet-sized bases exist at the following locations:
+
+[C3:1]     [C3:2]     [C3:3]     [C3:4]     [C3:100]     [C3:99]
+[C3:98]     [C3:97]     [C3:96]     [C3:95]     [C3:94]     [C3:93]
+[C3:92]     [C3:91]     [C3:90]     [C3:89]     [C3:88]     [C3:87]
+[C3:86]     [C3:85]     [C3:84]     [C3:83]     [C3:82]     [C3:81]
+ENDTEXT
+
+TEXT 6	; Artificial world 3, displaying Stargates
+This planet-sized sensor array and production facility has been monitoring
+transspace distortions in our quadrant for 1600 years. From their baseline
+observations, they have concluded that the following sectors contain space-
+distorting fields known as StarGates, Warp Links, or Jumpspace Disruptors:
+
+[C4:50]     [C4:49]     [C4:48]     [C4:47]     [C4:46]     [C4:45]
+[C4:44]     [C4:43]     [C4:42]     [C4:41]     [C4:40]     [C4:39]
+[C4:38]     [C4:37]     [C4:36]     [C4:35]     [C4:34]     [C4:33]
+ENDTEXT
+
+TEXT 7	; Artificial world teaser text
+This artificial planet is emitting high-gain paraspace transmissions on
+Garman-Slot intervals. This suggests that it may contain specialized sensor 
+arrays which are far superior to our own. Fleet Intelligence suggests we 
+pursue the conquest of this planet, at Your Majesty's convenience.
+ENDTEXT
+
+TEXT 8	; Instructions for player 1
+The gate at [C4:50] is the key to your success. Don't be tempted to send
+so many war fleets from that you leave it undefended. If you can keep it 
+until the endgame, it will lead your empire to total supremacy and victory. 
+Lose it too early, and your best strategy will be to hide in the nebula 
+until you can build up a strong fleet. 
+
+The sensor base at [C2:45] will reveal the location of your stargate to any
+empire who can conquer it. If you can't secure the base for yourself, at 
+least keep others from gaining access to its secrets.
+ENDTEXT
+
+TEXT 9	; Instructions for player 2
+Your arena is Jumpspace. In it, you stand a chance of victory; outside it,
+in the molasses of Warpspace, your planets will slowly starve in isolation.
+
+Conservation is faster than production - don't sacrifice your jumpfleets 
+lightly. If you squander your starting resources, you will soon find that
+you cannot stand your ground. If you maintain and build your fleets, you 
+will be able to strike swiftly and strongly, the nebula can shield the 
+location of your critical resources, and your expansion will be sure and 
+resolute.
+ENDTEXT
+
+TEXT 10	; Instructions for player 3
+You build on a core of high technology, but to compete with the high pro-
+duction of other empires, you must build up a corpus of planets which can 
+use your technology to create the machines that will conquer the galaxy. 
+
+Use your advanced weaponry to overwhelm your targets. The threat of a 
+heavy Ninja invasion can scare even advanced worlds into early submission,
+giving you fewer casualties and stronger conquered worlds. Your empire can
+only succeed on the premise that Knowledge is Power. Scout out the nebula 
+early on, and keep an eye on tempting targets and threats alike.
+ENDTEXT
+
+TEXT 11	; Instructions for player 4
+"Our Union is Our Strength." Each planet in your consortium is important
+to the health of the whole, and none should be considered useless. 
+
+Your planets seem like easy prey to your more advanced neighbors, and only 
+adamant defense can convince them otherwise. Your universities will thrust
+your technology forward quickly, and most of your planets will come along
+for the ride. Keep them together, pool their resources, and direct their
+industry in productive paths, and you will emerge from your corner of the 
+galaxy like a lion among lambs, unheeded until you were too late to stop.
+ENDTEXT
+
+TEXT 12	; Information about empire 1
+Even the oldest records on this planet cannot say who first built the ex-
+tensive network of soil-lined pods that orbit this gargantuan planet, but
+all agree that the ancient spaceship production facilities are still among
+the most efficient in the quadrant. More importantly to us, however, is 
+the intelligence report that this empire may control a stargate somewhere
+in the nebula. Doubtless constructed by the First Great Empire, it would
+be capable of projecting a fleet to anywhere in the galaxy in a matter of
+days. If this is true, the gate could be a threat to our own prosperity.
+ENDTEXT
+
+TEXT 13 ; Information about empire 2
+A relative newcomer to space-faring culture, this planet has a history of
+violent nations whose sole ambition was to steal the welfare of others.
+
+After a lucky capture of a jumpfleet in this sector, this planet declared
+itself a sovereign empire and proceeded to tyrannize the neighboring
+systems with jumpfleets patterned after those it had captured. Now a grow-
+ing number of planets fly the spotted flag of this empire, and produce
+the jumpships needed to magnify their independence - and their strength.
+ENDTEXT
+
+TEXT 14	; Information about empire 3
+This empire is one of the oldest in the quadrant, second only to the 
+fabled 'Sartid,' if they truly exist. The three advanced planets of this 
+empire have historically been peaceful, but the recent bloody ascent to 
+the throne by a new emperor may just be a taste of violence and aggres-
+sion to come.
+
+The low population of this empire has always hampered production, even in
+the face of their advanced technology, but if they conquer enough planets
+to increase their production significantly ... we will have to be cautious.
+ENDTEXT
+
+TEXT 15	; Information about empire 4
+The Warp Consortium was a loose incorporation of low-tech planets whose 
+greatest strength (and indeed, almost their only asset) was their unity in
+such a large group. Consisting of nearly 20 planets when they declared
+themselves a legal Empire, they have a strong production base and economic
+resiliency which gives them a tactical advantage.
+
+Their current independence owes in part to their control of starbases which
+give them access to various ancient jumpfleet deterrents near their empire.
+ENDTEXT
+
+TEXT 16 ; Information about empire 5
+This is a relatively small empire which has not yet learned the basics of
+interplanetary etiquette. Their jumpfleets cruise through the nebula, with
+the sole intent to raid and plunder.  A nuisance at best, this empire 
+should be dealt with swiftly and decisively.
+
+Fleet Command suggests that any effort put into negotiations with this
+empire would most likely be wasted.
+ENDTEXT
+
+TEXT 17	; Information about empires 6 and 7
+This empire has no real claim to uniqueness in this quadrant.  Ruled by a
+short-sighted emperor with no real tactical awareness, it likely poses a 
+significant threat only to some of our outlying worlds. That said, if we
+leave any of our planets undefended, it is likely that they would be 
+snatched up by this empire. Remember, Your Highness, that conservation of
+our resources will be easier than re-conquering them.
+ENDTEXT
+
+TEXT 18 ; Information about empire 8
+This is the capital of the Sartid empire, about which many fairy tales
+are told. While any of its planets would be great assets to our empire,
+Fleet Command suggests that we not pursue them unless we are in an un-
+assailable position. The historic tactical and political maneuvers of 
+the Sartids are the stuff of legend, and it is not advisable to provoke 
+their anger. The last few centuries have been among the most peaceful in 
+their history; it would be a shame to change that on our account.
+ENDTEXT
+
+TEXT 19 ; More background information for player 1
+This small paradise planet was added to the empire recently after one of
+our conquest fleets was transported through a wormhole to this remote
+part of the galaxy. The wormhole was likely a residual transspace dis-
+tortion caused by the nearby derelict stargate. Fortunately, the fleet 
+was able to commandeer the gate for a return voyage, or we would never 
+have known of their fate.
+
+Indeed, their accident shapes our future. This remote colony - already 
+expanding - has given us the hope of excellence in the galaxy.
+ENDTEXT
+
+TEXT 20 ; More background information for player 2
+Uncanny good fortune seems to accompany our empire through the black 
+void. Years of clan warfare ended when we captured a single jumpship
+in our home sector. We were able, with some difficulty, to reproduce 
+that first jumpship and begin the large corpus of ships we now control.
+
+Then, nearly a decade later, we discovered this huge relic from another 
+age. Before, we blindly groped in the darkness for our growth. Now this 
+outpost is our Eye in the Nebula.
+ENDTEXT
+
+TEXT 21 ; More background information for player 3
+Before your ascendance to the throne, this empire had not changed one
+whit in almost 90 years. This Ninja base is the most recent development.
+
+Like the shock troops that are trained here, our empire is lean, clear-
+headed, and technologically advanced. Like these Ninjas, we long to
+stretch our long-constricted limbs and look to the distant stars again.
+
+We hunger for action.
+ENDTEXT
+
+TEXT 22 ; More background information for player 4
+Artifacts from this planet were crucial in unraveling the language of 
+the lost civilization that went before us, and also made known to us
+the existence of the deep-space starbases nearby. And after the heroic
+efforts to find those bases in the vastness of space were successful, 
+this planet once again was the focal point of our efforts to resurrect
+their computers and sensor systems, which led, later, to the discovery 
+and control of the SRMs and jumpspace disrupter within our space.
+
+Truly, this planet is the academic heart of the Consortium.
+ENDTEXT
+
+ENDDESCRIPTION
+
+; And now, the scenario itself:
+
+DefineZone 2	36,6	39,9	; Jump's transport base system, gate
+DefineZone 3	4,8	7,18	; Starship's area
+DefineZone 4	6,24	10,28	; Jump's capital system
+DefineZone 5	13,3	20,7	; Bio-tech's capital area
+DefineZone 6	31,16	35,20	; Bio-tech's outpost, jumpbase
+DefineZone 7	19,19	22,22	; NPE - Pirates
+DefineZone 8	16,23	22,27	; NPE - Aggressors 1
+DefineZone 9	22,8	28,13	; NPE - Aggressors 2
+DefineZone 10	1,1	25,20	; Superarea 1
+DefineZone 11	26,1	40,23	; Superarea 2
+DefineZone 12	16,24	40,40	; Superarea 3
+DefineZone 13	1,21	15,40	; Superarea 4
+DefineZone 14	16,20	25,24	; Superarea 5
+DefineZone 15	26,31	40,40	; Warp consortium
+
+; Since superarea is mostly the warp consortium, we'll use
+; zone 15 plus the following zones for random world placement:
+DefineZone 16	16,24	40,30	; 175 sectors (67%)
+DefineZone 17	16,31	25,40	; 100 sectors (36%)
+
+; Create Empires -------------------------------------------------------------
+
+RandomizePlayers
+
+CreatePlayerEmpire 0
+0	; Revolution factor
+6	; Jump level
+2	; no of technologies of jump
+7	; Jumpships
+8	; Jtn
+0	; modifiers
+
+CreatePlayerEmpire 1
+0	; revolution factor
+7	; bio-tech level
+1	; no of technologies
+6	; hunter-killers
+0	; modifiers
+
+CreatePlayerEmpire 2
+1	; Revolution factor
+8	; Starship technology
+1	; No of technologies
+13	; Ninja
+0	; modifiers
+
+CreatePlayerEmpire 3
+2	; Revolution factor
+5	; Warp level
+1	; number of technologies
+11	; Transports
+0	; modifiers
+
+; And now the NPE's ----------------------------------------------------------
+
+
+CreateNPEmpire 0
+3	; Aggressor
+RndName
+0	; Revolution factor
+6	; Jump level
+2	; no of technologies of jump
+7	; Jumpships
+8	; Jtn
+0	; modifiers
+
+CreateNPEmpire 1
+1	; Pirates
+RndName
+0	; revolution factor
+7	; bio-tech level
+1	; no of technologies
+6	; hunter-killers
+0	; modifiers
+
+CreateNPEmpire 2
+2	; Kingdom empire
+RndName
+0	; Revolution factor
+8	; Starship technology
+1	; No of technologies
+13	; jumptransports
+0	; modifiers
+
+CreateNPEmpire 3
+3	; Aggressor
+"Warp Consortium"
+2	; Revolution factor
+5	; Warp level
+1	; number of technologies
+11	; hunter-killers
+0	; modifiers
+
+CreateNPEmpire 4
+1	; Pirates
+RndName
+0	; revolution factor
+7	; bio-tech level
+1	; no of techs
+6	; hk
+0	; modifiers
+
+CreateNPEmpire 5
+3	; aggressor empire
+RndName
+0	; revolution factor
+6	; jump level
+2	; no of techs
+7	; Jumpship
+8	; Jtn
+0	; modifiers
+
+CreateNPEmpire 6
+3	; aggressor empire
+RndName
+0	; revolution factor
+6	; jump level
+2	; no of techs
+7	; Jumpship
+8	; Jtn
+0	; modifiers
+
+CreateNPEmpire 7
+2	; Kingdom
+Sartid
+0	; revolution factor
+9	; Pre-Gate
+0	; no of techs
+0	; modifiers
+
+; Empire 1 --------------------------------------------------------------
+
+CreateWorld 1 Z:4
+11	; Gas Giant
+6	; jump
+4 	; capital
+0 	; empire 1
+2200 	; population
+90	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 7000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500    0 5000 3500    0    0 3500
+;  men  nnj  amb  che  met  sup  tri
+  3500    0    0 8000 6500 7000 4000
+
+CreateWorld 2 Z:4
+14	; Jungle
+5	; warp
+0	; agricultural
+0	; empire 1
+700	; population
+85	; efficiency
+20	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1500    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0    0    0    0    0 1000
+;  men  nnj  amb  che  met  sup  tri
+  1500    0    0 1000 1000 8000 1000
+
+CreateWorld 3 Z:4
+19	; underground
+5	; warp
+12	; raw material
+0	; empire 1
+2000	; population
+90	; efficiency
+100	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2000    0  400  300    0    0  800
+;  men  nnj  amb  che  met  sup  tri
+  1500    0    0 4000 7000 2000 4000
+
+CreateWorld 4 Z:4
+10	; Forest
+6	; jump
+18	; University
+0	; empire 1
+800	; population
+55	; efficiency
+80	; trillum
+;  LAM  def  GDM  ion
+     0    0 2500    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   800    0  500  500    0    0  200
+;  men  nnj  amb  che  met  sup  tri
+  1500    0    0 1000 2000 1000  800
+
+CreateWorld 5 Z:2
+5	; Class k
+4	; pre-warp
+16	; Transport base
+0	; empire 1
+2200	; population
+95	; efficiency
+75	; trillum
+;  LAM  def  GDM  ion
+     0    0 2000    0   
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5000    0    0    0    0    0 6000
+;  men  nnj  amb  che  met  sup  tri
+  2300    0    0 3000 5000 2000 2000
+
+CreateWorld 6 Z:2
+16	; Paradise
+4	; pre-warp
+16	; Transport base
+0	; empire 1
+1500	; population
+70	; efficiency
+80	; trillum
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2200    0    0    0    0    0  500
+;  men  nnj  amb  che  met  sup  tri
+  1300    0    0 1000 1500 1000 1500
+
+CreateWorld 7 Z:2
+7	; Class m
+5	; warp
+16	; Transport base
+0	; empire 1
+2300	; population
+95	; efficiency
+75	; trillum
+;  LAM  def  GDM  ion
+     0    0 2000    0   
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  4000    0    0    0    0    0 6000
+;  men  nnj  amb  che  met  sup  tri
+  2300    0    0 3000 5000 2000 2000
+
+CreateWorld 8 Z:2
+21	; volcanic
+4	; pre-warp
+9	; metal mine
+0	; empire 1
+1800	; population
+90	; efficiency
+80	; trillum
+;  LAM  def  GDM  ion
+     0    0 2500    0   
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3000    0    0    0    0    0 1000
+;  men  nnj  amb  che  met  sup  tri
+  1700    0    0 1500 8000 2000 1000
+
+CreateStarGate R:37..38,7..8
+24	; gate
+0	; empire 1
+
+; Empire 2 ----------------------------------------------------------
+
+CreateWorld 9 Z:5
+9 	; earthlike
+7 	; bio-tech
+4 	; capital
+1 	; empire 2
+2900 	; population
+90	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 3500 2000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3000 1500 4500 3500    0    0 2500
+;  men  nnj  amb  che  met  sup  tri
+  3000    0    0 6000 7500 2500 6500
+
+CreateWorld 10 Z:5
+12 	; hostile life
+6 	; jump tech
+7 	; jumpship base
+1 	; empire 2
+1800 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   500    0 2200 1500    0    0 1750
+;  men  nnj  amb  che  met  sup  tri
+  1750  300    0 3500 4500 1000 1000
+
+CreateWorld 11 Z:6
+1 	; arid
+6 	; jump tech
+7 	; jumpship base
+1 	; empire 2
+1700 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   500    0 2200 1500    0    0 1750
+;  men  nnj  amb  che  met  sup  tri
+  1750    0    0 3000 3500 1000 1500
+
+CreateWorld 12 Z:6
+21 	; volcanic
+6 	; jump tech
+7 	; jumpship base
+1 	; empire 2
+1700 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   500    0 2200 1500    0    0 1750
+;  men  nnj  amb  che  met  sup  tri
+  1750    0    0 3500 4500 1000 1000
+
+; For some reason, the starbase for this empire isn't created correctly
+; if it's created at this point in the scenario.  So I'll make it
+; at the end of the worlds section.  (Just so you know.)
+
+; Empire 3 ------------------------------------------------------------
+
+CreateWorld 13 Z:3
+19 	; underground
+8 	; starship
+4 	; capital
+2 	; empire 3
+850 	; population
+85	; efficiency
+100	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1000 3500 2000  
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6500 1500 2800 2000 1000    0 4000
+;  men  nnj  amb  che  met  sup  tri
+  5000 1000    0 5000 8000 4000 5000
+
+CreateWorld 14 Z:3
+0 	; ambrosia
+7 	; bio-tech
+1 	; Ambrosia planet
+2 	; empire 3
+1000 	; population
+65	; efficiency
+100	; trillum reserves
+;  LAM  def  GDM  ion
+     0  600 1500 1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1500    0 1000 1000    0    0  750
+;  men  nnj  amb  che  met  sup  tri
+  1500  200 4000 3500 2500 1500 1000
+
+CreateWorld 15 Z:3
+15	; earth
+8 	; starship
+10 	; Ninja base
+2 	; empire 3
+1000 	; population
+75	; efficiency
+100	; trillum reserves
+;  LAM  def  GDM  ion
+     0 2000 3000 2000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0 2000 3000    0    0  500
+;  men  nnj  amb  che  met  sup  tri
+  2500 2000 3000 4500 3000 1000 1500
+
+; Empire 4 ---------------------------------------------------------------
+
+CreateWorld 16 Z:15
+16 	; paradise
+5 	; warp
+4 	; capital
+3 	; empire 4
+3000 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+    0    0  2500    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2000    0    0    0    0    0 2000
+;  men  nnj  amb  che  met  sup  tri
+  3000    0    0 2500 3500 2000 2500
+
+CreateWorld 17 Z:15
+8 	; desert
+4 	; pre-warp
+20 	; trillum mine
+3 	; empire 4
+1500 	; population
+50	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0    0    0    0    0  500
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 1000 1500 1000 7500
+
+CreateWorld 18 Z:15
+5 	; class k
+5 	; Warp
+16 	; transport base
+3 	; empire 4
+1600 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1500    0    0    0    0    0 1000
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 1000 1500 1000 1500
+
+CreateWorld 19 Z:15
+7 	; class m
+5 	; Warp
+16 	; transport base
+3 	; empire 4
+1600 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0    0    0    0    0  500
+;  men  nnj  amb  che  met  sup  tri
+  1200    0    0 1000 1500 1000 1500
+
+CreateWorld 20 Z:15
+12 	; hostile life
+5 	; Warp
+16 	; transport base
+3 	; empire 4
+1900 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1200    0    0    0    0    0  500
+;  men  nnj  amb  che  met  sup  tri
+  1000  300    0 1000 1500 1000 1500
+
+CreateWorld 21 Z:15
+6	; Class L
+5	; Warp
+6	; independant (type)
+3	; empire 4
+1300	; population
+40	; efficiency
+40	; trillum
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   800    0    0    0    0    0  500
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 1000 1500 1000 1500
+
+CreateWorld 22 Z:15
+18	; ruins
+5	; Warp
+18	; University
+3	; empire 4
+900	; population
+50	; efficiency
+80	; trillum
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   800    0    0    0    0    0  500
+;  men  nnj  amb  che  met  sup  tri
+   700    0    0 1000 1500 1000 1500
+
+CreateWorld 23 Z:15
+9	; Earthlike
+4	; pre-warp
+9	; metal mine
+3	; empire 4
+1200	; population
+80	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   600    0    0    0    0    0  800
+;  men  nnj  amb  che  met  sup  tri
+   600    0    0 1000 3500 1000 1500
+
+CreateWorld 24 Z:15
+13	; Earthlike
+4	; pre-warp
+9	; metal mine
+3	; empire 4
+1100	; population
+90	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   600    0    0    0    0    0  800
+;  men  nnj  amb  che  met  sup  tri
+   700    0    0 1000 3500 1000 1500
+
+CreateWorld 25 Z:15
+21	; Volcanic
+3	; atomic
+9	; metal mine
+3	; empire 4
+800	; population
+80	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   600    0    0    0    0    0  800
+;  men  nnj  amb  che  met  sup  tri
+   600    0    0 1000 3500 1000 1500
+
+CreateWorld 26 Z:15
+12	; hostile life
+3	; atomic
+0	; agricultural
+3	; empire 4
+1400	; population
+90	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0 1400    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   700    0    0    0    0    0  800
+;  men  nnj  amb  che  met  sup  tri
+   900  250    0 1000 1500 6000 1500
+
+CreateWorld 27 Z:15
+16	; paradise
+3	; atomic
+5	; chemical
+3	; empire 4
+900	; population
+60	; efficiency
+90	; trillum
+;  LAM  def  GDM  ion
+     0    0 1200    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   600    0    0    0    0    0  800
+;  men  nnj  amb  che  met  sup  tri
+   600    0    0 5000 1500 1000 1500
+
+CreateWorld 28 Z:15
+7	; class m
+5	; warp
+5	; chemical
+3	; empire 4
+1400	; population
+70	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0  800    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   700    0    0    0    0    0  800
+;  men  nnj  amb  che  met  sup  tri
+   800    0    0 5000 1500 1000 1500
+
+CreateWorld 29 Z:15
+6	; class l
+3	; atomic
+6	; independant
+3	; empire 4
+600	; population
+65	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0  800    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   500    0    0    0    0    0  300
+;  men  nnj  amb  che  met  sup  tri
+   500    0    0 1000 1500 1000  800
+
+CreateWorld 30 Z:15
+17	; poisonous
+2	; pre-atomic
+6	; independant
+3	; empire 4
+500	; population
+75	; efficiency
+80	; trillum
+;  LAM  def  GDM  ion
+     0    0    0    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   300    0    0    0    0    0  300
+;  men  nnj  amb  che  met  sup  tri
+   500    0    0 1000  500 1000  100
+
+CreateWorld 31 Z:15
+18	; ruins
+4	; pre-warp
+6	; independant
+3	; empire 4
+1100	; population
+85	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0 1200    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   700    0    0    0    0    0  600
+;  men  nnj  amb  che  met  sup  tri
+   800    0    0 1000 1500 1000  900
+
+CreateWorld 32 Z:15
+1	; arid
+3	; atomic
+6	; independant
+3	; empire 4
+600	; population
+65	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0  800    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   500    0    0    0    0    0  300
+;  men  nnj  amb  che  met  sup  tri
+   800    0    0 1000 1500 1000  800
+
+CreateWorld 33 Z:15
+3	; class l
+3	; atomic
+6	; independant
+3	; empire 4
+1000	; population
+85	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0 1200    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0    0    0    0    0  800
+;  men  nnj  amb  che  met  sup  tri
+  1200    0    0 1000 1500 1000 1000
+
+CreateSRMs 3 26,29 R:26..27,29
+CreateSRMs 3 R:26..32,30 R:32..34,30
+CreateSRMs 3 R:35..38,30 R:38..40,30
+CreateSRMs 3 R:26,31..33 R:26,34..35
+CreateSRMs 3 R:26,36..37 R:26,37..40
+CreateSRMs 3 29,34 30,34
+CreateSRMs 3 35,33 36,33
+
+CreateStarGate R:31..37,31..34
+26	; disrupter
+3	; empire 4
+ 
+
+; Empire 5 ---------------------------------------------------------------
+ 
+CreateWorld 34 Z:7
+9	; earthlike
+7	; bio-tech
+4	; capital
+4	; empire 5
+2500	; population
+90	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0 3200 2000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1800 2000 4000 3000    0    0 1750
+;  men  nnj  amb  che  met  sup  tri
+  4650    0    0 4500 6500 4000 3800
+
+CreateWorld 35 Z:7
+12	; hostile life
+7	; bio-tech
+7	; jumpship base
+4	; empire 5
+1800	; population
+78	; efficiency
+90	; trillum
+;  LAM  def  GDM  ion
+     0    0 2200 1500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2500 1500 2500 2000    0    0 1050
+;  men  nnj  amb  che  met  sup  tri
+  2650    0    0 3000 4500 2500 2500
+
+CreateSRMs 4 R:19..20,19 R:21..22,19
+CreateSRMs 4 R:19..20,22 R:21..22,22
+CreateSRMs 4 R:19,19..20 R:19,21..22
+CreateSRMs 4 R:21,19..20 R:21,21..22
+
+; Empire 6 ---------------------------------------------------------------
+
+CreateWorld 36 Z:8
+7	; class m
+6	; jump
+4	; capital
+5	; empire 6
+2200	; population
+90	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0 3700    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1800    0 3500 3000    0    0 1750
+;  men  nnj  amb  che  met  sup  tri
+  5650    0    0 4500 6500 4000 3800
+
+; Empire 7 ---------------------------------------------------------------
+
+CreateWorld 37 Z:9
+16	; paradise
+6	; jump
+4	; capital
+6	; empire 7
+2400	; population
+90	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0 3700    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1800    0 3500 3000    0    0 1750
+;  men  nnj  amb  che  met  sup  tri
+  5650    0    0 4500 6500 4000 3800
+
+; Empire 8 ---------------------------------------------------------------
+
+CreateWorld 38 Z:10
+4	; class j
+9	; pre-gate
+4	; capital
+7	; empire 8
+3600	; population
+90	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+  4000 4500 7700 5000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7800 5000 7500 6000 3000    0 8750
+;  men  nnj  amb  che  met  sup  tri
+  5650    0    0 4500 6500 4000 3800
+
+CreateWorld 39 Z:11
+5	; class k
+9	; pre-gate
+2	; base planet
+7	; empire 8
+2800	; population
+90	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+  3500 4000 7000 4000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6800 4000 6500 5000 2000    0 6750
+;  men  nnj  amb  che  met  sup  tri
+  4650    0    0 4500 6500 4000 3800
+
+CreateWorld 40 Z:12
+6	; class l
+9	; pre-gate
+2	; base planet
+7	; empire 8
+2800	; population
+90	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+  3500 4000 7000 4000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6800 4000 6500 5000 2000    0 6750
+;  men  nnj  amb  che  met  sup  tri
+  4650    0    0 4500 6500 4000 3800
+
+CreateWorld 41 Z:13
+7	; class m
+9	; pre-gate
+2	; base planet
+7	; empire 8
+2800	; population
+90	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+  3500 4000 7000 4000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6800 4000 6500 5000 2000    0 6750
+;  men  nnj  amb  che  met  sup  tri
+  4650    0    0 4500 6500 4000 3800
+
+; Other worlds ------------------------------------------------
+
+CreateStarbase 1 Z:14
+21	; Fortress
+8	; Starship
+2	; Base planet
+8	; Independant
+1400	; Pop
+10	; Efficiency
+;  LAM  def  GDM  ion
+  4000 5000 9999 6000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  8000 7000 9000 7000 5000 3500 8000
+;  men  nnj  amb  che  met  sup  tri
+  8000 3000    0 9999 9999 9999 9999
+
+CreateWorld 42 Z:14
+2	; Artificial
+5	; warp
+6	; independant (type)
+8	; independant (empire)
+400	; pop
+60	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0 4700    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5800    0    0    0    0    0 1750
+;  men  nnj  amb  che  met  sup  tri
+  3650    0    0 4500 6500 4000 3800
+
+CreateWorld 43 Z:14
+2	; Artificial
+6	; jump
+6	; independant (type)
+8	; independant (empire)
+600	; pop
+60	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0 4700 1800
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3800    0 3000 2100    0    0 1750
+;  men  nnj  amb  che  met  sup  tri
+  3650    0    0 4500 6500 4000 3800
+
+CreateWorld 44 Z:14
+2	; Artificial
+6	; jump
+6	; independant (type)
+8	; independant (empire)
+600	; pop
+60	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0    0 4700 1800
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  4800    0 4000 2100    0    0 1750
+;  men  nnj  amb  che  met  sup  tri
+  3650    0    0 4500 6500 4000 3800
+
+CreateWorld 45 Z:14
+2	; Artificial
+7	; bio-tech
+6	; independant (type)
+8	; independant (empire)
+900	; pop
+60	; efficiency
+100	; trillum
+;  LAM  def  GDM  ion
+     0 1500 4700 2500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  4800 3000 3500 2000 2500    0 1750
+;  men  nnj  amb  che  met  sup  tri
+  5650    0    0 4500 6500 4000 3800
+
+
+
+; These are empire 2's and 4's outposts.  See above for an explanation of why it's here
+; instead of in empire 2's section.
+
+CreateStarbase 2 Z:6
+23	; outpost
+6 	; jump tech
+11 	; outpost
+1 	; empire 2
+1 	; population
+75	; efficiency
+;  LAM  def  GDM  ion
+     0    0 1500    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   500    0 1000  500    0    0  750
+;  men  nnj  amb  che  met  sup  tri
+   750    0    0 1000 1500  100 1000
+
+CreateStarbase 3 R:26..30,32..37
+23	; outpost
+5 	; warp tech
+6 	; independent
+3 	; empire 4
+10 	; population
+75	; efficiency
+;  LAM  def  GDM  ion
+     0    0 1500    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1500    0    0    0    0    0  750
+;  men  nnj  amb  che  met  sup  tri
+   750    0    0 1000 1500    0 1000
+
+CreateStarbase 4 R:32..37,32..37
+23	; outpost
+5 	; warp tech
+6 	; independent
+3 	; empire 4
+10 	; population
+75	; efficiency
+;  LAM  def  GDM  ion
+     0    0 1200    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   500    0    0    0    0    0  750
+;  men  nnj  amb  che  met  sup  tri
+   650    0    0 1000 1500    0 1000
+
+; Random worlds -----------------------------------------------------
+; Zone 10 :
+
+ClassTable
+2     ; Ambrosia
+7     ; Arid
+0     ; Artificial
+9     ; Barren
+4     ; Class J
+5     ; Class K
+4     ; Class L
+5     ; Class M
+8     ; Desert
+7     ; Earth
+3     ; Forest
+4     ; Gas Giant
+2     ; Hostile Life
+5     ; Ice world
+4     ; Jungle
+3     ; Ocean
+2     ; Paradise
+4     ; Poisonous
+7     ; Ruins
+7     ; Underground
+0     ; Terraforming
+8     ; Volcanic
+
+TechTable
+5	; pre-tech
+10	; primitive
+15	; pre-atomic
+22	; atomic
+20	; pre-warp
+14	; warp
+10	; jump 
+3	; bio-tech
+1	; starship
+0	; pre-gate
+0	; gate
+
+CreateRandomWorlds 40 10
+
+; Zone 11 :
+
+ClassTable
+3     ; Ambrosia
+5     ; Arid
+1     ; Artificial
+6     ; Barren
+6     ; Class J
+5     ; Class K
+6     ; Class L
+5     ; Class M
+6     ; Desert
+6     ; Earth
+4     ; Forest
+4     ; Gas Giant
+2     ; Hostile Life
+4     ; Ice world
+4     ; Jungle
+5     ; Ocean
+4     ; Paradise
+4     ; Poisonous
+5     ; Ruins
+7     ; Underground
+0     ; Terraforming
+8     ; Volcanic
+
+TechTable
+5	; pre-tech
+10	; primitive
+15	; pre-atomic
+24	; atomic
+20	; pre-warp
+16	; warp
+8	; jump 
+2	; bio-tech
+0	; starship
+0	; pre-gate
+0	; gate
+
+CreateRandomWorlds 24 11
+
+; Zone 12 :
+
+ClassTable
+5     ; Ambrosia
+4     ; Arid
+0     ; Artificial
+5     ; Barren
+6     ; Class J
+6     ; Class K
+4     ; Class L
+5     ; Class M
+5     ; Desert
+7     ; Earth
+5     ; Forest
+5     ; Gas Giant
+5     ; Hostile Life
+4     ; Ice world
+4     ; Jungle
+3     ; Ocean
+5     ; Paradise
+4     ; Poisonous
+4     ; Ruins
+7     ; Underground
+0     ; Terraforming
+7     ; Volcanic
+
+TechTable
+10	; pre-tech
+15	; primitive
+24	; pre-atomic
+24	; atomic
+16	; pre-warp
+10	; warp
+1	; jump 
+0	; bio-tech
+0	; starship
+0	; pre-gate
+0	; gate
+
+;We WOULD say:
+;CreateRandomWorlds 28 12
+;but we don't want to overload the warp consortium.  So...
+
+CreateRandomWorlds 3 15
+CreateRandomWorlds 16 16
+CreateRandomWorlds 9 17
+
+; Zone 13 :
+
+ClassTable
+1     ; Ambrosia
+5     ; Arid
+0     ; Artificial
+9     ; Barren
+4     ; Class J
+5     ; Class K
+5     ; Class L
+5     ; Class M
+6     ; Desert
+6     ; Earth
+3     ; Forest
+4     ; Gas Giant
+10    ; Hostile Life
+4     ; Ice world
+4     ; Jungle
+3     ; Ocean
+2     ; Paradise
+4     ; Poisonous
+8     ; Ruins
+6     ; Underground
+0     ; Terraforming
+6     ; Volcanic
+
+TechTable
+5	; pre-tech
+10	; primitive
+15	; pre-atomic
+24	; atomic
+20	; pre-warp
+16	; warp
+8	; jump 
+2	; bio-tech
+0	; starship
+0	; pre-gate
+0	; gate
+
+CreateRandomWorlds 42 13
+
+; And now, introducing ...
+; THE NEBULA!
+
+; It's very random -- theoretically we could end up with mostly empty
+; space, but that's not very likely.
+
+;Bands
+CreateRandomNebula 1 20 25
+;patches
+CreateRandomNebula 2 75 85
+
+;Now a dark band on the right
+CreateNebula 2 R:23..26,1 R:32..35,1
+CreateNebula 2 R:23..26,2 R:32..35,2
+CreateNebula 2 R:24..27,3 R:33..36,3
+CreateNebula 2 R:24..27,4 R:33..36,4
+CreateNebula 2 R:25..28,5 R:34..37,5
+CreateNebula 2 R:25..28,6 R:34..37,6
+CreateNebula 2 R:26..29,7 R:35..38,7
+CreateNebula 2 R:26..29,8 R:35..38,8
+CreateNebula 2 R:27..30,9 R:36..39,9
+CreateNebula 2 R:27..30,10 38,10
+CreateNebula 2 R:28..31,11 38,11
+CreateNebula 2 R:28..31,12 38,12
+CreateNebula 2 R:29..32,13 39,13
+CreateNebula 2 R:28..32,14 39,14
+CreateNebula 2 R:27..31,15 40,15
+CreateNebula 2 R:26..30,16 40,16
+CreateNebula 2 R:26..30,17 40,17
+CreateNebula 2 R:27..31,18 40,18
+CreateNebula 2 R:28..31,19 40,19
+CreateNebula 2 R:29..32,20 40,20
+CreateNebula 2 R:30..33,21 40,21
+CreateNebula 2 R:30..33,22 40,22
+CreateNebula 2 R:30..34,23 40,23
+CreateNebula 2 R:31..34,24 40,24
+CreateNebula 2 R:31..34,25 40,25
+CreateNebula 2 R:32..35,26 40,26
+CreateNebula 2 R:33..35,27 40,27
+CreateNebula 2 R:33..35,28 40,28
+CreateNebula 2 R:35..37,29 40,29
+CreateNebula 2 R:35..37,30 40,30
+CreateNebula 2 R:38..40,31 40,31
+
+; And a few of dark patches 
+DefineXY dark1 R:6..25,5..25
+CreateNebula 2 dark1:-3..-2,-3 dark1:1..3,-3
+CreateNebula 2 dark1:-4..-2,-2 dark1:3..4,-2
+CreateNebula 2 dark1:-5..-2,-1 dark1:2..4,-1
+CreateNebula 2 dark1:-4..-3,0 dark1:1..3,0
+CreateNebula 2 dark1:-2..-1,1 dark1:2..3,1
+CreateNebula 2 dark1:-2..0,2 dark1:1..2,2
+
+DefineXY dark2 R:6..25,15..35
+CreateNebula 2 dark2:-3..-2,-3 dark2:1..3,-3
+CreateNebula 2 dark2:-4..-2,-2 dark2:3..4,-2
+CreateNebula 2 dark2:-5..-2,-1 dark2:2..4,-1
+CreateNebula 2 dark2:-4..-3,0 dark2:1..3,0
+CreateNebula 2 dark2:-2..-1,1 dark2:2..3,1
+CreateNebula 2 dark2:-2..0,2 dark2:1..2,2
+
+DefineXY dark3 R:15..33,15..35
+CreateNebula 2 dark3:-3..-2,-3 dark3:1..3,-3
+CreateNebula 2 dark3:-4..-2,-2 dark3:3..4,-2
+CreateNebula 2 dark3:-5..-2,-1 dark3:2..4,-1
+CreateNebula 2 dark3:-4..-3,0 dark3:1..3,0
+CreateNebula 2 dark3:-2..-1,1 dark3:2..3,1
+CreateNebula 2 dark3:-2..0,2 dark3:1..2,2
+
+DefineXY dark4 R:6..33,5..35
+CreateNebula 2 dark4:-3..-2,-3 dark4:1..3,-3
+CreateNebula 2 dark4:-4..-2,-2 dark4:3..4,-2
+CreateNebula 2 dark4:-5..-2,-1 dark4:2..4,-1
+CreateNebula 2 dark4:-4..-3,0 dark4:1..3,0
+CreateNebula 2 dark4:-2..-1,1 dark4:2..3,1
+CreateNebula 2 dark4:-2..0,2 dark4:1..2,2
+
+DefineXY dark5 20,23
+CreateNebula 2 dark5:-3..-2,-3 dark5:1..3,-3
+CreateNebula 2 dark5:-4..-2,-2 dark5:3..4,-2
+CreateNebula 2 dark5:-5..-2,-1 dark5:2..4,-1
+CreateNebula 2 dark5:-4..-3,0 dark5:1..3,0
+CreateNebula 2 dark5:-2..-1,1 dark5:2..3,1
+CreateNebula 2 dark5:-2..0,2 dark5:1..2,2
+
+;And now a few dense spots in that center one:
+CreateNebula 3 dark5:-3..-2,-2 dark5:-2..-1,-2
+CreateNebula 3 dark5:-1,0 dark5:-1,0
+CreateNebula 3 dark5:2,-2..-1 dark5:2..3,-1..1
+
+EndScenario

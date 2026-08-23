@@ -302,57 +302,6 @@ public sealed partial class AnnualTickHandler
         [ConstructionType.Disrupter] = RawMaterialRow((CargoType.Chemicals, 1110), (CargoType.Metals, 1180), (CargoType.Trillum, 1120)),
     }.ToFrozenDictionary();
 
-    /// <summary>
-    /// Minimum tech level at which each cargo type appears in TechDev (DATACNST.PAS:359-370). TechDev
-    /// is monotonically increasing in TechLevel — every level's set is a superset of the previous
-    /// one's — so "first tech level it appears at" is equivalent to full set membership at every
-    /// later level, and much smaller to state than replicating all 11 sets.
-    /// </summary>
-    private static readonly FrozenDictionary<CargoType, TechLevel> _minTechForCargo = new Dictionary<CargoType, TechLevel> {
-        [CargoType.Supplies] = TechLevel.PreTech,
-        [CargoType.Legion] = TechLevel.Primitive,
-        [CargoType.Metals] = TechLevel.Primitive,
-        [CargoType.Chemicals] = TechLevel.PreAtomic,
-        [CargoType.Trillum] = TechLevel.Atomic,
-        [CargoType.Ambrosia] = TechLevel.Bio,
-        [CargoType.NinjaLegion] = TechLevel.Starship,
-    }.ToFrozenDictionary();
-
-    /// <summary>Minimum tech level at which each ship type appears in TechDev (DATACNST.PAS:359-370). See <see cref="_minTechForCargo"/>.</summary>
-    private static readonly FrozenDictionary<ShipType, TechLevel> _minTechForShip = new Dictionary<ShipType, TechLevel> {
-        [ShipType.Fighter] = TechLevel.PreWarp,
-        [ShipType.Transport] = TechLevel.Warp,
-        [ShipType.Jumpship] = TechLevel.Jump,
-        [ShipType.Jumptransport] = TechLevel.Jump,
-        [ShipType.HunterKiller] = TechLevel.Bio,
-        [ShipType.Penetrator] = TechLevel.Bio,
-        [ShipType.Starship] = TechLevel.Starship,
-    }.ToFrozenDictionary();
-
-    /// <summary>
-    /// Minimum tech level at which each defense type appears in TechDev (DATACNST.PAS:359-370). See
-    /// <see cref="_minTechForCargo"/>. Used by NewTechLevel (AnnualTickHandler.Empire.cs), not by
-    /// production — no defense-tech gate exists in the production pipeline itself.
-    /// </summary>
-    private static readonly FrozenDictionary<DefenseType, TechLevel> _minTechForDefense = new Dictionary<DefenseType, TechLevel> {
-        [DefenseType.Gdm] = TechLevel.Atomic,
-        [DefenseType.IonCannon] = TechLevel.Jump,
-        [DefenseType.DefenseSatellite] = TechLevel.Bio,
-        [DefenseType.Lam] = TechLevel.Starship,
-    }.ToFrozenDictionary();
-
-    /// <summary>Minimum tech level at which each construction type appears in TechDev (DATACNST.PAS:359-370). See <see cref="_minTechForCargo"/>. Used by NewTechLevel (AnnualTickHandler.Empire.cs).</summary>
-    private static readonly FrozenDictionary<ConstructionType, TechLevel> _minTechForConstruction = new Dictionary<ConstructionType, TechLevel> {
-        [ConstructionType.Outpost] = TechLevel.Bio,
-        [ConstructionType.Minefield] = TechLevel.Starship,
-        [ConstructionType.CommandBase] = TechLevel.Starship,
-        [ConstructionType.IndustrialComplex] = TechLevel.Starship,
-        [ConstructionType.Fortress] = TechLevel.PreGate,
-        [ConstructionType.WarpLink] = TechLevel.PreGate,
-        [ConstructionType.Disrupter] = TechLevel.PreGate,
-        [ConstructionType.Gate] = TechLevel.Gate,
-    }.ToFrozenDictionary();
-
     /// <summary>ISSP: how far over/under self-sufficient an industry's dial is set (DATACNST.PAS:524-525).</summary>
     private static readonly double[] _issp = [0.01, 0.10, 0.25, 0.50, 0.75, 1.00, 1.50, 2.00, 3.00, 4.00, 5.00];
 
@@ -455,10 +404,10 @@ public sealed partial class AnnualTickHandler
     {
         foreach (var neighbor in AdjacentSameEmpireRawMaterialPlanets(starbase, galaxy)) {
             foreach (var cargo in _rawMaterialCargoTypes) {
-                if (starbase.Cargo[cargo] <= MaxResources)
+                if (starbase.Cargo[cargo] <= PascalMath.MaxResources)
                     continue;
 
-                var transfer = Math.Min(MaxResources - neighbor.Cargo[cargo], starbase.Cargo[cargo] - MaxResources);
+                var transfer = Math.Min(PascalMath.MaxResources - neighbor.Cargo[cargo], starbase.Cargo[cargo] - PascalMath.MaxResources);
                 neighbor.Cargo[cargo] += transfer;
                 starbase.Cargo[cargo] -= transfer;
             }
@@ -499,11 +448,11 @@ public sealed partial class AnnualTickHandler
             : world.TechLevel;
 
     private static bool CargoTechAvailable(CargoType cargo, TechLevel effectiveTech) =>
-        effectiveTech >= _minTechForCargo[cargo];
+        effectiveTech >= TechCatalog.MinTechForCargo[cargo];
 
     private static bool ShipTechAvailable(IEconomicWorld world, ShipType ship, TechLevel effectiveTech)
     {
-        if (effectiveTech < _minTechForShip[ship])
+        if (effectiveTech < TechCatalog.MinTechForShip[ship])
             return false;
 
         // Independent worlds have no empire research record to check against; owned worlds also need
@@ -557,7 +506,7 @@ public sealed partial class AnnualTickHandler
     /// </summary>
     private int ProduceTrillum(IEconomicWorld world, int production, int currentTrillumCargo)
     {
-        var availableCapacity = MaxResources - Math.Min(currentTrillumCargo, MaxResources);
+        var availableCapacity = PascalMath.MaxResources - Math.Min(currentTrillumCargo, PascalMath.MaxResources);
         production = Math.Min(production, availableCapacity);
 
         var reserves = world.TrillumReserve;
@@ -729,11 +678,11 @@ public sealed partial class AnnualTickHandler
         if (production <= 0)
             production = 1;
 
-        production = Math.Min(production, MaxResources - world.Ships[ship]);
+        production = Math.Min(production, PascalMath.MaxResources - world.Ships[ship]);
         production = ApplyRawMaterialConstraint(world, production,
             _rawMaterialForShips.GetValueOrDefault(ship, FrozenDictionary<CargoType, int>.Empty), reportedShortfalls);
 
-        world.Ships[ship] = Math.Min(MaxResources, world.Ships[ship] + production);
+        world.Ships[ship] = Math.Min(PascalMath.MaxResources, world.Ships[ship] + production);
     }
 
     private void ProduceCargo(IEconomicWorld world, TechLevel effectiveTech, IndustryType industry, CargoType cargo, double prodAdj, HashSet<CargoType> reportedShortfalls)
@@ -755,7 +704,7 @@ public sealed partial class AnnualTickHandler
         else if (production <= 0)
             production = 1;
 
-        production = Math.Min(production, MaxResources - Math.Min(world.Cargo[cargo], MaxResources));
+        production = Math.Min(production, PascalMath.MaxResources - Math.Min(world.Cargo[cargo], PascalMath.MaxResources));
         production = ApplyRawMaterialConstraint(world, production,
             _rawMaterialForCargoProducts.GetValueOrDefault(cargo, FrozenDictionary<CargoType, int>.Empty), reportedShortfalls);
 

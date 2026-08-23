@@ -1,0 +1,691 @@
+ANACREON 10
+"Das Rhinegeld"
+0    ; Random Scenario
+1 8  ; 1 to 8 players
+39   ; 39x39 galaxy
+164  ; Number of planets
+1    ; Intermediate
+75 0 ; 75+ years
+4021 ; Start Year
+BEGINTEXT
+
+                 *** Das Rhinegeld - The Ring Saga ***
+                An intermediate scenario for 1-8 players.
+
+
+                            --Developed  by--
+
+                            Michael O'Connell
+                         James "Blue" Carstensen
+                               Edziu Iskra
+                            William Barlettano
+                              Derek Habermas
+
+
+Special thanks to Shannon Dwyer, Craig Garrettson, Greg Belmonte,
+and Wagner (for his music).
+
+NEWPAGE
+
+                               _DAS RHINEGELD_
+                                The Ring Saga
+
+Background:
+     The Terran Empire once stretched halfway across the Orion arm of the
+galaxy, spreading outward from Earth into the sparse regions of the Belt.
+Historians may dispute the actual details, but most agree that if Sol had
+not unexpectedly gone nova in 3012, humankind could have eventually
+colonized the entire galaxy.
+     As it were, with the collapse of the Inner Sphere communications
+nexus, most of the Imperial regions fell into isolated autonomy.  Indeed,
+the eight Citizen-Govenors on the frontier at first had their hands full
+maintaining control, and paid no attention to the once-thriving center.
+
+     Until 4018, when reports began to filter through the Rim that Earth
+had actually survived the catyclysm, and was not destroyed, but merely
+hidden in the center, in the nova's remnants...
+
+NEWPAGE
+
+     If the Emerald Throne was still intact, all it needed was someone to
+claim it... and all of the Govenors were heirs.
+     The first one to reach the center, and claim Earth as their own,
+would be the new Emperor, with the galaxy at their command.
+
+     It would not be simple.  Having at most three planets under their
+control, none of the Govenors had the necessary industrial base.  Each
+still had control of 1/8th of the minefields they had maintained as part
+of the Empire's defenses, but only had knowledge of the locations they
+controlled.  And none of the Govenors had the level of technology that the
+old Empire boasted, having to painstakingly rebuild the knowledge.
+     But to the one who gained the center first, power and riches beyond
+their imaginings.  Those who lost were doomed to a return to servitude.
+
+     The race was on.
+     
+NEWPAGE
+ENDTEXT
+
+;    Zone 1 is the entire map
+DefineZone 2 7,1 21,12   ;Player 1 turf
+DefineXY Cap1 R:7..21,1..12
+DefineZone 3 28,7 39,21  ;Player 2
+DefineXY Cap2 R:28..39,7..21
+DefineZone 4 19,28 33,39 ;Player 3
+DefineXY Cap3 R:19..33,28..39
+DefineZone 5 1,19 12,33  ;Player 4
+DefineXY Cap4 R:1..12,19..33
+DefineZone 6 19,1 33,12  ;Player 5
+DefineXY Cap5 R:19..33,1..12
+DefineZone 7 28,19 39,33 ;Player 6
+DefineXY Cap6 R:28..39,19..33
+DefineZone 8 7,28 21,39  ;Player 7
+DefineXY Cap7 R:7..21,28..39
+DefineZone 9 1,7 12,21   ;Player 8
+DefineXY Cap8 R:1..12,7..21
+DefineZone 10 13,13 27,27 ;Big square
+DefineZone 11 19,15 21,25 ;Vert
+DefineZone 12 15,19 25,21 ;Hor
+DefineZone 13 16,16 24,24 ;Mid Square
+DefineZone 14 17,17 23,23 ;Inner Square
+
+CreatePlayerEmpire 0  ;Player 1
+0   ;Revolution Index
+7   ;Bio-tech
+0   ;No techs
+CreatePlayerEmpire 1 0 7 0
+CreatePlayerEmpire 2 0 7 0
+CreatePlayerEmpire 3 0 7 0
+CreatePlayerEmpire 4 0 7 0
+CreatePlayerEmpire 5 0 7 0
+CreatePlayerEmpire 6 0 7 0
+CreatePlayerEmpire 7 0 7 0
+
+CreateNPEmpire 1
+3        ;Aggressor
+RndName  ;Name of the empire
+0        ;(undefined)
+7        ;Bio-tech
+0        ;No techs
+CreateNPEmpire 2 3 RndName 0 7 0
+CreateNPEmpire 3 3 RndName 0 7 0
+
+CreateNPEmpire 4
+2        ;Kingdom
+RndName  ;Name of the empire
+0        ;(undefined)
+7        ;Bio-tech
+0        ;No techs
+CreateNPEmpire 5 2 RndName 0 7 0
+CreateNPEmpire 6 2 RndName 0 7 0
+CreateNPEmpire 7 2 RndName 0 7 0
+
+
+; ---------------------------------------- System for player 1
+
+CreateWorld 1 Cap1:0,0  ;Player 1 Capital
+10  ;Forest
+7   ;Biotech
+4   ;Capital
+0   ;Player 1
+2000 ; 20 Billion population
+80  ;  efficiency
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 3000    0 1000 1500    0    0 3500
+; men  nnj  amb  che  met  sup  tri
+ 2750    0    0 3000 5000 3500 5000
+
+CreateWorld 2 Cap1:0..1,0..1
+5   ;Class K
+7   ;Biotech
+6   ;Independent
+0   ;Player 1
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+CreateWorld 3 Cap1:0..1,0..1
+6   ;Class L
+6   ;Jump
+6   ;Independent
+0   ;Player 1
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+; ---------------------------------------- System for player 2
+
+CreateWorld 4 Cap2:0,0  ;Player 2 Capital
+10  ;Forest
+7   ;Biotech
+4   ;Capital
+1   ;Player 2
+2000 ; 20 Billion population
+80  ;  efficiency
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 3000    0 1000 1500    0    0 3500
+; men  nnj  amb  che  met  sup  tri
+ 2750    0    0 3000 5000 3500 5000
+
+CreateWorld 5 Cap2:-1..0,0..1
+5   ;Class K
+7   ;Biotech
+6   ;Independent
+1   ;Player 2
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+CreateWorld 6 Cap2:-1..0,0..1
+6   ;Class L
+6   ;Jump
+6   ;Independent
+1   ;Player 2
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+; ---------------------------------------- System for player 3
+
+CreateWorld 7 Cap3:0,0  ;Player 3 Capital
+10  ;Forest
+7   ;Biotech
+4   ;Capital
+2   ;Player 3
+2000 ; 20 Billion population
+80  ;  efficiency
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 3000    0 1000 1500    0    0 3500
+; men  nnj  amb  che  met  sup  tri
+ 2750    0    0 3000 5000 3500 5000
+
+CreateWorld 8 Cap3:-1..0,-1..0
+5   ;Class K
+7   ;Biotech
+6   ;Independent
+2   ;Player 3
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+CreateWorld 9 Cap3:-1..0,-1..0
+6   ;Class L
+6   ;Jump
+6   ;Independent
+2   ;Player 3
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+; ---------------------------------------- System for player 4
+
+CreateWorld 10 Cap4:0,0  ;Player 4 Capital
+10  ;Forest
+7   ;Biotech
+4   ;Capital
+3   ;Player 4
+2000 ; 20 Billion population
+80  ;  efficiency
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 3000   0 1000 1500   0    0 3500
+; men  nnj  amb  che  met  sup  tri
+ 2750    0    0 3000 5000 3500 5000
+
+CreateWorld 11 Cap4:0..1,-1..0
+5   ;Class K
+7   ;Biotech
+6   ;Independent
+3   ;Player 4
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+CreateWorld 12 Cap4:0..1,-1..0
+6   ;Class L
+6   ;Jump
+6   ;Independent
+3   ;Player 4
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+; ---------------------------------------- System for player 5
+
+CreateWorld 13 Cap5:0,0  ;Player 5 Capital
+10  ;Forest
+7   ;Biotech
+4   ;Capital
+4   ;Player 5
+2000 ; 20 Billion population
+80  ;  efficiency
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 3000   0 1000 1500   0    0 3500
+; men  nnj  amb  che  met  sup  tri
+ 2750    0    0 3000 5000 3500 5000
+
+CreateWorld 14 Cap5:-1..0,0..1
+5   ;Class K
+7   ;Biotech
+6   ;Independent
+4   ;Player 5
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+CreateWorld 15 Cap5:-1..0,0..1
+6   ;Class L
+6   ;Jump
+6   ;Independent
+4   ;Player 5
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+; ---------------------------------------- System for player 6
+
+CreateWorld 16 Cap6:0,0  ;Player 6 Capital
+10  ;Forest
+7   ;Biotech
+4   ;Capital
+5   ;Player 6
+2000 ; 20 Billion population
+80  ;  efficiency
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 3000   0 1000 1500   0    0 3500
+; men  nnj  amb  che  met  sup  tri
+ 2750    0    0 3000 5000 3500 5000
+
+CreateWorld 17 Cap6:-1..0,-1..0
+5   ;Class K
+7   ;Biotech
+6   ;Independent
+5   ;Player 6
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+CreateWorld 18 Cap6:-1..0,-1..0
+6   ;Class L
+6   ;Jump
+6   ;Independent
+5   ;Player 6
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+; ---------------------------------------- System for player 7
+
+CreateWorld 19 Cap7:0,0  ;Player 7 Capital
+10  ;Forest
+7   ;Biotech
+4   ;Capital
+6   ;Player 7
+2000 ; 20 Billion population
+80  ;  efficiency
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 3000   0 1000 1500   0    0 3500
+; men  nnj  amb  che  met  sup  tri
+ 2750    0    0 3000 5000 3500 5000
+
+CreateWorld 20 Cap7:0..1,-1,,0
+5   ;Class K
+7   ;Biotech
+6   ;Independent
+6   ;Player 7
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+CreateWorld 21 Cap7:0..1,-1..0
+6   ;Class L
+6   ;Jump
+6   ;Independent
+6   ;Player 7
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+; ---------------------------------------- System for player 8
+
+CreateWorld 22 Cap8:0,0  ;Player 8 Capital
+10  ;Forest
+7   ;Biotech
+4   ;Capital
+7   ;Player 8
+2000 ; 20 Billion population
+80  ;  efficiency
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 3000   0 1000 1500   0    0 3500
+; men  nnj  amb  che  met  sup  tri
+ 2750    0    0 3000 5000 3500 5000
+
+CreateWorld 23 Cap8:0..1,0..1
+5   ;Class K
+7   ;Biotech
+6   ;Independent
+7   ;Player 8
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+CreateWorld 24 Cap8:0..1,0..1
+6   ;Class L
+6   ;Jump
+6   ;Independent
+7   ;Player 8
+1100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+    0    0 2000 1000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 1000    0  500  500    0    0 1500
+; men  nnj  amb  che  met  sup  tri
+  750    0    0 2000 3500 2500 1000
+
+; ---------------------------------------- Create Terra in center
+
+CreateWorld 25 20,20
+16  ;Paradise
+10  ;Gate
+2   ;Base Planet
+8   ;Independant
+3100 ;11b pop
+65  ;eff
+; LAM  def  GDM  ion
+ 6000 7000 9000 8000
+; fgt  hkr  jmp  jtn  pen  str  trn
+ 9000 7000 8500 7500 6000 5000 9500
+; men  nnj  amb  che  met  sup  tri
+ 7750 5000    0 9999 9999 9999 9999
+
+; ------------------------------------ Generate worlds in player turfs
+
+ClassTable
+0     ; Ambrosia
+10    ; Arid
+0     ; Artificial
+4     ; Barren
+10    ; Class J
+10    ; Class K
+10    ; Class L
+10    ; Class M
+4     ; Desert
+10    ; Earth
+3     ; Forest
+1     ; Gas Giant
+4     ; Hostile Life
+10    ; Ice world
+3     ; Jungle
+4     ; Ocean
+0     ; Paradise
+4     ; Poisonous
+1     ; Ruins
+1     ; Underground
+1     ; Volcanic
+
+TechTable
+5     ; pre-tech
+5     ; primitive
+15    ; pre-atomic
+30    ; atomic
+25    ; pre-warp
+15    ; warp
+5     ; jump
+0     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+
+CreateRandomWorlds 11 2
+CreateRandomWorlds 11 3
+CreateRandomWorlds 11 4
+CreateRandomWorlds 11 5
+CreateRandomWorlds 11 6
+CreateRandomWorlds 11 7
+CreateRandomWorlds 11 8
+CreateRandomWorlds 11 9
+CreateRandomWorlds 15 1
+
+; --------------------------------- Generate worlds across center square
+
+ClassTable
+2     ; Ambrosia
+5     ; Arid
+0     ; Artificial
+8     ; Barren
+8     ; Class J
+8     ; Class K
+8     ; Class L
+8     ; Class M
+5     ; Desert
+10    ; Earth
+5     ; Forest
+3     ; Gas Giant
+3     ; Hostile Life
+2     ; Ice world
+4     ; Jungle
+7     ; Ocean
+2     ; Paradise
+2     ; Poisonous
+2     ; Ruins
+3     ; Underground
+5     ; Volcanic
+
+TechTable
+0     ; pre-tech
+0     ; primitive
+0     ; pre-atomic
+0     ; atomic
+5     ; pre-warp
+25    ; warp
+30    ; jump
+25    ; bio
+10    ; starship
+5     ; pre-gate
+0     ; gate
+
+CreateRandomWorlds 14 10    ; big square
+
+; --------------------------------- Generate worlds in central nebula
+
+TechTable
+0     ; pre-tech
+0     ; primitive
+0     ; pre-atomic
+0     ; atomic
+0     ; pre-warp
+15    ; warp
+30    ; jump
+25    ; bio
+20    ; starship
+10    ; pre-gate
+0     ; gate
+
+CreateRandomWorlds 4  11    ; thinslice
+CreateRandomWorlds 4  12    ; thinslice
+CreateRandomWorlds 9  13    ; middle square
+
+; --------------------------------- Generate the absolute center...!
+
+ClassTable
+5     ; Ambrosia
+0     ; Arid
+0     ; Artificial
+10    ; Barren
+0     ; Class J
+0     ; Class K
+0     ; Class L
+0     ; Class M
+10    ; Desert
+5     ; Earth
+5     ; Forest
+10    ; Gas Giant
+5     ; Hostile Life
+0     ; Ice world
+5     ; Jungle
+5     ; Ocean
+10    ; Paradise
+5     ; Poisonous
+10    ; Ruins
+5     ; Underground
+10    ; Volcanic
+
+TechTable
+0     ; pre-tech
+0     ; primitive
+0     ; pre-atomic
+0     ; atomic
+0     ; pre-warp
+0     ; warp
+20    ; jump
+30    ; bio
+30    ; starship
+20    ; pre-gate
+0     ; gate
+
+CreateRandomWorlds 5 14   ; inner square
+
+; --------------------------------- Generate player SRM fields
+
+DefineXY F1A R:16..24,13..27
+DefineXY F1B R:13..27,16..24
+DefineXY F2A R:16..24,13..27
+DefineXY F2B R:13..27,16..24
+DefineXY F3A R:16..24,13..27
+DefineXY F3B R:13..27,16..24
+DefineXY F4A R:16..24,13..27
+DefineXY F4B R:13..27,16..24
+DefineXY F5A R:16..24,13..27
+DefineXY F5B R:13..27,16..24
+DefineXY F6A R:16..24,13..27
+DefineXY F6B R:13..27,16..24
+DefineXY F7A R:16..24,13..27
+DefineXY F7B R:13..27,16..24
+DefineXY F8A R:16..24,13..27
+DefineXY F8B R:13..27,16..24
+
+CreateSRMs 0 F1A:-3,0 F1A:3,0
+CreateSRMs 1 F2A:-3,0 F2A:3,0
+CreateSRMs 2 F3A:-3,0 F3A:3,0
+CreateSRMs 3 F4A:-3,0 F4A:3,0
+CreateSRMs 4 F5A:-3,0 F5A:3,0
+CreateSRMs 5 F6A:-3,0 F6A:3,0
+CreateSRMs 6 F7A:-3,0 F7A:3,0
+CreateSRMs 7 F8A:-3,0 F8A:3,0
+CreateSRMs 7 F8B:0,-3 F8B:0,3
+CreateSRMs 6 F7B:0,-3 F7B:0,3
+CreateSRMs 5 F6B:0,-3 F6B:0,3
+CreateSRMs 4 F5B:0,-3 F5B:0,3
+CreateSRMs 3 F4B:0,-3 F4B:0,3
+CreateSRMs 2 F3B:0,-3 F3B:0,3
+CreateSRMs 1 F2B:0,-3 F2B:0,3
+CreateSRMs 0 F1B:0,-3 F1B:0,3
+
+; --------------------------------- Create central nebulae
+
+CreateNebula 1 19,15 21,25
+CreateNebula 1 17,16 23,24
+CreateNebula 1 16,17 24,23
+CreateNebula 1 15,19 25,21
+CreateNebula 2 19,18 21,22
+CreateNebula 2 18,19 22,21
+
+; --------------------------------- Create other random nebulae
+
+CreateRandomNebula
+2   ; patches
+4 6 ; 3 to 4
+
+EndScenario
+

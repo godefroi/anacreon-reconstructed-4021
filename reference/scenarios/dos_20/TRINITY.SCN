@@ -1,0 +1,242 @@
+ANACREON 10
+Trinity
+0 ; random scenario
+2 3 30 105 1 50 0 4021
+BEGINTEXT
+
+
+        "...and so the Emperor Gal'Naith fell from power after his 1200-
+   year reign.  The Homethought coalition which forced him from the throne 
+   soon found itself overwhelmed by the chores of empire, and splintered 
+   into rival factions.  The forces of the rival factions tore the galaxy 
+   asunder in their quest for power, leaving the very seat of power 
+   unprotected.  After the Invasion of 2874, all of the outer provinces 
+   lost contact with what was left of central government... 
+        "...The home planets of the Trinity Alliance were the first to 
+   regain control of their destiny.  Each was headed by a strong Emperor, 
+   and distinguished by its own unique characteristics.  The three rulers 
+   had one common goal: to re-unite the galaxy under their flag... 
+        "...Another driving force behind galactic exploration was the 
+   rumored existence of the last base of Lord Hal'tre, which, according to 
+   legend, held the last great starship fleet..."
+
+                               From: The Roots of Trinity
+                                     by Lord Farley of Dathius
+NEWPAGE
+ENDTEXT
+;
+; Define zones for empires -----------------------------------------------------
+; Zone 2: Center of the Galaxy, contains the Starship and the Ambrosia worlds.
+; Zone 3: Home of empire 1, in upper left corner
+; Zone 4: Surroundings of empire 1, rich in metals, poor for food
+; Zone 5: Home of empire 2, at middle right
+; Zone 6: Surroundings of empire 2, high technology, few planets
+; Zone 7: Home of empire 3, at bottom middle
+; Zone 8: Surroundings of empire 3, low technology, many planets
+; ------------------------------------------------------------------------------
+;
+DefineZone 2 10,10 17,17
+DefineZone 3   4,3   8,7
+DefineZone 4   1,1 11,11
+DefineZone 5 24,12 28,16
+DefineZone 6  20,8 30,18
+DefineZone 7 10,21 14,25
+DefineZone 8  7,20 17,30
+;
+; Create 3 player empires ------------------------------------------------------
+; Each of the three empires has one of the previously created capitals.
+; NOTE: If there are less than three players, then not all three empires will
+; be created.  The capitals will remain as independent worlds, however.
+;
+CreatePlayerEmpire 0 1 7 0
+CreatePlayerEmpire 1 2 7 0
+CreatePlayerEmpire 2 3 7 0
+;
+; Create player capitals -------------------------------------------------------
+;
+; Capital for empire one, this is a forest planet with a large number of 
+; transports.  Food is vital in this part of the galaxy, due to a large
+; concentartion of volcanic/underground/barren worlds.
+CreateWorld 1 Z:3
+10 7 4 0 2200 85
+0 0 400 50
+600 100 200 350 20 10 250
+2000 0 0 1500 1500 4000 500
+;
+; Capital for empire two, 
+CreateWorld 2 Z:5
+9 7 4 1 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+; Capital for empire three, this is a jungle world
+CreateWorld 3 Z:7
+14 7 4 2 2200 85
+0 0 400 100
+400 250 300 350 20 10 300
+2000 0 0 1000 1500 4000 500
+;
+; Ambrosia world in the center of the galaxy.
+CreateWorld 4 Z:2
+0 5 6 8 500 70
+0 0 1400 300
+3000 60 130 0 40 0 100
+1000 0 0 1000 1500 2000 500
+;
+; This world is low tech, but was once an outpost of the empire.  It still
+; has a large number of orbiting starship.  They will fight with the world.
+; A smart player, however, will conquer the world without destroying the
+; starships.
+CreateWorld 5 Z:2
+6 5 6 8 600 60
+0 0 400 50
+400 10 50 150 0 750 250
+400 0 0 1000 1500 2000 500
+;
+; Two random High-Tech worlds, this adds some competition.
+; Also allows a place to add other players in later.
+;
+CreateWorld 6 Z:1
+9 7 6 8 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 7 Z:1
+9 7 6 8 2200 85
+0 0 400 100
+500 50 350 350 20 0 250
+2000 0 0 1000 1500 2000 500
+;
+; Create worlds around the capital of Empire one--------------------------------
+; Class Table for zone 4 -------------------------------------------------------
+ClassTable
+0     ; Ambrosia
+10    ; Arid
+0     ; Artificial
+17    ; Barren
+4     ; Class J
+4     ; Class K
+4     ; Class L
+4     ; Class M
+10    ; Desert
+1     ; Earth
+5     ; Forest
+10    ; Gas Giant
+1     ; Hostile Life
+0     ; Ice world
+2     ; Jungle
+2     ; Ocean
+0     ; Paradise
+5     ; Poisonous
+1     ; Ruins
+10    ; Underground
+10    ; Volcanic
+;
+; Tech Table for zone 4 --------------------------------------------------------
+TechTable
+0     ; pre-tech
+5     ; primitive
+15    ; pre-atomic
+30    ; atomic
+29    ; pre-warp
+15    ; warp
+5     ; jump
+1     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+;                                       
+CreateRandomWorlds 15 4
+;
+; Create standard worlds for zone 6, Empire 2 (10 total) ----------------
+ClassTable
+1     ; Ambrosia
+5     ; Arid
+0     ; Artificial
+8     ; Barren
+10    ; Class J
+10    ; Class K
+10    ; Class L
+10    ; Class M
+5     ; Desert
+10    ; Earth
+5     ; Forest
+2     ; Gas Giant
+1     ; Hostile Life
+2     ; Ice world
+4     ; Jungle
+7     ; Ocean
+1     ; Paradise
+2     ; Poisonous
+1     ; Ruins
+3     ; Underground
+3     ; Volcanic
+;
+TechTable
+0     ; pre-tech
+0     ; primitive
+10    ; pre-atomic
+30    ; atomic
+28    ; pre-warp
+18    ; warp
+12    ; jump
+2     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+CreateRandomWorlds 10 6
+;
+; Create standard worlds for zone 8, Empire 3-----------------------------------
+TechTable
+10    ; pre-tech
+20    ; primitive
+35    ; pre-atomic
+20    ; atomic
+10    ; pre-warp
+5     ; warp
+0     ; jump
+0     ; bio
+0     ; starship
+0     ; pre-gate    
+0     ; gate
+CreateRandomWorlds 25 8
+;
+; Create worlds in the center of the Galaxy-------------------------------------
+TechTable
+5     ; pre-tech
+10    ; primitive
+35    ; pre-atomic
+23    ; atomic
+15    ; pre-warp
+10    ; warp
+2     ; jump
+0     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+CreateRandomWorlds 10 2
+;
+; Create worlds throughout the Galaxy-------------------------------------------
+TechTable
+5     ; pre-tech
+10    ; primitive
+20    ; pre-atomic
+30    ; atomic
+23    ; pre-warp
+12    ; warp
+0     ; jump
+0     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+;
+CreateRandomWorlds 38 1
+;
+; Create one nebula strip
+CreateRandomNebula 1 1 1
+;
+; Create two to four nebula patches
+CreateRandomNebula 2 2 4
+EndScenario

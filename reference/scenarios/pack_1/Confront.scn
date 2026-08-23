@@ -1,0 +1,1477 @@
+ANACREON 12
+"The Great Confront"
+0        ;Random Scenario
+1 2      ;One Player
+50       ;50 x 50 Map Size
+175      ;180 Planets in Galaxy
+2        ;Advanced
+100 0    ;100+ Years Long
+5100     ;Starting Year
+
+BEGINTEXT
+
+       ˙                     .             ±   ±±±±
+   ˙          .          .              ± ±  ±±±±±        .            .
+                 .              .    ± ±  ±±±±±‹ﬂ             .
+    ˛             ˙                ±   ±±±±±±±ﬂ                        ˙
+ ˘          ˘            .      ±   ±±±±±±±±ﬂ        .   ˙         ˙
+           ˙ ˛€   ˛        ± ±    ±±±±±±±‹ﬂ                   .
+ €     ±                ±±  ±±±±±±±±±±±±ﬂ ˙                 ˘  .˙
+  €€€   €     ‹ ±±   ± ±±  ±±±±±±±±±±±€ﬂ         ˙    ˛
+     €€€ €€ ≤ €€   ±€ ≤≤±˛ ±±±±±±±±±‹±             .                   ˙
+   ˛        ±± ±€€€€€ ≤  ≤≤≤±±€‹±±±±±±‹±            .                  .
+     €€€€  ±±±≤≤≤€€€€€€€€±€±≤±€€‹ﬂ                The Great Confront .  
+     €±±€ €€€€± €€€€≤€≤€€€€≤≤€≤ ±      .  .
+    ˛  ±≤≤≤ ≤ €€€€€€€€€€€€€€≤‹ ≤                  An advanced scenario  .
+ ˛         ±±€±€≤€€€€€€€€€≤≤≤ ≤≤ ≤                ˙ 
+      €€€€€≤≤€≤≤€€€€€€€€€€€≤≤≤ ±       ‹                By
+        ˛ €€≤≤€€€€€€€€≤≤≤≤±±€€€€±±±  ±  ± ‹           ˙   James Moore
+€  ˙    €€€€€€€€€€€€≤ ≤€€≤≤≤≤€€€±  ±±          .    .
+     ≤€≤≤€€€€€€ €€€±±˛ €€˛  ±±€€  ±€              Difficulty: Advanced
+      €€€€€€ €€   €        €€     €≤± ±±          Length: 100+ years
+  €€€€€€€€€   €          ‹ ˛        ≤±± €±        
+ €€€€€  ˛     ˛     ˙         €€                  
+NEWPAGE
+
+ The dark cloud of war has fallen over the galaxy after many centuries of
+ peace. The great central Empire, the Federation of Star Worlds, led by
+ their great President Kirk, managed in the past to keep the peace between
+ the empires of humanity by means of their great strength and Kirk's skill
+ as a negotiator. Now Kirk is dead, killed by assasins sent by the malevolent
+ Warlord of Cosmos. The galaxy has been thrown into war again, with violent
+ factions trying to gain the upper hand, while the Federation seeks to restore
+ the status quo under the leadership of lesser men. In the wings, two star 
+ powers rise, with the goal of stopping the rise of Cosmos, and forstalling
+ the other great powers' attempts to fill the vaccum left by the Federation's
+ collapse. Though seperated by many sectors of space, these two powers must
+ work together to secure their place in the Galaxy, and stop the drive of 
+ Cosmos.
+NEWPAGE
+
+    THE POWERS OF THE GALAXY:
+      FEDERATION: 
+    The Central Empire, the Federation boasts of a strong starfleet and a
+    strong centralized position, as well as numerous SRM fields in defense
+    array. Their weakness is their reliance on jumpships, as well as the
+    lack of agressive leadership.
+
+      COSMOS:
+    Possessing a powerful fleet of starships, as well as a driving will
+    to use them makes Cosmos the force to reckon with. Backed by a vibrant
+    industry based around two industrial complexes, Cosmos' production
+    capacity is staggering. Their weakness is low technology, as well as
+    the lack of a strong jump fleet threat. Slow moving, they nevertheless
+    pack a mighty punch on arrival.
+NEWPAGE
+
+      SOLARIA:
+    Once allies of the Federation, the Solarians have now severed ties with
+    the Federation and embarked on a seperate policy of defense, coupled with
+    a drive for the highest technology. Peaceful by nature, the Solarians
+    despise war, but when attacked, fight with calm, thoughtful fanaticism.
+    Their fleet is balanced, and the empire has a network of base planets
+    and outposts which guard the tightly controlled perimeter of the empire.
+
+      SAVIORS:
+    Led by their religious guru, Bob, the Saviors aggressively persue their
+    self-appointed task of bringing "salvation" to the rest of the galaxy. 
+    Generally, this salvation is in the form of massive attacks by their
+    well-drilled battle fleets. The first power to use Ninjas, the Saviors
+    are fanatic in their drive for conquest, and brutal in their occupation.
+    Their industry, however, is weak and disjointed, due to massive purges
+    constantly occuring within the empire.
+NEWPAGE
+
+      DATAN:
+    This strange empire, peopled by androids, and led by the mad genius
+    Dr. Soong, is a dangerous element which seriously threatens the humans
+    within the galaxy. Utilizing superior technology, the Datans have 
+    fashioned several artificial mobile planets for themselves, which 
+    they use to gain raw materials to build replacments for themselves.
+    These planets roam the galaxy at will, and are very powerful. Their
+    weakness is their capital, the sole planet in their empire. It is 
+    rumoured to be hidden in an artificial nebula created by Soong.
+
+      STAR GUARD:
+    This powerful empire, possesing a large starship fleet, as well as
+    numerous SRM fields, is (thankfully) defensive in nature. Settled by
+    mercenaries from the ancient Garp-Romanic Wars, these people have a
+    vibrant will to fight for the homes they have built. Ninja-like in
+    skill, they will fight to the death before surrendering, prefering 
+    death before dishonor. Their power lays in a secret industrial complex
+    protected by a disruptor.
+
+NEWPAGE
+ENDTEXT
+
+BEGINDESCRIPTION
+
+WorldBackgroundIndex
+2:1 E:0		1	;Emp #1 Capital
+2:7 E:1		2	;Emp #2 Capital
+2:13 E:2	3	;Federation Capital
+2:33 E:3	4	;Cosmos Capital
+2:46 E:4	5	;Solarian Capital
+2:56 E:5	6	;Saviors Capital
+2:66 E:6	7	;Data Capital
+2:67 E:7	8	;Star Guard Capital
+EndIndex
+
+TEXT 1
+  Once the capital of the Tri-sun League, this planet was destroyed by
+  the wave of Fanatics that swept the galaxy after the fall of the
+  Loganians. Ruins dot the landscape, and the planet's two moons bear
+  the scars of that long ago war of destruction.
+
+ENDTEXT
+
+TEXT 2
+  This ocean world, called the "Mother of Seas" by its population, bears
+  the capital of the Second Empire. Close to the Federation, it recieved
+  favor from the Kirk before his untimely fall.
+
+ENDTEXT
+
+TEXT 3
+  Earth, mother planet of humanity. Once lonely and forgotten, under the
+  guidance of Kirk, new fame and glory were once more Earth's to claim.
+  Now, after his death, the new rulers skulk within the walls of the
+  High Palace and plan how to defeat Cosmos, if possible.
+
+ENDTEXT
+
+TEXT 4
+  Called Acheron by its inhabitants, the capital of Cosmos is a forbidding
+  place indeed. Hostile forms abound on the surface, and seas of boiling
+  sulfuric acid cover almost half the planet. The home of a tough, cruel
+  people, who brook no enemies, or friends, only slaves to their thirst
+  for glory.
+ 
+ENDTEXT
+
+TEXT 5
+  This desert world is home to the Solarians, worshipers of the Son God.
+  While hot and waterless, the sands and heat have forged a people of great
+  courage and honor. Alone in his Grand Castle, the Prefect of Solar tries
+  to forstall his enemies, while maintaining his stringent code of honor.
+
+ENDTEXT
+
+TEXT 6
+  A veritable Eden, this planet, home of the Savior and sight of his 
+  numerous visions, boasts of almost perfect conditions. Called Yeshu
+  by the pilgrims who flock here constantly, it is one of the most ill-
+  run planets in the galaxy. Still, it is a vibrant center of commerce
+  and trade, as long as you are "saved".
+
+ENDTEXT
+
+TEXT 7
+  This artificial world, discovered by Dr. Noonian Soong, houses the mind/
+  computer of the Datan empire. Huge banks of electro-fluid generators as 
+  well as a giant hydrogen cooled super-conductor give the planet its power
+  as well as fueling the obsessive mind of Soong, now trapped within the
+  core of the planet.
+
+ENDTEXT
+
+TEXT 8
+  Surrounding the girth of this gas giant are the glittering satelite cities
+  of the Star Guard Empire. Protected by huge SRM fields, this capital is
+  as well protected as any. Within the shells of plas-steel and titanium, 
+  the people of this great empire attempt to forge a defence capable of
+  withstanding the might of the other empires.
+
+ENDTEXT
+
+ENDDESCRIPTION
+
+; DebugScenario
+REPORT "START"
+
+DefineZone  2   18,18 32,32	; empire 3- Federation
+DefineZone  3   35,9 41,15	; empire 4a- Cosmos
+DefineZone  4   41,15 47,21	; empire 4b- "
+DefineZone  5   35,24 41,30	; empire 4c- " 
+DefineZone  6	44,9 47,12	; empire 4d- "
+DefineZone  7	13,37 18,42	; empire 5a- Solarian
+DefineZone  8   18,35 23,40     ; empire 5b- "
+DefineZone  9   22,5 31,12      ; empire 6- Saviors
+DefineZone  10  4,28 11,35      ; empire 7- Datans
+DefineZone  11  5,19 10,24      ; empire 8a- Star Guard
+DefineZone  12  10,17 15,22     ; empire 8b- Star Guard 
+
+
+; Create Empires -------------------------------------------------------------
+
+CreatePlayerEmpire 0
+0	; Revolution factor
+8	; Starship level
+2	; no of technologies of Starship
+10      ; Starship
+1       ; Ninja
+0	; modifiers
+
+CreatePlayerEmpire 1
+0	; revolution factor
+8	; starship level
+2       ; no of tech
+13       ; LAM
+10	; Starship
+0	; modifiers
+
+CreateNPEmpire 2
+3	; Kingdom empire
+Federation
+2	; Revolution factor
+9	; pre-gate technology
+0	; No of technologies
+0	; modifiers
+
+
+CreateNPEmpire 3
+3	; Aggressor empire
+Cosmos
+0	; Revolution factor
+8	; starship
+1	; number of technologies
+10      ; starship
+0	; modifiers
+
+CreateNPEmpire 4
+5	; guardian empire
+Solaria
+0	; revolution factor
+9	; Pre-gate level
+0	; no of techs
+0	; modifiers
+
+CreateNPEmpire 5
+3	; agressive
+Saviors
+0	; revolution factor
+8	; starship level
+1	; no of techs
+10	; starships
+0	; modifiers
+	;    empire will collapse if capital conquered
+
+CreateNPEmpire 6
+4	; Berserker empire
+Datan
+0	; revolution factor
+10	; gate
+0	; no of techs
+0	; modifiers
+
+
+CreateNPEmpire 7
+2	; Kingdom empire
+"Star Guard"
+0	; revolution factor
+8	; starship
+3	; no of techs
+10      ; starships
+20      ; Command bases
+1       ; LAMs
+0	; modifiers
+
+; Player Empire --------------------------------------------------------------
+Report "Empires Created"
+CreateWorld 1 15,10 
+18	; ruins
+8	; starship
+4 	; capital
+1 	; empire 1
+4050 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0   2000 7000 5500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5000 9999 9999 9999  5000 5000 5000
+;  men  nnj  amb  che  met  sup  tri
+  6000   1000    0 5000 8000 6000 5000
+
+
+CreateWorld 2 16,13
+20    	; volcanic
+8 	; starship
+14	; starship base
+1	; empire 1
+3550 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+    0  1500 5500 3000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5000  0  2500 5000 9999 5000 4000
+;  men  nnj  amb  che  met  sup  tri
+  5000    0    0 6000 8500 5000 6500
+
+CreateWorld 3 14,7
+9 	; earth type
+8 	; jump tech
+7 	; jumpship base
+1	; empire 1
+3150 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0   1300 5000  2500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5500  9999 9999 9999 2500 2000 2500
+;  men  nnj  amb  che  met  sup  tri
+  2000    0    0 5000 7000 6000 7000
+
+CreateWorld 4 15,12
+10 	; Forest
+8 	; starship
+7 	; jumpship base
+1	; empire 1
+3050 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1750 6000 2000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5000 9999 9999 9999 2500  2000 4500
+;  men  nnj  amb  che  met  sup  tri
+  4000    0    0 4000 5000 7000 6000
+
+CreateWorld 5 15,8
+5 	; class k
+7 	; bio-tech
+9 	; metal mine
+1 	; empire 1
+2050 	; population
+90	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1250 4000 1500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5000 5000 5000 2500  2500  500  5000
+;  men  nnj  amb  che  met  sup  tri
+  3500    0    0 2000 9000 4000 5000
+
+CreateWorld 6 12,12
+3  	; barren
+6 	; jump tech
+20	; trillum mine
+1	; empire 1
+1550 	; population
+90	; efficiency
+150	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 3550  500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5000  5000 7500 2500  2500  500  5000
+;  men  nnj  amb  che  met  sup  tri
+  3500    0    0 3000 5000 6000 9000
+
+CreateWorld 7 31,38
+15	; ocean 
+8 	; jump tech
+4	; Capital Empire #2
+0 	; empire 2
+4550 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+  2000  2000 7000 5000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6000  9999  9999 9999 4000 5000 5000
+;  men  nnj  amb  che  met  sup  tri
+  7000    0  4000 7500 8000 9000 5000
+
+CreateWorld 8 33,36
+5  	; class k 
+8 	; starship
+14	; starship
+0	; empire 2
+4000 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0  1500 5000  3500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6000    0   0    0   9999 7000 5000
+;  men  nnj  amb  che  met  sup  tri
+  5000    0    0 7000 8500 5000 6000
+
+CreateWorld 9 31,36
+12	; hostile 
+8 	; jump tech
+2  	; base planet
+0 	; empire 2
+3130 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+  1500  2000 4500  3000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6000 9999 9999 9999 4000  2000 5000
+;  men  nnj  amb  che  met  sup  tri
+  4000    0  6000 6000 7000 6000 7000
+
+CreateWorld 10 29,40
+11	; gas giant
+8 	; jump tech
+2 	; base planet
+0 	; empire 2
+2700 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+  1000 2000 4000  2500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6000 9999 9999 9999  4000 2000  5000
+;  men  nnj  amb  che  met  sup  tri
+  2500    0    0 5500 6500 3000 8000
+
+Report "10"
+CreateWorld 11 32,38
+16 	; paridise
+7 	; bio-tech
+1  	; ambrosia
+0 	; empire 2
+2300 	; population
+90	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0  500 2000  1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6000    0  2500   0  4000 2000 5000
+;  men  nnj  amb  che  met  sup  tri
+  3500    0  9000 7000 5000 5000 5000
+
+CreateWorld 12 31,41
+19   	; underground
+6 	; jump
+20	; trillum     
+0 	; empire 2
+1550 	; population
+90	; efficiency
+150	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0  1000  250
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6000    0 2500    0  4000 2000  5000
+;  men  nnj  amb  che  met  sup  tri
+  3500   0    0 3500 4000 3500 9000
+
+; Federation Empire-----------------------------------------------------------
+
+CreateWorld 13 Z:2
+9 	; earth
+8 	; starship
+4 	; capital
+2 	; empire 3
+3000 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+    0  2000 2500 3000
+ ;  fgt  hkr  jmp  jtn  pen  str  trn
+ 7500 5000 7500 6000  2000  1000 3500
+ ;  men  nnj  amb  che  met  sup  tri
+ 5000    0    0 2500 3500 2000 2500
+
+CreateWorld 14 Z:2
+20 	; volcanic
+8 	; starship
+14 	; starship    
+2 	; empire 3
+2200 	; population
+50	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+    0  2000 2500  3000
+ ;  fgt  hkr  jmp  jtn  pen  str  trn
+ 7500   5000 7500 6000  2000 1000 2500
+ ;  men  nnj  amb  che  met  sup  tri
+ 1500    0    0 3500 5500 1000 2000
+ 
+CreateWorld 15 Z:2
+12 	; hostile life
+8 	; starship
+14	; starship   
+2 	; empire 3
+3400 	; population
+70	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0  2000 5500 2500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000  2000 1000 1500
+;  men  nnj  amb  che  met  sup  tri
+  2500 1000    0 2000 3000 1000 1500
+
+CreateWorld 16 Z:2
+8 	; desert
+8 	; starship 
+14 	; starship    
+2 	; empire 3
+2700 	; population
+70	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0  2000 5000 2500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000  2000 1000 2500
+;  men  nnj  amb  che  met  sup  tri
+  2500    0    0 1000 1500 1000 7500
+
+CreateWorld 17 Z:2
+5 	; class k
+7 	; bio-tech
+7 	; jumpship base
+2 	; empire 3
+2200 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000  500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000  1000
+;  men  nnj  amb  che  met  sup  tri
+  3500    0    0 1500 2000 1000 1000
+
+ 
+CreateWorld 18 Z:2  
+14 	; jungle
+7 	; jumpship
+7 	; jumpship
+2 	; empire 3
+2300 	; population
+60	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+  0 4000 8500 3750
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000 3500
+;  men  nnj  amb  che  met  sup  tri
+  5500    0    0 5000 6500 4500 4700
+
+CreateWorld 19 Z:2
+20 	; volcanic
+7 	; bio-tech
+9 	; metal mining
+2 	; empire 3
+2700 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2750 1250
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000 1250
+;  men  nnj  amb  che  met  sup  tri
+  2350    0    0 3500 6400 1800 3500
+
+CreateWorld 20 Z:2
+8 	; desert
+7 	; bio-tech
+20 	; trillum mine
+2 	; empire 3
+1400 	; population
+85	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0  1000 2500 1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000  1000 3000
+;  men  nnj  amb  che  met  sup  tri
+  1780    0    0 2560 2234 1650 1800
+Report "20"
+
+CreateWorld 21 Z:2
+15 	; ocean
+8 	; starship
+5 	; chemical
+2 	; empire 3
+2300 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1100 5350 2750
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000 2500
+;  men  nnj  amb  che  met  sup  tri
+  4250    0    0 4500 1200 3000 1350
+
+CreateWorld 22 Z:2
+10 	; forest
+7 	; bio-tech
+0 	; agricultural
+2 	; empire 3
+2890 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1450  500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000 2150
+;  men  nnj  amb  che  met  sup  tri
+  2250    0    0 1300 2650 4800 1200
+
+CreateWorld 23 Z:2
+0 	; ambrosia
+8 	; starship
+1 	; ambrosia
+2 	; empire 3
+2950 	; population
+85	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1500 3500 2750
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000 2750
+;  men  nnj  amb  che  met  sup  tri
+  2250    0 7500 2300 3500 3000 2750
+
+CreateWorld 24 Z:2
+5 	; class k
+8 	; starship
+14 	; starship
+2 	; empire 3
+3235 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+   250  350  750  450
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   7500 5000 7500 6000 2000 1000 2000
+;  men  nnj  amb  che  met  sup  tri
+  2500 0 0 6000 8500 2000 4750
+
+CreateWorld 25 Z:2
+13 	; ice world
+8 	; starship
+2 	; base planet
+2 	; empire 3
+2215 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1500 3500 2250
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000 2600
+;  men  nnj  amb  che  met  sup  tri
+  3700    0    0 4200 5300 2700 2700
+
+CreateWorld 26 Z:2
+8 	; desert
+5 	; warp
+20 	; trillum mine
+2 	; empire 3
+1750 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 4350    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000 2300
+;  men  nnj  amb  che  met  sup  tri
+  1450    0    0 1670 3350 1500 5600
+
+CreateWorld 27 Z:2
+19 	; underground
+7 	; jumpship
+7  	; jumpship base
+2 	; empire 3
+2550 	; population
+45	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0    0    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000 2450
+;  men  nnj  amb  che  met  sup  tri
+  1450    0    0 3500 5600 1400 2200
+
+CreateWorld 28 Z:2
+10 	; forest
+3 	; atomic
+0 	; agricultural
+2 	; empire 3
+2680 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0    0    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000 2375
+;  men  nnj  amb  che  met  sup  tri
+  1600    0    0 1350 1555 2400 1150
+
+CreateWorld 29 Z:2
+7 	; class M
+8 	; starship
+7 	; jumpship base
+2 	; empire 3
+3267 	; population
+65	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 3750 1500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000  1000
+;  men  nnj  amb  che  met  sup  tri
+  2450    0    0 2500 4500 1500 3500
+
+CreateWorld 30 Z:2
+9 	; earth
+7 	; jumpship
+7  	; jumpship  
+2 	; empire 3
+2870 	; population
+65	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1250 4750 2500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000  2000
+;  men  nnj  amb  che  met  sup  tri
+  2500    0    0 3000 4000 2000 2000
+Report "30"
+
+CreateWorld 31 Z:2
+15 	; ocean
+6 	; jump tech
+16	; transport
+2 	; empire 3
+2105 	; population
+65	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1560    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000 2750
+;  men  nnj  amb  che  met  sup  tri
+  2890    0    0 5600 1350 1200 2350
+
+CreateWorld 32 Z:2
+5 	; class k
+7 	; bio-tech
+12 	; raw material
+2 	; empire 3
+2200 	; population
+65	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1250 4750 2500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500 5000 7500 6000 2000 1000 1550
+;  men  nnj  amb  che  met  sup  tri
+  3200    0    0 3500 5500 2000 2800
+
+Report "32"
+CreateStarbase 1 Z:2 23
+8       ;starship
+2       ;artificial
+2       ;empire 3
+0050    ;pop
+70      ; efficiency
+  0  300  1000  200
+500  0  0  0  1000  0  0
+500  0  0  100  100  100  100
+
+
+CreateStarbase 2 Z:2 23
+8
+2
+2
+0050
+70
+ 0  300  1000 200
+500  0  0  0  1000  0  0
+500  0  0  100  100  100  100
+
+Report "Fed completed"
+;   Cosmos Empire---------------------------------
+
+CreateWorld 33 Z:6
+12
+8
+4
+3
+4400
+77
+75
+0 2000 4000 3000
+8000 2000 3000 2333 5333 3666 3000
+4000 0 0 2000 3000 4000 5000
+
+CreateWorld 34 Z:6
+17
+8
+18
+3
+1900
+50
+75
+0 1000 4000 2000
+8000 2000 3000 2333 5333 3666 2000
+2000 0 0 4000 3000 4000 3000
+Report "34"
+CreateWorld 35 Z:6
+1
+8
+7
+3
+2300
+50
+75
+0 500 3000 1000
+8000 2000 3000 2333 5333 3666 2000
+2000 0 0 2000 3000 4000 2000
+
+CreateWorld 36 38,11
+8
+5
+20
+3
+2000
+50
+75
+0 500 2000 750
+8000 2000 3000 2333 5333 3666 2000
+2000 0 0 2000 3000 4000 2000
+Report "36"
+CreateWorld 37 39,11
+6
+4
+12
+3
+1900
+75
+75
+0 0 2000 0
+8000 2000 3000 2333 5333 3666 2000
+1300 0 0 2000 3000 4000 2000
+
+CreateWorld 38 39,12
+9
+4
+9
+3
+2300
+50
+75
+0 0 2000 0
+8000 2000 3000 2333 5333 3666 2000
+1500 0 0 1000 3000 7000 3000
+Report "38"
+CreateStarbase 3 38,12 22
+8
+2
+3
+2300
+70
+1000 1000 3000 1000
+8000 2000 3000 2333 5333 3666 2000
+1500 0 0 2000 3000 5000 2000
+Report "XXX"
+CreateWorld 39 Z:4
+10
+8
+14
+3
+2300
+75
+75
+0 1000 4000 2000
+8000 2000 3000 2333 5333 3666 2000
+1300 0 0 2000 3000 4500 3000
+Report "39"
+CreateWorld 40 Z:4
+11
+8
+14
+3
+3000
+50
+75
+0 1000 4000 2000
+8000 2000 3000 2333 5333 3666 2000
+3000 0 0 3000 2000 5000 3000
+
+Report "40"
+CreateWorld 41 Z:4
+12
+4
+9
+3
+2000
+30
+75
+0 0 1000 0
+8000 2000 3000 2333 5333 3666 2000
+2000 500 0 2500 7000 3000 1000
+
+CreateWorld 42 Z:4
+18
+7
+2
+3
+3300
+50
+75
+0 0 3000 750
+8000 2000 3000 2333 5333 3666 2000
+2000 0 0 2000 5000 2000 4000
+
+CreateWorld 43 39,25
+6
+4
+9
+3
+2300
+50
+75
+0 0 2000 0
+8000 2000 3000 2333 5333 3666 2000
+1500 0 0 2000 5000 3000 4000
+
+CreateWorld 44 38,26
+3
+5
+20
+3
+1700
+50
+150
+0 0 2000 0
+8000 2000 3000 2333 5333 3666 2000
+1800 0 0 2000 2000 1000 5000
+Report "44"
+CreateWorld 45 39,27
+5
+4
+12
+3
+2400
+50
+75
+0 0 2000 0
+8000 2000 3000 2333 5333 3666 2000
+2300 0 0 3000 4000 5000 4000
+
+CreateStarbase 4 39,26 22
+8
+2
+3
+3300
+77
+0 1000 4000 1500
+8000 2000 3000 2333 5333 3666 2000
+5000 0 0 3000 4000 2000 5000
+
+; Solarians-----------------------------------------
+Report "Solar begins"
+CreateWorld 46 Z:7
+8
+9
+4
+4
+4000
+70
+75
+3000 2000 5000 3000
+6000 3000 4000 3500 3000 1500 2000
+3000 0 0 2000 5000 3000 4000
+
+CreateWorld 47 14,38
+11
+8
+2
+4
+2500
+70
+75
+3000 1000 3000 2000
+6000 3000 4000 3500 3000 1500 2000
+2500 0 0 2000 3000 4000 3000
+
+CreateWorld 48 17,38
+13
+8
+2
+4
+2300
+70
+75
+3000 1000 3000 2000
+6000 3000 4000 3500 3000 1500 2000
+2500 0 0 2000 3000 4000 3000
+Report "48"
+CreateWorld 49 19,36
+3
+8
+2
+4
+2400
+65
+75
+2500 1000 3000 2000
+6000 3000 4000 3500 3000 1500 2000
+2400 0 0 2000 4000 2000 4000
+Report "49"
+CreateWorld 50 22,36
+20
+8
+2
+4
+2000
+79
+75
+3000 1000 3000 2000
+6000 3000 4000 3500 3000 1500 2000
+2400 0 0 2000 4000 2000 4000
+
+Report "50"
+CreateWorld 51 22,39
+19
+8
+2
+4
+2500
+50
+75
+3000 1000 3000 2000
+6000 3000 4000 3500 3000 1500 2000
+2400 0 0 2000 4000 2000 4000
+
+CreateWorld 52 Z:8
+16
+9
+18
+4
+2000
+70
+75
+0 2000 4000 3000
+6000 3000 4000 3500 3000 1500 2000
+1000 0 0 2000 3000 2000 4000
+
+CreateWorld 53 Z:8
+18
+8
+14
+4
+3300
+70
+75
+0 3000 5000 2000
+6000 3000 4000 3500 3000 1500 2000
+3000 0 0 2000 4000 3000 2000
+
+CreateWorld 54 Z:7
+15
+7
+7
+4
+2700
+70
+75
+0 2000 4000 3000
+6000 3000 4000 3500 3000 1500 2000
+2000 0 0 3000 3000 3000 3000
+
+CreateWorld 55 Z:8
+20
+4
+12
+4
+1200
+80
+75
+0 0 2000 0
+6000 3000 4000 3500 3000 1500 2000
+2000 0 0 2000 3000 2000 1000
+
+CreateStarbase 5 Z:7 23
+8
+2
+4
+0010
+70
+0 0 500 0
+1000 0 0 0 0 0 0
+500 0 0 100 100 100 100
+
+CreateStarbase 6 Z:7 23
+8
+2
+4
+0010
+70
+0 0 500 0
+1000 0 0 0 0 0 0
+500 0 0 100 100 100 100
+
+CreateStarbase 7 Z:8 23
+8
+2
+4
+0010
+70
+0 0 500 0
+1000 0 0 0 0 0 0
+500 0 0 100 100 100 100
+
+CreateStarbase 8 Z:8 23
+8
+2
+4
+0010
+70
+0 0 500 0
+1000 0 0 0 0 0 0
+500 0 0 100 100 100 100
+
+;  Saviors-------------------------------------------------
+Report "Solarian"
+CreateWorld 56 Z:9
+16
+8
+4
+5
+4000
+60
+75
+0 1000 4000 3000
+5000 2500 3500 2500 5000 2500 2000
+3000 1000 0 2000 3000 4000 2000
+
+CreateWorld 57 Z:9
+17
+8
+14
+5
+2300
+30
+75
+0 1000 4000 3000
+5000 2500 3500 2500 5000 2500 2000
+2000 1000 0 2000 3000 4000 2000
+
+CreateWorld 58 Z:9
+4
+8
+14
+5
+2700
+20
+75
+0 1000 3000 2000
+5000 2500 3500 2500 5000 2500 2000
+3000 1000 0 2000 3000 4000 2000
+
+CreateWorld 59 Z:9
+3
+7
+7
+5
+2000
+33
+75
+0 0 3000 2000
+5000 2500 3500 2500 5000 2500 2000
+3000 0 0 2000 3000 4000 2000
+
+CreateWorld 60 Z:9
+1
+6
+7
+5
+1700
+40
+75
+0 0 3000 0
+5000 2500 3500 2500 5000 2500 2000
+2000 500 0 2000 3400 4000 4000
+
+CreateWorld 61 Z:9
+12
+7
+2
+5
+2000
+20
+75
+1000 0 3000 1500
+5000 2500 3500 2500 5000 2500 2000
+2000 1000 0 1000 2000 3000 2000
+
+CreateWorld 62 Z:9
+9
+7
+2
+5
+2300
+33
+75
+2000 0 2000 500
+5000 2500 3500 2500 5000 2500 2000
+2000 1000 0 1000 2000 3000 3000
+
+CreateWorld 63 Z:9
+5
+3
+9
+5
+1900
+20
+75
+0 0 2000 0
+5000 2500 3500 2500 5000 2500 2000
+1000 500 0 1000 6000 3000 2000
+
+CreateWorld 64 Z:9
+17
+4
+12
+5
+1400
+30
+75
+0 0 2000 0
+5000 2500 3500 2500 5000 2500 2000
+1000 500 0 4000 5000 2000 5000
+
+CreateWorld 65 Z:9
+0
+8
+10
+5
+1800
+50
+75
+0 1000 3000 1500
+5000 2500 3500 2500 5000 2500 2000
+3000 3000 7000 4000 5000 3000 2300
+Report "Saviors"
+;  Datans-------------------------------------------------
+
+CreateWorld 66 Z:10
+2
+10
+4
+6
+5000
+90
+75
+5000 5000 7000 6000
+5000 5000 7500 5000 5000 2500 2000
+3000 0 0 3000 5000 3000 2000
+
+CreateStarbase 9 Z:10 21
+9
+2
+6
+0500
+70
+2000 1000 3000 1500
+8000 8000 9999 8000 9999 6000 3000
+5000 0 0 6000 6000 4000 6000
+
+CreateStarbase 10 Z:10 20
+9
+2
+6
+0500
+70
+2000 1000 3000 1500
+8000 8000 9999 8000 9999 6000 3000
+5000 0 0 6000 6000 4000 6000
+Report "Before 11"
+CreateStarbase 11 Z:10 20
+9
+2
+6
+0500
+70
+2000 1000 3000 1500
+8000 8000 9999 8000 9999 6000 3000
+5000 0 0 6000 6000 4000 6000
+Report "Datans"
+;    Star Guard----------------------------------------
+
+CreateWorld 67 7,31
+11
+8
+4
+7
+3500
+70
+75
+0 1000 4000 2000
+6000 4000 6000 4000 6000 3000 2000
+3000 1500 0 3000 4000 3000 5000
+
+CreateWorld 68 Z:11
+1
+8
+14
+7
+2300
+80
+75
+0 1000 4000 2000
+6000 4000 6000 4000 6000 3000 2000
+3000 500 0 3000 3000 3000 3000
+
+CreateWorld 69 Z:11
+9
+8
+14
+7
+2700
+80
+75
+0 1000 4000 2000
+6000 4000 6000 4000 6000 3000 2000
+3000 500 0 3000 3000 3000 3000
+
+CreateWorld 70 Z:11
+11
+6
+7
+7
+2300
+80
+75
+0 0 3000 0
+6000 4000 6000 4000 6000 3000 2000
+3000 500 0 3000 3000 3000 3000
+Report "70"
+CreateWorld 71 Z:11
+12
+8
+18
+7
+1000
+80
+75
+0 1000 3000 1500
+6000 4000 6000 4000 6000 3000 2000
+2000 500 0 3000 3000 3000 3000
+Report "71"
+CreateWorld 72 12,18
+17
+4
+5
+7
+1900
+66
+75
+0 0 500 0
+6000 4000 6000 4000 6000 3000 2000
+1000 500 0 3000 3000 3000 3000
+
+CreateWorld 73 13,18
+9
+5
+12
+7
+1500
+80
+75
+0 0 500 0
+6000 4000 6000 4000 6000 3000 2000
+1000 500 0 3000 3000 3000 3000
+
+CreateWorld 74 12,19
+3
+2
+20
+7
+1800
+50
+100
+0 0 500 0
+6000 4000 6000 4000 6000 3000 2000
+500 0 0 3000 3000 3000 3000
+
+CreateWorld 75 13,20
+5
+4
+9
+7
+2300
+60
+75
+0 0 500 0
+6000 4000 6000 4000 6000 3000 2000
+500 0 0 2000 5000 3000 4000
+Report "Before starbase 12"
+CreateStarbase 12 13,19 22
+8
+2
+7
+1600
+70
+0 1000 5000 2000
+6000 4000 6000 4000 6000 3000 2000
+3000 1500 0 3000 3000 3000 3000
+
+
+
+ClassTable
+2     ; Ambrosia
+6     ; Arid
+1     ; Artificial
+9     ; Barren
+6     ; Class J
+6     ; Class K
+6     ; Class L
+6     ; Class M
+6     ; Desert
+4     ; Earth
+2     ; Forest
+6     ; Gas Giant
+5     ; Hostile Life
+5     ; Ice world
+3     ; Jungle
+3     ; Ocean
+5     ; Paradise
+3     ; Poisonous
+2     ; Ruins
+6     ; Underground
+8     ; Volcanic
+
+TechTable
+10	; pre-tech
+22	; primitive
+25	; pre-atomic
+16	; atomic
+10	; pre-warp
+8	; warp
+5	; jump 
+2	; bio-tech
+1	; starship
+1	; pre-gate
+0	; gate
+
+ 
+CreateRandomNebula 1 2 4
+CreateRandomNebula 2 4 8
+
+CreateRandomWorlds 100 1
+
+CreateNebula 1 3,27 7,30
+CreateNebula 1 5,31 9,36
+CreateNebula 2 6,30 8,32
+CreateNebula 2 9,28 12,31
+
+CreateSRMs 2 18,20 18,28
+CreateSRMs 2 18,18 25,18
+CreateSRMs 2 20,26 20,31
+CreateSRMs 2 25,32 32,32
+CreateSRMs 2 32,24 32,18
+CreateSRMs 7 10,16 15,16
+CreateSRMs 7 5,18 10,18
+
+EndScenario
+

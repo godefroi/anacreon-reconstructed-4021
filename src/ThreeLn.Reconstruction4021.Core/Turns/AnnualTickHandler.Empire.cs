@@ -11,44 +11,6 @@ public sealed partial class AnnualTickHandler
     private const int TechIncUnvRns = 17;   // % chance for university on ruins world (:59)
 
     /// <summary>
-    /// One "unlockable item" across all 4 of Empire.Technology's category buckets, ordered to match
-    /// Pascal's single TechnologyTypes enum (LAM..dis) exactly — GetNewTech's Rnd(1,TechNumber) picks
-    /// an index into that combined ordering, so golden-file RNG parity depends on this order:
-    /// Defenses, then Ships, then Resources (CargoType), then Constructions.
-    ///
-    /// Lazy, not a plain field initializer: this class's static fields are split across partial
-    /// files (this one and AnnualTickHandler.Production.cs, which declares _minTechForDefense/
-    /// _minTechForShip/_minTechForCargo/_minTechForConstruction), and all of a type's partial-file
-    /// field initializers run in one shared static constructor in file-compilation order — not
-    /// dependency order. A plain initializer here read those tables as still-null on the first build,
-    /// since this file happens to compile first alphabetically. Lazy defers BuildTechCatalog until
-    /// first access, by which point the whole static constructor (every partial file's fields) has
-    /// already finished.
-    /// </summary>
-    private static readonly Lazy<(TechLevel MinTech, Func<UnlockedTechnology, bool> IsUnlocked, Action<UnlockedTechnology> Unlock)[]> _techCatalog =
-        new(BuildTechCatalog);
-
-    private static (TechLevel, Func<UnlockedTechnology, bool>, Action<UnlockedTechnology>)[] BuildTechCatalog()
-    {
-        var entries = new List<(TechLevel, Func<UnlockedTechnology, bool>, Action<UnlockedTechnology>)>();
-
-        foreach (var type in Enum.GetValues<DefenseType>())
-            entries.Add((_minTechForDefense[type], t => t.Defenses.Contains(type), t => t.Defenses.Add(type)));
-        foreach (var type in Enum.GetValues<ShipType>())
-            entries.Add((_minTechForShip[type], t => t.Ships.Contains(type), t => t.Ships.Add(type)));
-        foreach (var type in Enum.GetValues<CargoType>())
-            entries.Add((_minTechForCargo[type], t => t.Resources.Contains(type), t => t.Resources.Add(type)));
-        foreach (var type in Enum.GetValues<ConstructionType>())
-            entries.Add((_minTechForConstruction[type], t => t.Constructions.Contains(type), t => t.Constructions.Add(type)));
-
-        return [.. entries];
-    }
-
-    /// <summary>Every catalog item unlocked by <paramref name="tech"/> but not yet in <paramref name="owned"/>, in catalog order (GetNewTech's PossibleTechSet-TechSet, UPDATE.PAS:370).</summary>
-    private static List<Action<UnlockedTechnology>> MissingTechAt(UnlockedTechnology owned, TechLevel tech) =>
-        [.. _techCatalog.Value.Where(e => e.MinTech <= tech && !e.IsUnlocked(owned)).Select(e => e.Unlock)];
-
-    /// <summary>
     /// UPDATE.PAS:224-428 (NewTechLevel). UpdateEmpire's other line (committing NewTotalRevIndex) is
     /// already handled in <see cref="RunAnnualTick"/>; this is UpdateEmpire's only other behavior.
     /// Skips AddNews — no news subsystem yet, same precedent as every other UpdateWorld step.
@@ -58,10 +20,10 @@ public sealed partial class AnnualTickHandler
         var tech = emp.TechnologyLevel;
 
         // TechSet=TechDev[GteTchLvl]: every category fully researched, nothing left to ever roll for.
-        if (MissingTechAt(emp.Technology, TechLevel.Gate).Count == 0)
+        if (TechCatalog.MissingTechAt(emp.Technology, TechLevel.Gate).Count == 0)
             return;
 
-        var missingAtCurrentLevel = MissingTechAt(emp.Technology, tech);
+        var missingAtCurrentLevel = TechCatalog.MissingTechAt(emp.Technology, tech);
         var (chance, lab) = GetChanceForNewTech(emp, tech, game);
 
         if (Rnd(1, 100) > chance)

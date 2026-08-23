@@ -1,0 +1,237 @@
+ANACREON 10
+"Reconstruction: 4021"
+0     ; random scenario
+1 3   ; 1-3 players
+21    ; 21x21 galaxy
+50    ; 50 planets
+0     ; Difficulty: Beginner
+50 0  ; 50+ years
+4021
+BEGINTEXT
+
+        "...When the First Empire finally collapsed, the spasms and
+   convultions of its death were so violent that the galaxy was thrown
+   into a dark age that lasted nearly a thousand years.  Hundreds of worlds
+   were devastated by the great wars at the end of the era.  Many more
+   simply stagnated and decayed as they lost contact with Earth.  In the
+   end, what was once a cohesive and monolithic unit spanning the stars
+   of known space, degenerated into a dozen loose kingdoms trying to 
+   maintain control over their own territories.  As the dark ages pro-
+   gressed, even these kingdoms disappeared.  Entire worlds lost the
+   technology to travel across the stars.  World by world the galaxy
+   regressed thousands of years in the history of humanity..."
+                                 From: The Seeds of Panemonde,
+                                       by Lord Jonathan R. Rowehin.
+
+ It is four thousand years after the collapse of the First Empire.  Although 
+ not fully recovered from the cataclysm, the galaxy is slowly beginning to 
+ unite once again.  Worlds have formed federations and federations have 
+ turned into empires.  And although hundreds of worlds are still living 
+ unaware that other humans inhabit the stars, there is a renewed hope in the 
+ galaxy that a Second Empire will rise out of the first. 
+NEWPAGE
+ In this scenario, you will start out as the totalitarian ruler of a single
+ earth-like world.  For the past few years your world has been building up
+ its starfleet, preparing to forge an empire out of the surrounding worlds.
+ Though not as technologically advanced as the First Empire, you possess a
+ few ancient ships, remanents of another era, that will help you in your
+ conquests.  Your ultimate goal is the unification of the galaxy,
+ preferably under your flag.
+ENDTEXT
+
+; ------------------------------------------------------------------------------
+; Zone 2 is in the center of the galaxy and will contain mostly primitive
+; planets.  Zones 3 through 6 form the periphery and will contain most of the
+; powerful and advanced planets.
+; Zones 7 through 11 will contain each of the 5 player empires and are spread
+; throughout the galaxy.
+
+; Define zone 2 in the center of the galaxy ------------------------------------
+DefineZone 2 6,6 16,16
+
+; Define zones 3-6 in the periphery --------------------------------------------
+DefineZone 3  6,1  21,5
+DefineZone 4 17,6  21,21
+DefineZone 5  1,17 16,21
+DefineZone 6  1,1   5,16
+DefineZone 7  5,14  9,18            ; location of empire 1
+DefineZone 8  13,4  17,8            ; location of empire 2
+DefineZone 9  10,10 12,12           ; location of empire 3
+DefineZone 10 16,16 20,20           ; location of empire 4
+DefineZone 11  2,2   6,6            ; location of empire 5
+
+; Create 5 player empires ------------------------------------------------------
+; Each of the five empires has one of the previously created capitals.
+; NOTE: If there are less than five players, then not all five empires will
+; be created.  The capitals will remain as independent worlds, however.
+
+CreatePlayerEmpire 0 0 7 0
+CreatePlayerEmpire 1 0 7 0
+CreatePlayerEmpire 2 0 7 0
+
+CreateNPEmpire 1
+3           ; Aggressor Empire
+RndName     ; Name of the empire
+0           ; (undefined)
+7           ; Bio tech
+0           ; (undefined)
+
+CreateNPEmpire 2
+3           ; Aggressor Empire
+RndName     ; Name of the empire
+0           ; (undefined)
+7           ; Bio tech
+0           ; (undefined)
+
+CreateNPEmpire 3
+3           ; Aggressor Empire
+RndName     ; Name of the empire
+0           ; (undefined)
+7           ; Bio tech
+0           ; (undefined)
+
+CreateNPEmpire 4
+3           ; Aggressor Empire
+RndName     ; Name of the empire
+0           ; (undefined)
+7           ; Bio tech
+0           ; (undefined)
+
+
+; Create player capitals -------------------------------------------------------
+
+CreateWorld 1 Z:7                   ; empire 1 capital
+9    ; earth-like
+7    ; bio tech
+4    ; Capital type
+0    ; empire 1
+2200 ; population
+85   ; efficiency
+;  LAM  def  GDM  ion
+     0    0  400  100
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   400   50  200  150   20    0  250
+;  men  nnj  amb  che  met  sup  tri
+  2000    0    0 1000 1500 2000  500
+
+CreateWorld 2 Z:8                   ; empire 2 capital
+9    ; earth-like
+7    ; bio tech
+4    ; Capital
+1    ; Empire 2
+2200 ; population
+85   ; efficiency
+;  LAM  def  GDM  ion
+     0    0  400  100
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   400   50  200  150   20    0  250
+;  men  nnj  amb  che  met  sup  tri
+  2000    0    0 1000 1500 2000  500
+
+CreateWorld 3 Z:9                   ; empire 3 capital
+9    ; earth-like
+7    ; bio tech
+4    ; Capital
+2    ; Empire 3
+2200 ; population
+85   ; efficiency
+;  LAM  def  GDM  ion
+     0    0  400  100
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   400   50  200  150   20    0  250
+;  men  nnj  amb  che  met  sup  tri
+  2000    0    0 1000 1500 2000  500
+
+CreateWorld 4 Z:10                  ; empire 4 capital
+9    ; earth-like
+7    ; bio tech
+4    ; Capital
+3    ; Empire 4
+2200 ; population
+85   ; efficiency
+;  LAM  def  GDM  ion
+     0    0  400  100
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   400   50  200  150   20    0  250
+;  men  nnj  amb  che  met  sup  tri
+  2000    0    0 1000 1500 2000  500
+
+CreateWorld 5 Z:11                  ; empire 5 capital
+9    ; earth-like
+7    ; bio tech
+4    ; Capital
+4    ; Empire 5
+2200 ; population
+85   ; efficiency
+;  LAM  def  GDM  ion
+     0    0  400  100
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   400   50  200  150   20    0  250
+;  men  nnj  amb  che  met  sup  tri
+  2000    0    0 1000 1500 2000  500
+
+; Class Table for all zones ----------------------------------------------------
+ClassTable
+1     ; Ambrosia
+5     ; Arid
+0     ; Artificial
+8     ; Barren
+10    ; Class J
+10    ; Class K
+10    ; Class L
+10    ; Class M
+5     ; Desert
+10    ; Earth
+5     ; Forest
+2     ; Gas Giant
+1     ; Hostile Life
+2     ; Ice world
+4     ; Jungle
+7     ; Ocean
+1     ; Paradise
+2     ; Poisonous
+1     ; Ruins
+3     ; Underground
+3     ; Volcanic
+
+; Tech Table for periphery worlds ----------------------------------------------
+TechTable
+0     ; pre-tech
+10    ; primitive
+20    ; pre-atomic
+30    ; atomic
+23    ; pre-warp
+12    ; warp
+5     ; jump
+0     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+
+; Create standard worlds in each of the periphery zones (24 total) -------------
+CreateRandomWorlds 6 3              ; 6 worlds in zone 3
+CreateRandomWorlds 6 4              ; 6 worlds in zone 4
+CreateRandomWorlds 6 5              ; 6 worlds in zone 5
+CreateRandomWorlds 6 6              ; 6 worlds in zone 6
+
+; Tech Table for zone 2 --------------------------------------------------------
+TechTable
+10    ; pre-tech
+20    ; primitive
+35    ; pre-atomic
+20    ; atomic
+10    ; pre-warp
+5     ; warp
+0     ; jump
+0     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+
+; Create 21 primitive worlds in zone 2 -----------------------------------------
+CreateRandomWorlds 21 2
+
+CreateRandomNebula 1 1 1
+CreateRandomNebula 2 1 3
+
+ENDSCENARIO

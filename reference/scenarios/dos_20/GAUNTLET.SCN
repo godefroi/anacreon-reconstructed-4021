@@ -1,0 +1,1227 @@
+ANACREON 12
+"The Gauntlet"
+0        ;Random Scenario
+1 1      ;One Player
+50       ;50 x 50 Map Size
+172      ;180 Planets in Galaxy
+2        ;Advanced
+100 0    ;100+ Years Long
+3100     ;Starting Year
+
+BEGINTEXT
+
+       ˙                     .             ±   ±±±±
+   ˙          .          .              ± ±  ±±±±±        .            .
+                 .              .    ± ±  ±±±±±‹ﬂ             .
+    ˛             ˙                ±   ±±±±±±±ﬂ                        ˙
+ ˘          ˘            .      ±   ±±±±±±±±ﬂ        .   ˙         ˙
+           ˙ ˛€   ˛        ± ±    ±±±±±±±‹ﬂ                   .
+ €     ±                ±±  ±±±±±±±±±±±±ﬂ ˙                 ˘  .˙
+  €€€   €     ‹ ±±   ± ±±  ±±±±±±±±±±±€ﬂ         ˙    ˛
+     €€€ €€ ≤ €€   ±€ ≤≤±˛ ±±±±±±±±±‹±             .                   ˙
+   ˛        ±± ±€€€€€ ≤  ≤≤≤±±€‹±±±±±±‹±            .                  .
+     €€€€  ±±±≤≤≤€€€€€€€€±€±≤±€€‹ﬂ                The Gauntlet          .  
+     €±±€ €€€€± €€€€≤€≤€€€€≤≤€≤ ±      .  .
+    ˛  ±≤≤≤ ≤ €€€€€€€€€€€€€€≤‹ ≤                  An advanced scenario for
+ ˛         ±±€±€≤€€€€€€€€€€€≤≤≤ ≤≤ ≤                ˙ solo play by
+      €€€€€≤≤€≤≤€€€€€€€€€€€≤≤≤ ±       ‹                Lee Davies and
+        ˛ €€≤≤€€€€€€€€≤≤≤≤±±€€€€±±±  ±  ± ‹           ˙   George Moromisato
+€  ˙    €€€€€€€€€€€€≤ ≤€€≤≤≤≤€€€±  ±±          .    .
+     ≤€≤≤€€€€€€ €€€±±˛ €€˛  ±±€€  ±€              Difficulty: Advanced
+      €€€€€€ €€   €        €€     €≤± ±±          Length: 100+ years
+  €€€€€€€€€   €          ‹ ˛        ≤±± €±        
+ €€€€€  ˛     ˛     ˙         €€                  
+NEWPAGE
+
+ In your race's attempts to expand beyond the confines of your over-
+ crowded world you have discovered that the rest of the galaxy is already 
+ a very dark and uninviting place.
+
+ The worlds of the sector are in a state of turmoil, cast into ever darkening
+ wars that pit race against race. No longer is peaceful negotiation a pos-
+ sible solution. As you realize that many races vie for the ultimate control 
+ of the galaxy, you to are drawn into a wide-spread conflagration. If you do 
+ not fight you will be destroyed.
+
+ Once expansion seemed an easy enough task, now at least five other races
+ also fight for control. Instead of the simple straight forward advance
+ of your civilization now you must run the gauntlet that others have made
+ for you...
+
+                                            Leah Dahries
+NEWPAGE
+
+ This is a large, open-ended scenario for advanced players. Your goal is to
+ conquer and prosper. Some of the other empires in the galaxy are easy prey,
+ others are deadly predators. Though your initial resources are small, your
+ skills and your experience will enable you to prevail.
+
+ENDTEXT
+
+BEGINDESCRIPTION
+
+WorldBackgroundIndex
+2:1 E:0		1	;Emp #1 Capital
+2:2 E:1		2	;Troglidian Capital
+2:8 E:2		3	;Paradine Capital
+2:13 E:3	4	;Gaian Capital
+2:18 E:4	5	;Egaly Capital
+2:34 E:5	6	;Thinnva Capital
+2:41 E:6	7	;Dakara Capital
+2:46 E:7	8	;Soid Capital
+EndIndex
+
+TEXT 1
+Algol, as the planet is known to the native inhabitants, is not the 
+easiest planet in the galaxy to live on.  Life is difficult as the 
+population soars to 50 billion, but the warriors of this planet, hardened
+by the environment, are matched by none.
+
+"Nothing stands in our way..."
+ENDTEXT
+
+TEXT 2
+The capital of the Troglidian empire
+
+A barren world to the naked eye, this planet hides thriving underground 
+production factories.  The inhabitants of this world were quite advanced
+before they ventured to the stars.  Hampered by a low population, 
+efficiency is ingrained into their way of life.
+ENDTEXT
+
+TEXT 3
+The capital of the Paradine empire, a lush and green world, is called a 
+"Garden Paradise" by the inhabitants. As their age of star travel dawned,
+the people of the world started a plan of colonization and conquest,
+impatient for rapid expansion. Though they are the youngest of the space
+faring empires, they have the potential to become an important power.         
+ENDTEXT
+
+TEXT 4
+"Gaia", the capital of a strong and thriving empire, was once a world torn
+by civil war. As soon as its inhabitants developed the ability to reach
+the stars, they abandoned their planet-bound conflicts and united to forge
+an interstellar empire. Although the old friction between internal factions
+remain, the Gaians as a race tolerate no external interference.
+
+It is said that before the collapse of the First Empire this world was
+called "Earth" by its people, but there is no conclusive evidence to prove
+that this world was indeed the mythical birthplace of humanity.
+ENDTEXT
+
+TEXT 5
+The home world of the Egaly is a misty jungle world of fog and rainstorms.
+Despite their fearsome looks, the Egaly are a very peaceful and intelligent
+race. Their Kingdom was established long ago and has remained the same size
+for centuries. Though harassed by the Thinnva, the empire is stable and 
+productive.
+
+Explorers that have been allowed to visit the Egaly empire say that most
+of their ships are built by an ancient industrial complex.
+ENDTEXT
+
+TEXT 6
+The Thinnva are tall and slender humanoids that have a very loose and
+chaotic society. Often referred to as "parasites" by other races, the
+Thinnva commonly attack transport fleets to steal their cargo. Though they
+do not have many worlds, they are a most efficient and resourceful empire.
+ENDTEXT
+
+TEXT 7
+This world of immense volcanic activity hides the race of the Dakara, a
+violent people that dwell deep under the surface of their inhospitable
+world.  The love of conquest and viciousness that these people demonstrate
+is a constant surprise to other civilized races of the sector.
+ENDTEXT
+
+TEXT 8
+The world of the Soid is a warm but stormy world, covered almost entirely
+by ocean. The Soid, which can only be described as intelligent amorphous
+blobs, live under the seas in great stone cities. Though little is actually
+known about this race, their reputation for conquest is unquestionable.
+So far, attempts to communicate with them have failed.
+ENDTEXT
+
+ENDDESCRIPTION
+
+; DebugScenario
+
+DefineZone  2   20,20 30,30	; empire 2
+DefineZone  3   20,10 30,20	; empire 3
+DefineZone  4   15,25 25,35	; empire 4
+DefineZone  5   25,25 35,35	; empire 5
+DefineZone  6   10,15 20,25	; empire 6
+DefineZone  7	30,15 40,25	; empire 7
+DefineZone  8	20,35 30,45	; empire 8
+
+DefineXY	Player1		R:15..40,15..35
+DefineXY	Emp5		Z:5
+DefineXY	Emp6		Z:6
+DefineXY	Emp5Ind		R:32..36,32..36
+
+; Create Empires -------------------------------------------------------------
+
+CreatePlayerEmpire 0
+0	; Revolution factor
+7	; Bio-tech level
+0	; no of technologies of bio-tech
+0	; modifiers
+
+CreateNPEmpire 1
+3	; Aggressor empire
+Troglidia
+0	; revolution factor
+8	; starship level
+0	; no of technologies
+0	; modifiers
+
+CreateNPEmpire 2
+3	; Aggressor empire
+Paradine
+6	; Revolution factor
+6	; Warp technology
+2	; No of technologies
+7	; jumpships
+8	; jumptransports
+1	; modifiers
+CENTRAL
+
+CreateNPEmpire 3
+3	; Aggressor empire
+Gaian
+2	; Revolution factor
+7	; Bio-tech
+1	; number of technologies
+6	; hunter-killers
+0	; modifiers
+
+CreateNPEmpire 4
+2	; kingdom empire
+Egaly
+0	; revolution factor
+9	; Pre-gate level
+0	; no of techs
+0	; modifiers
+
+CreateNPEmpire 5
+1	; pirate empire
+Thinnva
+0	; revolution factor
+8	; starship level
+1	; no of techs
+22	; industrial complex
+1	; modifiers
+CENTRAL	;    empire will collapse if capital conquered
+
+CreateNPEmpire 6
+3	; Aggressor empire
+Dakara
+0	; revolution factor
+7	; bio-tech
+1	; no of techs
+9	; penetrator
+0	; modifiers
+
+CreateNPEmpire 7
+3	; aggressor empire
+Soid
+4	; revolution factor
+7	; bio-tech
+2	; no of techs
+6	; hunter-killers
+23	; outpost
+0	; modifiers
+
+; Player Empire --------------------------------------------------------------
+
+CreateWorld 1 Player1:0,0
+16	; paradise
+7	; bio-tech
+4 	; capital
+0 	; empire 1
+4500 	; population
+99	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 7000 3500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500    0 7500 5500    0    0 3500
+;  men  nnj  amb  che  met  sup  tri
+  7500    0    0 7000 9500 6000 7000
+
+; Troglidian Empire ----------------------------------------------------------
+
+CreateWorld 2 Z:2
+19 	; underground
+8 	; starship
+4 	; capital
+1 	; empire 2
+2300 	; population
+99	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0  500 3500 2000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5000 1500 4500 3500 1000    0 2500
+;  men  nnj  amb  che  met  sup  tri
+  2000    0    0 8000 9500 2500 9500
+
+CreateWorld 3 Z:2
+20 	; volcanic
+6 	; jump tech
+9 	; metal mining
+1 	; empire 2
+1750 	; population
+65	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1500    0    0 1500 500    0 1750
+;  men  nnj  amb  che  met  sup  tri
+   750    0    0 3500 4500  750 1000
+
+CreateWorld 4 Z:2
+18 	; ruins
+8 	; starship
+2 	; base planet
+1 	; empire 2
+2700 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 750 6000 2000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2700 1000 3500 3000  750    0 1500
+;  men  nnj  amb  che  met  sup  tri
+  2500    0    0 2000 3000 1000 2000
+
+CreateWorld 5 Z:2
+9 	; earth
+7 	; bio-tech
+7 	; jumpship base
+1 	; empire 2
+3200 	; population
+30	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0  250 2000  500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1500 4000 7000 5000    0    0    0
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 1500 2500  500 1500
+
+CreateWorld 6 Z:2
+14 	; jungle
+6 	; jump tech
+0 	; agricultural
+1 	; empire 2
+1500 	; population
+50	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0  500    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   750    0 1000 2500    0    0  750
+;  men  nnj  amb  che  met  sup  tri
+  1500    0    0  750 1250 7500  750
+
+CreateWorld 7 Z:2
+3 	; barren
+6 	; jump tech
+12 	; raw material
+1 	; empire 2
+2100 	; population
+45	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000 250
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0  500 1500    0    0 2500
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 2200 4400 1500 3300
+
+; Paradine Empire ------------------------------------------------------------
+
+CreateWorld 8 Z:3
+16 	; paradise
+7 	; bio-tech
+4 	; capital
+2 	; empire 3
+3200 	; population
+65	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2500    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500    0 2500 2000    0    0 3000
+;  men  nnj  amb  che  met  sup  tri
+  5000    0    0 5000 8000 4000 5000
+
+CreateWorld 9 Z:3
+0 	; ambrosia
+6 	; jump tech
+18 	; university
+2 	; empire 3
+2200 	; population
+45	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1500    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1500    0 1000 1000    0    0  750
+;  men  nnj  amb  che  met  sup  tri
+  1500    0    0 2500 4000 1500 1000
+
+CreateWorld 10 Z:3
+9 	; earth
+6 	; jump tech
+7 	; jumpship base
+2 	; empire 3
+2700 	; population
+50	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0 2000 3000    0    0  500
+;  men  nnj  amb  che  met  sup  tri
+  2500    0    0 1500 3500 1000 1500
+
+CreateWorld 11 Z:3
+20 	; volcanic
+5 	; warp
+12 	; raw material
+2 	; empire 3
+3700 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0  500    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0    0    0    0    0 3000
+;  men  nnj  amb  che  met  sup  tri
+   750    0    0 3500 5600 1000 2500
+
+CreateWorld 12 Z:3
+10 	; forest
+5 	; warp
+0 	; agricultural
+2 	; empire 3
+1200 	; population
+65	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0    0    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1500    0  500 1000    0    0 1000
+;  men  nnj  amb  che  met  sup  tri
+   750    0    0 1000 1500 4500  500
+
+; Gaian Empire ---------------------------------------------------------------
+
+CreateWorld 13 Z:4
+9 	; earth
+8 	; starship
+4 	; capital
+3 	; empire 4
+3000 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+    0    0 2500 1000
+ ;  fgt  hkr  jmp  jtn  pen  str  trn
+ 4000 2000 3500 4500    0    0 3500
+ ;  men  nnj  amb  che  met  sup  tri
+ 5000    0    0 2500 3500 2000 2500
+
+CreateWorld 14 Z:4
+20 	; volcanic
+6 	; jump
+12 	; raw material
+3 	; empire 4
+2200 	; population
+50	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+    0    0 1500    0
+ ;  fgt  hkr  jmp  jtn  pen  str  trn
+ 1500    0  750 1500    0    0 2500
+ ;  men  nnj  amb  che  met  sup  tri
+ 1500    0    0 3500 5500 1000 2000
+ 
+CreateWorld 15 Z:4
+12 	; hostile life
+7 	; bio-tech
+2 	; base planet
+3 	; empire 4
+3400 	; population
+40	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1500  500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2000 1000 1500 2000    0    0 1500
+;  men  nnj  amb  che  met  sup  tri
+  2500 1000    0 2000 3000 1000 1500
+
+CreateWorld 16 Z:4
+8 	; desert
+6 	; jump tech
+20 	; trillum mine
+3 	; empire 4
+1700 	; population
+50	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0 1000 1000    0    0  500
+;  men  nnj  amb  che  met  sup  tri
+  1500    0    0 1000 1500 1000 7500
+
+CreateWorld 17 Z:4
+5 	; class k
+7 	; bio-tech
+7 	; jumpship base
+3 	; empire 4
+2200 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1000  500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0 1000 2000 1500    0    0
+;  men  nnj  amb  che  met  sup  tri
+  1500    0    0 1500 2000 1000 1000
+
+; Egaly Empire ---------------------------------------------------------------
+ 
+CreateWorld 18 Emp5:0,0
+14 	; jungle
+9 	; pre-gate
+4 	; capital
+4 	; empire 5
+4700 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+  5500 7000 8500 5750
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5500 4750 8000 5250 2500 2500 3500
+;  men  nnj  amb  che  met  sup  tri
+  5500    0    0 5000 6500 4500 4700
+
+CreateStarbase 1 Emp5Ind:0,0
+22	; industrial complex
+9 	; pre-gate
+2 	; base planet
+4 	; empire 5
+2600 	; population
+75	; efficiency
+;  LAM  def  GDM  ion
+  7500 5500 8000 5000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6000 4450 3750 2500 1350 1200 3800
+;  men  nnj  amb  che  met  sup  tri
+  4500    0    0 4500 6500 2500 3500
+
+CreateWorld 19 Emp5Ind:-1,0
+20 	; volcanic
+7 	; bio-tech
+9 	; metal mining
+4 	; empire 5
+3700 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2750 1250
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5000    0 2100 2250    0    0 1250
+;  men  nnj  amb  che  met  sup  tri
+  2350    0    0 3500 6400 1800 3500
+
+CreateWorld 20 Emp5Ind:1,0
+8 	; desert
+7 	; bio-tech
+20 	; trillum mine
+4 	; empire 5
+3400 	; population
+85	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2500 1150
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2340 1450 2250 1700    0    0 1100
+;  men  nnj  amb  che  met  sup  tri
+  1780    0    0 2560 2234 1650 1800
+
+CreateWorld 21 Emp5Ind:0,1
+15 	; ocean
+8 	; starship
+5 	; chemical
+4 	; empire 5
+3000 	; population
+85	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1100 5350 2750
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5500    0 3250 2250 1550    0 2500
+;  men  nnj  amb  che  met  sup  tri
+  4250    0    0 4500 1200 3000 1350
+
+CreateWorld 22 Emp5Ind:0,-1
+10 	; forest
+7 	; bio-tech
+0 	; agricultural
+4 	; empire 5
+2890 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1450  500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2250  500    0    0  750    0 1150
+;  men  nnj  amb  che  met  sup  tri
+  1250    0    0 1300 2650 4800 1200
+
+CreateStarbase 2 Z:5
+23	; outpost
+9 	; pre-gate
+11 	; outpost
+4 	; empire 5
+100 	; population
+95	; efficiency
+;  LAM  def  GDM  ion
+     0  500 2000 1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2000    0    0    0 1000  500    0
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 1500 2000 1500 2000
+
+CreateStarbase 3 37,31
+23	; outpost
+9 	; pre-gate
+11 	; outpost
+4 	; empire 5
+100 	; population
+95	; efficiency
+;  LAM  def  GDM  ion
+     0  500 2000 1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2000    0    0    0 1000  500    0
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 1500 2000 1500 2000
+
+CreateStarbase 4 32,22
+23	; outpost
+9 	; pre-gate
+11 	; outpost
+4 	; empire 5
+100 	; population
+95	; efficiency
+;  LAM  def  GDM  ion
+     0  500 2000 1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2000    0    0    0 1000  500    0
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 1500 2000 1500 2000
+
+CreateStarbase 5 Z:7
+23	; outpost
+9 	; pre-gate
+11 	; outpost
+4 	; empire 5
+100 	; population
+95	; efficiency
+;  LAM  def  GDM  ion
+     0  500 2000 1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2000    0    0    0 1000  500    0
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 1500 2000 1500 2000
+
+CreateWorld 23 Z:5
+0 	; ambrosia
+8 	; starship
+1 	; ambrosia
+4 	; empire 5
+2950 	; population
+85	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1500 3500 2750
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3750 1500 3000 2500 1750    0 1750
+;  men  nnj  amb  che  met  sup  tri
+  2250    0 7500 2300 3500 3000 2750
+
+CreateWorld 24 Z:5
+5 	; class k
+9 	; pre-gate
+10 	; ninja
+4 	; empire 5
+3235 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+   250  350  750  450
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   600   50  200  750    0    0 400
+;  men  nnj  amb  che  met  sup  tri
+  7650 5200 8500 6000 8500 2000 4750
+
+CreateWorld 25 Z:5
+13 	; ice world
+8 	; starship
+2 	; base planet
+4 	; empire 5
+3415 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1500 3500 2250
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  4500 1550 2250 1350 1750 1000 2600
+;  men  nnj  amb  che  met  sup  tri
+  6700    0    0 4200 5300 2700 2700
+
+CreateWorld 26 Z:5
+8 	; desert
+5 	; warp
+20 	; trillum mine
+4 	; empire 5
+2750 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 4350    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3350 1225    0 1150    0    0 1250
+;  men  nnj  amb  che  met  sup  tri
+  1450    0    0 1670 3350 1500 5600
+
+CreateWorld 27 Z:5
+19 	; underground
+4 	; pre-warp
+12 	; raw material
+4 	; empire 5
+3550 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0    0    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2350    0    0    0    0    0 1450
+;  men  nnj  amb  che  met  sup  tri
+  1450    0    0 3500 5600 1400 2200
+
+CreateWorld 28 Z:5
+10 	; forest
+3 	; atomic
+0 	; agricultural
+4 	; empire 5
+2680 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0    0    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1750  150 1150    0    0    0 1375
+;  men  nnj  amb  che  met  sup  tri
+  1600    0    0 1350 1555 2400 1150
+
+CreateWorld 29 Z:5
+7 	; class M
+8 	; starship
+7 	; jumpship base
+4 	; empire 4
+3267 	; population
+85	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 3750 1500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3250 1350 2500 1450    0    0    0
+;  men  nnj  amb  che  met  sup  tri
+  2450    0    0 2500 4500 1500 3500
+
+CreateWorld 30 Z:5
+9 	; earth
+9 	; pre-gate
+18 	; university
+4 	; empire 5
+2870 	; population
+65	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1250 4750 2500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  4350 1100 3150    0 1150    0    0
+;  men  nnj  amb  che  met  sup  tri
+  2500    0    0 3000 4000 2000 2000
+
+CreateWorld 31 Z:5
+15 	; ocean
+6 	; jump tech
+5 	; chemical
+4 	; empire 5
+3105 	; population
+65	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 1560    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1750 1500    0    0    0    0 1750
+;  men  nnj  amb  che  met  sup  tri
+  2890    0    0 5600 1350 1200 2350
+
+CreateWorld 32 Z:5
+5 	; class k
+7 	; bio-tech
+12 	; raw material
+4 	; empire 5
+3200 	; population
+65	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1250 4750 2500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  4500    0 1500    0 2250    0 1550
+;  men  nnj  amb  che  met  sup  tri
+  3200    0    0 3500 5500 2000 2800
+
+CreateWorld 33 Z:5
+3 	; barren
+7 	; bio-tech
+9 	; metal mining
+4 	; empire 5
+2450 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 3500 2150
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  4230 1100 2000    0    0    0 3250
+;  men  nnj  amb  che  met  sup  tri
+  3300    0    0 2450 7600 1340 3567
+
+; Thinnva Empire -------------------------------------------------------------
+
+CreateWorld 34 Emp6:0,0
+9 	; earth
+8 	; starship
+4 	; capital
+5 	; empire 6
+3500 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 2000 5500 3500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  5500 4000 6000 4000 2000    0 2500
+;  men  nnj  amb  che  met  sup  tri
+  7500    0    0 3500 5500 2000 7500
+
+CreateStarbase 6 12,17
+22	; industrial complex
+8 	; starship
+7 	; jumpship base
+5 	; empire 6
+1800 	; population
+75	; efficiency
+;  LAM  def  GDM  ion
+     0 2000 4000 3000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2500 7500 9000 6000 2500    0 2500
+;  men  nnj  amb  che  met  sup  tri
+  5000 2000    0 8000 8000 8000 8000
+
+CreateWorld 35 12,16
+20 	; volcanic
+7 	; bio-tech
+12 	; raw material
+5 	; empire 6
+4500 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2500 1500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3500 1500 2000 1500 1500    0 2500
+;  men  nnj  amb  che  met  sup  tri
+  2500    0    0 8000 8000 2000 8000
+
+CreateWorld 36 12,18
+19 	; underground
+8 	; starship
+12 	; raw material
+5 	; empire 6
+3700 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1000 2500 1500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3500 1500 2000 1500 1500    0 2500
+;  men  nnj  amb  che  met  sup  tri
+  2500    0    0 8000 8000 2000 8000
+
+CreateWorld 37 13,17
+8 	; desert
+7 	; bio-tech
+20 	; trillum mine
+5 	; empire 6
+2300 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2500 1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1500    0 2000 3000  750    0 1000
+;  men  nnj  amb  che  met  sup  tri
+  2500    0    0 2500 2500 1500 9000
+
+CreateWorld 38 Z:6
+5 	; class K
+8 	; starship
+2 	; base planet
+5 	; empire 6
+3100 	; population
+85	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1000 3000 2000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6500 4000 5000 3000 1000    0 4000
+;  men  nnj  amb  che  met  sup  tri
+  5000 1500    0 1500 2500 1000 1000
+
+CreateWorld 39 Z:6
+0 	; ambrosia
+7 	; bio-tech
+1 	; ambrosia
+5 	; empire 6
+2500 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0  500 2000 1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2500 2000 3000 2000 3500    0  500
+;  men  nnj  amb  che  met  sup  tri
+  2000 2000 5000 4000 3000 2000 1000
+
+CreateWorld 40 Z:6
+16 	; paradise
+8 	; starship
+10 	; ninja
+5 	; empire 6
+3400 	; population
+65	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0 1000 3000 2000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3500 2000 3000 2000 1500    0 1000
+;  men  nnj  amb  che  met  sup  tri
+  3000 5000 5000 3500 4500 2500 2000
+
+; Dakara Empire --------------------------------------------------------------
+
+CreateWorld 41 Z:7
+20 	; volcanic
+8 	; starship
+4 	; capital
+6 	; empire 7
+3400 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 3000 1500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  4500    0 3500 2500 1500    0 3500
+;  men  nnj  amb  che  met  sup  tri
+  4500    0    0 4500 6500 2500 3500
+
+CreateWorld 42 Z:7
+3 	; barren
+7 	; bio-tech
+2 	; base planet
+6 	; empire 7
+3100 	; population
+85	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2500 1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3500    0 2500 1500 1000    0 2500
+;  men  nnj  amb  che  met  sup  tri
+  3500    0    0 3500 5500 1500 2500
+
+CreateWorld 43 Z:7
+18 	; ruins
+7 	; bio-tech
+7 	; jumpship base
+6 	; empire 7
+3200 	; population
+90	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2500 1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1500    0 4500 3500 3000    0  500
+;  men  nnj  amb  che  met  sup  tri
+  2000    0    0 3500 3200 1000 1500
+
+CreateWorld 44 Z:7
+12 	; hostile life
+7 	; bio-tech
+16 	; transport base
+6 	; empire 7
+2900 	; population
+80	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2500 1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500    0 1000 1000    0    0 5000
+;  men  nnj  amb  che  met  sup  tri
+  5000 2000    0 3500 3000 2000 3500
+
+CreateWorld 45 Z:7
+16 	; paradise
+7 	; bio-tech
+12 	; raw material
+6 	; empire 7
+5200 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 3500 2500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  7500    0 5000 7000 3500    0 5500
+;  men  nnj  amb  che  met  sup  tri
+  3000 1000    0 9000 9000 9000 9000
+
+; Soid Empire ----------------------------------------------------------------
+
+CreateWorld 46 Z:8
+15 	; ocean
+8 	; starship
+4 	; capital
+7 	; empire 8
+4400 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 3750 2500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  6000 2000 4500 3500    0    0 4000
+;  men  nnj  amb  che  met  sup  tri
+  5500    0    0 4000 5500 3000 4500
+
+CreateStarbase 7 31,40
+23	; outpost
+7 	; bio-tech
+11 	; outpost
+7 	; empire 8
+100 	; population
+95	; efficiency
+;  LAM  def  GDM  ion
+     0    0 1000  500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0  500    0    0    0    0
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 1000 1500 1000 1500
+
+CreateStarbase 8 25,46
+23	; outpost
+7 	; bio-tech
+11 	; outpost
+7 	; empire 8
+100 	; population
+95	; efficiency
+;  LAM  def  GDM  ion
+     0    0 1000  500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0  500    0    0    0    0
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 1000 1500 1000 1500
+
+CreateStarbase 9 20,40
+23	; outpost
+7 	; bio-tech
+11 	; outpost
+7 	; empire 8
+100 	; population
+95	; efficiency
+;  LAM  def  GDM  ion
+     0    0 1000  500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0  500    0    0    0    0
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 1000 1500 1000 1500
+
+CreateStarbase 10 25,36
+23	; outpost
+7 	; bio-tech
+11 	; outpost
+7 	; empire 8
+100 	; population
+95	; efficiency
+;  LAM  def  GDM  ion
+     0    0 1000  500
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  1000    0  500    0    0    0    0
+;  men  nnj  amb  che  met  sup  tri
+  1000    0    0 1000 1500 1000 1500
+
+CreateWorld 47 Z:8
+3 	; barren
+6 	; jump tech
+9 	; metal mining
+7 	; empire 8
+3030 	; population
+75	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2500    0
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  2500 1500 2100 1100    0    0 2350
+;  men  nnj  amb  che  met  sup  tri
+  3500    0    0 2000 5500 1560 1450
+
+CreateWorld 48 Z:8
+18 	; ruins
+7 	; bio-tech
+18 	; university
+7 	; empire 8
+3560 	; population
+70	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 3500 2250
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  4500 1500 3200    0    0    0    0
+;  men  nnj  amb  che  met  sup  tri
+  3350    0    0 2000 3000 1000 1000
+
+CreateWorld 49 Z:8
+6 	; class l
+6 	; jump tech
+20 	; trillum mine
+7 	; empire 8
+2770 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2350 1150
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  4500 1500 3100 2250    0    0    0
+;  men  nnj  amb  che  met  sup  tri
+  3350    0    0 2000 3500 1000 7500
+
+CreateWorld 50 Z:8
+14 	; jungle
+7 	; bio-tech
+0 	; agricultural
+7 	; empire 8
+3230 	; population
+85	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 3100 1000
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3250    0    0    0    0    0 1350
+;  men  nnj  amb  che  met  sup  tri
+  2250    0    0 1350 2600 3400 1100
+
+CreateWorld 51 Z:8
+17 	; poisonous
+6 	; jump tech
+5 	; chemical
+7 	; empire 8
+2735 	; population
+95	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 2250 1100
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3250    0    0    0    0    0 2450
+;  men  nnj  amb  che  met  sup  tri
+  3350    0    0 5700 3700 1380 1560
+
+CreateWorld 52 Z:8
+3 	; barren
+7 	; bio-tech
+2 	; base planet
+7 	; empire 8
+4400 	; population
+99	; efficiency
+75	; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 3500 2350
+;  fgt  hkr  jmp  jtn  pen  str  trn
+  3750 2000 2500 2350    0    0 2500
+;  men  nnj  amb  che  met  sup  tri
+  6400    0    0 3000 5500 2500 4500
+
+ClassTable
+2     ; Ambrosia
+6     ; Arid
+1     ; Artificial
+9     ; Barren
+7     ; Class J
+7     ; Class K
+7     ; Class L
+7     ; Class M
+7     ; Desert
+5     ; Earth
+3     ; Forest
+3     ; Gas Giant
+4     ; Hostile Life
+5     ; Ice world
+4     ; Jungle
+3     ; Ocean
+1     ; Paradise
+3     ; Poisonous
+2     ; Ruins
+6     ; Underground
+8     ; Volcanic
+
+TechTable
+10	; pre-tech
+22	; primitive
+25	; pre-atomic
+16	; atomic
+10	; pre-warp
+8	; warp
+5	; jump 
+2	; bio-tech
+1	; starship
+1	; pre-gate
+0	; gate
+
+CreateSRMs 4 Emp5:1,1 Emp5:1,-1
+CreateSRMs 4 Emp5:-1,-1 Emp5:1,-1
+CreateSRMs 4 Emp5:-1,-1 Emp5:-1,1
+CreateSRMs 4 Emp5:-1,1 Emp5:1,1
+CreateSRMs 5 Emp6:-1,1 Emp6:-1,3
+CreateSRMs 5 Emp6:-1,1 Emp6:4,-1
+CreateSRMs 5 Emp6:-1,3 Emp6:4,3
+CreateSRMs 5 Emp6:4,-1 Emp6:4,3
+CreateSRMs 5 Emp6:-5,-5 Emp6:-5,5
+CreateSRMs 5 Emp6:-5,-5 Emp6:5,-5
+CreateSRMs 5 Emp6:5,-5 Emp6:5,5
+CreateSRMs 5 Emp6:-5,5 Emp6:5,5
+
+CreateNebula 2 Emp6:-7,7 Emp6:7,-7
+
+CreateRandomNebula 1 1 4
+CreateRandomNebula 2 2 6
+
+CreateRandomWorlds 120 1
+
+EndScenario

@@ -1,0 +1,320 @@
+ANACREON 10
+"The Aftermath"
+0 ; random scenario
+2 4 40 160 1 100 0 4021
+BEGINTEXT
+
+
+    ษอออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออป
+    บ               The Aftermath by Brent Fairbanks                      บ
+    วฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤถ
+    บ Players: 2 to 4                                                     บ
+    บ Galaxy: 40 by 40 sectors, 160 planets                               บ
+    บ Difficulty: Intermediate                                            บ
+    บ Length: Over 100 years                                              บ
+    บ                                                                     บ
+    บ                                                                     บ
+    บ                                                                     บ
+    บ                                                                     บ
+    บ                                                                     บ
+    บ                                                                     บ
+    ศอออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออผ
+
+NEWPAGE           
+
+    ษอออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออป
+    บ                       The Attack of 3853                            บ
+    วฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤถ
+    บ   The machines had travelled over 300 years from the Haladian       บ
+    บ Galaxy, in their ceaseless quest to destroy all life.  They caught  บ
+    บ the Empire by surprise, spreading death and destruction throughout  บ
+    บ the center of the Galaxy.  The main centers of commerce, government,บ
+    บ and culture were wiped out, and their planets were laid to waste.   บ
+    บ   However, in their great haste, the machines had no time for the   บ
+    บ Galactic Fringe.  The planets on the outskirts were left relatively บ
+    บ unharmed, as the Berserkers headed for the Dalswertian Nebula.      บ
+    บ These planets were left with the ability to rebuild themselves, if  บ
+    บ they could overcome the loss of technology and central government.  บ
+    ศอออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออผ
+
+NEWPAGE           
+
+    ษอออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออป
+    บ                      The Recovery of 4021                           บ
+    วฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤถ
+    บ   Your objective in this game will be to gain control of the Galaxy บ
+    บ by whatever means possible.  You will begin the game with a small   บ
+    บ number of supplicant planets, which your predecessor collected      บ
+    บ before your brilliant coup.  How you use these worlds, and how      บ
+    บ effectively you use them, is entirely your responsibility           บ
+    บ   The planets in the Galactic core are largely dead. The Berserkers บ
+    บ saw to that.  However, the planets on the Fringe are ready to be    บ
+    บ absorbed into your empire.  It should be noted that the core worlds บ
+    บ hold many of the secrets of the Old Empire, along with the          บ
+    บ Ambrosia worlds that were spared the destruction.                   บ
+    ศอออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออผ
+
+NEWPAGE
+ENDTEXT                                                    
+;                                                           
+; Define zones for empires -----------------------------------------------------
+; Zone 6: The decimated center of the galaxy
+; ------------------------------------------------------------------------------
+;
+DefineZone  2   1,1 16,11         ;
+DefineZone  3 23,28 37,38         ;
+DefineZone  4  2,19 17,29         ;
+DefineZone  5  22,7 37,17         ;
+DefineZone  6  12,4 27,37         ;
+DefineZone  7   5,3   9,7         ; Capitol for Empire 1
+DefineZone  8 31,33 32,37         ; Capitol for Empire 2
+DefineZone  9  6,25 10,29         ; Capitol for Empire 3
+DefineZone 10 30,10 34,14         ; Capitol for Empire 4
+;
+; Define Locations of Player Capitols ------------------------------------------
+;
+DefineXY Cap1 Z:7
+DefineXY Cap2 Z:8
+DefineXY Cap3 Z:9
+DefineXY Cap4 Z:10
+
+; Create 4 player empires ------------------------------------------------------
+
+CreatePlayerEmpire 0 0 7 0
+CreatePlayerEmpire 1 0 7 0
+CreatePlayerEmpire 2 0 7 0
+CreatePlayerEmpire 3 0 7 0 
+
+; Create player capitals -------------------------------------------------------
+;
+; Capital for empire one 
+CreateWorld 1 Cap1:0,0
+9       ; Earth class planet
+7       ; Bio-tech level technology
+4       ; Capital
+0       ; Empire 1
+2200    ; Population
+85      ; Efficiency
+;
+; LAM def GDM ion
+   0   0  400 100
+; fgt hkr jmp jtn pen str trn
+  500  50 350 350  20  0  250
+; men nnj amb  che  met  sup tri
+ 2000  0   0  1000 1500 2000 500
+;
+; Capital for empire two, this is a forest planet.
+CreateWorld 2 Cap2:0,0
+10      ; Forest world
+7       ; Bio-tech level
+4       ; Capital
+1       ; Empire 2
+2200    ; Population
+85      ; Efficiency
+;
+; LAM def GDM ion
+   0   0  400  50
+; fgt hkr jmp jtn pen str trn
+  600 100 200 350  20  0  250
+; men nnj amb  che  met  sup tri
+ 2000  0   0  1500 1500 4000 500
+;
+; Capital for empire three, this is a jungle world
+CreateWorld 3 Cap3:0,0
+14 7 4 2 2200 85
+0 0 400 100
+400 250 300 350 20 10 300
+2000 0 0 1000 1500 4000 500
+;
+; Capital for empire four
+CreateWorld 4 Cap4:0,0
+9 7 4 3 2200 85     
+0 0 400 100
+3000 60 130 0 40 0 100
+1000 0 0 1000 1500 2000 500
+;
+; Worlds for the various empires
+;
+CreateWorld 5 Cap1:2,1
+;Cls Tech Typ Emp  Pop Eff
+   4    5   6   0 1500  70
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 6 Cap1:-1,-1
+;Cls Tech Typ Emp  Pop Eff
+   7    6   7   0 1800  70
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 7 Cap2:-1,2
+;Cls Tech Typ Emp  Pop Eff
+   3    5   6   1 1400  60
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 8 Cap2:0,1
+;Cls Tech Typ Emp  Pop Eff
+   7    6   7   1 1800  65
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 9 Cap3:1,0
+;Cls Tech Typ Emp  Pop Eff
+  11    5   5   2 1100  55
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 10 Cap3:0,-1
+;Cls Tech Typ Emp  Pop Eff
+   7    5   7   2 1700  65
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 11 Cap4:2,0
+;Cls Tech Typ Emp  Pop Eff
+   7    6   7   3 1500  65
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+CreateWorld 12 Cap4:-1,1
+;Cls Tech Typ Emp  Pop Eff
+  15    5   6   3 1600  60
+0 0 400 0
+500 0 150 150 0 0 250
+2000 0 0 1000 1500 2000 500
+;
+;
+; Create standard worlds for zone 2-5 (80 total) -------------------------------
+ClassTable
+1     ; Ambrosia
+7     ; Arid
+0     ; Artificial
+9     ; Barren
+8     ; Class J
+8     ; Class K
+8     ; Class L
+8     ; Class M
+7     ; Desert
+7     ; Earth
+5     ; Forest
+2     ; Gas Giant
+3     ; Hostile Life
+2     ; Ice world
+4     ; Jungle
+6     ; Ocean
+1     ; Paradise
+5     ; Poisonous
+1     ; Ruins
+3     ; Underground
+5     ; Volcanic
+;
+TechTable
+0     ; pre-tech
+10    ; primitive
+15    ; pre-atomic
+30    ; atomic
+30    ; pre-warp
+10    ; warp
+5     ; jump
+0     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+CreateRandomWorlds 18 2
+CreateRandomWorlds 18 3
+CreateRandomWorlds 18 4
+CreateRandomWorlds 18 5
+;
+; Create worlds for Zone 6 -----------------------------------------------------
+ClassTable
+3     ; Ambrosia
+8     ; Arid
+0     ; Artificial
+10    ; Barren
+3     ; Class J
+3     ; Class K
+3     ; Class L
+3     ; Class M
+10    ; Desert
+1     ; Earth
+3     ; Forest
+5     ; Gas Giant
+5     ; Hostile Life
+2     ; Ice world
+4     ; Jungle
+4     ; Ocean
+0     ; Paradise
+10    ; Poisonous
+8     ; Ruins
+5     ; Underground
+10    ; Volcanic
+;
+; Tech Table for zone 6 --------------------------------------------------------
+TechTable
+5     ; pre-tech
+15    ; primitive
+25    ; pre-atomic
+30    ; atomic
+20    ; pre-warp
+4     ; warp
+1     ; jump
+0     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+;                                       
+CreateRandomWorlds 40 6
+;
+; Create worlds throughout the Galaxy-------------------------------------------
+ClassTable
+1     ; Ambrosia
+5     ; Arid
+0     ; Artificial
+8     ; Barren
+10    ; Class J
+10    ; Class K
+10    ; Class L
+10    ; Class M
+5     ; Desert
+10    ; Earth
+5     ; Forest
+2     ; Gas Giant
+1     ; Hostile Life
+2     ; Ice world
+4     ; Jungle
+7     ; Ocean
+1     ; Paradise
+2     ; Poisonous
+1     ; Ruins
+3     ; Underground
+3     ; Volcanic
+;
+TechTable
+5     ; pre-tech
+10    ; primitive
+20    ; pre-atomic
+30    ; atomic
+23    ; pre-warp
+12    ; warp
+0     ; jump
+0     ; bio
+0     ; starship
+0     ; pre-gate
+0     ; gate
+;
+CreateRandomWorlds 40 1
+;
+; Create one nebula strip
+ CreateRandomNebula 1 1 1
+;
+; Create two to four nebula patches
+ CreateRandomNebula 2 2 4
+EndScenario

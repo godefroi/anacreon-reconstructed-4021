@@ -1,0 +1,439 @@
+ANACREON 12
+"Arronax"
+0	; Random Scenario
+1 4	; One to four players
+45	; 45 x 45 grid
+200   ; 200 planets
+1     ; Intermediate
+100 0 ; 100 + years
+7054	; starting year
+
+; This scenario was created by Adam Luker
+; (zot@aapc.com), in the hopes that it might 
+; be enjoyed.
+
+BEGINTEXT
+                              
+
+                              ***** Arronax *****
+
+               Just after the collapse of the second great empire,  
+       mankind lived in a divided but still intact society.  Lacking
+       the catastrophic disarray of the first fall, many worlds remained
+       self-sufficient and conservative.  Any world that seemed to step
+       out of line was swiftly punished by its neighbors.  But human 
+       nature soon required men once again to look to the stars and 
+       dream of expansion.  Some worlds set up huge industries devoted 
+       to shipbuilding so they could again roam the galaxy."  
+
+NEWPAGE                
+                              
+                              ***** Arronax *****   
+
+               "However, one province had somehow escaped the tide of 
+       the fall and was able to keep its integrity.  It grew accustomed
+       to supremacy and extremely discouraged others from attempting 
+       to become powerful.  Arronax, a divided kingdom, was ruled by rival
+       twin magistrates which sometimes clashed, but they were both violent-
+       ly opposed to others "poaching" in their territory, which they felt 
+       to be the entire galaxy."  
+                                        
+                                        - History of the Galaxy
+                                          Zex Narphil, Counselor
+        
+NEWPAGE
+                              
+                              ***** Arronax *****    
+
+               You are controlling an empire that is desperate for 
+       expansion.  Your two planets are overflowing with ships and 
+       pilgrims who want to try their luck at a new frontier.  They
+       grow increasingly restless and your throne is in danger.  You 
+       must overthrow the Arronaxan empires and once again establish 
+       harmony in the galaxy.
+
+               You must be cautious.  Not all emperors have such noble 
+       motives as do you.  Many are once again learning the skills of 
+       piracy, and of building conquering machines; colossal structures
+       which fill an entire sector.  Your mission will not be easy, but
+       you must succeed in order to advance.  Already your planet is being
+       probed by Arronax...
+
+NEWPAGE
+
+ENDTEXT
+
+; --- World flavor text ---
+
+BEGINDESCRIPTION
+
+WorldBackgroundIndex
+2:1 E:0          1 ; Player 1 Capital
+2:3 E:1          1 ; Player 2 Capital
+2:5 E:2          1 ; Player 3 Capital
+2:6 E:3          1 ; Player 4 Capital
+2:8 E:4          2 ; Arronax 1 (empire 5)
+2:12 E:5         2 ; Arronax 2 (empire 6)
+2:16 E:6         3 ; Empire 7, the pirates
+2:17 E:7         4 ; Empire 8, the berzerker empire
+3:1 E:7          5 ; Rogue Starbase
+EndIndex
+
+TEXT 1
+Only by defeating Arronax will you be able to expand your empire.
+ENDTEXT
+
+TEXT 2
+One of the Arronaxan capitals, this is one of your primary targets
+ENDTEXT
+
+TEXT 3
+This is the capital of the pirate empire.  An effecient 
+jumpbase, it would be a strong asset under your flag.
+ENDTEXT
+
+TEXT 4
+This world controls the Starbase that roams these sectors. 
+Conquering this planet would most effectively stop the 
+starbase from tormenting you.
+ENDTEXT
+
+TEXT 5
+This starbase poses a great threat to your systems.  By 
+disabling the planet that controls it, you can stop it
+from ravaging your worlds.  That won't be so easy, though.
+ENDTEXT
+
+ENDDESCRIPTION
+
+;DebugScenario
+ 
+Report "Starting"
+
+; --- Define the zones ---
+
+DefineZone 2 15,18 20,23 ; player 1
+DefineZone 3 10,25 15,30 ; player 2
+DefineZone 4 32,10 37,15   ; player 3
+DefineZone 5 18,33 23,38 ; player 4
+DefineZone 6 1,1 20,10   ; Arronax 1 (empire 5)
+DefineZone 7 25,35 45,45 ; Arronax 2 (empire 6)
+DefineZone 8 8,37 13,42   ; pirates (empire 7)
+DefineZone 9 32,30 36,35 ; berzerker (empire 8)
+
+; --- Create empires ---
+
+CreatePlayerEmpire 0
+1	; revolution factor
+7 	; bio-tech
+1 	; one technology
+23	; Outpost
+0 	; Modifiers
+
+CreatePlayerEmpire 1
+1	; rev, etc.
+7 
+1 
+6	; Hunter-killers
+0
+
+CreatePlayerEmpire 2
+1
+7
+1
+2	; Defense satellites
+0
+
+CreatePlayerEmpire 3
+1
+7
+1
+9	; penetrators
+0
+
+; --- Non-player empires.  Replacements, then static ones. ---
+
+CreateNPEmpire 1
+3	; agressor
+RndName
+1	; rev
+7	; bio-tech
+1	; techs
+6	; HK
+0	; modifiers
+
+CreateNPEmpire 2
+3 RndName 1 7 1 2 0
+
+CreateNPEmpire 3
+3 RndName 1 7 1 2 0
+
+CreateNPEmpire 4
+3 
+Arronax
+1 8 2
+10	; str
+13	; nnj
+1 
+CENTRAL
+
+CreateNPEmpire 5
+3 
+Arronax
+1 8 2 10 13 1 CENTRAL
+
+CreateNPEmpire 6
+1	; pirate
+RndName 0 7 1 6 1 CENTRAL
+
+CreateNPEmpire 7
+4	; Berzerker
+RndName 2 7 0 1 CENTRAL
+
+; --- Player worlds ---
+
+CreateWorld 1 Z:2
+4	; class j
+7	; bio-tech
+4	; capital
+0	; player 1
+; Pop eff tril
+3500  75  50
+;LAM  def  GDM  ion
+0     0   3500  1000
+;fgt  hkr  jmp  jtn  pen  str  trn
+4000  0    2500 1000 500  0    1500
+;men  nnj  amb  che  met  sup  tri
+4500  0    0    4000 6000 2500 2000
+
+CreateWorld 2 Z:2
+9	; earth-like
+6	; jump
+7	; jumpship base
+0 	; player 1
+1800 60 50
+0 0 2000 500
+1000 0 2000 1000 0 0 500
+2000 0 0 2000 4000 1500 1099
+
+CreateWorld 3 Z:3
+5	; class k
+7	; bio-tech
+4 	; capital
+1	; empire 2 
+3500 75 50
+0 0 3500 1000
+3000 600 2500 1000 500 0 1500
+4500 0 0 2500 4500 2500 1500
+
+CreateWorld 4 Z:3
+9	; Earth-like
+6	; jump
+7	; jumpship base
+1	; empire 2
+1800 60 50
+0 0 2000 500
+1000 0 2000 1000 0 0 500
+2000 0 0 2000 4000 1500 1099
+ 
+CreateWorld 5 Z:4
+6	; class l
+7	; bio-tech
+4	; capital
+2	; empire 3
+3500 75 50
+0 0 3500 1000
+3000 600 2500 1000 500 0 1500
+4500 0 0 2500 4500 2500 1500
+
+CreateWorld 6 Z:4
+9	; Earth-like
+6	; jump
+7	; jumpship base
+2	; empire 3
+1800 60 50
+0 0 2000 500
+1000 0 2000 1000 0 0 500
+2000 0 0 2000 4000 1500 1099
+ 
+CreateWorld 7 Z:5
+7	; Class M
+7	; Bio-tech
+4	; Capital
+3	; Empire 4
+3500 75 50
+0 0 3500 1000
+4000 0 2500 1000 500 0 1500
+4500 0 0 4000 6000 2500 2000
+
+CreateWorld 8 Z:5
+9	; Earth-like
+6	; jump
+7	; jumpship base
+3	; empire 4
+1800 60 50
+0 0 2000 500
+1000 0 2000 1000 0 0 500
+2000 0 0 2000 4000 1500 1099
+
+; --- Non-player worlds ---
+; Arronax 1
+
+CreateWorld 9 Z:6
+20	; Volcanic
+8	; Starship
+4	; Capital
+4	; Empire 5 (Arronax 1)
+4000 95 100
+2000 1000 5000 2000
+6000 2000 4000 3000 1000 500 3000
+6000 0 0 4000 7000 2500 3000
+
+CreateWorld 10 Z:6
+11	; Gas Giant
+7	; Bio-tech
+2	; base planet
+4	; Arronax 1
+1500 70 40
+0 600 2500 1000
+2000 500 1200 800 250 0 900
+2000 0 0 3000 4000 1500 1500
+
+CreateWorld 11 Z:6
+17	; Poisonous
+5	; warp
+5	; chemical
+4	; Arronax 1
+700 70 40
+0 200 1500 600
+500 0 500 300 0 0 500
+1000 0 0 7000 1000 800 500
+
+CreateWorld 12 Z:6
+20	; volcanic
+5	; warp
+12	; raw material
+4	; Arronax 1
+700 70 40
+0 200 1500 600
+500 0 500 300 0 0 500
+1000 0 0 6000 5000 800 3000
+
+; Arronax 2
+
+CreateWorld 13 Z:7
+20	; volcanic
+8	; starship
+4	; Capital
+5	; Empire 6 (Arronax 2)
+4000 95 100
+2000 1000 5000 2000
+6000 2000 4000 3000 1000 500 3000
+6000 0 0 4000 7000 2500 3000
+
+CreateWorld 14 Z:7
+11	; gas giant
+7	; bio-tech
+2	; Base planet
+5	; Arronax 2
+1500 70 40
+0 600 2500 1000
+2000 500 1200 800 250 0 900
+2000 0 0 3000 4000 1500 1500
+
+CreateWorld 15 Z:7
+17	; Poisonous
+5	; warp
+5	; Chemical
+5	; Arronax 2
+700 70 40
+0 200 1500 600
+500 0 500 300 0 0 500
+1000 0 0 7000 1000 800 500
+
+CreateWorld 16 Z:7
+20	; volcanic
+5	; warp
+12	; raw materials
+5	; Arronax 2
+700 70 40
+0 200 1500 600
+500 0 500 300 0 0 500
+1000 0 0 6000 5000 800 3000
+
+; Pirates
+
+CreateWorld 17 Z:8
+12	; Hostile life
+7	; bio-tech
+4	; capital
+6	; empire 7 (pirates)
+2500 90 30
+1000 500 3000 1500
+2000 3000 4000 2500 0 0 2500
+4000 1000 0 2000 3000 1000 1500
+
+CreateWorld 18 Z:8
+11	; gas giant
+6	; jump
+7	; Jumpship base
+6	; pirates
+1500 80 50
+0 0 3000 1500
+1000 1500 2500 1500 0 0 800
+2500 0 0 2500 3500 1000 1500
+
+; Berzerkers
+
+CreateWorld 19 Z:9
+3	; barren
+7	; bio-tech
+4	; capital
+7	; Empire 8 (berserkers)
+2500 60 40
+1000 500 3000 1500
+2000 500 2000 1500 0 0 1500
+2000 0 0 2000 4000 1000 1000
+
+CreateStarbase 1 Z:9
+20	; command base
+7	; bio-tech
+2	; base planet
+7	; berzerkers
+2500 75
+4000 2000 7000 2500
+6000 3000 6000 4000 1500 500 3000
+4000 2000 0 7000 9999 4500 9999
+
+; Advanced planet out there somewhere
+
+CreateWorld 20 Z:1
+13	; ice world
+9	; pre-gate
+6	; independant
+8	; independant
+600 80 20
+0 800 4000 1500
+3000 800 1000 1600 250 400 2000
+3000 400 0 3500 6000 4000 2500
+
+; generals
+
+ClassTable 5 5 0 5 10 10 10 10 5 10 4 4 2 1 3 3 1 3 2 3 4
+
+TechTable 3 7 15 15 20 20 15 5 0 0 0
+
+CreateRandomWorlds 180 1
+
+CreateSRMs 4 10,12 22,12
+
+CreateSRMs 5 27,30 27,45
+CreateSRMs 5 28,30 35,30 
+
+CreateRandomNebula 2 2 4
+
+EndScenario
+
+
+
+
