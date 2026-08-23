@@ -10,10 +10,11 @@ procedure into a fresh file, this maintains small patches against the real
 copy at build time, and calls the real, only-minimally-touched Pascal code
 directly against a hand-assembled `Universe^`.
 
-**Status: in production for all eight ground-truth domains that exist so far
+**Status: in production for all nine ground-truth domains that exist so far
 (`techlevel.golden`, `military.golden`, `starbase.golden`, `ambrosia.golden`,
-`revolution.golden`, `production.golden`, `empire.golden`, `construction.golden` — see
-`docs/ROADMAP.md`'s "Ground-truth harness generation" section). `reference/verify/*.pas`'s
+`revolution.golden`, `production.golden`, `empire.golden`, `construction.golden`,
+`empirecreate.golden` — see `docs/ROADMAP.md`'s "Ground-truth harness generation" section).
+`reference/verify/*.pas`'s
 per-procedure transcription pattern has had no domains on it since
 `production.golden`'s migration — `production.pas` was the last file using
 it, and `common.pas` (its only remaining shared dependency) was deleted
@@ -30,7 +31,8 @@ there's just nothing currently using it.**
   file): assembles a minimal `Universe^` and calls the real `UpdateWorld`.
   Machine-parseable CLI: `case <domain> <case1> <case2> ...`, where `<domain>`
   selects the case shape/output line (`techlevel`, `military`, `starbase`,
-  `ambrosia`, `revolution`, `production`, `empire`, or `construction` so far — see the file's own header comment). One driver, not one per domain, so
+  `ambrosia`, `revolution`, `production`, `empire`, `construction`, or `empirecreate` so far — see
+  the file's own header comment). One driver, not one per domain, so
   `PatchHarness.CompileAndRun` only has to copy/patch/compile the whole
   patched tree once per `dotnet test` run regardless of how many domains use it.
 - `build.ps1` — deletes and regenerates `patched/` from pristine source +
@@ -284,6 +286,29 @@ material thresholds predicted, confirmed case by case against a manually-invoked
 `runworld.exe` before any C# test code was written — including the scratch-copy-discard behavior
 (`InsufficientMaterialLeavesEverythingUnchanged`) and the completion branches for all three dispatch
 targets (mine, starbase, stargate).
+
+Ninth domain, `empirecreate` (Phase 2 commit 2b): unlike every domain before it, this one needed no
+new patch at all — `CreateEmpire` (`PRIMINTR.PAS:982`) was already in that unit's own `INTERFACE`
+section, since it's `NEWGAME.PAS`'s own real call target. Rather than pull in all of `NEWGAME.PAS`
+(and its much larger `USES` clause — `Crt`/`Dos`/`DOS2`/`EIO`/`WND`/`Menu`/`DFA`/`LoadSave`/`NPE`/
+`NPETypes`) just to reach `CreatePlayerEmpire`/`CreateNPEmpire`, `runworld.pas`'s `empirecreate`
+domain reproduces their 3-line starting-tech-set formula inline (`KnownTechs:=TechDev[Pred(Tech)];
+KnownTechs:=KnownTechs+extras; KnownTechs:=KnownTechs*TechDev[Tech]`) and calls the real `CreateEmpire`
+directly with the result — the same "relocate the small formula, not the whole unit" precedent
+`GetIndustrialDistribution` set. No RNG anywhere in this domain; both the formula and `CreateEmpire`
+are fully deterministic.
+
+13 cases exhaustively cross-check all 11 rows of Pascal's real `TechDev` constant
+(`DATACNST.PAS:359-370`) against the C# port's own `TechCatalog` min-tech tables (ten "no extra
+techs" cases, one per level from `Primitive` through `Gate` — with no extras, the result always
+collapses to exactly `TechDev[Pred(Tech)]`), plus both directions of the final intersect-clamp
+(`ExtraTechAtCurrentLevel` survives, `ExtraTechAboveCurrentLevel` gets silently dropped) and one case
+confirming `TechDev[Gate]` itself is the full 26-item set (`ExtraTechCompletesTopRow`). Every value
+was confirmed by hand against a manually-invoked, freshly-compiled `runworld.exe` before any C# test
+code was written, then matched byte-for-byte once wired in. `TechLevel.PreTech` is deliberately not
+a case here — `Pred(PreTchLvl)` is an out-of-range `TechDev` index in real Pascal (a range-check
+error that would crash the harness, not a well-defined empty set), and no real scenario file ever
+creates a player/NPE empire at that level anyway; it's covered by a hardcoded C# test instead.
 
 ## Recommendation
 

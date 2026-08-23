@@ -99,5 +99,15 @@ public class GoldenFileTests
                  $"{(c.Fleet1 is not null ? 1 : 0)},{c.Fleet1?.Chemicals ?? 0},{c.Fleet1?.Metals ?? 0},{c.Fleet1?.Trillum ?? 0}," +
                  $"{(c.Fleet2 is not null ? 1 : 0)},{c.Fleet2?.Chemicals ?? 0},{c.Fleet2?.Metals ?? 0},{c.Fleet2?.Trillum ?? 0}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "construction", .. args.Skip(1)]));
+
+        // Patch-based, not transcribed: runworld.pas's empirecreate domain reproduces NEWGAME.PAS's
+        // tech-set formula inline, then calls the real, already-exported CreateEmpire (PRIMINTR.PAS)
+        // directly — no need to pull in NEWGAME.PAS's own much larger USES clause for 3 lines of pure
+        // set math. See EmpireFactoryCases's doc comment for the 26-bit Technology encoding (same
+        // convention as the empire domain) and why every TechDev row from Primitive through Gate gets
+        // its own case.
+        GoldenFile.Regenerate("empirecreate", EmpireFactoryCases.All,
+            c => $"{(int)c.TechLevel},{c.ExtraTechsMask}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "empirecreate", .. args.Skip(1)]));
     }
 }

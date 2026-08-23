@@ -85,4 +85,23 @@ public static class TechCatalog
     /// <summary>Every catalog item unlocked by <paramref name="tech"/> but not yet in <paramref name="owned"/>, in catalog order (GetNewTech's PossibleTechSet-TechSet, UPDATE.PAS:370).</summary>
     public static List<Action<UnlockedTechnology>> MissingTechAt(UnlockedTechnology owned, TechLevel tech) =>
         [.. _catalog.Where(e => e.MinTech <= tech && !e.IsUnlocked(owned)).Select(e => e.Unlock)];
+
+    /// <summary>
+    /// A single named grant, for callers building an explicit tech list by real type (e.g. empire
+    /// creation's scenario-specified "extra techs") rather than walking the whole catalog. Kept here
+    /// rather than callers writing <c>t => t.Ships.Add(type)</c> inline so every grant of a given
+    /// bucket goes through one place. Deliberately keyed on this port's own enums, not any external
+    /// file format's numbering — a decoder for e.g. a scenario file's own ordinal space belongs at
+    /// that format's parsing boundary, translating into these, not the other way around.
+    /// </summary>
+    public static Action<UnlockedTechnology> Grant(DefenseType type) => t => t.Defenses.Add(type);
+
+    /// <summary>See <see cref="Grant(DefenseType)"/>.</summary>
+    public static Action<UnlockedTechnology> Grant(ShipType type) => t => t.Ships.Add(type);
+
+    /// <summary>See <see cref="Grant(DefenseType)"/>.</summary>
+    public static Action<UnlockedTechnology> Grant(CargoType type) => t => t.Resources.Add(type);
+
+    /// <summary>See <see cref="Grant(DefenseType)"/>.</summary>
+    public static Action<UnlockedTechnology> Grant(ConstructionType type) => t => t.Constructions.Add(type);
 }

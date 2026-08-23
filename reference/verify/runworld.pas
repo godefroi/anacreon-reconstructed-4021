@@ -27,6 +27,9 @@
                 Lab2Present,Lab2TypeOrd,Lab2ClassOrd,Lab2TechOrd,Lab2Eff,
                 Lab3Present,Lab3TypeOrd,Lab3TechOrd,Lab3Eff (Lab3 is a starbase, no class)
                 -> "techlevel=<ordinal>;technology=<26-bit mask, bit i = TechnologyTypes(i+1)>"
+     empirecreate TechOrd,ExtraTechsMask (same 26-bit encoding as empire) -- calls the real
+                CreateEmpire with NEWGAME.PAS's own tech-set formula, no RNG involved
+                -> "techlevel=<ordinal>;technology=<26-bit mask>"
      construction ConstrTypesOrd (pre-offset: SRM=19..dis=26, TechnologyTypes' own
                 ordinals, not a 0-based ConstrTypes-relative one), YearsToCompletion,
                 TechOrd (Empire1's TechnologyLevel), RngFixedValue,
@@ -606,6 +609,58 @@ procedure RunEmpireCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunEmpireCreateCase(const arg: String);
+   { Calls the real, already-exported CreateEmpire (PRIMINTR.PAS:982) with the exact tech-set
+     formula NEWGAME.PAS's CreatePlayerEmpire (:1203,1207) / CreateNPEmpire (:1240,1243) compute
+     before calling it:
+        KnownTechs:=TechDev[Pred(Tech)];
+        KnownTechs:=KnownTechs+extras;
+        KnownTechs:=KnownTechs*TechDev[Tech];
+     reproduced inline here rather than pulling in all of NEWGAME.PAS's much larger USES clause
+     (Crt/Dos/DOS2/EIO/WND/Menu/DFA/LoadSave/NPE/NPETypes) for 3 lines of pure set math -- the same
+     "relocate the small formula, not the whole unit" precedent as GetIndustrialDistribution. No RNG
+     anywhere in this domain -- the formula and CreateEmpire are both fully deterministic.
+
+     ExtraTechsMask uses the same 26-bit encoding as the empire domain (bit i = TechnologyTypes(i+1)).
+
+     Deliberately not exercised here: TechLevel(0)=PreTchLvl, since Pred(PreTchLvl) is an out-of-range
+     TechDev index in real Pascal (a range-check error, not a well-defined "empty set") -- no real
+     scenario file ever creates a player/NPE empire at that level. See EmpireFactoryTests' own
+     hardcoded (non-golden) coverage of that defensive case. }
+   var
+      parts: array[0..1] of LongInt;
+      Tech: TechLevel;
+      KnownTechs: TechnologySet;
+      i: Integer;
+      mask: LongInt;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   NoOfPlanets:=0;
+
+   Tech:=TechLevel(parts[0]);
+
+   KnownTechs:=TechDev[Pred(Tech)];
+   for i:=0 to 25 do
+      if ((parts[1] shr i) and 1)=1 then
+         KnownTechs:=KnownTechs+[TechnologyTypes(i+1)];
+   KnownTechs:=KnownTechs*TechDev[Tech];
+
+   CreateEmpire(Empire1,True,False,'Terra','',EmptyQuadrant,Tech,KnownTechs,0,[],4000);
+
+   mask:=0;
+   for i:=0 to 25 do
+      if TechnologyTypes(i+1) in Universe^.EmpireData[Empire1].Technology then
+         mask:=mask or (1 shl i);
+
+   WriteLn('techlevel=',Ord(Universe^.EmpireData[Empire1].TechnologyLevel),
+           ';technology=',mask);
+
+   Dispose(Universe);
+   end;
+
 procedure RunConstructionCase(const arg: String);
    { Owned by Empire1, construction site + up to two fleets all at (5,5). NextStarbaseSlot/
      NextStargateSlot pick the highest available slot counting down from MaxNoOfStarbases/
@@ -719,6 +774,8 @@ procedure RunCaseMode;
          RunProductionCase(ParamStr(i))
       else if domain='empire' then
          RunEmpireCase(ParamStr(i))
+      else if domain='empirecreate' then
+         RunEmpireCreateCase(ParamStr(i))
       else if domain='construction' then
          RunConstructionCase(ParamStr(i))
       else

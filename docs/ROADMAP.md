@@ -242,7 +242,7 @@ follow once that's working. Next up: Phase 2, Galaxy / new-game setup, below.
 **Constants to extract:** `MaxPop` array (UPDATE.PAS:1077-1098), `BasePop` lookup, `TechAdj[]`,
 `TechAdj2[]`, `K6`, `SuppliesPerBillion`, `DrugsPerBillion`, `ThgLmt()` clamp function.
 
-## 2. Galaxy / new-game setup — in progress, 2a landed
+## 2. Galaxy / new-game setup — in progress, 2a-2b landed
 
 Nothing in the port creates a `Game`/`Galaxy`/`Empire` from scratch yet — every existing test
 hand-builds fixtures. Pascal has no procedural galaxy generator: `NEWGAME.PAS`'s `LoadScenario`
@@ -267,9 +267,24 @@ Broken into five sub-commits:
   `Core/Entities/TechCatalog.cs` — both are now genuinely shared between the annual-tick handler
   and new-game empire creation (2b), not a speculative extraction. Pure refactor, zero behavior
   change (all 124 existing tests pass, golden files byte-identical).
-- ⬜ **2b, empire creation** — port `CreateEmpire`/`CreatePlayerEmpire`/`CreateNPEmpire`'s starting
-  tech-set seeding (`TechDev[Pred(Tech)]` ∪ extras, ∩ `TechDev[Tech]`, via `TechCatalog`) and
-  `DefenseSettings` initialization from `InitDefenseRecord` (`DATACNST.PAS:373-379`).
+- ✅ **2b, empire creation** (`Core/NewGame/EmpireFactory.cs`). Ports `CreateEmpire`
+  (`PRIMINTR.PAS:982-1016`)'s field-copy plus `CreatePlayerEmpire`/`CreateNPEmpire`
+  (`NEWGAME.PAS:1186-1259`)'s starting tech-set formula (`TechDev[Pred(Tech)]` ∪ extras, ∩
+  `TechDev[Tech]`, via `TechCatalog`) and `DefenseSettings.Fleets` seeding from `InitDefenseRecord`
+  (`DATACNST.PAS:373-379` — `Starbases` stays all-zero, matching Pascal's own typed constant, which
+  never sets that field either). "Extra techs" are typed against this port's own enums
+  (`TechCatalog.Grant(ShipType.HunterKiller)`, etc.), not any file format's raw ordinal — a future
+  scenario-file parser (2e) decodes into these, not the other way around, so the domain model never
+  couples to the legacy `.SCN` numbering (see the design decisions above and the "Long-term future
+  possibilities" note on a less number-heavy scenario format). Golden-file-backed
+  (`empirecreate.golden`): `runworld.pas`'s new `empirecreate` domain reproduces the 3-line tech-set
+  formula inline and calls the real, already-exported `CreateEmpire` directly — no need for a new
+  patch, since `CreateEmpire` was already in `PRIMINTR.PAS`'s `INTERFACE`. 13 cases exhaustively
+  cross-check all 11 rows of Pascal's real `TechDev` constant against `TechCatalog`'s min-tech
+  tables, plus both intersect-clamp directions (an at-level extra survives, an above-level extra gets
+  dropped) — every value confirmed against a real compiled `runworld.exe` run before being wired into
+  the C# test. `TechLevel.PreTech` itself (no valid `Pred`) is hardcoded instead, since Pascal itself
+  can't safely execute that case (an out-of-range array index, not a well-defined empty set).
 - ⬜ **2c, explicit-coordinate placement** — `SetUpWorld`/`CreateWorld`/`CreateBase`/`CreateGate`/
   `CreateSRMs`/`CreateNebula`, reusing `IEconomicWorld.InitializeSelfSufficiency()` and the existing
   `GetIndustrialDistribution` industry-population helper.
@@ -460,3 +475,4 @@ right tool for a future genuinely-isolated, parameter-only procedure (see "Recom
 
 - options-based enable/disable v2 features, as well as other future enhancements
 - fleet orders to build a minefield across an entire area, either a list of coordinates, or a bounded area
+- improved scenario format without so many "magic" numbers

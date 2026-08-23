@@ -677,8 +677,9 @@ public class AnnualTickHandlerEmpireTests
     /// <summary>Encodes/decodes Empire.Technology as the same 26-bit mask runworld.pas's empire domain
     /// uses (see EmpireCases's doc comment) — deliberately independent of TechCatalog's own entry
     /// ordering, not shared with it, so a bug in that ordering can't hide on both sides of the
-    /// golden-file comparison.</summary>
-    private static void ApplyTechnologyBitmask(UnlockedTechnology tech, int mask)
+    /// golden-file comparison. Internal (not private): EmpireFactoryTests reuses this same pair rather
+    /// than duplicating a third independent encoder/decoder.</summary>
+    internal static void ApplyTechnologyBitmask(UnlockedTechnology tech, int mask)
     {
         var bit = 0;
         foreach (var d in Enum.GetValues<DefenseType>()) { if (((mask >> bit) & 1) != 0) tech.Defenses.Add(d); bit++; }
@@ -687,7 +688,7 @@ public class AnnualTickHandlerEmpireTests
         foreach (var k in Enum.GetValues<ConstructionType>()) { if (((mask >> bit) & 1) != 0) tech.Constructions.Add(k); bit++; }
     }
 
-    private static int ComputeTechnologyBitmask(UnlockedTechnology tech)
+    internal static int ComputeTechnologyBitmask(UnlockedTechnology tech)
     {
         var bit = 0;
         var mask = 0;

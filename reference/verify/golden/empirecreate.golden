@@ -1,0 +1,13 @@
+case=Primitive;techlevel=1;technology=65536
+case=PreAtomic;techlevel=2;technology=100352
+case=Atomic;techlevel=3;technology=116736
+case=PreWarp;techlevel=4;technology=247812
+case=Warp;techlevel=5;technology=247828
+case=Jump;techlevel=6;technology=248852
+case=Bio;techlevel=7;technology=249052
+case=Starship;techlevel=8;technology=4451838
+case=PreGate;techlevel=9;technology=7340031
+case=Gate;techlevel=10;technology=58720255
+case=ExtraTechAtCurrentLevel;techlevel=7;technology=249084
+case=ExtraTechAboveCurrentLevel;techlevel=7;technology=249052
+case=ExtraTechCompletesTopRow;techlevel=10;technology=67108863
