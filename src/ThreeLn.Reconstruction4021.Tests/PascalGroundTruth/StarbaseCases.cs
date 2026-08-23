@@ -5,7 +5,7 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// dynamically skipped otherwise) and the always-on AnnualTickHandlerStarbaseTests.MatchesGoldenFile.
 /// Only inputs live here — expected outputs live exclusively in reference/verify/golden/starbase.golden,
 /// computed patch-based: a real run of the actual, only-minimally-touched UpdateWorld against a
-/// hand-assembled Universe^ (reference/verify/patch-based/runworld.pas's starbase domain), not a
+/// hand-assembled Universe^ (reference/verify/runworld.pas's starbase domain), not a
 /// per-procedure transcription. Covers only SupplyLink/SurplusLink's arithmetic — the one part of
 /// Commit 4 with real Pascal-transcription risk (a formula this session read out of UPDATE.PAS itself,
 /// not something exercised elsewhere); the eligibility/gating logic (wrong empire, wrong world type,

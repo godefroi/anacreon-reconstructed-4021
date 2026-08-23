@@ -51,10 +51,10 @@ public class GoldenFileTests
             args => PatchHarness.CompileAndRun("runworld", ["case", "military", .. args.Skip(1)]));
 
         // Patch-based, not transcribed: runs the real, only-minimally-touched UpdateWorld against a
-        // hand-assembled Universe^ (reference/verify/patch-based/runworld.pas) instead of an isolated
+        // hand-assembled Universe^ (reference/verify/runworld.pas) instead of an isolated
         // transcription of UpdateTechLevel alone, so the ground truth includes the real GetCapital/
         // GetTech lookups and Emp=Indep check rather than TechLevelCase's CapitalTech/IsIndependent
-        // standing in for them. See reference/verify/patch-based/README.md.
+        // standing in for them. See reference/verify/README.md.
         GoldenFile.Regenerate("techlevel", TechLevelCases.All,
             c => $"{(int)c.Tech},{(c.IsIndependent ? 1 : 0)},{(int)c.CapitalTech},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "techlevel", .. args.Skip(1)]));

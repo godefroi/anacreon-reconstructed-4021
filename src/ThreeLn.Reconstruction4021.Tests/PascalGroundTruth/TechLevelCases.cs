@@ -7,7 +7,7 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// dynamically skipped otherwise) and the always-on AnnualTickHandlerTechLevelTests.MatchesGoldenFile. Only inputs live
 /// here — expected outputs live exclusively in reference/verify/golden/techlevel.golden, computed
 /// patch-based: a real run of the actual, only-minimally-touched UpdateWorld against a hand-assembled
-/// Universe^ (reference/verify/patch-based/runworld.pas), not a per-procedure transcription — never
+/// Universe^ (reference/verify/runworld.pas), not a per-procedure transcription — never
 /// hand-typed either way. IsIndependent/CapitalTech here still stand in for the C# side's own
 /// Owner.IsIndependent/Owner.Capital, but on the Pascal side they now drive a real Emp=Indep check and
 /// a real GetCapital/GetTech lookup, not a parameterized stand-in for that logic.

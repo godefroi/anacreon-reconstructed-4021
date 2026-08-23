@@ -15,10 +15,10 @@ internal sealed class RequiresFpcAttribute()
         Task.FromResult(!PascalHarness.IsFpcAvailable);
 }
 
-/// <summary>Stack alongside [RequiresFpc] on a patch-based regenerator (reference/verify/patch-based/)
+/// <summary>Stack alongside [RequiresFpc] on a patch-based regenerator (reference/verify/)
 /// — it also needs git to apply patches/*.patch.</summary>
 internal sealed class RequiresGitAttribute()
-    : SkipAttribute("git not found on PATH — required to apply reference/verify/patch-based/patches/*.patch")
+    : SkipAttribute("git not found on PATH — required to apply reference/verify/patches/*.patch")
 {
     public override Task<bool> ShouldSkip(TestRegisteredContext context) =>
         Task.FromResult(!PascalHarness.IsGitAvailable);

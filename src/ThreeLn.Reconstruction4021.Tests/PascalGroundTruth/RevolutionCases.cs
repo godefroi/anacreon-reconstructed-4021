@@ -7,7 +7,7 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// dynamically skipped otherwise) and the always-on AnnualTickHandlerRevolutionTests.MatchesGoldenFile.
 /// Only inputs live here — expected outputs live exclusively in reference/verify/golden/revolution.golden,
 /// computed patch-based: a real run of the actual, only-minimally-touched UpdateWorld against a
-/// hand-assembled Universe^ (reference/verify/patch-based/runworld.pas's revolution domain), not a
+/// hand-assembled Universe^ (reference/verify/runworld.pas's revolution domain), not a
 /// per-procedure transcription.
 ///
 /// Previously (reference/verify/revolution.pas, since deleted) this fed a hand-derived post-

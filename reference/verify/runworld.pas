@@ -47,7 +47,7 @@
    human-readable sanity check (manual use).
 
    Not itself a patch target -- this is new code, checked in directly and
-   copied into pascal/ by build.ps1 (or PatchHarness, from the C# test
+   copied into patched/ by build.ps1 (or PatchHarness, from the C# test
    project) alongside the patched source.
 --------------------------------------------------------------------------- *)
 

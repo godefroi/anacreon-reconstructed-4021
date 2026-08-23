@@ -95,7 +95,7 @@ follow once that's working. Next up: Phase 2, Galaxy / new-game setup, below.
      harness instead of hand-derivation) — add coverage if it's ever touched.
    - ✅ **Golden-file ground truth.** All six ground-truth domains (`techlevel`, `military`, `starbase`,
      `ambrosia`, `revolution`, `production`) now run through the patch-based lane's real `UpdateWorld`
-     (`reference/verify/patch-based/`, see the "Ground-truth harness generation" section below) rather
+     (`reference/verify/`, see the "Ground-truth harness generation" section below) rather
      than a from-source transcription — `production.golden` was the last domain migrated (2026-08-22),
      retiring `reference/verify/production.pas`'s `FullPipeline` and its shared `common.pas` dependency.
      `GoldenFileTests` (runs in the default `dotnet test` suite, dynamically skipped when fpc/git aren't
@@ -298,9 +298,11 @@ Not scheduled, pull in only if/when needed: v2 gameplay changes and new features
 ## Ground-truth harness generation: patch-vs-transcribe (second lane added)
 
 Current practice (`reference/verify/*.pas`) transcribes each procedure into a fresh file, hand-read
-from source every time (`[[feedback_transcribe_pascal_harness_from_source]]`). Added an alternative
-in `reference/verify/patch-based/`: maintain small patches against the real
-`reference/DOSAnacreonSource131/*.PAS` files, apply them to a disposable copy at build time
+from source every time (`[[feedback_transcribe_pascal_harness_from_source]]`). Added an alternative,
+originally kept in a separate `reference/verify/patch-based/` subdirectory to stay distinct from the
+transcription `.pas` files above it (flattened into `reference/verify/` directly on 2026-08-22, once
+the transcription pattern had no domains left on it — see below): maintain small patches against the
+real `reference/DOSAnacreonSource131/*.PAS` files, apply them to a disposable copy at build time
 (`build.ps1`), and call the real, only-minimally-touched `UpdateWorld` directly against a
 hand-assembled `Universe^` instead of a simplified/parameterized stand-in.
 
@@ -318,7 +320,7 @@ matching), and one pure-math procedure (`GetIndustrialDistribution`) relocated v
 Also surfaced a genuine landmine: `DATASTRC.PAS:235`'s `GlobalSets ABSOLUTE SetOfActiveFleets` overlay
 compiles cleanly under fpc but doesn't preserve Turbo Pascal's declaration-order memory layout it
 depends on — writing through it silently corrupted the `Universe` pointer (a real access-violation
-crash, not a compile error). Full writeup: `reference/verify/patch-based/README.md`.
+crash, not a compile error). Full writeup: `reference/verify/README.md`.
 
 **Recommendation (updated 2026-08-21).** Reach for the patch-based, real-`Universe^` approach whenever
 it would improve testing fidelity, with an eye toward eventually building up a maximum-fidelity

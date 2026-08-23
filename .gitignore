@@ -12,10 +12,10 @@ reference/**/*.exe
 reference/**/*.o
 reference/**/*.ppu
 
-# reference/verify/patch-based/pascal/ is build.ps1's disposable output:
+# reference/verify/patched/ is build.ps1's disposable output:
 # pristine DOSAnacreonSource131 + patches/*.patch applied fresh every run.
 # Never a source of truth, never committed.
-reference/verify/patch-based/pascal/
+reference/verify/patched/
 
 # dotenv files
 .env

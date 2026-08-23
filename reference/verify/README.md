@@ -33,16 +33,16 @@ there's just nothing currently using it.**
   `ambrosia`, `revolution`, `production`, `empire`, or `construction` so far — see the file's own header comment). One driver, not one per domain, so
   `PatchHarness.CompileAndRun` only has to copy/patch/compile the whole
   patched tree once per `dotnet test` run regardless of how many domains use it.
-- `build.ps1` — deletes and regenerates `pascal/` from pristine source +
+- `build.ps1` — deletes and regenerates `patched/` from pristine source +
   patches, then compiles `runworld.pas`. Run it, then run
-  `.\pascal\runworld.exe case ...` for manual iteration. The C# test suite
+  `.\patched\runworld.exe case ...` for manual iteration. The C# test suite
   doesn't shell out to this script — `PatchHarness.cs` (in
   `src/ThreeLn.Reconstruction4021.Tests/PascalGroundTruth/`) does the same
   copy/patch/compile/run steps directly, so `GoldenFileTests` can call it
   like any other harness.
-- `pascal/` — disposable build output, gitignored, never a source of truth.
+- `patched/` — disposable build output, gitignored, never a source of truth.
   If you need to iterate on a patch: run `build.ps1`, edit the file directly
-  under `pascal/`, verify it compiles/runs, then regenerate that file's
+  under `patched/`, verify it compiles/runs, then regenerate that file's
   `.patch` from the diff against the pristine original and overwrite it in
   `patches/`. Never hand-edit a `.patch` file.
 
@@ -132,10 +132,10 @@ Original proof of concept: `runworld.pas` reproduced
 `TechLevelCases.OwnedWorldBehindCapitalAdvances` (Tech=Warp, owned, capital
 ahead at Jump, `RngFixedValue=0`) by calling the real `UpdateWorld` against a
 hand-assembled 2-planet `Universe^` — `techlevel=6`, matching
-`techlevel.golden`. Rebuilt from scratch (`build.ps1` deletes `pascal/`,
+`techlevel.golden`. Rebuilt from scratch (`build.ps1` deletes `patched/`,
 reapplies every patch, recompiles) and reran with identical results — the
 patches are complete and sufficient on their own, not dependent on whatever
-`pascal/` happened to contain from prior manual edits.
+`patched/` happened to contain from prior manual edits.
 
 Generalized from that one case into a CLI driver taking all of
 `TechLevelCases`' 8 cases, all 8 reproduced byte-identical to the

@@ -1,19 +1,19 @@
 <#
 .SYNOPSIS
-Rebuilds pascal/ from the pristine reference/DOSAnacreonSource131 source plus
+Rebuilds patched/ from the pristine reference/DOSAnacreonSource131 source plus
 patches/*.patch, then compiles the runworld driver.
 
-pascal/ is a disposable build product (gitignored, deleted and regenerated
+patched/ is a disposable build product (gitignored, deleted and regenerated
 every run) -- the patches are the single source of truth, never whatever
-pascal/ happens to contain on disk. DOSAnacreonSource131 itself is never
+patched/ happens to contain on disk. DOSAnacreonSource131 itself is never
 touched.
 #>
 
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
-$src = Join-Path $PSScriptRoot '..\..\DOSAnacreonSource131'
-$out = Join-Path $PSScriptRoot 'pascal'
+$src = Join-Path $PSScriptRoot '..\DOSAnacreonSource131'
+$out = Join-Path $PSScriptRoot 'patched'
 
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out | Out-Null

@@ -7,7 +7,7 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// dynamically skipped otherwise) and the always-on AnnualTickHandlerMilitaryTests.MatchesGoldenFile.
 /// Only inputs live here — expected outputs live exclusively in reference/verify/golden/military.golden,
 /// computed patch-based: a real run of the actual, only-minimally-touched UpdateWorld against a
-/// hand-assembled Universe^ (reference/verify/patch-based/runworld.pas's military domain), not a
+/// hand-assembled Universe^ (reference/verify/runworld.pas's military domain), not a
 /// per-procedure transcription.
 ///
 /// Previously (reference/verify/military.pas, since deleted) this fed a hand-derived post-

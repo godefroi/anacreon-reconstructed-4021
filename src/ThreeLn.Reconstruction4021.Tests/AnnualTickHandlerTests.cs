@@ -137,7 +137,7 @@ public class AnnualTickHandlerTests
 /// (including the previously-untested military-suppression branch, UPDATE.PAS:715-735) against
 /// reference/verify/golden/revolution.golden, computed patch-based (GoldenFileTests): the real,
 /// only-minimally-touched UpdateWorld run against a hand-assembled Universe^
-/// (reference/verify/patch-based/runworld.pas's revolution domain), not a per-procedure transcription
+/// (reference/verify/runworld.pas's revolution domain), not a per-procedure transcription
 /// — see RevolutionCases's doc comment for what that replaced, including a real production-pipeline
 /// gap (ReportPlanetLack's RevolutionIndex bump) this migration caught. Every case uses Ninja=0
 /// (hardcoded in the driver, matching every case here). The two tests below stay hardcoded: they
@@ -397,7 +397,7 @@ public class AnnualTickHandlerProductionTests
 /// shortage-driven death/efficiency, riot, tech regression) against
 /// reference/verify/golden/ambrosia.golden, computed patch-based (GoldenFileTests): the real,
 /// only-minimally-touched UpdateWorld run against a hand-assembled Universe^
-/// (reference/verify/patch-based/runworld.pas's ambrosia domain), not a per-procedure transcription —
+/// (reference/verify/runworld.pas's ambrosia domain), not a per-procedure transcription —
 /// see AmbrosiaCases's doc comment for what that replaced. The two guard tests below stay hardcoded:
 /// they assert control flow (a branch never taken, a value staying exactly at a boundary), not Pascal
 /// arithmetic, so there's nothing for a golden file to add.
@@ -505,7 +505,7 @@ public class AnnualTickHandlerAmbrosiaTests
 /// world's military (Cargo.Legions) toward the population/type-derived optimum. MatchesGoldenFile
 /// checks the real Pascal arithmetic against reference/verify/golden/military.golden, computed
 /// patch-based (GoldenFileTests): the real, only-minimally-touched UpdateWorld run against a
-/// hand-assembled Universe^ (reference/verify/patch-based/runworld.pas's military domain), not a
+/// hand-assembled Universe^ (reference/verify/runworld.pas's military domain), not a
 /// per-procedure transcription — see MilitaryCases's doc comment for what that replaced.
 /// </summary>
 public class AnnualTickHandlerMilitaryTests
@@ -553,7 +553,7 @@ public class AnnualTickHandlerMilitaryTests
 /// for unowned worlds). MatchesGoldenFile checks the real Pascal arithmetic against
 /// reference/verify/golden/techlevel.golden, computed patch-based (GoldenFileTests): the real,
 /// only-minimally-touched UpdateWorld run against a hand-assembled Universe^
-/// (reference/verify/patch-based/runworld.pas), not a per-procedure transcription — this is the one
+/// (reference/verify/runworld.pas), not a per-procedure transcription — this is the one
 /// domain where the ground truth includes a real GetCapital/GetTech lookup and Emp=Indep check rather
 /// than CapitalTech/IsIndependent standing in for them. Unlike Revolution/MilitaryCase,
 /// UpdateTechLevel's formula never reads Population, so every case here uses a tiny Population(10)

@@ -7,9 +7,9 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// dynamically skipped otherwise) and the always-on AnnualTickHandlerProductionTests.MatchesGoldenFile.
 /// Only inputs live here — expected outputs live exclusively in reference/verify/golden/
 /// production.golden, computed by a real FreePascal run of the real, patched UpdateWorld (via
-/// reference/verify/patch-based/runworld.pas's production domain), not the old isolated
+/// reference/verify/runworld.pas's production domain), not the old isolated
 /// reference/verify/production.pas transcription (deleted — see
-/// reference/verify/patch-based/README.md).
+/// reference/verify/README.md).
 ///
 /// That migration caught two bugs in the harness itself (not the C# port): runworld.pas originally
 /// left the planet's owning empire with an empty Pascal TechnologySet, which — because UPDATE.PAS

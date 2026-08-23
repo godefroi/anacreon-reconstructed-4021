@@ -25,7 +25,7 @@ internal static class GoldenFile
     /// only the harness name, case list, and per-case arg format differ between domains. runHarness
     /// defaults to PascalHarness.CompileAndRun(harnessName, args) (the per-procedure transcription
     /// pattern); pass PatchHarness.CompileAndRun for a domain whose ground truth instead comes from
-    /// the real, patched UpdateWorld (see reference/verify/patch-based/README.md).</summary>
+    /// the real, patched UpdateWorld (see reference/verify/README.md).</summary>
     public static void Regenerate<TCase>(string harnessName, IReadOnlyList<TCase> cases, Func<TCase, string> argFormatter,
         Func<string[], string>? runHarness = null)
         where TCase : INamedCase
