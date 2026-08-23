@@ -79,5 +79,17 @@ public class GoldenFileTests
         GoldenFile.Regenerate("empirecreate", EmpireFactoryCases.All,
             c => $"{(int)c.TechLevel},{c.ExtraTechsMask}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "empirecreate", .. args.Skip(1)]));
+
+        GoldenFile.Regenerate("trillumreserves", TrillumReservesCases.All,
+            c => $"{(int)c.Class},{c.RegionReserves},{c.RngFixedValue}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "trillumreserves", .. args.Skip(1)]));
+
+        GoldenFile.Regenerate("randomplanet", RandomPlanetCases.All,
+            c => $"{(int)c.Class},{(int)c.Tech},{c.RngFixedValue}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "randomplanet", .. args.Skip(1)]));
+
+        GoldenFile.Regenerate("nebula", NebulaCases.All,
+            c => $"{c.SizeOfGalaxy},{c.Mode},{c.PatchCount},{c.RngFixedValue}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "nebula", .. args.Skip(1)]));
     }
 }

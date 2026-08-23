@@ -47,8 +47,12 @@ public sealed partial class AnnualTickHandler
         [WorldClass.Volcanic] = 3950,
     }.ToFrozenDictionary();
 
-    /// <summary>Average population at 50% efficiency, by tech level (DATACNST.PAS:221-223).</summary>
-    private static readonly FrozenDictionary<TechLevel, int> _basePopulationByTech = new Dictionary<TechLevel, int> {
+    /// <summary>
+    /// Average population at 50% efficiency, by tech level (DATACNST.PAS:221-223). Internal (not
+    /// private): <see cref="NewGame.GalaxySetup.CreateRndPlanet"/> needs the same table for its own population
+    /// formula (NEWGAME.PAS:943).
+    /// </summary>
+    internal static readonly FrozenDictionary<TechLevel, int> BasePopulationByTech = new Dictionary<TechLevel, int> {
         [TechLevel.PreTech] = 3,
         [TechLevel.Primitive] = 10,
         [TechLevel.PreAtomic] = 100,
@@ -132,7 +136,7 @@ public sealed partial class AnnualTickHandler
     private void UpdatePopulation(IEconomicWorld world)
     {
         var maxPop = _maxPopulationByClass[world.EffectiveClass];
-        var basePop = _basePopulationByTech[world.TechLevel];
+        var basePop = BasePopulationByTech[world.TechLevel];
 
         double increase;
         if (world.Population > maxPop)

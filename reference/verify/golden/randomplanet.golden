@@ -1,0 +1,5 @@
+case=EarthLikeWarpRng0;population=618;efficiency=40;fgt=64;hkr=0;jmp=0;jtn=0;pen=0;ssp=0;trn=24;cargomen=32;cargoche=24;cargomet=40;cargosup=20;cargotri=8;defLAM=0;defDef=0;defGDM=40;defIon=0
+case=EarthLikePreTechRng0;population=2;efficiency=40;fgt=0;hkr=0;jmp=0;jtn=0;pen=0;ssp=0;trn=0;cargomen=0;cargoche=0;cargomet=0;cargosup=0;cargotri=0;defLAM=0;defDef=0;defGDM=0;defIon=0
+case=ArtificialGateRng0;population=2646;efficiency=40;fgt=192;hkr=17;jmp=24;jtn=15;pen=10;ssp=3;trn=72;cargomen=96;cargoche=72;cargomet=120;cargosup=60;cargotri=24;defLAM=0;defDef=72;defGDM=120;defIon=96
+case=ClassMJumpRng5;population=986;efficiency=45;fgt=389;hkr=0;jmp=53;jtn=34;pen=0;ssp=0;trn=149;cargomen=197;cargoche=149;cargomet=245;cargosup=125;cargotri=53;defLAM=0;defDef=0;defGDM=245;defIon=197
+case=BarrenBioRng2;population=1507;efficiency=42;fgt=322;hkr=30;jmp=42;jtn=26;pen=18;ssp=0;trn=122;cargomen=162;cargoche=122;cargomet=202;cargosup=102;cargotri=42;defLAM=0;defDef=122;defGDM=202;defIon=162

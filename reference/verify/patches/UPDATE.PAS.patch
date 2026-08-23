@@ -1,6 +1,6 @@
 --- a/UPDATE.PAS
 +++ b/UPDATE.PAS
-@@ -11,22 +11,46 @@ UNIT Update;
+@@ -11,22 +11,55 @@ UNIT Update;
  
  INTERFACE
  
@@ -51,10 +51,19 @@
 +  unit (it's declared in IMPLEMENTATION, below). Read-only; behavior of
 +  UpdateWorld/Rebellion is unchanged. }
 +FUNCTION GetNewTotalRevIndex(Emp: Empire): Integer;
++
++{ PATCH (fpc): CreateRndPlanet/RandomTrillumReserves/NebulaeBand/NebulaePatches (Phase 2 commit 2d)
++  relocated verbatim from NEWGAME.PAS, same reasoning as UpdateConstruction's own Intrface-only
++  helpers above -- see the IMPLEMENTATION-section comment near CreatePlanet's relocation for the
++  full dependency list and why GetRandomXY/CreateRandomWorlds are deliberately NOT relocated here. }
++PROCEDURE CreateRndPlanet(ID: IDNumber; Coord: XYCoord; Class: WorldClass; T: TechLevel);
++FUNCTION RandomTrillumReserves(Cls: WorldClass; RegionReserves: Word): Word;
++PROCEDURE NebulaeBand;
++PROCEDURE NebulaePatches(NoOfPatches: Word);
  
  IMPLEMENTATION
  
-@@ -36,7 +60,20 @@ USES
+@@ -36,7 +69,20 @@ USES
  VAR
     NewTotalRevIndex: ARRAY [Empire] of Integer;
  
@@ -76,7 +85,7 @@
                             Headline: NewsTypes; P1,P2,P3: Integer;
                             VAR OtherReports: ResourceSet);
     VAR
-@@ -55,6 +92,235 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
+@@ -55,6 +101,449 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
        END;
     END;  { ReportPlanetLack }
  
@@ -309,10 +318,224 @@
 +      Indus[IndI]:=Round(TIP*(IndusDist[IndI]/100)*(ClassIndAdj[Class,IndI]/100));
 +   END;  { GetOptimumIndus }
 +
++{ PATCH (fpc): CreatePlanet relocated verbatim from INTRFACE.PAS (same reasoning as
++  GetIndustrialDistribution/GetOptimumIndus above), plus RandomTrillumReserves/RndShips/RndCargo/
++  RndDefns/SetUpWorld/CreateRndPlanet/NebulaeBand/NebulaePatches relocated verbatim from NEWGAME.PAS
++  (Phase 2 commit 2d) -- pulling in all of NEWGAME.PAS for these would drag in Crt/Dos/DOS2/EIO/WND/
++  Menu/DFA/LoadSave/NPE/NPETypes for a handful of self-contained formulas, same "relocate the small
++  formula, not the whole unit" precedent as everything above. GetRandomXY/CreateRandomWorlds are
++  deliberately NOT relocated here: under this harness's ForcedRandomValue convention every Rnd call
++  within one invocation returns the same fixed offset, so a blocked coordinate's retry always re-rolls
++  the identical (still-blocked) coordinate -- there is no way to construct a golden-file case
++  exercising "blocked, then a later retry succeeds" on either side of the comparison, on principle,
++  not as an oversight. See reference/verify/README.md's "Tenth domain" note. }
++PROCEDURE CreatePlanet(ID: IDNumber; NewXY: XYCoord);
++   BEGIN
++   WITH Universe^ DO
++      BEGIN
++      WITH Sector[NewXY.x]^[NewXY.y] DO
++         Obj:=ID;
++
++      WITH Planet[ID.Index] DO
++         BEGIN
++         XY:=NewXY;
++         ImpExp:=DefaultISSP;
++         END;
++      END;  { with scope }
++   END;  { CreatePlanet }
++
++FUNCTION RandomTrillumReserves(Cls: WorldClass; RegionReserves: Word): Word;
++   VAR
++      Temp: Word;
++
++   BEGIN
++   Temp:=GreaterInt(Integer(RegionReserves)+Rnd(-25,25),0);
++   RandomTrillumReserves:=Round((Temp)*(TriResByClass[Cls]/100)+Rnd(1,100));
++   END;  { RandomTrillumReserves }
++
++PROCEDURE RndShips(Nfgt,Nhkr,Njmp,Njtn,Npen,Nstr,Ntrn: Integer;
++                   Tech: TechLevel; PerCentVar: Byte;
++                   CheckTech: Boolean;
++                   VAR Ships: ShipArray);
++   VAR
++      ShpI: ShipTypes;
++
++   BEGIN
++   Ships[fgt]:=ThgLmt(RndVar(Nfgt,PerCentVar));
++   Ships[hkr]:=ThgLmt(RndVar(Nhkr,PerCentVar));
++   Ships[jmp]:=ThgLmt(RndVar(Njmp,PerCentVar));
++   Ships[jtn]:=ThgLmt(RndVar(Njtn,PerCentVar));
++   Ships[pen]:=ThgLmt(RndVar(Npen,PerCentVar));
++   Ships[ssp]:=ThgLmt(RndVar(Nstr,PerCentVar));
++   Ships[trn]:=ThgLmt(RndVar(Ntrn,PerCentVar));
++
++   IF CheckTech THEN
++      FOR ShpI:=fgt TO trn DO
++         IF NOT (ShpI IN TechDev[Tech]) THEN
++            Ships[ShpI]:=0;
++   END;  { RndShips }
++
++PROCEDURE RndCargo(Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri: Integer;
++                   Tech: TechLevel; PerCentVar: Byte;
++                   CheckTech: Boolean;
++                   VAR Cargo: CargoArray);
++   VAR
++      CarI: CargoTypes;
++
++   BEGIN
++   Cargo[men]:=ThgLmt(RndVar(Nmen,PerCentVar));
++   Cargo[nnj]:=ThgLmt(RndVar(Nnnj,PerCentVar));
++   Cargo[amb]:=ThgLmt(RndVar(Namb,PerCentVar));
++   Cargo[che]:=ThgLmt(RndVar(Nche,PerCentVar));
++   Cargo[met]:=ThgLmt(RndVar(Nmet,PerCentVar));
++   Cargo[sup]:=ThgLmt(RndVar(Nsup,PerCentVar));
++   Cargo[tri]:=ThgLmt(RndVar(Ntri,PerCentVar));
++
++   IF CheckTech THEN
++      FOR CarI:=men TO tri DO
++         IF NOT (CarI IN TechDev[Tech]) THEN
++            Cargo[CarI]:=0;
++   END;  { RndCargo }
++
++PROCEDURE RndDefns(NLAM,Ndef,NGDM,Nion: Integer;
++                   Tech: TechLevel; PerCentVar: Byte;
++                   CheckTech: Boolean;
++                   VAR Defns: DefnsArray);
++   VAR
++      DefI: DefnsTypes;
++
++   BEGIN
++   Defns[LAM]:=ThgLmt(RndVar(NLAM,PerCentVar));
++   Defns[def]:=ThgLmt(RndVar(Ndef,PerCentVar));
++   Defns[GDM]:=ThgLmt(RndVar(NGDM,PerCentVar));
++   Defns[ion]:=ThgLmt(RndVar(Nion,PerCentVar));
++
++   IF CheckTech THEN
++      FOR DefI:=LAM TO ion DO
++         IF NOT (DefI IN TechDev[Tech]) THEN
++            Defns[DefI]:=0;
++   END;  { RndDefns }
++
++PROCEDURE SetUpWorld(WorldID: IDNumber;
++                     Cls: WorldClass;
++                     Tech: TechLevel;
++                     Typ: WorldTypes;
++                     Emp: Empire;
++                     Pop: Population;
++                     Eff: Index;
++                     Special: SetOfSpecialConditions;
++                     Nfgt,Nhkr,Njmp,Njtn,Npen,Nstr,Ntrn: Integer;
++                     Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri: Integer;
++                     NLAM,Ndef,NGDM,Nion: Integer;
++                     CheckTech: Boolean);
++   VAR
++      Indus: IndusArray;
++      Ships: ShipArray;
++      Cargo: CargoArray;
++      Defns: DefnsArray;
++
++   BEGIN
++   SetClass(WorldID,Cls);
++   SetTech(WorldID,Tech);
++   SetType(WorldID,Typ);
++   SetStatus(WorldID,Emp);
++   SetPopulation(WorldID,Pop);
++   SetEfficiency(WorldID,Eff);
++   SetSpecial(WorldID,Special);
++   { PATCH (fpc): Scout(Emp,XY) call dropped -- confirmed by reading its body (INTRFACE.PAS:91-137)
++     that it consumes no RNG and only updates fog-of-war/news bookkeeping, so dropping it cannot
++     perturb this harness's RNG stream or any Universe^ field this domain reads back. Matches
++     GalaxySetup.ApplySetup's own documented omission on the C# side. }
++   GetOptimumIndus(WorldID,Indus);
++   PutIndus(WorldID,Indus);
++   RndShips(Nfgt,Nhkr,Njmp,Njtn,Npen,Nstr,Ntrn,Tech,20,CheckTech,Ships);
++   PutShips(WorldID,Ships);
++   RndCargo(Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri,Tech,20,CheckTech,Cargo);
++   PutCargo(WorldID,Cargo);
++   RndDefns(NLAM,Ndef,NGDM,Nion,Tech,20,CheckTech,Defns);
++   PutDefns(WorldID,Defns);
++   END;  { SetUpWorld }
++
++PROCEDURE CreateRndPlanet(ID: IDNumber; Coord: XYCoord; Class: WorldClass; T: TechLevel);
++   CONST
++      RndMilTechAdj: ARRAY [TechLevel] OF Real =
++         {   pt     p    pa     a    pw     w     j     b     s    pg     g }
++         ( 0.01, 0.02, 0.04, 0.05, 0.10, 0.30, 0.35, 0.60, 0.75, 0.95, 1.00 );
++
++   VAR
++      MI: Integer;
++      Eff: Index;
++      Pop: Population;
++
++   BEGIN
++   CreatePlanet(ID,Coord);
++
++   Eff:=Rnd(40,60);
++   Pop:=RndVar(Trunc((1+(Eff-50)/500)*BasePop[T]), 10);
++   MI:=Rnd(1,33)+Rnd(1,34)+Rnd(1,33);
++   MI:=Round(MI*RndMilTechAdj[T]);
++
++   SetUpWorld(ID,Class,T,IndTyp,Indep,Pop,Eff,[],
++              80*MI, 7*MI, 10*MI, 6*MI, 4*MI, MI, 30*MI,
++              40*MI, 0, 0, 30*MI, 50*MI, 25*MI, 10*MI,
++              0, 30*MI, 50*MI, 40*MI,True);
++   END;  { CreateRndPlanet }
++
++PROCEDURE NebulaeBand;
++   VAR
++      InitX,StartX,XDisp,x,y: Integer;
++      Coord: XYCoord;
++
++   BEGIN
++   InitX:=Rnd(1,SizeOfGalaxy);
++
++   IF InitX<=(SizeOfGalaxy DIV 4) THEN
++      XDisp:=Rnd(0,3)
++   ELSE IF InitX>=(SizeOfGalaxy*3 DIV 4) THEN
++      XDisp:=Rnd(-3,0)
++   ELSE
++      XDisp:=Rnd(-3,3);
++
++   StartX:=InitX;
++   FOR y:=1 TO SizeOfGalaxy DO
++      BEGIN
++      FOR x:=StartX-Rnd(1,5) TO StartX+Rnd(1,5) DO
++         IF InGalaxy(x,y) THEN
++            BEGIN
++            Coord.x:=x;  Coord.y:=y;
++            PutNebula(Coord,Nebula);
++            END;
++
++      StartX:=StartX+XDisp;
++      END;  { loop }
++   END;  { NebulaeBand }
++
++PROCEDURE NebulaePatches(NoOfPatches: Word);
++   VAR
++      Patch: Byte;
++      InitX,InitY,x,y: Integer;
++      Coord: XYCoord;
++
++   BEGIN
++   FOR Patch:=1 TO NoOfPatches DO
++      BEGIN
++      InitX:=Rnd(1,SizeOfGalaxy);
++      InitY:=Rnd(1,SizeOfGalaxy);
++      FOR y:=InitY-Rnd(1,3) TO InitY+Rnd(1,3) DO
++         FOR x:=InitX-Rnd(1,4-Abs(y-InitY)) TO
++                InitX+Rnd(1,4-Abs(y-InitY)) DO
++            IF InGalaxy(x,y) THEN
++               BEGIN
++               Coord.x:=x;  Coord.y:=y;
++               PutNebula(Coord,Nebula);
++               END;  { loop }
++      END;  { loop }
++   END;  { NebulaePatches }
++
  PROCEDURE ConstructStarbase(Emp: Empire; STyp: StarbaseTypes; XY: XYCoord; VAR ID: IDNumber);
     VAR
        EmpTech: TechLevel;
-@@ -99,9 +365,8 @@ PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR I
+@@ -99,9 +588,8 @@ PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR I
        CreateStargate(ID,Emp,GTyp,XY);
     END;  { ConstructStargate }
  
@@ -323,7 +546,7 @@
     VAR
        ConstrFleets: FleetSet;
        EnoughRawMaterial,Error: Boolean;
-@@ -234,10 +499,10 @@ PROCEDURE UpdateEmpire(Emp: Empire);
+@@ -234,10 +722,10 @@ PROCEDURE UpdateEmpire(Emp: Empire);
        PROCEDURE GetChanceForNewTech(Emp: Empire; EmpTech: TechLevel;
                                      VAR TotalChance: Index; VAR LabID: IDNumber);
        { GetChanceForNewTech:
@@ -338,7 +561,7 @@
           which the technology was discovered. }
  
           LABEL
-@@ -1430,61 +1695,10 @@ PROCEDURE UpdateWorld(World: IDNumber);
+@@ -1430,61 +1918,10 @@ PROCEDURE UpdateWorld(World: IDNumber);
           END;  { with scope }
     END;  { UpdateWorld }
  

@@ -242,7 +242,7 @@ follow once that's working. Next up: Phase 2, Galaxy / new-game setup, below.
 **Constants to extract:** `MaxPop` array (UPDATE.PAS:1077-1098), `BasePop` lookup, `TechAdj[]`,
 `TechAdj2[]`, `K6`, `SuppliesPerBillion`, `DrugsPerBillion`, `ThgLmt()` clamp function.
 
-## 2. Galaxy / new-game setup — in progress, 2a-2c landed
+## 2. Galaxy / new-game setup — in progress, 2a-2d landed
 
 Nothing in the port creates a `Game`/`Galaxy`/`Empire` from scratch yet — every existing test
 hand-builds fixtures. Pascal has no procedural galaxy generator: `NEWGAME.PAS`'s `LoadScenario`
@@ -302,10 +302,21 @@ Broken into five sub-commits:
   relocating just those five procedures is deferred to 2d, which needs the identical relocation anyway
   (`CreateRndPlanet` calls `SetUpWorld` too) — one relocation covering both commits' golden-file needs
   beats doing it twice.
-- ⬜ **2d, randomized placement** — `GetRandomXY`/`CreateRndPlanet`/`CreateRandomWorlds`/the nebula
-  generators, via a transient per-generation occupancy set (no permanent `Galaxy` spatial index). Also
-  where `SetUpWorld`/`RndShips`/`RndCargo`/`RndDefns`/`RandomTrillumReserves` get relocated into the
-  patched tree and 2c's own golden-file coverage lands alongside 2d's.
+- ✅ **2d, randomized placement** (`Core/NewGame/GalaxySetup.cs`, continued). Ports `GetRandomXY`
+  (transient per-call `IsGoodForRandomWorld` check — no permanent `Galaxy` spatial index, matching the
+  design decision above), `CreateRndPlanet`, `CreateRandomWorlds`, and `NebulaeBand`/`NebulaePatches`.
+  `NebulaeBand`/`NebulaePatches` keep their arithmetic in Pascal's own 1-based coordinate space
+  (matching `Rnd` call values exactly) and shift to this port's 0-based `Coordinate` only at the point
+  of painting a cell. Relocated `CreatePlanet`/`RandomTrillumReserves`/`RndShips`/`RndCargo`/
+  `RndDefns`/`SetUpWorld` verbatim into the patched `UPDATE.PAS` (deferred from 2c), landing 2c's own
+  golden-file coverage alongside 2d's three new domains (`trillumreserves.golden`,
+  `randomplanet.golden`, `nebula.golden`) — see `reference/verify/README.md`'s "Tenth domain" note for
+  why `GetRandomXY`/`CreateRandomWorlds` themselves stay hardcoded-only (the `ForcedRandomValue`
+  convention can't express "blocked, then a later retry succeeds"). That investigation surfaced a real
+  bug in the golden-file harness's own `ForcedRandomValue` test convention (wrong check order in the
+  `INT.PAS` patch, letting a forced value override `Rnd`'s real degenerate-range clamp) — fixed in the
+  Pascal patch, not `PascalMath.Rnd` (whose existing behavior was already correct), confirmed via
+  `git status` on `reference/verify/golden/` that no other domain's committed values moved.
 - ⬜ **2e, `.SCN` scenario file loading** — the capstone integration test: `LoadScenario`'s
   tokenizer/dispatch loop minus its DOS UI, golden-file-verified against real `dos_131/*.SCN` files
   run through the real, patched `LoadScenario`.

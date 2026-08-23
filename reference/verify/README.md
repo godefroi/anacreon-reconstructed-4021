@@ -10,10 +10,11 @@ procedure into a fresh file, this maintains small patches against the real
 copy at build time, and calls the real, only-minimally-touched Pascal code
 directly against a hand-assembled `Universe^`.
 
-**Status: in production for all nine ground-truth domains that exist so far
+**Status: in production for all twelve ground-truth domains that exist so far
 (`techlevel.golden`, `military.golden`, `starbase.golden`, `ambrosia.golden`,
 `revolution.golden`, `production.golden`, `empire.golden`, `construction.golden`,
-`empirecreate.golden` — see `docs/ROADMAP.md`'s "Ground-truth harness generation" section).
+`empirecreate.golden`, `trillumreserves.golden`, `randomplanet.golden`,
+`nebula.golden` — see `docs/ROADMAP.md`'s "Ground-truth harness generation" section).
 `reference/verify/*.pas`'s
 per-procedure transcription pattern has had no domains on it since
 `production.golden`'s migration — `production.pas` was the last file using
@@ -309,6 +310,53 @@ code was written, then matched byte-for-byte once wired in. `TechLevel.PreTech` 
 a case here — `Pred(PreTchLvl)` is an out-of-range `TechDev` index in real Pascal (a range-check
 error that would crash the harness, not a well-defined empty set), and no real scenario file ever
 creates a player/NPE empire at that level anyway; it's covered by a hardcoded C# test instead.
+
+Tenth domain, `trillumreserves`/`randomplanet`/`nebula` (Phase 2 commit 2d): relocated
+`CreatePlanet` (`INTRFACE.PAS`) plus `RandomTrillumReserves`/`RndShips`/`RndCargo`/`RndDefns`/
+`SetUpWorld`/`CreateRndPlanet`/`NebulaeBand`/`NebulaePatches` (`NEWGAME.PAS`) verbatim into the
+patched `UPDATE.PAS`, same "relocate the small formula, not the whole unit" precedent as every domain
+before it — all of them are self-contained `Universe^`/`Misc`/`DataCnst`/`PrimIntr` logic, already
+confirmed reachable from `UPDATE.PAS`'s existing `USES` clause with zero new unit imports needed.
+`GetRandomXY`/`CreateRandomWorlds` are deliberately **not** relocated: under this harness's
+`ForcedRandomValue` convention, every `Rnd` call within one invocation returns the same fixed offset,
+so a coordinate blocked on the first roll is blocked on every retry too (the C# side hit the identical
+wall — see `GalaxySetupTests.GetRandomXY_ThrowsAfterTooManyRetriesOnAnOccupiedCell`) — there is no way
+to construct a golden-file case that reaches "blocked, then a later retry succeeds" on either side of
+the comparison, on principle, not from lack of trying. Those two procedures' own logic (percentile
+table lookups, the safety-loop compatibility check, occupancy/nebula rejection) is simple enough that
+hand-derived hardcoded tests (`GalaxySetupTests`) fully cover it instead — the golden-file domains here
+target only the pieces with real formula risk: `CreateRndPlanet`'s `Trunc`/`Round`/tech-adjustment-table
+math and `NebulaeBand`/`NebulaePatches`' coordinate-space arithmetic.
+
+All three domains reproduced this session's own hand-derivations exactly on the first real Pascal run
+(`randomplanet`'s `EarthLikeWarpRng0` case matched `GalaxySetupTests.
+CreateRndPlanet_ComputesPopulationMilitaryIndexAndAppliesTechGate` field-for-field; `nebula`'s band/patch
+single-case grids matched their own hardcoded tests) — good confirmation the C# port and the relocated
+Pascal agree, but a multi-patch nebula case (`PatchesMultipleRng2`, three patches under one forced
+value) caught a real bug in this harness's own `ForcedRandomValue` test convention, not in the C# port:
+
+**A real landmine: `ForcedRandomValue` was checked in the wrong order.** The original `INT.PAS` patch
+had `Rnd` check `ForcedRandomValue>=0` *before* the real, unconditional `Max<=Min` degenerate-range
+clamp — so a forced value could override that clamp, producing a result outside `[Min,Max]` whenever
+`Min=Max` coincided with a nonzero forced offset. `NebulaePatches`' own `Rnd(1,4-Abs(y-InitY))` hits
+exactly `Min=Max` (`4-Abs(y-InitY)=1`) at a patch's vertical extremes, so `PatchesMultipleRng2` (forced
+value 2) exposed it: Pascal painted a full 6th row that `GalaxySetup.NebulaePatches` (via
+`PascalMath.Rnd`, which has always checked the degenerate range first, matching pristine `Rnd`'s own
+"If Min>Max then Min is returned" semantics) correctly did not. The fix went into the *Pascal test
+patch*, not `PascalMath.Rnd` — pristine `Rnd`'s degenerate-range clamp is real, unconditional behavior;
+`ForcedRandomValue` is a test-only device layered on top of it, so the clamp has to win first, the same
+order `PascalMath.Rnd`+`FixedRandom` already used. Reordering `INT.PAS.patch` to check `Max<=Min`
+before `ForcedRandomValue` fixed `nebula.golden` and, checked directly via `git status`, moved none of
+the other eleven already-committed golden files — confirming no earlier domain's cases had
+coincidentally depended on the wrong ordering. A tempting-but-wrong fix worth naming explicitly: making
+`PascalMath.Rnd` call through to `random.Next()` even when `min==max` (so `FixedRandom`'s override
+would "win" the same way the old, buggy `INT.PAS` ordering did) breaks `NewTechLevel`'s
+`missingAtCurrentLevel[Rnd(1, missingAtCurrentLevel.Count) - 1]` indexing the moment a shared
+`FixedRandom` offset exceeds a small `Count` — real Pascal's own equivalent (`Tech[Rnd(1,TechNumber)]`
+against a fixed `ARRAY[1..30]`) never crashes on this, it just reads a stale slot, since the array is
+statically over-provisioned; a C# `List` has no such slack. Confirmed empirically (four pre-existing
+Phase-1 tests broke instantly when this alternate fix was tried) before reverting it in favor of the
+`INT.PAS` reorder above.
 
 ## Recommendation
 

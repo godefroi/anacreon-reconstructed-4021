@@ -44,6 +44,15 @@
                     starbasebio,starbaseche,starbasemin,starbasesyg,starbasesyj,starbasesys,
                     starbasesyt,starbasesup,starbasetri=<v> (all 9 industries);
                     stargatekind=<StargateTypes ordinal> (all <key>=<value>)"
+     trillumreserves ClassOrd,RegionReserves,RngFixedValue -> "reserves=<v>"
+     randomplanet ClassOrd,TechOrd,RngFixedValue -> "population=<v>;efficiency=<v>;
+                fgt=<v>;hkr=<v>;jmp=<v>;jtn=<v>;pen=<v>;ssp=<v>;trn=<v>;
+                cargomen=<v>;cargoche=<v>;cargomet=<v>;cargosup=<v>;cargotri=<v>;
+                defLAM=<v>;defDef=<v>;defGDM=<v>;defIon=<v> (all <key>=<value>)"
+     nebula     SizeOfGalaxy,Mode(1=band,2=patches),PatchCount(patches mode only),RngFixedValue
+                -> "grid=<SizeOfGalaxy*SizeOfGalaxy chars, row-major y=1..Size then x=1..Size,
+                    '1'=Nebula '0'=None>" -- GetRandomXY/CreateRandomWorlds have no domain here; see
+                the UPDATE.PAS patch's own relocation note for why
    One output line per case, in order, to stdout -- consumed by PatchHarness
    in the C# test project via GoldenFile.Regenerate's runHarness override.
    With no arguments, runs a single hardcoded techlevel case as a
@@ -753,6 +762,121 @@ procedure RunConstructionCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunTrillumReservesCase(const arg: String);
+   { Calls the now-exported RandomTrillumReserves directly (Phase 2 commit 2d) -- no Universe^ state
+     needed at all beyond what New/FillChar/Dispose bracket for symmetry with every other domain;
+     the function only reads its two value parameters and the module-level TriResByClass table. }
+   var
+      parts: array[0..2] of LongInt;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+
+   ForcedRandomValue:=parts[2];
+
+   WriteLn('reserves=',RandomTrillumReserves(WorldClass(parts[0]),parts[1]));
+
+   Dispose(Universe);
+   end;
+
+procedure RunRandomPlanetCase(const arg: String);
+   { Calls the now-exported CreateRndPlanet directly (Phase 2 commit 2d) at a fixed (5,5) -- location
+     never varies in this domain, CreateRndPlanet's own formula doesn't read it. Requires
+     InitializeSector first: CreatePlanet (relocated alongside CreateRndPlanet) writes through
+     Sector[x]^[y].Obj, same requirement as RunStarbaseCase/RunConstructionCase. Doesn't set
+     TrillumReserve -- matching real Pascal, CreateRndPlanet's own call sites always do that
+     separately (see RunTrillumReservesCase / GalaxySetup.CreateRndPlanet's own doc comment). }
+   var
+      parts: array[0..2] of LongInt;
+      ID: IDNumber;
+      Coord: XYCoord;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   InitializeSector(10);
+   NoOfPlanets:=1;
+
+   ForcedRandomValue:=parts[2];
+
+   ID.ObjTyp:=Pln;  ID.Index:=1;
+   Coord.x:=5;  Coord.y:=5;
+   CreateRndPlanet(ID,Coord,WorldClass(parts[0]),TechLevel(parts[1]));
+
+   WriteLn('population=',Universe^.Planet[1].Pop,
+           ';efficiency=',Universe^.Planet[1].Eff,
+           ';fgt=',Universe^.Planet[1].Ships[fgt],
+           ';hkr=',Universe^.Planet[1].Ships[hkr],
+           ';jmp=',Universe^.Planet[1].Ships[jmp],
+           ';jtn=',Universe^.Planet[1].Ships[jtn],
+           ';pen=',Universe^.Planet[1].Ships[pen],
+           ';ssp=',Universe^.Planet[1].Ships[ssp],
+           ';trn=',Universe^.Planet[1].Ships[trn],
+           ';cargomen=',Universe^.Planet[1].Cargo[men],
+           ';cargoche=',Universe^.Planet[1].Cargo[che],
+           ';cargomet=',Universe^.Planet[1].Cargo[met],
+           ';cargosup=',Universe^.Planet[1].Cargo[sup],
+           ';cargotri=',Universe^.Planet[1].Cargo[tri],
+           ';defLAM=',Universe^.Planet[1].Defns[LAM],
+           ';defDef=',Universe^.Planet[1].Defns[def],
+           ';defGDM=',Universe^.Planet[1].Defns[GDM],
+           ';defIon=',Universe^.Planet[1].Defns[ion]);
+
+   Dispose(Universe);
+   end;
+
+procedure RunNebulaCase(const arg: String);
+   { Calls the now-exported NebulaeBand/NebulaePatches directly (Phase 2 commit 2d). Dumps the whole
+     SizeOfGalaxy-by-SizeOfGalaxy grid as a row-major '0'/'1' string (y=1..Size outer, x=1..Size inner,
+     Pascal's own 1-based coordinate space -- the C# side shifts by -1 when comparing against its own
+     0-based Coordinate, see NebulaCases' own doc comment) rather than a fixed field list, since
+     which cells get painted is exactly what each case is checking. Requires InitializeSector first
+     (also sets SizeOfGalaxy, GetNebula/PutNebula's own requirement, same as RunStarbaseCase). Grid is
+     a plain Pascal String (255-char cap under -Mtp), so SizeOfGalaxy*SizeOfGalaxy must stay under
+     that -- fine for a targeted case, not meant for galaxy-scale sizes. }
+   var
+      parts: array[0..3] of LongInt;
+      x,y: Integer;
+      Coord: XYCoord;
+      Grid: String;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   InitializeSector(parts[0]);
+
+   ForcedRandomValue:=parts[3];
+
+   if parts[1]=1 then
+      NebulaeBand
+   else if parts[1]=2 then
+      NebulaePatches(parts[2])
+   else
+      begin
+      WriteLn(StdErr,'runworld: unknown nebula mode ',parts[1]);
+      Halt(1);
+      end;
+
+   Grid:='';
+   for y:=1 to parts[0] do
+      for x:=1 to parts[0] do
+         begin
+         Coord.x:=x;  Coord.y:=y;
+         if GetNebula(Coord)=Nebula then
+            Grid:=Grid+'1'
+         else
+            Grid:=Grid+'0';
+         end;
+
+   WriteLn('grid=',Grid);
+
+   Dispose(Universe);
+   end;
+
 procedure RunCaseMode;
    var
       domain: String;
@@ -778,6 +902,12 @@ procedure RunCaseMode;
          RunEmpireCreateCase(ParamStr(i))
       else if domain='construction' then
          RunConstructionCase(ParamStr(i))
+      else if domain='trillumreserves' then
+         RunTrillumReservesCase(ParamStr(i))
+      else if domain='randomplanet' then
+         RunRandomPlanetCase(ParamStr(i))
+      else if domain='nebula' then
+         RunNebulaCase(ParamStr(i))
       else
          begin
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');

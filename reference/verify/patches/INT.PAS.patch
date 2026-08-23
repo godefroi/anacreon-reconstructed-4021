@@ -1,6 +1,6 @@
 --- a/INT.PAS
 +++ b/INT.PAS
-@@ -15,6 +15,17 @@
+@@ -15,6 +15,17 @@ FUNCTION RndVar(Value,Variation: Integer): Integer;
  FUNCTION Sgn(X: LongInt): LongInt;
  PROCEDURE SwapInt(VAR a,b: Integer);
  
@@ -18,18 +18,34 @@
  IMPLEMENTATION
  
  PROCEDURE SwapInt{VAR a,b: Integer};
-@@ -111,7 +122,9 @@
+@@ -107,12 +118,25 @@ FUNCTION ISqrt{X: Integer): Integer};
+ 
+ FUNCTION Rnd{Min,Max: Integer): Integer};
+ { Rnd:
+-   Returns a random number between Max and Min inclusive.  If Min>Max then Min 
++   Returns a random number between Max and Min inclusive.  If Min>Max then Min
     is returned. }
  
     BEGIN
--   IF Max<=Min THEN
-+   IF ForcedRandomValue>=0 THEN
-+      Rnd:=Min+ForcedRandomValue
-+   ELSE IF Max<=Min THEN
++   { PATCH: Max<=Min checked before ForcedRandomValue, not after -- the degenerate-range clamp is
++     real, unconditional Rnd behavior (pristine source: "If Min>Max then Min is returned", and by the
++     same logic Min=Max has only one possible value regardless of what Random would have picked), so a
++     forced test run should see it too. The original ordering (forced check first) let a forced value
++     override this clamp, silently producing an out-of-[Min,Max] result whenever Min=Max coincided
++     with a nonzero ForcedRandomValue -- confirmed via a real divergence between this harness and the
++     C# port's own PascalMath.Rnd+FixedRandom (which always checks the degenerate range first) in
++     NebulaCases.PatchesMultipleRng2 (NebulaePatches' own Rnd(1,4-Abs(y-InitY)) hits Min=Max at the
++     patch's vertical extremes). Reordering here, not in the C# side, since this clamp is pristine
++     Rnd's own real behavior -- the forced branch is a test-only patch layered on top of it, not the
++     other way around. }
+    IF Max<=Min THEN
        Rnd:=Min
++   ELSE IF ForcedRandomValue>=0 THEN
++      Rnd:=Min+ForcedRandomValue
     ELSE
        Rnd:=Random((Max-Min)+1)+Min;
-@@ -130,4 +143,6 @@
+    END;  { Rnd }
+@@ -130,4 +154,6 @@ FUNCTION RndVar{Value,Variation: Integer): Integer};
     RndVar:=Rnd(Value-temp1,Value+temp1);
     END;  { RndVar }
  

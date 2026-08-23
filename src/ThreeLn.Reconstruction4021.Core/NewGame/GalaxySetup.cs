@@ -34,6 +34,26 @@ public sealed class GalaxySetup(Random random)
     }.ToFrozenDictionary();
 
     /// <summary>
+    /// DATACNST.PAS:273-294 — minimum tech level required to have a population on a given world
+    /// class, feeding CreateRandomWorlds' class/tech-table retry loop.
+    /// </summary>
+    private static readonly FrozenDictionary<WorldClass, TechLevel> _minTechForClass = new Dictionary<WorldClass, TechLevel> {
+        [WorldClass.Ambrosia] = TechLevel.PreTech, [WorldClass.Arid] = TechLevel.Primitive, [WorldClass.Artificial] = TechLevel.Jump, [WorldClass.Barren] = TechLevel.PreWarp,
+        [WorldClass.ClassJ] = TechLevel.PreTech, [WorldClass.ClassK] = TechLevel.PreTech, [WorldClass.ClassL] = TechLevel.PreTech, [WorldClass.ClassM] = TechLevel.PreTech,
+        [WorldClass.Desert] = TechLevel.Primitive, [WorldClass.EarthLike] = TechLevel.PreTech, [WorldClass.Forest] = TechLevel.PreTech, [WorldClass.GasGiant] = TechLevel.PreWarp,
+        [WorldClass.Hostile] = TechLevel.PreAtomic, [WorldClass.Ice] = TechLevel.PreAtomic, [WorldClass.Jungle] = TechLevel.PreTech, [WorldClass.Ocean] = TechLevel.PreWarp,
+        [WorldClass.Paradise] = TechLevel.PreTech, [WorldClass.Poisonous] = TechLevel.Atomic, [WorldClass.Ruins] = TechLevel.PreTech, [WorldClass.Underground] = TechLevel.Primitive,
+        [WorldClass.Volcanic] = TechLevel.PreAtomic,
+    }.ToFrozenDictionary();
+
+    /// <summary>NEWGAME.PAS:929-931 — CreateRndPlanet's military-buildup scaling factor by tech level.</summary>
+    private static readonly FrozenDictionary<TechLevel, double> _rndMilTechAdjustment = new Dictionary<TechLevel, double> {
+        [TechLevel.PreTech] = 0.01, [TechLevel.Primitive] = 0.02, [TechLevel.PreAtomic] = 0.04, [TechLevel.Atomic] = 0.05,
+        [TechLevel.PreWarp] = 0.10, [TechLevel.Warp] = 0.30, [TechLevel.Jump] = 0.35, [TechLevel.Bio] = 0.60,
+        [TechLevel.Starship] = 0.75, [TechLevel.PreGate] = 0.95, [TechLevel.Gate] = 1.00,
+    }.ToFrozenDictionary();
+
+    /// <summary>
     /// NEWGAME.PAS:953-1025 (CreateWorld). Population gets its own ±15% jitter here (RndVar(Pp,15));
     /// SetUpWorld's own ships/cargo/defenses get a separate ±20% (see ApplySetup). CheckTech is always
     /// False here, matching Pascal's own CreateWorld call — only CreateRndPlanet (2d) passes True.
@@ -135,6 +155,144 @@ public sealed class GalaxySetup(Random random)
     {
         var temp = Math.Max(regionReserves + PascalMath.Rnd(random, -25, 25), 0);
         return PascalMath.PascalRound(temp * (_trillumReservesByClass[cls] / 100.0) + PascalMath.Rnd(random, 1, 100));
+    }
+
+    /// <summary>
+    /// NEWGAME.PAS:234-256 (GetRandomXY) — picks a random point in [<paramref name="upperLeft"/>,
+    /// <paramref name="lowerRight"/>], retrying up to 100 times when <paramref name="checkOccupancy"/>
+    /// is set until it lands on an empty, unmined, non-dense-nebula cell. Pascal's own failure path
+    /// sets XY to a sentinel and reports a non-fatal ScenaError, letting scenario loading continue;
+    /// this port has no scenario-error-flag machinery (that's 2e's concern), so a real "no room left"
+    /// failure throws instead of returning a value silently.
+    /// </summary>
+    public Coordinate GetRandomXY(Galaxy.Galaxy galaxy, Coordinate upperLeft, Coordinate lowerRight, bool checkOccupancy)
+    {
+        Coordinate xy;
+        var count = 0;
+        do {
+            xy = new Coordinate(PascalMath.Rnd(random, upperLeft.X, lowerRight.X), PascalMath.Rnd(random, upperLeft.Y, lowerRight.Y));
+            count++;
+        } while (checkOccupancy && count <= 100 && !IsGoodForRandomWorld(galaxy, xy));
+
+        if (count > 100)
+            throw new InvalidOperationException("No room for random world in zone.");
+
+        return xy;
+    }
+
+    /// <summary>GetRandomXY's own acceptance predicate (NEWGAME.PAS:246-249) — unlike <see cref="IsOccupied"/>, also rejects dense nebula.</summary>
+    private static bool IsGoodForRandomWorld(Galaxy.Galaxy galaxy, Coordinate c) =>
+        !IsOccupied(galaxy, c) && galaxy.GetNebula(c) != NebulaType.DenseNebula;
+
+    /// <summary>
+    /// NEWGAME.PAS:924-951 (CreateRndPlanet) — an independent, unowned world seeded from a random
+    /// "military index" roll rather than scenario-supplied quantities. Doesn't set TrillumReserve
+    /// itself, matching Pascal: its one real call site (CreateRandomWorlds) sets that separately right
+    /// after, via RandomTrillumReserves.
+    /// </summary>
+    public Planet CreateRndPlanet(Galaxy.Galaxy galaxy, Coordinate location, WorldClass cls, TechLevel tech)
+    {
+        var planet = new Planet { Location = location, Class = cls };
+        ((IEconomicWorld)planet).InitializeSelfSufficiency();
+
+        var efficiency = PascalMath.Rnd(random, 40, 60);
+        var basePop = (int)((1 + (efficiency - 50) / 500.0) * AnnualTickHandler.BasePopulationByTech[tech]);
+        var population = PascalMath.Jitter(random, basePop, 10);
+
+        var mi = PascalMath.Rnd(random, 1, 33) + PascalMath.Rnd(random, 1, 34) + PascalMath.Rnd(random, 1, 33);
+        mi = PascalMath.PascalRound(mi * _rndMilTechAdjustment[tech]);
+
+        var ships = new ShipCounts {
+            Fighters = 80 * mi, HunterKillers = 7 * mi, Jumpships = 10 * mi, Jumptransports = 6 * mi,
+            Penetrators = 4 * mi, Starships = mi, Transports = 30 * mi,
+        };
+        var cargo = new CargoHold { Legions = 40 * mi, Chemicals = 30 * mi, Metals = 50 * mi, Supplies = 25 * mi, Trillum = 10 * mi };
+        var defenses = new DefenseCounts { DefenseSatellites = 30 * mi, Gdms = 50 * mi, IonCannons = 40 * mi };
+
+        ApplySetup(planet, tech, WorldType.Independent, Empire.Independent, population, efficiency, ships, cargo, defenses, checkTech: true);
+
+        galaxy.Planets.Add(planet);
+        return planet;
+    }
+
+    /// <summary>
+    /// NEWGAME.PAS:1122-1163 (CreateRandomWorlds). <paramref name="classTable"/>/<paramref name="techTable"/>
+    /// stand in for Pascal's scenario-populated 100-entry percentile tables (CLASSTABLE/TECHTABLE
+    /// commands) — building those from a .SCN file is 2e's job; this only needs the finished tables.
+    /// </summary>
+    public IReadOnlyList<Planet> CreateRandomWorlds(Galaxy.Galaxy galaxy, int count, Coordinate upperLeft, Coordinate lowerRight,
+        IReadOnlyList<WorldClass> classTable, IReadOnlyList<TechLevel> techTable, int trillumReserveBase)
+    {
+        var planets = new List<Planet>(count);
+
+        for (var i = 0; i < count; i++) {
+            var coord = GetRandomXY(galaxy, upperLeft, lowerRight, checkOccupancy: true);
+
+            WorldClass cls;
+            TechLevel tech;
+            var safety = 0;
+            do {
+                cls = classTable[PascalMath.Rnd(random, 1, 100) - 1];
+                tech = techTable[PascalMath.Rnd(random, 1, 100) - 1];
+                safety++;
+            } while (safety <= 100 && tech < _minTechForClass[cls]);
+
+            if (safety > 100)
+                throw new InvalidOperationException("Incompatible class and tech tables.");
+
+            var planet = CreateRndPlanet(galaxy, coord, cls, tech);
+            planet.TrillumReserve = RandomTrillumReserves(cls, trillumReserveBase);
+            planets.Add(planet);
+        }
+
+        return planets;
+    }
+
+    /// <summary>
+    /// NEWGAME.PAS:1261-1291 (NebulaeBand) — a diagonal-drifting strip of plain Nebula across the
+    /// whole galaxy. Pascal's own bounds/loop are 1-based against SizeOfGalaxy; this replicates that
+    /// arithmetic verbatim (so the Rnd call sequence/values match real Pascal exactly) and only
+    /// shifts to this port's 0-based Coordinate at the point of painting a cell.
+    /// </summary>
+    public void NebulaeBand(Galaxy.Galaxy galaxy)
+    {
+        var initX = PascalMath.Rnd(random, 1, galaxy.Size);
+        var xDisp = initX <= galaxy.Size / 4 ? PascalMath.Rnd(random, 0, 3)
+            : initX >= galaxy.Size * 3 / 4 ? PascalMath.Rnd(random, -3, 0)
+            : PascalMath.Rnd(random, -3, 3);
+
+        var startX = initX;
+        for (var y = 1; y <= galaxy.Size; y++) {
+            var low = startX - PascalMath.Rnd(random, 1, 5);
+            var high = startX + PascalMath.Rnd(random, 1, 5);
+            for (var x = low; x <= high; x++) {
+                if (x >= 1 && x <= galaxy.Size)
+                    galaxy.SetNebula(new Coordinate(x - 1, y - 1), NebulaType.Nebula);
+            }
+
+            startX += xDisp;
+        }
+    }
+
+    /// <summary>NEWGAME.PAS:1293-1313 (NebulaePatches) — a scatter of diamond-shaped Nebula patches. See <see cref="NebulaeBand"/> for the 1-based-arithmetic/0-based-paint convention.</summary>
+    public void NebulaePatches(Galaxy.Galaxy galaxy, int patchCount)
+    {
+        for (var patch = 0; patch < patchCount; patch++) {
+            var initX = PascalMath.Rnd(random, 1, galaxy.Size);
+            var initY = PascalMath.Rnd(random, 1, galaxy.Size);
+
+            var yLow = initY - PascalMath.Rnd(random, 1, 3);
+            var yHigh = initY + PascalMath.Rnd(random, 1, 3);
+            for (var y = yLow; y <= yHigh; y++) {
+                var spread = 4 - Math.Abs(y - initY);
+                var xLow = initX - PascalMath.Rnd(random, 1, spread);
+                var xHigh = initX + PascalMath.Rnd(random, 1, spread);
+                for (var x = xLow; x <= xHigh; x++) {
+                    if (x >= 1 && x <= galaxy.Size && y >= 1 && y <= galaxy.Size)
+                        galaxy.SetNebula(new Coordinate(x - 1, y - 1), NebulaType.Nebula);
+                }
+            }
+        }
     }
 
     /// <summary>NEWGAME.PAS:1100-1120 (CreateGate). No RNG — slot-allocation-failure (NextStargateSlot&lt;=0) has no C# equivalent, Galaxy.Stargates is an unbounded List.</summary>

@@ -9,7 +9,15 @@ public static class PascalMath
 {
     public const int MaxResources = 9999;
 
-    /// <summary>Random integer in [min,max] inclusive; returns min if the range is empty or inverted (INT.PAS:Rnd).</summary>
+    /// <summary>
+    /// Random integer in [min,max] inclusive; returns min if the range is empty or inverted (INT.PAS:Rnd).
+    /// This is pristine Rnd's real degenerate-range clamp, unconditional — the golden-file harness's
+    /// own ForcedRandomValue test override (reference/verify/patches/INT.PAS.patch) checks this clamp
+    /// *before* substituting a forced value, not after, so a forced test run agrees with this method
+    /// (and with FixedRandom) at min==max too. See that patch's own comment for why the check order
+    /// matters (a real, found divergence in NebulaCases.PatchesMultipleRng2 before the patch was
+    /// reordered to match).
+    /// </summary>
     public static int Rnd(Random random, int min, int max) => max <= min ? min : random.Next(max - min + 1) + min;
 
     /// <summary>Randomly varies a value by up to variation% in either direction (Pascal source: INT.PAS's RndVar).</summary>
