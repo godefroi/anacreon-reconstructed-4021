@@ -65,8 +65,20 @@ internal static class PascalHarness
         return fields;
     }
 
-    /// <summary>Shared with PatchHarness, which shells out to git and fpc from a different working
-    /// directory but needs the same process-running/error-reporting behavior.</summary>
+    /// <summary>
+    /// Shared with PatchHarness, which shells out to git and fpc from a different working directory
+    /// but needs the same process-running/error-reporting behavior.
+    ///
+    /// Reads stdout and stderr concurrently, not sequentially — reading one stream fully with
+    /// ReadToEnd() before even starting the other is the classic .NET child-process deadlock: it
+    /// blocks until the child closes that pipe (normally, by exiting), but a child that fills its
+    /// *other* stream's OS pipe buffer first (nobody is draining it yet) blocks on that write and
+    /// never reaches exit — so the never-touched stream's buffer filling is what wedges the
+    /// exits-eventually stream too. Real, not hypothetical: a since-removed debug WriteLn(StdErr,...)
+    /// added while investigating Phase 2 commit 2e's own golden-file test — one line per planet across
+    /// 11 real scenario files in one batched invocation — reproduced multi-minute hangs here before
+    /// being traced back to this exact pattern.
+    /// </summary>
     internal static string RunProcess(string fileName, IReadOnlyList<string> args, string workingDirectory)
     {
         var startInfo = new ProcessStartInfo(fileName) {
@@ -80,10 +92,13 @@ internal static class PascalHarness
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start {fileName}");
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        Task.WaitAll(stdoutTask, stderrTask);
         process.WaitForExit();
 
+        var stdout = stdoutTask.Result;
+        var stderr = stderrTask.Result;
         if (process.ExitCode != 0)
             throw new InvalidOperationException(
                 $"{fileName} {string.Join(' ', args)} exited {process.ExitCode}\nstdout:\n{stdout}\nstderr:\n{stderr}");
