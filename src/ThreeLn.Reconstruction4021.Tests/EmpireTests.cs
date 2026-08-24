@@ -33,4 +33,30 @@ public class EmpireTests
 
         await Assert.That(a.Owner).IsSameReferenceAs(b.Owner);
     }
+
+    [Test]
+    public async Task TryLaunchProbe_UnderCapacity_SucceedsAndRecordsDestination()
+    {
+        var empire = new Empire { Name = "Human" };
+        var destination = new Coordinate(5, 5);
+
+        var launched = empire.TryLaunchProbe(destination);
+
+        await Assert.That(launched).IsTrue();
+        await Assert.That(empire.ProbesInTransit).Contains(destination);
+    }
+
+    [Test]
+    public async Task TryLaunchProbe_AtCapacity_Fails()
+    {
+        var empire = new Empire { Name = "Human" };
+        for (var i = 0; i < Empire.MaxProbesInTransit; i++) {
+            await Assert.That(empire.TryLaunchProbe(new Coordinate(i, i))).IsTrue();
+        }
+
+        var launched = empire.TryLaunchProbe(new Coordinate(0, 1));
+
+        await Assert.That(launched).IsFalse();
+        await Assert.That(empire.ProbesInTransit.Count).IsEqualTo(Empire.MaxProbesInTransit);
+    }
 }

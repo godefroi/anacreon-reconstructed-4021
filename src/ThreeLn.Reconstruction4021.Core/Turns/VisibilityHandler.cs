@@ -23,6 +23,14 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
         (0, 0), (-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1),
     }.ToFrozenSet();
 
+    // Directions = (NoDir,No,Ne,Ea,Se,So,Sw,We,Nw), DirX/DirY (DATACNST.PAS:561-564) -- center, then
+    // clockwise from north. Order matters here, unlike _adjacentOffsets above: ProbeScout
+    // (INTRFACE.PAS:1289-1344) can stop scanning partway through the ring, so which offsets come
+    // before an early exit is part of the real behavior, not an implementation detail.
+    private static readonly (int dx, int dy)[] _probeScoutOffsets = [
+        (0, 0), (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1),
+    ];
+
     public void RefreshVisibility(Empire empire, Game game)
     {
         // Fleet visibility is ephemeral — clear completely each turn (INTRFACE.PAS:ScoutFleets rewrites all).
@@ -39,7 +47,104 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
 
         // Rebuild entity visibility (INTRFACE.PAS:ScoutObjects + DetermineIfScouted).
         ScoutObjects(empire, game);
+
+        // Resolve any in-transit probes (INTRFACE.PAS:UpdateProbes) -- ANACREON.PAS's SetUpTurn calls
+        // this in the same breath as the three steps above, right before this empire's own turn plays.
+        ResolveProbes(empire, game);
     }
+
+    /// <summary>
+    /// UpdateProbes (INTRFACE.PAS:1346-1359). A probe has no in-flight position (see
+    /// Empire.ProbesInTransit's own doc comment) — it resolves entirely in this one call, then
+    /// returns to the available pool, so every entry is scouted and the whole list cleared together.
+    /// </summary>
+    private void ResolveProbes(Empire empire, Game game)
+    {
+        foreach (var destination in empire.ProbesInTransit) {
+            ScoutFromProbe(empire, destination, game);
+        }
+
+        empire.ProbesInTransit.Clear();
+    }
+
+    /// <summary>
+    /// ProbeScout (INTRFACE.PAS:1289-1344): scans the destination's 3x3 ring in Pascal's fixed
+    /// order. A cell already Scouted by this empire is skipped entirely (no re-roll, no re-mark). An
+    /// unscouted occupant with legions present risks the probe: a successful destroy roll stops the
+    /// scan for the rest of the ring (matching ProbeScout's Exit — UpdateProbes still returns this
+    /// probe to Ready either way, so "destroyed" only means less of the ring gets scouted this call).
+    /// A Dark Nebula cell stops the scan too, regardless of what else happened at that cell. AddNews
+    /// (destroy/first-contact notifications) is dropped — no news subsystem yet, same precedent as
+    /// every other UpdateWorld step; tracked as a real upcoming phase in docs/ROADMAP.md, not a
+    /// dismissal.
+    /// </summary>
+    private void ScoutFromProbe(Empire empire, Coordinate destination, Game game)
+    {
+        foreach (var (dx, dy) in _probeScoutOffsets) {
+            var x = destination.X + dx;
+            var y = destination.Y + dy;
+
+            if (x < 0 || x >= game.Galaxy.Size || y < 0 || y >= game.Galaxy.Size) {
+                continue;
+            }
+
+            var cell = new Coordinate(x, y);
+            var target = FindProbeTarget(cell, empire, game);
+
+            if (target is { AlreadyScouted: false } occupant) {
+                var chanceToDestroy = PascalMath.ISqrt(occupant.Legions);
+                if (occupant.Owner != Empire.Independent && PascalMath.Rnd(random, 1, 100) < chanceToDestroy) {
+                    return;
+                }
+
+                occupant.MarkScouted();
+            }
+
+            if (game.Galaxy.GetNebula(cell) == Types.NebulaType.DarkNebula) {
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// GetObject/GetStatus/GetCargo/Scouted (PRIMINTR.PAS) as ProbeScout uses them: whichever single
+    /// non-fleet entity (Sector[x]^[y].Obj) occupies a cell, or null for Void. Fleets never factor in
+    /// here — ProbeScout only ever calls GetObject, never GetFleets.
+    /// </summary>
+    private static ProbeTarget? FindProbeTarget(Coordinate cell, Empire empire, Game game)
+    {
+        foreach (var planet in game.Galaxy.Planets) {
+            if (planet.Location == cell) {
+                return new ProbeTarget(planet.Owner, planet.Cargo.Legions,
+                    empire.Planets.Scouted.Contains(planet), () => empire.Planets.MarkScouted(planet));
+            }
+        }
+
+        foreach (var starbase in game.Galaxy.Starbases) {
+            if (starbase.Location == cell) {
+                return new ProbeTarget(starbase.Owner, starbase.Cargo.Legions,
+                    empire.Starbases.Scouted.Contains(starbase), () => empire.Starbases.MarkScouted(starbase));
+            }
+        }
+
+        foreach (var stargate in game.Galaxy.Stargates) {
+            if (stargate.Location == cell) {
+                return new ProbeTarget(stargate.Owner, Legions: 0,
+                    empire.Stargates.Scouted.Contains(stargate), () => empire.Stargates.MarkScouted(stargate));
+            }
+        }
+
+        foreach (var constr in game.Galaxy.ConstructionSites) {
+            if (constr.Location == cell) {
+                return new ProbeTarget(constr.Owner, Legions: 0,
+                    empire.ConstructionSites.Scouted.Contains(constr), () => empire.ConstructionSites.MarkScouted(constr));
+            }
+        }
+
+        return null;
+    }
+
+    private readonly record struct ProbeTarget(Empire Owner, int Legions, bool AlreadyScouted, Action MarkScouted);
 
     private static void ScoutFleets(Empire empire, Game game)
     {

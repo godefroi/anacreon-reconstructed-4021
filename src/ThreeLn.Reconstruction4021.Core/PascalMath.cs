@@ -32,4 +32,23 @@ public static class PascalMath
 
     /// <summary>Clamps a produced/consumed quantity to [0,MaxResources], truncating (Pascal source: MISC.PAS's ThgLmt).</summary>
     public static int ClampResource(double x) => x > MaxResources ? MaxResources : x < 0 ? 0 : (int)x;
+
+    /// <summary>
+    /// Integer square root, rounded to the nearest integer (Pascal source: INT.PAS's ISqrt,
+    /// INT.PAS:85-106). Ported as the same odd-number-summation integer algorithm rather than
+    /// Math.Sqrt+round, to avoid any floating-point boundary risk for large inputs.
+    /// </summary>
+    public static int ISqrt(int x)
+    {
+        var oddSeq = -1;
+        var square = 0;
+
+        do {
+            oddSeq += 2;
+            square += oddSeq;
+        } while (x >= square);
+
+        var root = (oddSeq >> 1) + 1;
+        return x <= square - root ? root - 1 : root;
+    }
 }

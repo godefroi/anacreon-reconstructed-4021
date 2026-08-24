@@ -1,3 +1,4 @@
+using ThreeLn.Reconstruction4021.Core.Galaxy;
 using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Core.Entities;
@@ -25,7 +26,33 @@ public sealed class Empire
     /// </summary>
     public IEconomicWorld? Capital { get; set; }
     public DefenseSettings DefenseSettings { get; } = new();
-    public List<Probe> Probes { get; } = [];
+
+    /// <summary>NoOfProbesPerEmpire (TYPES.PAS:33) — the fixed-size probe pool every empire draws from.</summary>
+    public const int MaxProbesInTransit = 10;
+
+    /// <summary>
+    /// Destinations of probes currently away (Pascal's ProbeRecord.Dest for every slot with
+    /// Status=PInTrans). A probe has no in-flight position or individual slot identity worth
+    /// modeling — GetProbe (PRIMINTR.PAS:922-932) just grabs whichever numbered slot happens to be
+    /// Ready, and UpdateProbes (INTRFACE.PAS:1346-1359) resolves every in-transit probe in one call —
+    /// so "in transit" reduces to just this list of destinations.
+    /// </summary>
+    public List<Coordinate> ProbesInTransit { get; } = [];
+
+    /// <summary>
+    /// GetProbe+LaunchProbe (PRIMINTR.PAS:922-945), combined into one atomic call since neither slot
+    /// identity nor a separate "no probes available" signal is needed beyond the bool return.
+    /// </summary>
+    public bool TryLaunchProbe(Coordinate destination)
+    {
+        if (ProbesInTransit.Count >= MaxProbesInTransit) {
+            return false;
+        }
+
+        ProbesInTransit.Add(destination);
+        return true;
+    }
+
     public List<LocationBookmark> Bookmarks { get; } = [];
 
     public int TotalRevolutionIndex { get; set; }

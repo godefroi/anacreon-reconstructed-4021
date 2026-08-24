@@ -53,6 +53,14 @@
                 -> "grid=<SizeOfGalaxy*SizeOfGalaxy chars, row-major y=1..Size then x=1..Size,
                     '1'=Nebula '0'=None>" -- GetRandomXY/CreateRandomWorlds have no domain here; see
                 the UPDATE.PAS patch's own relocation note for why
+     probescout DestOwnerOrd,DestLegions,DestAlreadyScouted(0/1),RngFixedValue -> "destscouted=<0|1>;
+                ringscouted=<0|1>" -- calls the already-exported ProbeScout (INTRFACE.PAS:1289-1344)
+                directly against one planet at the probe's destination (5,5) and one at the very next
+                ring cell in Pascal's fixed offset order, (5,4). Covers ISqrt(Cargo[men]) and the
+                Rnd(1,100)<ChanceToDestroy threshold plus its Exit-before-ScoutObject sequencing -- ring
+                ordering/early-exit control flow itself is hardcoded-tested on the C# side
+                (VisibilityHandlerProbeTests), since there's no separate Pascal formula to cross-check
+                there.
      rng        Seed,Range,Count -> "values=<Count comma-joined Random(Range) draws after
                 RandSeed:=Seed>" -- not a UpdateWorld/GalaxySetup domain; a standing regression fixture
                 for the C# test project's PascalRandom (see RunRngCase's own comment)
@@ -1220,6 +1228,66 @@ procedure RunScenarioCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunProbeScoutCase(const arg: String);
+   { ProbeScout (INTRFACE.PAS:1289-1344), called directly (already exported, no patch needed) against
+     a hand-assembled Universe^: one planet at the probe's destination (5,5) with configurable
+     owner/legions/already-scouted, and one at the very next ring cell in Pascal's fixed offset order,
+     (5,4) -- (dx,dy)=(0,-1) -- used purely as a "did the scan continue past the destination" signal;
+     its own owner (Empire2) and legions (0) never vary. Covers ISqrt(Cargo[men]) and the
+     Rnd(1,100)<ChanceToDestroy threshold plus its Exit-before-ScoutObject sequencing -- ring
+     ordering/early-exit control flow itself is hardcoded-tested on the C# side
+     (VisibilityHandlerProbeTests), since there's no separate Pascal formula to cross-check there.
+
+     Requires InitializeSector plus direct Sector[x]^[y].Obj writes for both planets -- ProbeScout
+     resolves them via GetObject, same requirement as the starbase/construction domains. }
+   var
+      parts: array[0..3] of LongInt;
+      destID, ringID: IDNumber;
+      dest: XYCoord;
+      destOwner: Empire;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   InitializeSector(20);
+   NoOfPlanets:=2;
+
+   destOwner:=Empire(parts[0]);
+
+   Universe^.Planet[1].XY.x:=5;  Universe^.Planet[1].XY.y:=5;
+   Universe^.Planet[1].Emp:=destOwner;
+   Universe^.Planet[1].Cargo[men]:=parts[1];
+   if parts[2]<>0 then
+      begin
+      Universe^.Planet[1].ScoutedBy:=[Empire1];
+      Universe^.Planet[1].KnownBy:=[Empire1];
+      end;
+
+   destID.ObjTyp:=Pln;  destID.Index:=1;
+   Sector[5]^[5].Obj:=destID;
+
+   Universe^.Planet[2].XY.x:=5;  Universe^.Planet[2].XY.y:=4;
+   Universe^.Planet[2].Emp:=Empire2;
+
+   ringID.ObjTyp:=Pln;  ringID.Index:=2;
+   Sector[5]^[4].Obj:=ringID;
+
+   SetOfActivePlanets:=[1,2];
+   SetOfPlanetsOf[destOwner]:=SetOfPlanetsOf[destOwner]+[1];
+   SetOfPlanetsOf[Empire2]:=SetOfPlanetsOf[Empire2]+[2];
+
+   ForcedRandomValue:=parts[3];
+
+   dest.x:=5;  dest.y:=5;
+   ProbeScout(Empire1,dest);
+
+   WriteLn('destscouted=',Ord(Empire1 IN Universe^.Planet[1].ScoutedBy),
+           ';ringscouted=',Ord(Empire1 IN Universe^.Planet[2].ScoutedBy));
+
+   Dispose(Universe);
+   end;
+
 procedure RunCaseMode;
    var
       domain: String;
@@ -1255,6 +1323,8 @@ procedure RunCaseMode;
          RunRngCase(ParamStr(i))
       else if domain='scenario' then
          RunScenarioCase(ParamStr(i))
+      else if domain='probescout' then
+         RunProbeScoutCase(ParamStr(i))
       else
          begin
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');

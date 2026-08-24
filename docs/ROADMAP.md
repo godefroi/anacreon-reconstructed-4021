@@ -342,17 +342,46 @@ Broken into five sub-commits:
   limitation" section, since this is exactly the kind of investigation a future reader shouldn't have
   to redo.
 
-## 3. NPE AI
+## 3. Probe movement and visibility — ✅ done
 
-Implement an `ITurnHandler` for computer empires. Start with one "classic" implementation — the
-handler-per-empire design (`Game.TurnHandlers`) already supports adding an "advanced" variant later
-without any changes to `TurnEngine`.
+Corrected from the original one-line description ("fleet-movement-style advance toward a
+destination"), which doesn't match source: `ProbeRecord` (`DATASTRC.PAS:170-175`) has no position
+field, only a destination and status — a probe doesn't move incrementally at all. `UpdateProbes`
+(`INTRFACE.PAS:1346-1359`) runs once per empire at the start of that empire's own turn, resolved as
+the last step of `VisibilityHandler.RefreshVisibility` (`TurnEngine` needed no changes — matches
+Pascal's `SetUpTurn`, which calls `ClearScoutSet`/`ScoutFleets`/`ScoutObjects`/`UpdateProbes` as one
+sequence). `ProbeScout` resolves an in-transit probe immediately against its destination, then marks
+it ready again — one "trip" is exactly one full turn-cycle, not a distance-based journey.
 
-## 4. Probe movement and visibility
+`Empire.Probes`/`Probe`/`ProbeStatus` (a pre-existing, unused stub literally mirroring Pascal's
+4-state `ProbeRecord`) was simplified to `Empire.ProbesInTransit: List<Coordinate>` plus
+`TryLaunchProbe`/`MaxProbesInTransit` — `ProbeStatus.AtDestination`/`.Lost` were confirmed dead code
+(never assigned anywhere in either the 1.31 or 2.0 source trees), so `Status` was fully derivable from
+`Destination`'s nullability and slot identity had no observable meaning (`GetProbe` just grabs
+whichever slot is `Ready`). See the root `README.md`'s "Ideas noticed but not chased down" section for
+what that dead code might hint at.
 
-Implement `UpdateProbes` (fleet-movement-style advance toward a destination). Once probes move,
-wire their scouting radius into `VisibilityHandler.RefreshVisibility` — probes grant scouting around
-their current location the same way owned planets/fleets do.
+Golden-file-backed (`probescout.golden`, `ProbeScoutCases`/`VisibilityHandlerProbeTests.MatchesGoldenFile`)
+via a new `probescout` domain in `runworld.pas`. `ProbeScout`/`UpdateProbes` had to be relocated
+(verbatim, not rewritten) from `INTRFACE.PAS` into the patched `UPDATE.PAS`, same "relocate the small
+dependency, not the whole unit" precedent as `GetOptimumIndus` — confirmed directly (not assumed) that
+importing `Intrface` itself pulls in `Fleet`/`Orders`/`NPE` via its own `IMPLEMENTATION USES`, exactly
+the combat/NPE-AI blast radius every earlier phase has deliberately stayed out of. That investigation
+also produced a validated, ready-to-use `SYSTEM2.PAS.patch` (fpc can't compile its `$V+`-mode string
+mismatch or its x86 `INLINE` assembly — replaced with a plain Pascal loop) for whenever a future phase
+(Combat/NPE AI) actually needs that `Intrface`→`EIO`/`Fleet`/`Orders`/`NPE` chain to compile.
+
+## 4. News
+
+Port `NEWS.PAS`'s per-empire event log (`AddNews`/`GetNewsList`/`GetNewsItem`/`EraseNews`). Not a UI
+nicety: confirmed from source that `ReviewNews` (present in every NPE personality —
+`NPE00.PAS`/`NPE01.PAS`/`NPE04.PAS`) calls `GetNewsList` and walks it as the AI's primary "what
+happened to me this turn" signal (attack severity, tech theft, deaths) — Phase 6 (NPE AI) has a real
+data dependency on this, not just a display one. Sequenced after Probes and before Combat/NPE AI:
+every prior phase (six sites in `AnnualTickHandler.*`, plus Probes' own `ProbeScout` destroy/
+first-contact events) has been dropping `AddNews` calls with an explicit "no news subsystem yet"
+comment — this phase is where all of those get retrofitted to call the real thing, in one pass,
+rather than each phase inventing its own placeholder.
 
 ## 5. Combat
 
@@ -368,19 +397,33 @@ defenses) from raw materials, gated by researched `Technology`. Bigger than Comm
 `UpdateMilitary` — needs three new tables (`DefAdj`, `DefBuildRate`, `RawM` per defense type) not yet
 extracted, and it branches on `WorldID.ObjTyp=Pln` vs `=Base` (runs unconditionally for both, per
 UPDATE.PAS:1387,1429) — exactly the planet/starbase overlap question deferred to economy phase
-Commit 4, so land the planet-only version no earlier than that.
+Commit 4, so land the planet-only version no earlier than that. Lands with real `AddNews` calls for
+battle outcomes from the start, since Phase 4 (News) precedes it.
 
-## 6. Save/load
+## 6. NPE AI
+
+Implement an `ITurnHandler` for computer empires. Start with one "classic" implementation — the
+handler-per-empire design (`Game.TurnHandlers`) already supports adding an "advanced" variant later
+without any changes to `TurnEngine`.
+
+Moved after Probes/News/Combat (was Phase 3 originally): confirmed directly from source that NPE
+decision-making is written against combat primitives from the start, not layered on after —
+`NPE01.PAS`'s `USES` clause pulls in `Attack`/`AttNPE`, and its own `FindTarget` procedure is
+combat-targeting logic. It also reads the News feed as a real sensory input, not just a display
+concern — see Phase 4. Building the NPE turn handler before Combat or News exists would mean an AI
+that can't act on its own core decisions or perceive what happened to it.
+
+## 7. Save/load
 
 Translation layer to read/write original `.SAV` files. Explicitly does not shape the in-memory
 model — the on-disk format is a serialization concern, not a design input.
 
-## 7. Human interactive turn handler + Terminal.Gui UI
+## 8. Human interactive turn handler + Terminal.Gui UI
 
 The last `ITurnHandler` implementation, plus the actual windowed interface (map view, fleet orders,
 construction, etc.) per `TUI_LIBRARY_RECOMMENDATION.md`.
 
-## 8. Async/hotseat turn mode
+## 9. Async/hotseat turn mode
 
 Deferred multiplayer option — sequential mode (already built) is the only mode a solo player sees.
 

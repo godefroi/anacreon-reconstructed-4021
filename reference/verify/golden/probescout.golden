@@ -1,0 +1,5 @@
+case=NoLegionsNeverDestroys;destscouted=1;ringscouted=1
+case=HighLegionsDestroysOnLowRoll;destscouted=0;ringscouted=0
+case=HighLegionsSurvivesOnHighRoll;destscouted=1;ringscouted=1
+case=IndependentNeverDestroysDespiteLegions;destscouted=1;ringscouted=1
+case=AlreadyScoutedNeverRolls;destscouted=1;ringscouted=1

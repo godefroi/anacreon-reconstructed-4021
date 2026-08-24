@@ -1,6 +1,6 @@
 --- a/UPDATE.PAS
 +++ b/UPDATE.PAS
-@@ -11,32 +11,140 @@ UNIT Update;
+@@ -11,32 +11,151 @@ UNIT Update;
  
  INTERFACE
  
@@ -121,6 +121,17 @@
 +PROCEDURE CreateRandomNebula(VAR SF: TEXT);
 +PROCEDURE CreateSRMs(VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
 +PROCEDURE CreateRandomWorlds(VAR SF: TEXT; VAR FirstWorld: Word; VAR ClassTable: ClassArray; VAR TechTable: TechArray; TriRes: Word; VAR Zone: ZoneArray);
++
++{ PATCH (fpc): ProbeScout/UpdateProbes (Phase 3), relocated verbatim from INTRFACE.PAS -- same
++  reasoning as GetOptimumIndus/the LoadScenario helpers above: Intrface's own IMPLEMENTATION USES
++  pulls in Fleet, Orders, and NPE (confirmed directly, not assumed -- trying to import Intrface here
++  reaches those three units, exactly the combat/NPE-AI blast radius this codebase has deliberately
++  stayed out of every earlier phase), so only these two procedures move, not the whole unit.
++  GetObject/GetStatus/GetCargo/Scouted/Known/ScoutObject are all PrimIntr, already USES'd here;
++  ISqrt/Rnd are Int, already USES'd; GetNebula is Galaxy, already USES'd; AddNews is News, already
++  USES'd -- nothing else needs relocating alongside them. }
++PROCEDURE ProbeScout(Emp: Empire; XY: XYCoord);
++PROCEDURE UpdateProbes(Emp: Empire);
  
  IMPLEMENTATION
  
@@ -150,7 +161,7 @@
                             Headline: NewsTypes; P1,P2,P3: Integer;
                             VAR OtherReports: ResourceSet);
     VAR
-@@ -55,6 +163,449 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
+@@ -55,6 +174,449 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
        END;
     END;  { ReportPlanetLack }
  
@@ -600,7 +611,7 @@
  PROCEDURE ConstructStarbase(Emp: Empire; STyp: StarbaseTypes; XY: XYCoord; VAR ID: IDNumber);
     VAR
        EmpTech: TechLevel;
-@@ -99,9 +650,8 @@ PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR I
+@@ -99,9 +661,8 @@ PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR I
        CreateStargate(ID,Emp,GTyp,XY);
     END;  { ConstructStargate }
  
@@ -611,7 +622,7 @@
     VAR
        ConstrFleets: FleetSet;
        EnoughRawMaterial,Error: Boolean;
-@@ -234,10 +784,10 @@ PROCEDURE UpdateEmpire(Emp: Empire);
+@@ -234,10 +795,10 @@ PROCEDURE UpdateEmpire(Emp: Empire);
        PROCEDURE GetChanceForNewTech(Emp: Empire; EmpTech: TechLevel;
                                      VAR TotalChance: Index; VAR LabID: IDNumber);
        { GetChanceForNewTech:
@@ -626,7 +637,7 @@
           which the technology was discovered. }
  
           LABEL
-@@ -1430,61 +1980,758 @@ PROCEDURE UpdateWorld(World: IDNumber);
+@@ -1430,61 +1991,830 @@ PROCEDURE UpdateWorld(World: IDNumber);
           END;  { with scope }
     END;  { UpdateWorld }
  
@@ -1353,8 +1364,6 @@
 -      begin
 -      WriteString('Construction #'+Int2Str(i)+'     ',2,1,7);
 -      IF i IN SetOfActiveConstructionSites THEN
--         BEGIN
--         UpdateConstruction(i);
 +   FirstWorld:=FirstWorld+NoOfWorlds;
 +   END;  { CreateRandomWorlds }
 +
@@ -1387,29 +1396,19 @@
 +   CASE Typ OF
 +      1: BEGIN
 +         NebulaeBand;
-          END;
--      END;
++         END;
 +      2: BEGIN
 +         NebulaePatches(Rnd(Min,Max));
 +         END;
 +      END;  { case }
 +   END;  { CreateRandomNebula }
- 
--   ClrScr;
--   WriteString('Updating Empires...',2,1,7);
--   FOR Emp:=Empire1 TO Empire8 do
--      IF EmpireActive(Emp) THEN
--         UpdateEmpire(Emp);
++
 +PROCEDURE CreateSRMs{VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray};
 +   VAR
 +      XY,UpperLeft,LowerRight: XYCoord;
 +      E,x,y: Word;
 +      ObjID: IDNumber;
- 
--   DeleteReadMessages;
--
--   CloseWindow;
--   END;  { UpdateUniverse }
++
 +   BEGIN
 +   E:=NextInteger(SF);
 +   GetNextXY(SF,XYPoint,Zone,False,UpperLeft);
@@ -1424,5 +1423,88 @@
 +               PutMine(XY,Empire(E));
 +            END;
 +   END;  { CreateSRMs }
++
++PROCEDURE ProbeScout(Emp: Empire; XY: XYCoord);
++{ ProbeScout:
++   Emp scouts the area around Loc. }
++
++   VAR
++      Dir: Directions;
++      x,y: Integer;
++      TempLoc: XYCoord;
++      Obj: IDNumber;
++      Loc: Location;
++      OtherEmp: Empire;
++      NamePtr: NameRecordPtr;
++      NameToAdd: String16;
++      Cargo: CargoArray;
++      ChanceToDestroy: Integer;
++
++   { ProbeScout: MAIN PROCEDURE }
++   BEGIN
++   IF NOT SameXY(XY,Limbo) THEN
++      FOR Dir:=NoDir TO NW DO
+          BEGIN
+-         UpdateConstruction(i);
+-         END;
+-      END;
++         x:=XY.x+DirX[Dir];
++         y:=XY.y+DirY[Dir];
++         IF InGalaxy(x,y) THEN
++            BEGIN
++            TempLoc.x:=x;
++            TempLoc.y:=y;
++            GetObject(TempLoc,Obj);
++            OtherEmp:=GetStatus(Obj);
+ 
+-   ClrScr;
+-   WriteString('Updating Empires...',2,1,7);
+-   FOR Emp:=Empire1 TO Empire8 do
+-      IF EmpireActive(Emp) THEN
+-         UpdateEmpire(Emp);
++            IF (NOT Scouted(Emp,Obj)) AND (Obj.ObjTyp<>Void) THEN
++               BEGIN
++               Loc.ID:=Obj;  Loc.XY:=Limbo;
++               GetCargo(Obj,Cargo);
++               ChanceToDestroy:=ISqrt(Cargo[men]);
++               IF (OtherEmp<>Indep)
++                  AND (Rnd(1,100)<ChanceToDestroy) THEN
++                  { ASSERT: Probe is destroyed }
++                  BEGIN
++                  AddNews(Emp,PDest,Loc,0,0,0);
++                  AddNews(OtherEmp,PCap,Loc,Ord(Emp),0,0);
++                  Exit;
++                  END;
+ 
+-   DeleteReadMessages;
++               { send news to empire }
++               IF (NOT Known(Emp,Obj)) AND (OtherEmp<>Emp) THEN
++                  AddNews(Emp,POk,Loc,0,0,0);
+ 
+-   CloseWindow;
+-   END;  { UpdateUniverse }
++               ScoutObject(Emp,Obj);
++               END;
++
++            IF GetNebula(TempLoc)=DarkNebula THEN
++               Exit;
++            END;
++         END;  { loop }
++   END;  { ProbeScout }
++
++PROCEDURE UpdateProbes(Emp: Empire);
++   VAR
++      i: Word;
++
++   BEGIN
++   FOR i:=1 TO NoOfProbesPerEmpire DO
++      WITH Universe^ DO
++         WITH EmpireData[Emp].Probe[i] DO
++            IF (Status=PInTrans) THEN
++               BEGIN
++               ProbeScout(Emp,Dest);
++               Status:=PReady;
++               END;
++   END;  { UpdateProbes }
  
  END.

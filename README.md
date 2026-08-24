@@ -5,6 +5,27 @@ directly from its original Turbo Pascal source (`reference/DOSAnacreonSource131/
 `docs/ROADMAP.md` for current phase status and design decisions, and `reference/verify/README.md`
 for how ground-truth (real Pascal output) is used to verify the port.
 
+## Ideas noticed but not chased down
+
+A living list of things spotted incidentally while working on something else — not an audit, just a
+place to write down a lead before it's forgotten. Light on detail where detail hasn't been derived.
+
+### Probes may once have persisted at their destination instead of resolving instantly
+
+`ProbeStatus` (`TYPES.PAS:125`) declares four states — `PReady`, `PInTrans`, `PAtDest`, `PLost` — but
+the shipped 1.31 (and 2.0) behavior only ever reaches the first two. `UpdateProbes`
+(`INTRFACE.PAS:1346-1359`) resolves an in-transit probe in a single call (scout, then straight back to
+`PReady`); `PAtDest`/`PLost` are never assigned anywhere in either source tree, and `ProbesReturn`
+(`INTRFACE.PAS:1361-1370`, the one procedure that reads `PAtDest`) is never called in either tree
+either — checked both directly, not assumed from one.
+
+The shape is suggestive: a design where a probe might take multiple turns to arrive, then sit at its
+destination (continuing to scout, or awaiting recall) before returning, would need exactly this
+four-state enum. Whether that was ever implemented, planned, or removed before either shipped source
+tree isn't something source alone can answer — this is inference from dead code's shape, not a
+confirmed history. Not ported (see `docs/ROADMAP.md`'s Phase 3), and not planned unless it resurfaces
+as something worth reviving deliberately.
+
 ## Known limitation: scenario golden-file testing can't be bit-exact, and why
 
 `ScenarioLoaderGoldenTests` (loading a real `.SCN` file end to end through the C# `ScenarioLoader`)
