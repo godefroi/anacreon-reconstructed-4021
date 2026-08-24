@@ -409,7 +409,7 @@ cascade into an explicit if/else-if chain (see `AnnualTickHandler.Revolution.cs`
 boundary tests at each tier transition, including one proving `RevIndex>75` genuinely has two outcomes
 (`Rebellion` vs. a lone `RebellionWarning4`), not one.
 
-## 5. Combat — in progress, 5a-5b landed
+## 5. Combat — in progress, 5a-5c landed
 
 Attack resolution, fleet/starbase destruction, capital loss and empire elimination. The original
 one-paragraph version of this section undersold the real scope, the same way "8 known News sites"
@@ -476,12 +476,26 @@ Sub-commits:
   independent-world tech gate are hardcoded instead — `UpdateMilitary` doesn't even run for a
   non-complex starbase, so `TroopStrength` has no RNG-dependent growth to account for, and neither
   branch involves a sqrt/pow cascade.
-- **5c, combat constants + `AttackType`** — new unified enum mirroring Pascal's
-  `AttackTypes = NoRes..nnj` (spans `DefenseType ∪ ShipType ∪ {Legion, NinjaLegion}` — a genuine
-  single cross-product axis for `CombatTable[Attacker,Defender]`, unlike `TechGrantIdentity`'s four
-  independent identity spaces from Phase 4), plus the combat constant tables as pure data
-  (`CombatTable`, `WeapEff`, `ShipValue`, `ProtecOffered`/`Needed`, `CombatTechAdj`,
-  `CombatClassAdj`, `CombatBaseAdj`, `GDMLaunch`/`Kill`, `CombatPower`).
+- ✅ **5c, combat constants + `AttackType`** (`Types/AttackType.cs`, `Combat/CombatConstants.cs`) —
+  new unified enum mirroring Pascal's `AttackTypes = NoRes..nnj` (spans
+  `DefenseType ∪ ShipType ∪ {Legion, NinjaLegion}` — a genuine single cross-product axis for
+  `CombatTable[Attacker,Defender]`, unlike `TechGrantIdentity`'s four independent identity spaces
+  from Phase 4), declared in Pascal's own LAM..nnj order so every table below reads off source
+  without reordering; the leading `NoRes` sentinel is dropped rather than ported — its row/column in
+  `CombatTable` is all zero and never legitimately read, so "no target" is represented as
+  `AttackType?` at whichever call site needs it (5d/5e), not as an enum member. `AttackTypeExtensions`
+  maps to/from `DefenseType`/`ShipType` (both stay real per-type stored state on
+  `DefenseCounts`/`ShipCounts`; `AttackType` is purely a combat-engine indexing concern). Combat
+  constant tables as pure data, transcription-lane (isolated, parameter-only, no real-state
+  dependency): `CombatTable`, `WeapEff`, `ShipValue`, `CombatPower` (all `AttackType`-keyed);
+  `ProtecOffered`/`ProtecNeeded`/`TrnAdj`/`GdmKill` (`ShipType`-keyed); `CargoSpace`
+  (`CargoType`-keyed); `CombatTechAdj` (`(AttackerTech,DefenderTech)`-keyed — confirmed the index
+  order from ATTACK.PAS's two real call sites, not just the table's own comment); `CombatClassAdj`
+  (`WorldClass`-keyed); `CombatBaseAdj` (`StarbaseKind`-keyed); `GdmLaunch` (`TechLevel`-keyed). Every
+  key enum's declaration order was verified against TYPES.PAS directly to match Pascal's ordinal
+  order before trusting positional array transcription. Tests: enum order, full key-space coverage
+  per table, a handful of known values, and the `AttackType`↔`DefenseType`/`ShipType` mapping
+  round-trips — no combat logic exists yet to exercise these tables against.
 - **5d, group/shell combat engine core** — the actual per-round damage math (`GetEnemy`,
   `CalculateCombatData`, `Battle`/`GroupAttack`/`EnemyAttack`, targeting/priority arrays,
   `EnemySurrenders`). The bulk of the phase; golden-file-backed via a new patch-based

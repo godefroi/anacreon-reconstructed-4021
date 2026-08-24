@@ -85,4 +85,16 @@ public class EnumTests
     {
         await Assert.That(Enum.GetValues<WorldType>()).Count().IsEqualTo(21);
     }
+
+    [Test]
+    public async Task AttackType_MatchesPascalOrder()
+    {
+        await Assert.That(Enum.GetValues<AttackType>()).IsEquivalentTo(
+        [
+            AttackType.Lam, AttackType.DefenseSatellite, AttackType.Gdm, AttackType.IonCannon,
+            AttackType.Fighter, AttackType.HunterKiller, AttackType.Jumpship, AttackType.Jumptransport,
+            AttackType.Penetrator, AttackType.Starship, AttackType.Transport,
+            AttackType.Legion, AttackType.NinjaLegion,
+        ]);
+    }
 }
