@@ -53,7 +53,7 @@ public static class TechCatalog
         [ShipType.Starship] = TechLevel.Starship,
     }.ToFrozenDictionary();
 
-    /// <summary>See <see cref="MinTechForCargo"/>. No defense-tech gate exists in the production pipeline itself — only NewTechLevel reads this.</summary>
+    /// <summary>See <see cref="MinTechForCargo"/>. Read by NewTechLevel (research rolls) and by AnnualTickHandler.Defenses.cs's DefenseTechAvailable (UpdateDefenses' own per-world TechDev[Tech] gate).</summary>
     public static readonly FrozenDictionary<DefenseType, TechLevel> MinTechForDefense = new Dictionary<DefenseType, TechLevel> {
         [DefenseType.Gdm] = TechLevel.Atomic,
         [DefenseType.IonCannon] = TechLevel.Jump,

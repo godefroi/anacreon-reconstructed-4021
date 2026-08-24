@@ -340,17 +340,12 @@ public sealed partial class AnnualTickHandler
     /// which specifically depends on Cargo holding values above MaxResources mid-pipeline, before that
     /// final clamp.
     /// </summary>
-    private void RunProductionPipeline(IEconomicWorld world, Action? beforeProduce = null, Action? afterProduce = null)
+    private void RunProductionPipeline(IEconomicWorld world, HashSet<CargoType> reportedShortfalls, Action? beforeProduce = null, Action? afterProduce = null)
     {
         beforeProduce?.Invoke();
 
         var effectiveTech = EffectiveTechnologyLevel(world);
         var ip = (_industrialProductionTechAdjustment[world.TechLevel] / 100.0) * ((world.Efficiency + 250) / 100.0) / K6;
-
-        // OtherReports (UPDATE.PAS:1131,1133): one per-tick set, shared across UpdateIndustry and
-        // Production (and, once implemented, UpdateDefenses) — each resource type's shortfall report
-        // (see ReportResourceShortfall) fires at most once per tick, not once per call site that hits it.
-        var reportedShortfalls = new HashSet<CargoType>();
 
         ProduceRawMaterial(world, effectiveTech, ip);
         var industryDistribution = GetIndustrialDistribution(world);

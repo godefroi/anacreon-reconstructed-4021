@@ -47,6 +47,11 @@ public class GoldenFileTests
             c => $"{c.PlanetPop},{(int)c.Tech},{c.Legions},{(int)c.Type},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "military", .. args.Skip(1)]));
 
+        GoldenFile.Regenerate("defenses", DefensesCases.All,
+            c => $"{c.PlanetPop},{(int)c.Tech},{c.Legions},{c.NinjaLegions},{(int)c.Type},{c.Efficiency}," +
+                 $"{c.CargoChe},{c.CargoMet},{c.CargoTri},{c.TechnologyBitmask},{c.RngFixedValue}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "defenses", .. args.Skip(1)]));
+
         GoldenFile.Regenerate("techlevel", TechLevelCases.All,
             c => $"{(int)c.Tech},{(c.IsIndependent ? 1 : 0)},{(int)c.CapitalTech},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "techlevel", .. args.Skip(1)]));

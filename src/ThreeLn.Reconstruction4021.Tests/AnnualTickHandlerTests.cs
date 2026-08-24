@@ -677,6 +677,205 @@ public class AnnualTickHandlerMilitaryTests
 }
 
 /// <summary>
+/// Verifies Phase 5 Commit 5b: UpdateDefenses (UPDATE.PAS:1278-1351), growing
+/// IEconomicWorld.Defenses toward a troop-strength-derived optimum, gated by
+/// AnnualTickHandler.Defenses.cs's DefenseTechAvailable (the empire-research/per-world-TechLevel
+/// intersection UPDATE.PAS:1367-1369 computes for every world every tick). MatchesGoldenFile covers
+/// the planet-only formula/tech-gate/raw-material-shortfall behavior against
+/// reference/verify/golden/defenses.golden — see DefensesCases' own doc comment for why. The
+/// starbase-specific Optimum/BuildRate multipliers (Outpost quarters and zeroes DefenseSatellite;
+/// CommandBase/Fortress quadruple both) and the independent-world tech gate are hardcoded instead:
+/// none of them involve a sqrt/pow cascade, and (Outpost/CommandBase cases) UpdateMilitary doesn't
+/// even run for a non-complex starbase — see AnnualTickHandler.cs's UpdateStarbase — so
+/// TroopStrength is exactly the seeded Cargo.Legions with no RNG-dependent growth to account for.
+/// </summary>
+public class AnnualTickHandlerDefensesTests
+{
+    private static Game BuildGame(Planet planet, Empire owner)
+    {
+        var game = new Game(new Core.Galaxy.Galaxy(size: 20));
+        game.Galaxy.Planets.Add(planet);
+        game.Empires.Add(owner);
+        return game;
+    }
+
+    private static Game BuildGame(Starbase starbase, Empire owner)
+    {
+        var game = new Game(new Core.Galaxy.Galaxy(size: 20));
+        game.Galaxy.Starbases.Add(starbase);
+        game.Empires.Add(owner);
+        return game;
+    }
+
+    [Test]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [MethodDataSource(typeof(PascalGroundTruth.DefensesCases), nameof(PascalGroundTruth.DefensesCases.AsDataSource))]
+    public async Task MatchesGoldenFile(PascalGroundTruth.DefensesCase c)
+    {
+        var golden = PascalGroundTruth.GoldenFile.Load("defenses.golden");
+
+        var owner = new Empire { Name = "Test" };
+        if (c.TechnologyBitmask != 0) {
+            foreach (var type in Enum.GetValues<DefenseType>())
+                if ((c.TechnologyBitmask & (1 << (int)type)) != 0)
+                    owner.Technology.Defenses.Add(type);
+        }
+        var planet = new Planet {
+            Location = new Coordinate(0, 0),
+            Owner = owner,
+            Class = WorldClass.ClassM,
+            Type = c.Type,
+            TechLevel = c.Tech,
+            Efficiency = c.Efficiency,
+            Population = c.PlanetPop,
+        };
+        planet.Cargo.Legions = c.Legions;
+        planet.Cargo.NinjaLegions = c.NinjaLegions;
+        planet.Cargo.Chemicals = c.CargoChe;
+        planet.Cargo.Metals = c.CargoMet;
+        planet.Cargo.Trillum = c.CargoTri;
+        planet.Cargo.Supplies = 9999;
+        var game = BuildGame(planet, owner);
+        owner.Capital = planet;
+        var handler = new AnnualTickHandler(new FixedRandom(c.RngFixedValue));
+
+        handler.RunAnnualTick(game);
+
+        var expected = golden[c.Name];
+        await Assert.That(planet.Defenses.Lams).IsEqualTo(int.Parse(expected["lam"]));
+        await Assert.That(planet.Defenses.DefenseSatellites).IsEqualTo(int.Parse(expected["def"]));
+        await Assert.That(planet.Defenses.Gdms).IsEqualTo(int.Parse(expected["gdm"]));
+        await Assert.That(planet.Defenses.IonCannons).IsEqualTo(int.Parse(expected["ion"]));
+
+        if (c.Name == "RawMaterialShortageClampsBuildInLoopOrder") {
+            await Assert.That(owner.News.Select(n => n.Headline)).Contains(NewsType.DefensesLackResources);
+        }
+    }
+
+    // DefenseType bit i = TechnologyTypes(i+1) in DefensesCases' Pascal-side encoding, but here it's
+    // just DefenseType's own C# ordinal — DefenseType and DefenseType alone, no cross-enum offset.
+    private static void ResearchAllDefenses(Empire owner)
+    {
+        foreach (var type in Enum.GetValues<DefenseType>())
+            owner.Technology.Defenses.Add(type);
+    }
+
+    [Test]
+    public async Task Outpost_QuartersOptimumAndForcesDefenseSatelliteAndLamToZero()
+    {
+        // Kind=Outpost skips UpdateMilitary entirely (UpdateStarbase only runs it for STyp=cmp), so
+        // Cargo.Legions(1000) is exactly TroopStrength with no RNG-dependent growth to account for.
+        // Efficiency=100 keeps UpdateEfficiency's own inc at a guaranteed 0 (its "_ => 0" branch, no
+        // Rnd call at all); Owner.Capital left null keeps UpdateTechLevel a no-op (no Rnd call either)
+        // — both fully deterministic, not just RNG-insensitive.
+        var owner = new Empire { Name = "Test" };
+        ResearchAllDefenses(owner);
+        var starbase = new Starbase {
+            Location = new Coordinate(0, 0),
+            Owner = owner,
+            Kind = StarbaseKind.Outpost,
+            Type = WorldType.Outpost,
+            TechLevel = TechLevel.Starship,
+            Efficiency = 100,
+        };
+        starbase.Cargo.Legions = 1000;
+        starbase.Cargo.Chemicals = 99999;
+        starbase.Cargo.Metals = 99999;
+        starbase.Cargo.Trillum = 99999;
+        var game = BuildGame(starbase, owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        // TroopStrength=1000 -> BuildRate=0.75, Optimum=10/4=2.5 (quartered).
+        // Gdm: OptimumDef=Trunc(2.5*215)=537, MaxBuild=Trunc(0.75*250)=187 -> build=187.
+        // Ion: OptimumDef=Trunc(2.5*83)=207, MaxBuild=Trunc(0.75*95)=71 -> build=71.
+        await Assert.That(starbase.Defenses.Gdms).IsEqualTo(187);
+        await Assert.That(starbase.Defenses.IonCannons).IsEqualTo(71);
+        // DefenseSatellite forced to 0 by the Outpost rule; Lam forced to 0 since Type isn't Base/Capital.
+        await Assert.That(starbase.Defenses.DefenseSatellites).IsEqualTo(0);
+        await Assert.That(starbase.Defenses.Lams).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CommandBase_QuadruplesOptimumAndBuildRateAndAllowsLam()
+    {
+        var owner = new Empire { Name = "Test" };
+        ResearchAllDefenses(owner);
+        var starbase = new Starbase {
+            Location = new Coordinate(0, 0),
+            Owner = owner,
+            Kind = StarbaseKind.CommandBase,
+            Type = WorldType.Base, // in [Base,Capital] -> Lam is allowed
+            TechLevel = TechLevel.Starship,
+            Efficiency = 100,
+        };
+        starbase.Cargo.Legions = 1000;
+        starbase.Cargo.Chemicals = 99999;
+        starbase.Cargo.Metals = 99999;
+        starbase.Cargo.Trillum = 99999;
+        var game = BuildGame(starbase, owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        // TroopStrength=1000 -> BuildRate=0.75*4=3.0, Optimum=10*4=40 (quadrupled, not quartered).
+        // Lam: OptimumDef=Trunc(40*145)=5800, MaxBuild=Trunc(3.0*220)=660 -> build=660.
+        // DefenseSatellite: OptimumDef=Trunc(40*76)=3040, MaxBuild=Trunc(3.0*50)=150 -> build=150.
+        // Gdm: OptimumDef=Trunc(40*215)=8600, MaxBuild=Trunc(3.0*250)=750 -> build=750.
+        // Ion: OptimumDef=Trunc(40*83)=3320, MaxBuild=Trunc(3.0*95)=285 -> build=285.
+        await Assert.That(starbase.Defenses.Lams).IsEqualTo(660);
+        await Assert.That(starbase.Defenses.DefenseSatellites).IsEqualTo(150);
+        await Assert.That(starbase.Defenses.Gdms).IsEqualTo(750);
+        await Assert.That(starbase.Defenses.IonCannons).IsEqualTo(285);
+    }
+
+    [Test]
+    public async Task IndependentWorld_TechLevelGateAloneIsEnoughNoResearchNeeded()
+    {
+        // TechLevel.Gate short-circuits UpdateTechLevel's very first line (world.TechLevel==Gate)
+        // before it ever reaches the independent branch's Rnd(1,50) roll -- no RNG dependency there.
+        // Legions(900) comfortably clears UpdateMilitary's Jitter(800,10) spread ([720,880]) for
+        // WorldType.Independent at Population=1500, so it isn't grown further. Population itself
+        // isn't pinned the way Efficiency/TechLevel are: UpdatePopulation runs earlier in the same
+        // tick and does perturb it (confirmed empirically, not asserted exactly here — the planet
+        // formula's own precise arithmetic is already exhaustively covered for owned worlds by
+        // MatchesGoldenFile; what's novel here is only the tech-gate-without-research behavior, which
+        // doesn't need an exact magnitude to demonstrate).
+        var independent = Empire.Independent;
+        var planet = new Planet {
+            Location = new Coordinate(0, 0),
+            Owner = independent,
+            Class = WorldClass.ClassM,
+            Type = WorldType.Independent,
+            TechLevel = TechLevel.Gate,
+            Efficiency = 100,
+            Population = 1500,
+        };
+        planet.Cargo.Legions = 900;
+        planet.Cargo.Chemicals = 99999;
+        planet.Cargo.Metals = 99999;
+        planet.Cargo.Trillum = 99999;
+        var game = new Game(new Core.Galaxy.Galaxy(size: 20));
+        game.Galaxy.Planets.Add(planet);
+        var handler = new AnnualTickHandler(new FixedRandom(1));
+
+        handler.RunAnnualTick(game);
+
+        // EffectiveTechnologyLevel(independent, Gate) = Gate-1 = PreGate, clearing every
+        // MinTechForDefense threshold (highest is Lam's Starship) with no empire research at all —
+        // Empire.Independent's own Technology.Defenses is empty, confirming DefenseTechAvailable's
+        // "IsIndependent ||" short-circuit actually takes effect rather than the empty set vacuously
+        // failing every Contains check.
+        await Assert.That(planet.Defenses.Gdms).IsGreaterThan(0);
+        await Assert.That(planet.Defenses.IonCannons).IsGreaterThan(0);
+        await Assert.That(planet.Defenses.DefenseSatellites).IsGreaterThan(0);
+        // Lam forced to 0: Type=Independent isn't in [Base,Capital].
+        await Assert.That(planet.Defenses.Lams).IsEqualTo(0);
+    }
+}
+
+/// <summary>
 /// Verifies Commit 3 of the economy phase: UpdateTechLevel (UPDATE.PAS:1032-1072), tech-level
 /// advancement/regression toward an owned world's empire's capital (or a 1-in-50 independent drift
 /// for unowned worlds). MatchesGoldenFile checks the real Pascal arithmetic against

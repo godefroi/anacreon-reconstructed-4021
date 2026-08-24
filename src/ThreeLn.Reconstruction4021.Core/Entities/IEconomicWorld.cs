@@ -33,6 +33,7 @@ public interface IEconomicWorld : ISectorObject
     ShipCounts Ships { get; }
     CargoHold Cargo { get; }
     IndustryLevels Industry { get; }
+    DefenseCounts Defenses { get; }
 
     /// <summary>GetClass (PRIMINTR.PAS:414-420): a planet's own <see cref="Planet.Class"/>; ArtCls
     /// for every starbase — a starbase has no world-class field of its own in Pascal.</summary>

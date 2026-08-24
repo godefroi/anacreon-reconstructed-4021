@@ -12,6 +12,11 @@
    Each <caseN> is a comma-separated tuple, shape depends on <domain>:
      techlevel  TechOrd,IsIndependent,CapitalTechOrd,RngFixedValue -> "techlevel=<ordinal>"
      military   PlanetPop,TechOrd,Legions,TypOrd,RngFixedValue     -> "legions=<value>"
+     defenses   PlanetPop,TechOrd,Legions,NinjaLegions,TypOrd,Efficiency,
+                CargoChe,CargoMet,CargoTri,TechnologyBitmask,RngFixedValue
+                -> "lam=<v>;def=<v>;gdm=<v>;ion=<v>" -- TechnologyBitmask uses the same
+                26-bit encoding as the empire domain (bit i = TechnologyTypes(i+1));
+                only bits 0-3 (LAM,def,GDM,ion) matter here
      starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue  -> "starbaseChe=<v>;neighborChe=<v>"
      ambrosia   Addicted,Ambrosia,RngFixedValue                    -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
      revolution PlanetPop,ClassOrd,TechOrd,Efficiency,RevIndex,Legions,RngFixedValue
@@ -246,6 +251,72 @@ procedure RunMilitaryCase(const arg: String);
    UpdateWorld(ID);
 
    WriteLn('legions=',Universe^.Planet[1].Cargo[men]);
+
+   Dispose(Universe);
+   end;
+
+procedure RunDefensesCase(const arg: String);
+   { Same shape as RunMilitaryCase (Empire1, capital pointing at itself so
+     UpdateTechLevel can't drift Tech mid-tick and perturb anything read
+     downstream), plus the fields UpdateDefenses itself reads: Cargo[nnj]
+     (TroopStrength's other half), Efficiency (BuildRate), and Cargo[che,met,tri]
+     (the two-pass raw-material draw -- deliberately settable low to exercise
+     the DefLack clamp). TechnologyBitmask gates which of LAM/def/GDM/ion can
+     build at all; the case set covers both "researched" and "not researched"
+     so DefI IN Technology's guard is exercised, not just always-true. The
+     real UpdateMilitary step still runs first (same real UpdateWorld
+     sequence as every other domain) and may grow Cargo[men] toward its own
+     optimum before UpdateDefenses ever reads TroopStrength -- not shielded
+     against, since the golden file captures whatever the real pipeline
+     produces end to end, the same way MilitaryCase's own legions=<value>
+     already does for a different field. }
+   var
+      parts: array[0..10] of LongInt;
+      ID, CapID: IDNumber;
+      i: Integer;
+      techSet: TechnologySet;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   NoOfPlanets:=1;
+
+   Universe^.Planet[1].Cls:=ClsM;
+   Universe^.Planet[1].Typ:=WorldTypes(parts[4]);
+   Universe^.Planet[1].Tech:=TechLevel(parts[1]);
+   Universe^.Planet[1].Eff:=parts[5];
+   Universe^.Planet[1].Pop:=parts[0];
+   Universe^.Planet[1].Cargo[sup]:=9999;
+   Universe^.Planet[1].Cargo[men]:=parts[2];
+   Universe^.Planet[1].Cargo[nnj]:=parts[3];
+   Universe^.Planet[1].Cargo[che]:=parts[6];
+   Universe^.Planet[1].Cargo[met]:=parts[7];
+   Universe^.Planet[1].Cargo[tri]:=parts[8];
+   Universe^.Planet[1].Emp:=Empire1;
+
+   SetOfActivePlanets:=[1];
+   SetOfPlanetsOf[Empire1]:=[1];
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire1].IsAPlayer:=False;
+   CapID.ObjTyp:=Pln;  CapID.Index:=1;
+   Universe^.EmpireData[Empire1].Capital:=CapID;
+
+   techSet:=[];
+   for i:=0 to 25 do
+      if ((parts[9] shr i) and 1)=1 then
+         techSet:=techSet+[TechnologyTypes(i+1)];
+   Universe^.EmpireData[Empire1].Technology:=techSet;
+
+   ForcedRandomValue:=parts[10];
+
+   ID.ObjTyp:=Pln;  ID.Index:=1;
+   UpdateWorld(ID);
+
+   WriteLn('lam=',Universe^.Planet[1].Defns[LAM],
+           ';def=',Universe^.Planet[1].Defns[def],
+           ';gdm=',Universe^.Planet[1].Defns[GDM],
+           ';ion=',Universe^.Planet[1].Defns[ion]);
 
    Dispose(Universe);
    end;
@@ -1299,6 +1370,8 @@ procedure RunCaseMode;
          RunTechLevelCase(ParamStr(i))
       else if domain='military' then
          RunMilitaryCase(ParamStr(i))
+      else if domain='defenses' then
+         RunDefensesCase(ParamStr(i))
       else if domain='starbase' then
          RunStarbaseCase(ParamStr(i))
       else if domain='ambrosia' then

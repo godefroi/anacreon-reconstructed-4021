@@ -26,6 +26,23 @@ tree isn't something source alone can answer — this is inference from dead cod
 confirmed history. Not ported (see `docs/ROADMAP.md`'s Phase 3), and not planned unless it resurfaces
 as something worth reviving deliberately.
 
+### An earlier, simpler combat-resolution design predates the group/shell system
+
+While scoping Phase 5 (Combat), `BATTLE.PAS` (`CalcAttackRound`/`CalcMilitaryPower`) and `BOMBER.PAS`
+(`Bombing1stPhase`/`Bombing2ndPhase`) turned up as dead code — grepped for callers across the entire
+1.31 source tree, and nothing outside those two files calls into either one. `Bombing2ndPhase`'s own
+body is an empty stub (`BEGIN END`), and `Bombing1stPhase` (which does have a real body, calling into
+`BATTLE.PAS`) is itself never called by anything.
+
+The shape here is a much simpler, non-group-based "quick resolve" combat formula — a single
+attacker-vs-defender military-power ratio, no orbital shells, no per-ship-type targeting — next to
+the real, live combat engine (`ATTACK.PAS`'s group/shell system: `GroupRecord`s advancing through
+`ShellPosition`s, `CombatTable`-driven per-type targeting, round-by-round resolution). Reads like an
+earlier or alternate design for resolving an attack that was superseded once the group/shell system
+was built, left in the tree rather than deleted. As with the probe-persistence lead above, this is
+inference from dead code's shape, not confirmed history. Not ported (see `docs/ROADMAP.md`'s
+Phase 5) — the live `ATTACK.PAS` engine is the one this port implements.
+
 ## Known limitation: scenario golden-file testing can't be bit-exact, and why
 
 `ScenarioLoaderGoldenTests` (loading a real `.SCN` file end to end through the C# `ScenarioLoader`)

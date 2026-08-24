@@ -77,13 +77,19 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
     /// </summary>
     private void UpdateWorld(Planet planet, Game game, Dictionary<Empire, int> newTotalRevIndex)
     {
-        RunProductionPipeline(planet);
+        // OtherReports (UPDATE.PAS:1131,1133,1358): one per-tick set, shared by RunProductionPipeline
+        // (UpdateIndustry/Production) and UpdateDefenses — each resource type's shortfall report (see
+        // ReportResourceShortfall) fires at most once per tick, not once per call site that hits it.
+        var reportedShortfalls = new HashSet<CargoType>();
+
+        RunProductionPipeline(planet, reportedShortfalls);
         UpdateEfficiency(planet);
         UpdateTechLevel(planet);
         UpdatePopulation(planet);
         UseUpFood(planet);
         UseUpAmbrosia(planet);
         UpdateMilitary(planet);
+        UpdateDefenses(planet, reportedShortfalls);
         UpdateRevolution(planet, game, newTotalRevIndex);
 
         if (planet.Class == WorldClass.Hostile) {
@@ -102,9 +108,10 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
     private void UpdateStarbase(Starbase starbase, Game game, Dictionary<Empire, int> newTotalRevIndex)
     {
         var isComplex = starbase.Kind == StarbaseKind.IndustrialComplex;
+        var reportedShortfalls = new HashSet<CargoType>();
 
         if (isComplex) {
-            RunProductionPipeline(starbase, () => SupplyLink(starbase, game.Galaxy), () => SurplusLink(starbase, game.Galaxy));
+            RunProductionPipeline(starbase, reportedShortfalls, () => SupplyLink(starbase, game.Galaxy), () => SurplusLink(starbase, game.Galaxy));
         }
 
         UpdateEfficiency(starbase);
@@ -117,6 +124,10 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
             UpdateMilitary(starbase);
             UpdateRevolution(starbase, game, newTotalRevIndex);
         }
+
+        // UpdateDefenses runs unconditionally for every starbase (UPDATE.PAS:1429), unlike the rest of
+        // the economy pipeline above, which only runs for industrial complexes.
+        UpdateDefenses(starbase, reportedShortfalls);
     }
 
     /// <summary>Clamps a world's revolution index to [0,100] (PRIMINTR.PAS:ChangeRevIndex).</summary>

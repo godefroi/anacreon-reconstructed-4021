@@ -409,22 +409,113 @@ cascade into an explicit if/else-if chain (see `AnnualTickHandler.Revolution.cs`
 boundary tests at each tier transition, including one proving `RevIndex>75` genuinely has two outcomes
 (`Rebellion` vs. a lone `RebellionWarning4`), not one.
 
-## 5. Combat
+## 5. Combat — in progress, 5a-5b landed
 
-Attack resolution, fleet/starbase destruction, capital loss and empire elimination. The turn loop
-currently assumes empires never leave `Game.Empires` mid-game (`TurnEngine.AdvanceOneTurn`,
-`Game.NextEmpire`) — this phase removes that assumption. Also lands minefield mechanics:
-`SectorRecord.MineScout` is per-cell (not per-entity, no `EntityVisibility<Minefield>` exists),
-so minefield visibility needs its own tracking structure, not a sixth `EntityVisibility<T>` on `Empire`.
+Attack resolution, fleet/starbase destruction, capital loss and empire elimination. The original
+one-paragraph version of this section undersold the real scope, the same way "8 known News sites"
+undersold Phase 4 — a research pass reading `ATTACK.PAS`/`ATTCOMM.PAS`/`ATTNPE.PAS`/`BATTLE.PAS`/
+`BOMBER.PAS`/`FLEET.PAS`/`FLTCOMM.PAS`/`SBASE.PAS`/`ORDERS.PAS` plus the relevant `UPDATE.PAS`/
+`DATACNST.PAS`/`DATASTRC.PAS`/`ANACREON.PAS`/`INTRFACE.PAS` sections found:
 
-Needs `UpdateDefenses` (UPDATE.PAS:1278-1351) landed first as baseline defensive state for attack
-resolution to read: builds up a `Defns` array (new `DefnsTypes` enum — LAM/def/ion-style planetary
-defenses) from raw materials, gated by researched `Technology`. Bigger than Commit 2c's
-`UpdateMilitary` — needs three new tables (`DefAdj`, `DefBuildRate`, `RawM` per defense type) not yet
-extracted, and it branches on `WorldID.ObjTyp=Pln` vs `=Base` (runs unconditionally for both, per
-UPDATE.PAS:1387,1429) — exactly the planet/starbase overlap question deferred to economy phase
-Commit 4, so land the planet-only version no earlier than that. Lands with real `AddNews` calls for
-battle outcomes from the start, since Phase 4 (News) precedes it.
+- **`ATTCOMM.PAS`/`FLTCOMM.PAS`/`ORDERS.PAS` are ~entirely DOS UI or a human order-compiler**, not
+  simulation logic — Phase 8's job. The one thing worth keeping from them: `ATTCOMM.PAS`'s
+  `AutoAttackCommand` confirms the real non-interactive entry point every non-human attack goes
+  through is `ATTNPE.PAS`'s `NPEAttack(fleetId, targetId, intent, retreatIndex)` — the one
+  primitive this phase needs to expose for Phase 6 (NPE AI) and Phase 8 (human auto-resolve) to
+  call later, with nothing wired up to call it yet (same "build the primitive first" precedent as
+  Phases 3/4).
+- **`ATTNPE.PAS`'s "NPE" means "no player experience" (auto-resolved), not "AI decision logic."**
+  It's the round-by-round resolution driver (`FleetEngage`/`WorldEngage`/`GroupEngage`) both a
+  human's auto-resolve and a computer empire's attack funnel through — no strategic targeting logic
+  lives here for Phase 6 to reimplement.
+- **`BATTLE.PAS`/`BOMBER.PAS` are confirmed dead code** — no callers anywhere in the source tree.
+  Not ported; recorded as a design-history lead in the root `README.md`'s "Ideas noticed but not
+  chased down" section (an earlier, simpler non-group combat formula, superseded by `ATTACK.PAS`'s
+  group/shell system).
+- **Empire elimination is plain `Game.Empires.Remove(eliminated)`, not a ported `InUse` flag.**
+  Real Pascal marks a fixed array slot `InUse:=False` (`INTRFACE.PAS:1657`) because it has no real
+  list to remove from. This port does have one, and `Game.NextEmpire`/`Game.IsFirstEmpire` already
+  re-derive everything live (`Empires.IndexOf(current)`, `Empires[0]`) rather than caching a
+  position — hand-traced (see the Phase 5 plan, retained in conversation history) that plain
+  removal self-heals the "one annual tick per lap" invariant regardless of when in a lap the
+  removal happens, with no new `IsEliminated` field and no guards needed anywhere `Game.Empires`
+  is already iterated (`AddGlobalNews`, `RunAnnualTick`'s per-empire loop). Only humans are exempt
+  from removal, matching Pascal's own `EmpirePlayer` branch in `ConquerEmpire`.
+- **Human-empire defeat: `Empire.DefeatedBy: Empire?`, not Pascal's capital-sentinel trick.**
+  `ConquerEmpire` (`ATTACK.PAS:1120-1131`) never calls `DestroyEmpire` on a human — instead it
+  overloads `Capital: IDNumber` with a sentinel (`ObjTyp:=Void`, empire ordinal in `Index`) to
+  record who won. Same shape as `NewsItem.Loc`'s pre-Phase-4 union — split into two real fields
+  instead: `Capital = null` (already means "no capital" unambiguously) plus a new `DefeatedBy`
+  field for the other fact. The write is real Pascal behavior this phase's `ConquerEmpire` port
+  needs; nothing reads `DefeatedBy` yet (no human `ITurnHandler` exists — Phase 8's job).
+
+Sub-commits:
+
+- ✅ **5a, this section.** Recorded the corrected scope and design calls above before writing any
+  code, matching the "verify don't recall" discipline from every prior phase's own planning.
+- ✅ **5b, `UpdateDefenses` + `Defns` state** (`UPDATE.PAS:1278-1351`) — `DefenseType`-indexed growth
+  on `IEconomicWorld` (`AnnualTickHandler.Defenses.cs`), wired into `AnnualTickHandler.UpdateWorld`/
+  `UpdateStarbase` the way `UpdateMilitary` was in Commit 2c — unconditionally for a starbase, after
+  `UpdateMilitary` for a planet. `DefenseCounts` (already existed, never written to) becomes real
+  state. Surfaced a real gate this port hadn't modeled anywhere for defenses yet: Pascal's
+  `Technology:=Technology*TechDev[Tech]` (UPDATE.PAS:1367-1369) intersects the empire's *researched*
+  defenses with what the *world's own* `TechLevel` makes available at all — caught by the new
+  patch-based `defenses` golden domain (`reference/verify/runworld.pas`), which disagreed with a
+  first pass that gated purely on `Empire.Technology.Defenses.Contains`. Fixed via
+  `DefenseTechAvailable`, reusing `Production.cs`'s existing `EffectiveTechnologyLevel`/
+  `TechCatalog.MinTechForDefense` exactly the way `ShipTechAvailable` already does for ships — an
+  independent world needs only the tech-level gate (at one level below its own), no empire research
+  at all. `_rawMaterialForDefenses` is a new table (`RawM`'s `LAM..ion` rows) rather than an
+  extension of an existing shared one — confirmed no C# mirror of Pascal's `RawM` spans
+  ships+defenses today; each consumer (ships, cargo products, construction, now defenses) keeps its
+  own dictionary, matching this port's existing pattern rather than one array indexed by Pascal's
+  single flat `ResourceTypes`. Golden-file-backed (`defenses.golden`, `DefensesCases`/
+  `AnnualTickHandlerDefensesTests`) for the planet-only formula/tech-gate/raw-material-shortfall
+  behavior; the three starbase-specific multipliers (Outpost quarters `Optimum` and zeroes
+  `DefenseSatellite`; CommandBase/Fortress quadruple both `Optimum` and `BuildRate`) and the
+  independent-world tech gate are hardcoded instead — `UpdateMilitary` doesn't even run for a
+  non-complex starbase, so `TroopStrength` has no RNG-dependent growth to account for, and neither
+  branch involves a sqrt/pow cascade.
+- **5c, combat constants + `AttackType`** — new unified enum mirroring Pascal's
+  `AttackTypes = NoRes..nnj` (spans `DefenseType ∪ ShipType ∪ {Legion, NinjaLegion}` — a genuine
+  single cross-product axis for `CombatTable[Attacker,Defender]`, unlike `TechGrantIdentity`'s four
+  independent identity spaces from Phase 4), plus the combat constant tables as pure data
+  (`CombatTable`, `WeapEff`, `ShipValue`, `ProtecOffered`/`Needed`, `CombatTechAdj`,
+  `CombatClassAdj`, `CombatBaseAdj`, `GDMLaunch`/`Kill`, `CombatPower`).
+- **5d, group/shell combat engine core** — the actual per-round damage math (`GetEnemy`,
+  `CalculateCombatData`, `Battle`/`GroupAttack`/`EnemyAttack`, targeting/priority arrays,
+  `EnemySurrenders`). The bulk of the phase; golden-file-backed via a new patch-based
+  `reference/verify/` domain, not hand-derivation — this is the least hand-verifiable logic in the
+  port so far.
+- **5e, resolution loop + `NPEAttack` entry point** — `ATTNPE.PAS`'s round driver culminating in
+  the one public entry point Phase 6/8 will call later.
+- **5f, outcome application + empire elimination** — `ResolveAttack`/`ConquerWorld`/
+  `ConquerEmpire`/`DestroyEmpire` using the plain-`List.Remove`/`DefeatedBy` model above, plus
+  `DestroyFleet`/`AbortFleet`.
+- **5g, standalone mechanics** — `HolocaustWorld`, `LAMAttack`, `DestroyConstructionOrGate`,
+  `SelfDestructObject` (ported with no caller wired up yet, same precedent as `Empire.News.Clear()`).
+- **5h, minefield damage + disrupter blocking + minefield visibility** — folded additively into
+  `FleetMovementHandler`'s existing step loop; new per-cell `Galaxy` mine-visibility structure
+  (can't reuse `EntityVisibility<T>`, which is keyed by entity reference, not coordinate).
+- **5i, `HostileLife` news fix + roadmap wrap-up** — a small Phase 1/4 gap this investigation
+  caught (`HostileLife`, shipped Phase 1, calls no `AddNews` despite the relevant `NewsType`
+  members already existing), bundled here since it's combat-adjacent and cheap.
+
+### Known gaps in already-shipped movement (surfaced by Phase 5, not fixed by it)
+
+Two places where the shipped `FleetMovementHandler` (Phase 2/3) is a deliberately simplified
+straight-line stepper next to what real Pascal does — found while scoping Combat, but movement
+fidelity, not a combat mechanic, so explicitly not fixed in Phase 5 (would have roughly doubled
+its scope):
+
+- **Stargate teleportation / fortress pass-through jumps.** Real `UpdateFleet`
+  (`FLEET.PAS:646-860`) handles a fleet passing through a friendly stargate or "jumping" through a
+  fortress (up to 5 steps at once) mid-move; `FleetMovementHandler.AdvanceFleet` only steps
+  straight toward the destination.
+- **Starbase obstacle-avoidance and fuel cost.** `SBASE.PAS:88-263`'s `MovePlayerStarbases`/
+  `GetNewBasePos` route a mobile starbase around obstacles and charge fuel;
+  `FleetMovementHandler.AdvanceStarbases` steps straight toward the destination with no fuel cost
+  and no obstacle check.
 
 ## 6. NPE AI
 

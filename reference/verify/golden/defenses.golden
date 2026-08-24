@@ -1,0 +1,5 @@
+case=AllResearchedAmpleMaterialsGrowsAllFour;lam=4640;def=1054;gdm=5273;ion=2003
+case=LamZeroedOnNonBaseCapitalWorld;lam=0;def=51;gdm=256;ion=97
+case=NothingResearchedStaysZero;lam=0;def=0;gdm=0;ion=0
+case=WorldTechLevelBelowThresholdBlocksDespiteResearch;lam=0;def=0;gdm=5273;ion=2003
+case=RawMaterialShortageClampsBuildInLoopOrder;lam=4;def=0;gdm=0;ion=0
