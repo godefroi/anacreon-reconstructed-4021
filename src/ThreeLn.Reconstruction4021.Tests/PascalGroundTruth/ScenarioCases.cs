@@ -7,7 +7,10 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// with dead DOS UI — see UPDATE.PAS's own PATCH comment at the relocation), seeded with the same
 /// <see cref="PascalRandom"/>/<c>RandSeed</c> value on both sides so <c>CREATERANDOMWORLDS</c>'
 /// collision-retry loop — unreachable under every other domain's <c>ForcedRandomValue</c> convention —
-/// finally gets exercised against a real, non-degenerate RNG sequence.
+/// finally gets exercised against a real, non-degenerate RNG sequence. <c>RunScenarioCase</c> emits an
+/// aggregate checksum over the whole loaded Universe^, but <c>ScenarioLoaderGoldenTests.MatchesGoldenFile</c>
+/// only asserts a subset of it — see that class's own doc comment for why every RNG-derived field, not
+/// just the obviously-randomized ones, had to be dropped from exact-match comparison.
 ///
 /// <c>dos_131</c> has 12 files; 11 are covered here. <c>PRINCES.SCN</c> is deliberately excluded: its
 /// first <c>CREATESTARBASE</c> command has one extra integer field that matches neither this 1.31

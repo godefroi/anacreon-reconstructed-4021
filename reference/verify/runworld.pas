@@ -64,7 +64,13 @@
                 list) -- not a per-entity dump, deliberately: real dos_131 files have up to ~160
                 worlds, and a mismatch anywhere (a wrong coordinate, a dropped jitter, a missed empire)
                 perturbs at least one of these sums, which is what a golden-file regression actually
-                needs to catch
+                needs to catch. The C# side (ScenarioLoaderGoldenTests.MatchesGoldenFile) only
+                exact-matches a subset of these fields, not all of them -- every field touched by a
+                random draw anywhere in the file turned out to be fragile to RNG-stream-position drift
+                between two independently-written implementations, even fields that look explicit/
+                deterministic on their face (see that test's own doc comment, and the root README's
+                "Known limitation" section, for why). This driver still emits every field: useful for
+                manual diagnosis even where the C# test doesn't assert on it.
    One output line per case, in order, to stdout -- consumed by PatchHarness
    in the C# test project via GoldenFile.Regenerate's runHarness override.
    With no arguments, runs a single hardcoded techlevel case as a

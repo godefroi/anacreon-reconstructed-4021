@@ -58,7 +58,7 @@ internal static class PatchHarness
                 throw new FileNotFoundException($"Patch-based driver source not found: {driverPath}");
             File.Copy(driverPath, Path.Combine(outDir, driverName + ".pas"), overwrite: true);
 
-            PascalHarness.RunProcess(PascalHarness.FpcPath, ["-Mtp", driverName + ".pas"], outDir);
+            PascalHarness.RunProcess(PascalHarness.FpcPath, ["-Mtp", "-CfSSE2", driverName + ".pas"], outDir);
             _builtDrivers.Add(driverName);
         }
 

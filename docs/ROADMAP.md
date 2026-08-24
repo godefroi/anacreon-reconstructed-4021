@@ -317,16 +317,30 @@ Broken into five sub-commits:
   `INT.PAS` patch, letting a forced value override `Rnd`'s real degenerate-range clamp) — fixed in the
   Pascal patch, not `PascalMath.Rnd` (whose existing behavior was already correct), confirmed via
   `git status` on `reference/verify/golden/` that no other domain's committed values moved.
-- ⬜ **2e, `.SCN` scenario file loading** — the capstone integration test: `LoadScenario`'s
-  tokenizer/dispatch loop minus its DOS UI, golden-file-verified against real `dos_131/*.SCN` files
-  run through the real, patched `LoadScenario`. In progress: every real `dos_131` fixture uses
-  `CREATERANDOMWORLDS`, whose collision-retry loop degenerates under the `ForcedRandomValue`
-  convention (a fixed offset always re-rolls the same blocked coordinate) — full end-to-end fixture
-  comparison needs a real, non-degenerate RNG sequence instead. Landed the foundation for that first:
-  `PascalRandom` (`src/ThreeLn.Reconstruction4021.Tests/PascalRandom.cs`), a from-scratch, empirically
-  verified port of this project's actual fpc runtime's `Random`/`RandSeed` algorithm (a Mersenne
-  Twister variant, not the classic Turbo Pascal LCG a DOS-era codebase might suggest), backed by a new
-  `rng.golden` standing regression fixture — see `reference/verify/README.md`'s own section on it.
+- ✅ **2e, `.SCN` scenario file loading** — the capstone integration test: `LoadScenario`'s
+  tokenizer/dispatch loop minus its DOS UI (`Core/NewGame/ScenarioLoader.cs`), golden-file-verified
+  against 11 real `dos_131/*.SCN` files run through the real, patched `LoadScenario`
+  (`PRINCES.SCN` excluded — real 1.31 itself can't load it either, see `ScenarioCases.cs`).
+  `CREATERANDOMWORLDS`'s collision-retry loop degenerates under the `ForcedRandomValue` convention (a
+  fixed offset always re-rolls the same blocked coordinate), so this needed a real, non-degenerate RNG
+  sequence: `PascalRandom` (`src/ThreeLn.Reconstruction4021.Tests/PascalRandom.cs`), a from-scratch,
+  empirically verified port of this project's actual fpc runtime's `Random`/`RandSeed` algorithm (a
+  Mersenne Twister variant, not the classic Turbo Pascal LCG a DOS-era codebase might suggest), backed
+  by a new `rng.golden` standing regression fixture — see `reference/verify/README.md`'s own section
+  on it.
+
+  Running real scenario files end to end surfaced a structural limit, not a bug: any field touched by
+  a random draw anywhere in the file is fragile to RNG-stream-position drift between two
+  independently-written implementations (confirmed concretely for a starbase population computed from
+  only its file's *explicit* `CreateWorld` commands, nowhere near any randomized generation) — a
+  floating-point boundary flip anywhere upstream changes how many draws a call consumes, desyncing
+  every later draw in the same file. Not fixable by matching floating-point precision (verified:
+  forcing fpc to `-CfSSE2`/strict double just trades one set of boundary flips for another). Resolved
+  by narrowing `ScenarioLoaderGoldenTests` to exact-match only fields with no random draw anywhere in
+  their computation, plus a domain-invariant smoke test (bounds from type/domain constraints, not
+  game-balance assumptions) for everything else — full writeup in the root `README.md`'s "Known
+  limitation" section, since this is exactly the kind of investigation a future reader shouldn't have
+  to redo.
 
 ## 3. NPE AI
 

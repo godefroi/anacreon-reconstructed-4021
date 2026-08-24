@@ -389,6 +389,19 @@ boundary. This isn't a `UpdateWorld`/`GalaxySetup` domain — it exists so that 
 a real RNG sequence (2e's `CREATERANDOMWORLDS`, and potentially a genuine end-to-end `.SCN` file load)
 can build on an already-verified foundation instead of re-deriving it under pressure.
 
+## `build.ps1`/`PatchHarness.cs` compile with `-CfSSE2`
+
+Phase 2 commit 2e's scenario domain (see below) found that fpc's default i386 codegen keeps chained
+`Real` expressions in the x87 FPU's 80-bit extended-precision stack until explicitly stored, while
+C#'s `double` is always strict 64-bit IEEE754 — so a borderline expression can round to a different
+integer in each language. `-CfSSE2` forces fpc to use strict 64-bit double throughout, aligning the
+harness with the only precision C# has. Verified via `git diff --stat` on the regenerated golden
+files that it changed none of the 13 golden domains existing at the switch — but that's a snapshot,
+not a guarantee: it changes float semantics harness-wide, so a future domain with its own borderline
+`Real` expression will get different ground truth under it than under fpc's default. Kept as a
+deliberate baseline choice regardless. Full writeup of what this does and doesn't fix: the root
+`README.md`'s "Known limitation: scenario golden-file testing can't be bit-exact" section.
+
 ## Recommendation
 
 Reach for this approach whenever it would improve testing fidelity, with an

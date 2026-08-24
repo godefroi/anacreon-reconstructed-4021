@@ -26,7 +26,7 @@ try {
     foreach ($p in $patches) {
         git apply -p1 --verbose $p.FullName
     }
-    fpc -Mtp runworld.pas
+    fpc -Mtp -CfSSE2 runworld.pas
 } finally {
     Pop-Location
 }
