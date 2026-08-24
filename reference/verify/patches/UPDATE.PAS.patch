@@ -1,6 +1,6 @@
 --- a/UPDATE.PAS
 +++ b/UPDATE.PAS
-@@ -11,22 +11,55 @@ UNIT Update;
+@@ -11,32 +11,140 @@ UNIT Update;
  
  INTERFACE
  
@@ -55,15 +55,80 @@
 +{ PATCH (fpc): CreateRndPlanet/RandomTrillumReserves/NebulaeBand/NebulaePatches (Phase 2 commit 2d)
 +  relocated verbatim from NEWGAME.PAS, same reasoning as UpdateConstruction's own Intrface-only
 +  helpers above -- see the IMPLEMENTATION-section comment near CreatePlanet's relocation for the
-+  full dependency list and why GetRandomXY/CreateRandomWorlds are deliberately NOT relocated here. }
++  full dependency list. GetRandomXY/CreateRandomWorlds were deliberately NOT relocated at the time --
++  see the PATCH note further below (2e) for why that's since been superseded. }
 +PROCEDURE CreateRndPlanet(ID: IDNumber; Coord: XYCoord; Class: WorldClass; T: TechLevel);
 +FUNCTION RandomTrillumReserves(Cls: WorldClass; RegionReserves: Word): Word;
 +PROCEDURE NebulaeBand;
 +PROCEDURE NebulaePatches(NoOfPatches: Word);
++
++{ PATCH (fpc): LoadScenario's own parsing helpers and SF-token-parsing command handlers (Phase 2
++  commit 2e), relocated verbatim from NEWGAME.PAS -- with two documented exceptions: CreateNPEmpire
++  drops its InitializeNPE call (NPE AI state is Phase 3 scope -- NPE.PAS's own IMPLEMENTATION USES
++  pulls in Crt/EIO/Wnd/PrimIntr/NPE01-04, a real blast radius this phase deliberately doesn't cross,
++  matching EmpireFactory's own already-established scope boundary), and CreateRandomWorlds drops its
++  one GotoXY(1,WhereY) progress-cursor call (cosmetic; same "drop a single incidental UI call,
++  document it" precedent already used for SetUpWorld's own dropped Scout/SetSpecial calls).
++  GetRandomXY here is NEWGAME.PAS's own retry-on-collision version, not GalaxySetup.GetRandomXY's C#
++  port -- previously deliberately not relocated (2d's own note above) because the ForcedRandomValue
++  convention can't express a retry loop, but PascalRandom (a real, empirically-verified RNG port —
++  see rng.golden/PascalRandom) now can drive one meaningfully.
++
++  LoadScenario's own header-parse + command-dispatch loop is NOT relocated here -- it's saturated
++  with real, load-bearing DOS UI (OpenWindow bracketing the whole procedure, ScenarioIntroduction
++  deciding NoOfPlayers via a menu, ClrScr/PressAnyKey/CloseWindow) that can't be dropped without
++  changing what the loop actually does, unlike the two single-call exceptions above. runworld.pas's
++  own RunScenarioCase reimplements that one loop fresh instead, calling these relocated primitives in
++  the same order/shape real LoadScenario does. }
++TYPE
++   ClassArray = ARRAY [1..100] OF WorldClass;
++   TechArray = ARRAY [1..100] OF TechLevel;
++   ZoneRecord = RECORD
++      x1,y1,x2,y2: Byte;
++      END;
++   ZoneArray = ARRAY [1..20] OF ZoneRecord;
++   XYPointRecord = RECORD
++      Name: String8;
++      XY: XYCoord;
++      END;
++   XYPointArray = ARRAY [1..25] OF XYPointRecord;
++   EmpireNameArray = ARRAY [Empire] OF String32;
++   SexArray = ARRAY [Empire] OF Boolean;
++
++VAR
++   ScenarioError: Boolean;
++   DebugScena: Boolean;
++   ScenaVersion: Word;
++
++PROCEDURE ScenaError(Line: LineStr);
++FUNCTION NextInteger(VAR SF: Text): Integer;
++PROCEDURE GetRandomXY(VAR XY: XYCoord; x1,y1,x2,y2: Integer; CheckWorld: Boolean);
++PROCEDURE GetRandomRange(Line: String16; VAR Low,High: Integer);
++PROCEDURE GetNextXY(VAR SF: Text; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray; CheckWorlds: Boolean; VAR RetXY: XYCoord);
++PROCEDURE LoadClassArray(VAR SF: TEXT; VAR CA: ClassArray);
++PROCEDURE LoadTechArray(VAR SF: TEXT; VAR TA: TechArray);
++PROCEDURE DefineXYPoint(VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
++PROCEDURE DefineZone(VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
++PROCEDURE ReadModifierList(VAR SF: TEXT; VAR Modifiers: SetOfEmpireModifiers);
++PROCEDURE SetTrillumReserves(VAR SF: TEXT; VAR TriRes: Word);
++PROCEDURE GetRandomEmpireName(VAR EmpireName: EmpireNameArray; VAR NewName: String32);
++PROCEDURE CreatePlayerEmpire(VAR SF: TEXT; NoOfPlayers: Empire; VAR EmpireName,Password: EmpireNameArray; VAR Sex: SexArray);
++PROCEDURE CreateNPEmpire(VAR SF: TEXT; VAR EmpireName: EmpireNameArray);
++PROCEDURE CreateWorld(VAR SF: TEXT; VAR FirstWorld: Word; VAR NoOfPlayers: Empire; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
++PROCEDURE CreateBase(VAR SF: TEXT; VAR FirstBase: Word; VAR NoOfPlayers: Empire; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
++PROCEDURE CreateGate(VAR SF: TEXT; NoOfPlayers: Empire; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
++PROCEDURE CreateNebula(VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
++PROCEDURE CreateRandomNebula(VAR SF: TEXT);
++PROCEDURE CreateSRMs(VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
++PROCEDURE CreateRandomWorlds(VAR SF: TEXT; VAR FirstWorld: Word; VAR ClassTable: ClassArray; VAR TechTable: TechArray; TriRes: Word; VAR Zone: ZoneArray);
  
  IMPLEMENTATION
  
-@@ -36,7 +69,20 @@ USES
+ USES
+-   Environ;
++   Environ,
++   DFA;
+ 
  VAR
     NewTotalRevIndex: ARRAY [Empire] of Integer;
  
@@ -85,7 +150,7 @@
                             Headline: NewsTypes; P1,P2,P3: Integer;
                             VAR OtherReports: ResourceSet);
     VAR
-@@ -55,6 +101,449 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
+@@ -55,6 +163,449 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
        END;
     END;  { ReportPlanetLack }
  
@@ -535,7 +600,7 @@
  PROCEDURE ConstructStarbase(Emp: Empire; STyp: StarbaseTypes; XY: XYCoord; VAR ID: IDNumber);
     VAR
        EmpTech: TechLevel;
-@@ -99,9 +588,8 @@ PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR I
+@@ -99,9 +650,8 @@ PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR I
        CreateStargate(ID,Emp,GTyp,XY);
     END;  { ConstructStargate }
  
@@ -546,7 +611,7 @@
     VAR
        ConstrFleets: FleetSet;
        EnoughRawMaterial,Error: Boolean;
-@@ -234,10 +722,10 @@ PROCEDURE UpdateEmpire(Emp: Empire);
+@@ -234,10 +784,10 @@ PROCEDURE UpdateEmpire(Emp: Empire);
        PROCEDURE GetChanceForNewTech(Emp: Empire; EmpTech: TechLevel;
                                      VAR TotalChance: Index; VAR LabID: IDNumber);
        { GetChanceForNewTech:
@@ -561,29 +626,695 @@
           which the technology was discovered. }
  
           LABEL
-@@ -1430,61 +1918,10 @@ PROCEDURE UpdateWorld(World: IDNumber);
+@@ -1430,61 +1980,758 @@ PROCEDURE UpdateWorld(World: IDNumber);
           END;  { with scope }
     END;  { UpdateWorld }
  
 -PROCEDURE UpdateUniverse;
--   VAR
++{ PATCH (fpc): UpdateUniverse deleted -- whole-galaxy tick loop plus
++  screen progress window (ClrScr/OpenWindow/WriteString/CloseWindow, the only
++  Crt/EIO/WND usage in this unit); this harness calls UpdateWorld directly
++  per-planet instead. Note for later: it does confirm Year:=Year+1 is real
++  global state (Environ's Year), matching Game.Year in the C# port. }
++
++{ PATCH (fpc): LoadScenario's parsing helpers and SF-token-parsing command handlers (Phase 2 commit
++  2e), relocated verbatim from NEWGAME.PAS -- see the INTERFACE-section comment above these
++  forward-declarations for the full list of what's relocated and the two documented exceptions
++  (CreateNPEmpire's dropped InitializeNPE call, CreateRandomWorlds' dropped GotoXY call).
++
++  The var-string-checking directive right below relaxes a compile-time-only check: AllUpCase(VAR
++  Strg: MaxStr) (STRG.PAS, MaxStr=STRING[255]) is called here with LineStr/String8
++  (STRING[80]/STRING[8]) variables -- fpc's default strict mode requires a VAR parameter's declared
++  type to match exactly, which none of this relocated code was ever compiled against before (nothing
++  already in this harness called AllUpCase). Not a behavior change: a short-string VAR parameter is
++  passed by reference over the same length-prefixed byte buffer regardless of its declared max
++  length, and AllUpCase only uppercases existing bytes in place, never grows the string, so aliasing
++  a smaller actual buffer through the larger formal type is memory-safe. }
++{$V-}
++
++PROCEDURE ScenaError{Line: LineStr};
++   BEGIN
++   WriteLn(Line);
++   ScenarioError:=True;
++   END;  { ScenaError }
++
++FUNCTION NextInteger{VAR SF: Text): Integer};
+    VAR
 -      UpdateWindow: WindowHandle;
 -      i: Byte;
--      Emp: Empire;
--      ID: IDNumber;
--
++      Token: LineStr;
++      Temp,Error: Integer;
++      BadToken: Boolean;
++
++   BEGIN
++   Token:=DFA1NextToken(SF,BadToken);
++   IF BadToken THEN
++      ScenaError('ERROR: Bad token "'+Token+'"')
++   ELSE
++      BEGIN
++      Val(Token,Temp,Error);
++      IF Error=0 THEN
++         NextInteger:=Temp
++      ELSE
++         ScenaError('ERROR: Illegal number format "'+Token+'"');
++      END;
++   END;  { NextInteger }
++
++PROCEDURE GetRandomXY{VAR XY: XYCoord; x1,y1,x2,y2: Integer; CheckWorld: Boolean};
++   VAR
++      ObjectThere: IDNumber;
++      Count: Word;
++
++   BEGIN
++   Count:=0;
++   REPEAT
++      XY.x:=Rnd(x1,x2);
++      XY.y:=Rnd(y1,y2);
++      GetObject(XY,ObjectThere);
++      Inc(Count);
++   UNTIL (NOT CheckWorld) OR (Count>100)
++         OR ((ObjectThere.ObjTyp=Void)
++         AND (EnemyMine(XY)=Indep)
++         AND (GetNebula(XY)<>DenseNebula));
++
++   IF Count>100 THEN
++      BEGIN
++      XY:=Limbo;
++      ScenaError('ERROR: No room for random world in zone.');
++      END;
++   END;  { GetRandomXY }
++
++PROCEDURE GetRandomRange{Line: String16; VAR Low,High: Integer};
++   VAR
++      Error,DashPos: Word;
++
++   BEGIN
++   Low:=0;
++   High:=0;
++   DashPos:=Pos('..',Line);
++   IF DashPos=0 THEN
++      BEGIN
++      Val(Line,Low,Error);
++      IF Error<>0 THEN
++         Low:=0
++      ELSE
++         High:=Low;
++      END
++   ELSE
++      BEGIN
++      Val(Copy(Line,1,DashPos-1),Low,Error);
++      IF Error=0 THEN
++         BEGIN
++         Val(Copy(Line,DashPos+2,10),High,Error);
++         IF Error<>0 THEN
++            BEGIN
++            Low:=0;
++            High:=0;
++            Exit;
++            END;
++         END
++      ELSE
++         Low:=0;
++      END;
++   END;  { GetRandomRange }
++
++PROCEDURE GetNextXY{VAR SF: Text; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray;
++                    CheckWorlds: Boolean; VAR RetXY: XYCoord};
++   VAR
++      Token: LineStr;
++      i,CommaPos,ColonPos,Error,Z: Word;
++      TempX1,TempY1,TempX2,TempY2: Integer;
++      ObjectThere: IDNumber;
++      Header: String8;
++      BadToken: Boolean;
++
++   PROCEDURE GetXY(Line: LineStr; VAR x,y: Integer);
++      VAR
++         Error: Word;
++         CommaPos: Word;
++
++      BEGIN
++      IF Line='' THEN
++         BEGIN
++         x:=0;
++         y:=0;
++         END
++      ELSE
++         BEGIN
++         CommaPos:=Pos(',',Line);
++         Val(Copy(Line,1,CommaPos-1),x,Error);
++         IF Error<>0 THEN
++            BEGIN
++            x:=0;
++            y:=0;
++            ScenaError('ERROR: Illegal coordinate "'+Line+'"');
++            END
++         ELSE
++            BEGIN
++            Val(Copy(Line,CommaPos+1,5),y,Error);
++            IF Error<>0 THEN
++               BEGIN
++               x:=0;
++               y:=0;
++               ScenaError('ERROR: Illegal coordinate "'+Line+'"');
++               END;
++            END;
++         END;
++      END;  { GetXY }
++
++   BEGIN
++   Token:=DFA1NextToken(SF,BadToken);
++   IF BadToken THEN
++      ScenaError('ERROR: Bad token "'+Token+'"')
++   ELSE
++      BEGIN
++      CommaPos:=Pos(',',Token);
++      ColonPos:=Pos(':',Token);
++      Header:=Copy(Token,1,2);
++      Header[1]:=UpCase(Header[1]);
++      IF Header='Z:' THEN
++         BEGIN
++         Val(Copy(Token,3,5),Z,Error);
++         IF Error<>0 THEN
++            BEGIN
++            RetXY:=Limbo;
++            ScenaError('ERROR: Illegal zone coordinate "'+Token+'"');
++            END
++         ELSE
++            BEGIN
++            WITH Zone[Z] DO
++               GetRandomXY(RetXY,x1,y1,x2,y2,CheckWorlds);
++            END;
++         END
++      ELSE IF Header='R:' THEN
++         BEGIN
++         GetRandomRange(Copy(Token,3,CommaPos-3),TempX1,TempX2);
++         GetRandomRange(Copy(Token,CommaPos+1,10),TempY1,TempY2);
++         IF InGalaxy(TempX1,TempY1) AND InGalaxy(TempX2,TempY2) THEN
++            GetRandomXY(RetXY,TempX1,TempY1,TempX2,TempY2,CheckWorlds)
++         ELSE
++            BEGIN
++            RetXY:=Limbo;
++            ScenaError('ERROR: Illegal random coordinates "'+Token+'"');
++            END
++         END
++      ELSE IF ColonPos<>0 THEN
++         BEGIN
++         GetRandomRange(Copy(Token,ColonPos+1,(CommaPos-ColonPos)-1),TempX1,TempX2);
++         GetRandomRange(Copy(Token,CommaPos+1,10),TempY1,TempY2);
++         Token:=Copy(Token,1,ColonPos-1);
++         AllUpCase(Token);
++         i:=25;
++         WHILE (i>0) AND (Token<>XYPoint[i].Name) DO
++            Dec(i);
++
++         IF i<>0 THEN
++            BEGIN
++            TempX1:=XYPoint[i].XY.x+TempX1;
++            TempX2:=XYPoint[i].XY.x+TempX2;
++            TempY1:=XYPoint[i].XY.y+TempY1;
++            TempY2:=XYPoint[i].XY.y+TempY2;
++            IF InGalaxy(TempX1,TempY1) AND InGalaxy(TempX2,TempY2) THEN
++               GetRandomXY(RetXY,TempX1,TempY1,TempX2,TempY2,CheckWorlds)
++            ELSE
++               BEGIN
++               RetXY:=Limbo;
++               ScenaError('ERROR: Relative coordinates outside of galaxy.');
++               END
++            END
++         ELSE
++            BEGIN
++            RetXY:=Limbo;
++            ScenaError('ERROR: XYPoint not found "'+Token+'"');
++            END;
++         END
++      ELSE IF CommaPos<>0 THEN
++         BEGIN
++         GetXY(Token,TempX1,TempY1);
++         IF InGalaxy(TempX1,TempY1) THEN
++            BEGIN
++            RetXY.x:=TempX1;
++            RetXY.y:=TempY1;
++            END
++         ELSE
++            BEGIN
++            RetXY:=Limbo;
++            ScenaError('ERROR: Absolute coordinates outside of galaxy.');
++            END;
++         END
++      ELSE
++         BEGIN
++         ScenaError('ERROR: Illegal coordinate "'+Token+'"');
++         END;
++      END;
++   END;  { GetNextXY }
++
++PROCEDURE LoadClassArray{VAR SF: TEXT; VAR CA: ClassArray};
++   VAR
++      ClsI: WorldClass;
++      i,Index,Prob: Word;
++
++   BEGIN
++	IF DebugScena THEN
++		WriteLn('DEBUG: ClassTable');
++
++   Index:=1;
++   FOR ClsI:=AmbCls TO VlcCls DO
++      BEGIN
++      Prob:=NextInteger(SF);
++      FOR i:=Index TO Index+Prob-1 DO
++         CA[i]:=ClsI;
++      Index:=Index+Prob;
++      END;
++
++   IF Index<>101 THEN
++      ScenaError('ERROR: Class table probabilities do not add up to 100.');
++   END;  { LoadClassArray }
++
++PROCEDURE LoadTechArray{VAR SF: TEXT; VAR TA: TechArray};
++   VAR
++      TchI: TechLevel;
++      i,Index,Prob: Word;
++
++   BEGIN
++	IF DebugScena THEN
++		WriteLn('DEBUG: TechTable');
++
++   Index:=1;
++   FOR TchI:=PreTchLvl TO GteTchLvl DO
++      BEGIN
++      Prob:=NextInteger(SF);
++      FOR i:=Index TO Index+Prob-1 DO
++         TA[i]:=TchI;
++      Index:=Index+Prob;
++      END;
++
++   IF Index<>101 THEN
++      ScenaError('ERROR: Tech table probabilities do not add up to 100.');
++   END;  { LoadTechArray }
++
++PROCEDURE DefineXYPoint{VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray};
++   VAR
++      NewXYPoint: String8;
++      NewXY: XYCoord;
++      i: Word;
++      BadToken: Boolean;
++      Token: LineStr;
++
++   BEGIN
++   i:=25;
++   WHILE (i>0) AND (XYPoint[i].Name<>'') DO
++      Dec(i);
++
++   Token:=DFA1NextToken(SF,BadToken);
++   IF BadToken THEN
++      ScenaError('ERROR: Bad token "'+Token+'"')
++   ELSE
++      BEGIN
++      NewXYPoint:=Token;
++      GetNextXY(SF,XYPoint,Zone,False,NewXY);
++
++      IF i=0 THEN
++         ScenaError('ERROR: Too many XYPoints defined.')
++      ELSE
++         BEGIN
++         AllUpCase(NewXYPoint);
++         XYPoint[i].Name:=NewXYPoint;
++         XYPoint[i].XY:=NewXY;
++
++			IF DebugScena THEN
++				WriteLn('DEBUG: DefineXY (',XYPoint[i].XY.x,',',XYPoint[i].XY.y,')');
++
++         END;
++      END;
++   END;  { DefineXYPoint }
++
++PROCEDURE DefineZone{VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray};
++   VAR
++      ZNumber: Word;
++      XY1,XY2: XYCoord;
++
++   BEGIN
++   ZNumber:=NextInteger(SF);
++   GetNextXY(SF,XYPoint,Zone,False,XY1);
++   GetNextXY(SF,XYPoint,Zone,False,XY2);
++   WITH Zone[ZNumber] DO
++      BEGIN
++      x1:=XY1.x;
++      y1:=XY1.y;
++      x2:=XY2.x;
++      y2:=XY2.y;
++
++		IF DebugScena THEN
++			WriteLn('DEBUG: DefineZone ',ZNumber,'  (',x1,',',y1,' ',x2,',',y2,')');
++      END;
++   END;  { DefineZone }
++
++PROCEDURE SetTrillumReserves{VAR SF: TEXT; VAR TriRes: Word};
++   BEGIN
++   TriRes:=NextInteger(SF);
++   IF (TriRes<0) OR (TriRes>100) THEN
++      ScenaError('ERROR: Illegal trillum reserve setting.');
++   END;  { SetTrillumReserves }
++
++CONST
++   NoOfRndNames = 59;
++   RndEmpireName: ARRAY [1..NoOfRndNames] OF String16 =
++      ( 'Aaraavon','Antramis','Azores',
++        'Bok','Brekandi','Byzantium',
++        'Cal''Dulmas','Cerberon','Chulron',
++        'Dol Parem','Doramis','Drii',
++        'Earon','Entares','Esperance',
++        'Fahron','First Sun','Freberon',
++        'Geldtried','Gen-Tarem','Ghaza',
++        'Haar','Hasarem','Highguard','Horace',
++        'Iileron','Illissia',
++        'Jamin','Jasper','Jool Den',
++        'Kandii','Kendrezani',
++        'Lazarus','Lililth',
++        'Moorline','Mu','Mutara',
++        'Ny','N''zares',
++        'Occem','Ovaris',
++        'Palanhoth','Pell','Pharo',
++        'Quezelquan',
++        'Rho Kandii','Rosseri',
++        'Sarlok','Sol-Terra',
++        'Terminus','Terra','Trantor',
++        'Ultarion',
++        'Vex','Vlandis',
++        'Whorl',
++        'Xi',
++        'Yew','Yolandis' );
++
++PROCEDURE GetRandomEmpireName{VAR EmpireName: EmpireNameArray; VAR NewName: String32};
++   VAR
++      Emp: Empire;
++      Ok: Boolean;
++
++   BEGIN
++   REPEAT
++      Ok:=True;
++
++      NewName:=RndEmpireName[Rnd(1,NoOfRndNames)];
++      FOR Emp:=Empire1 TO Empire8 DO
++         IF EmpireName[Emp]=NewName THEN
++            Ok:=False;
++
++   UNTIL Ok;
++   END;  { GetRandomEmpireName }
++
++PROCEDURE ReadModifierList{VAR SF: TEXT; VAR Modifiers: SetOfEmpireModifiers};
++   VAR
++      i,NoOfModifiers: Word;
++      Abort: Boolean;
++      ModToken: String16;
++
++   BEGIN
++   Modifiers:=[];
++   IF ScenaVersion>=12 THEN
++      BEGIN
++      NoOfModifiers:=NextInteger(SF);
++      FOR i:=1 TO NoOfModifiers DO
++         BEGIN
++         ModToken:=DFA1NextToken(SF,Abort);
++         AllUpCase(ModToken);
++         IF ModToken='CENTRAL' THEN
++            Modifiers:=Modifiers+[CentralEMD];
++         END;
++      END;
++   END;  { ReadModifierList }
++
++PROCEDURE CreatePlayerEmpire{VAR SF: TEXT; NoOfPlayers: Empire;
++                             VAR EmpireName,Password: EmpireNameArray;
++                             VAR Sex: SexArray};
++   VAR
++      i,Pl,Tl,NoOfTechs,RevFactor: Integer;
++      Emp: Empire;
++      Tech: TechLevel;
++      KnownTechs: TechnologySet;
++      Modifiers: SetOfEmpireModifiers;
++
++   BEGIN
++   Pl:=NextInteger(SF);
++   RevFactor:=NextInteger(SF);
++   Tl:=NextInteger(SF);
++   Tech:=TechLevel(Tl);
++   KnownTechs:=TechDev[Pred(Tech)];
++   NoOfTechs:=NextInteger(SF);
++   FOR i:=1 TO NoOfTechs DO
++      KnownTechs:=KnownTechs+[TechnologyTypes(NextInteger(SF))];
++   KnownTechs:=KnownTechs * TechDev[Tech];
++
++   ReadModifierList(SF,Modifiers);
++
++   Emp:=Empire(Pl);
++   IF Emp<=NoOfPlayers THEN
++      BEGIN
++      CreateEmpire(Emp,True,Sex[Emp],EmpireName[Emp],Password[Emp],
++                   EmptyQuadrant,Tech,KnownTechs,RevFactor,Modifiers,Year);
++      END;
++   END;  { CreatePlayerEmpire }
++
++PROCEDURE CreateNPEmpire{VAR SF: TEXT; VAR EmpireName: EmpireNameArray};
++   VAR
++      i,E,Tl,NoOfTechs,RevFactor: Integer;
++      Emp: Empire;
++      Tech: TechLevel;
++      Name: String32;
++      BadToken: Boolean;
++      KnownTechs: TechnologySet;
++      Modifiers: SetOfEmpireModifiers;
++
++   BEGIN
++   E:=NextInteger(SF);
++   NextInteger(SF); { PATCH (fpc): NPEmpireTypes ordinal (ET) -- consumed to stay token-position-correct,
++                      not stored: it only ever fed the dropped InitializeNPE call below, and NPEmpireTypes
++                      itself lives in NPETypes.PAS, a unit this relocation deliberately doesn't import
++                      (see this block's own INTERFACE-section PATCH comment). }
++   Name:=DFA1NextToken(SF,BadToken);
++   RevFactor:=NextInteger(SF);
++   Tl:=NextInteger(SF);
++   Tech:=TechLevel(Tl);
++   NoOfTechs:=NextInteger(SF);
++   KnownTechs:=TechDev[Pred(Tech)];
++   FOR i:=1 TO NoOfTechs DO
++      KnownTechs:=KnownTechs+[TechnologyTypes(NextInteger(SF))];
++   KnownTechs:=KnownTechs * TechDev[Tech];
++
++   ReadModifierList(SF,Modifiers);
++
++   Emp:=Empire(E);
++
++   IF NOT EmpireActive(Emp) THEN
++      BEGIN
++      IF Name='RndName' THEN
++         GetRandomEmpireName(EmpireName,Name);
++
++      CreateEmpire(Emp,False,Boolean(Rnd(0,1)),Name,'',
++                   EmptyQuadrant,Tech,KnownTechs,RevFactor,Modifiers,Year);
++      { PATCH (fpc): InitializeNPE(Emp,ETyp) dropped -- see this relocation
++        block's own INTERFACE-section PATCH comment for why. }
++      END;
++   END;  { CreateNPEmpire }
++
++PROCEDURE CreateWorld{VAR SF: TEXT;
++                      VAR FirstWorld: Word;
++                      VAR NoOfPlayers: Empire;
++                      VAR XYPoint: XYPointArray;
++                      VAR Zone: ZoneArray};
++   VAR
++      n,C,Tl,T,E,Pp,Ef: Integer;
++      ObjID: IDNumber;
++      XY: XYCoord;
++      NLAM,Ndef,NGDM,Nion,Nfgt,Nhkr,Njmp,Njtn,Npen,Nssp,Ntrn,
++      Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri: Integer;
++      Emp: Empire;
++      Typ: WorldTypes;
++      Reserves,TriRes: Word;
++
++   BEGIN
++   n:=NextInteger(SF);
++
++	IF DebugScena THEN
++		WriteLn('DEBUG: CreateWorld ',n);
++
++   GetNextXY(SF,XYPoint,Zone,True,XY);
++   C:=NextInteger(SF);
++   Tl:=NextInteger(SF);
++   T:=NextInteger(SF);
++   E:=NextInteger(SF);
++   Pp:=NextInteger(SF);
++   Ef:=NextInteger(SF);
++   IF ScenaVersion>=12 THEN
++      TriRes:=NextInteger(SF)
++   ELSE
++      TriRes:=100;
++   NLAM:=NextInteger(SF);
++   Ndef:=NextInteger(SF);
++   NGDM:=NextInteger(SF);
++   Nion:=NextInteger(SF);
++   Nfgt:=NextInteger(SF);
++   Nhkr:=NextInteger(SF);
++   Njmp:=NextInteger(SF);
++   Njtn:=NextInteger(SF);
++   Npen:=NextInteger(SF);
++   Nssp:=NextInteger(SF);
++   Ntrn:=NextInteger(SF);
++   Nmen:=NextInteger(SF);
++   Nnnj:=NextInteger(SF);
++   Namb:=NextInteger(SF);
++   Nche:=NextInteger(SF);
++   Nmet:=NextInteger(SF);
++   Nsup:=NextInteger(SF);
++   Ntri:=NextInteger(SF);
++
++   ObjID.ObjTyp:=Pln;
++   ObjID.Index:=FirstWorld;
++   Inc(FirstWorld);
++   Emp:=Empire(E);
++   Typ:=WorldTypes(T);
++   IF (Emp<>Indep) AND (NOT EmpireActive(Emp)) THEN
++      BEGIN
++      Emp:=Indep;
++      Typ:=IndTyp;
++      END;
++
++   CreatePlanet(ObjID,XY);
++   SetUpWorld(ObjID,WorldClass(C),TechLevel(Tl),Typ,Emp,RndVar(Pp,15),Ef,[],
++              Nfgt,Nhkr,Njmp,Njtn,Npen,Nssp,Ntrn,
++              Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri,
++              NLAM,Ndef,NGDM,Nion,False);
++   Reserves:=RandomTrillumReserves(WorldClass(C),TriRes);
++   PutTrillumReserves(ObjID,Reserves);
++
++   IF Typ=CapTyp THEN
++      SetCapital(Emp,ObjID);
++   END; { CreateWorld }
++
++PROCEDURE CreateBase{VAR SF: TEXT;
++                     VAR FirstBase: Word;
++                     VAR NoOfPlayers: Empire;
++                     VAR XYPoint: XYPointArray;
++                     VAR Zone: ZoneArray};
++   VAR
++      n,C,Tl,T,E,Pp,Ef,STyp: Integer;
++      ObjID: IDNumber;
++      XY: XYCoord;
++      NLAM,Ndef,NGDM,Nion,Nfgt,Nhkr,Njmp,Njtn,Npen,Nssp,Ntrn,
++      Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri: Integer;
++      Emp: Empire;
++      Typ: WorldTypes;
++		BaseTyp: StarbaseTypes;
++
++   BEGIN
++   n:=NextInteger(SF);
++
++	IF DebugScena THEN
++		WriteLn('DEBUG: CreateStarbase ',n);
++
++   GetNextXY(SF,XYPoint,Zone,True,XY);
++   STyp:=NextInteger(SF);
++   Tl:=NextInteger(SF);
++   T:=NextInteger(SF);
++   E:=NextInteger(SF);
++   Pp:=NextInteger(SF);
++   Ef:=NextInteger(SF);
++   NLAM:=NextInteger(SF);
++   Ndef:=NextInteger(SF);
++   NGDM:=NextInteger(SF);
++   Nion:=NextInteger(SF);
++   Nfgt:=NextInteger(SF);
++   Nhkr:=NextInteger(SF);
++   Njmp:=NextInteger(SF);
++   Njtn:=NextInteger(SF);
++   Npen:=NextInteger(SF);
++   Nssp:=NextInteger(SF);
++   Ntrn:=NextInteger(SF);
++   Nmen:=NextInteger(SF);
++   Nnnj:=NextInteger(SF);
++   Namb:=NextInteger(SF);
++   Nche:=NextInteger(SF);
++   Nmet:=NextInteger(SF);
++   Nsup:=NextInteger(SF);
++   Ntri:=NextInteger(SF);
++
++   ObjID.ObjTyp:=Base;
++   ObjID.Index:=FirstBase;
++   Emp:=Empire(E);
++	BaseTyp:=StarbaseTypes(STyp);
++
++	IF BaseTyp=out THEN
++		Typ:=OutTyp
++	ELSE IF BaseTyp IN [cmm,frt] THEN
++		Typ:=BseTyp
++	ELSE
++		Typ:=WorldTypes(T);
++
++   IF (Emp=Indep) OR EmpireActive(Emp) THEN
++      BEGIN
++      Inc(FirstBase);
++      CreateStarbase(ObjID,Emp,XY,BaseTyp);
++      SetUpWorld(ObjID,ArtCls,TechLevel(Tl),Typ,Emp,RndVar(Pp,15),Ef,[],
++                 Nfgt,Nhkr,Njmp,Njtn,Npen,Nssp,Ntrn,
++                 Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri,
++                 NLAM,Ndef,NGDM,Nion,False);
++
++      IF Typ=CapTyp THEN
++         SetCapital(Emp,ObjID);
++      END;
++   END; { CreateBase }
++
++PROCEDURE CreateGate{VAR SF: TEXT;
++                     NoOfPlayers: Empire;
++                     VAR XYPoint: XYPointArray;
++                     VAR Zone: ZoneArray};
++   VAR
++      XY: XYCoord;
++      GTyp: StargateTypes;
+       Emp: Empire;
+       ID: IDNumber;
+ 
 -   { UpdateUniverse: MAIN PROCEDURE }
--   BEGIN
+    BEGIN
 -   TextAttr:=7;
 -   ClrScr;
 -   OpenWindow(20,7,40,7,ThinBRD,'',7,C.SYSWBorder,UpdateWindow);
 -   FillChar(NewTotalRevIndex,SizeOf(NewTotalRevIndex),0);
--
++   GetNextXY(SF,XYPoint,Zone,True,XY);
++   GTyp:=StargateTypes(NextInteger(SF));
++   Emp:=Empire(NextInteger(SF));
++   ID.ObjTyp:=Gate;
++   ID.Index:=NextStargateSlot;
++   IF ID.Index>0 THEN
++      CreateStargate(ID,Emp,GTyp,XY)
++   ELSE
++      ScenaError('ERROR: Too many stargates created.');
++   END;  { CreateGate }
+ 
 -   Year:=Year+1;
--
++PROCEDURE CreateRandomWorlds{VAR SF: TEXT;
++                             VAR FirstWorld: Word;
++                             VAR ClassTable: ClassArray;
++                             VAR TechTable: TechArray;
++                             TriRes: Word;
++                             VAR Zone: ZoneArray};
++   VAR
++      Safety,i,NoOfWorlds: Word;
++      ObjID: IDNumber;
++      Coord: XYCoord;
++      Class: WorldClass;
++      Tech: TechLevel;
++      Reserves,ZNumber: Word;
+ 
 -   { update planets }
 -   FOR i:=1 TO NoOfPlanets DO
--      BEGIN
++   BEGIN
++   NoOfWorlds:=NextInteger(SF);
++   ZNumber:=NextInteger(SF);
++
++   ObjID.ObjTyp:=Pln;
++   FOR i:=FirstWorld TO (FirstWorld+NoOfWorlds-1) DO
+       BEGIN
 -      WriteString('World #'+Int2Str(i)+'     ',2,1,7);
 -      ID.ObjTyp:=Pln;  ID.Index:=i;
 -      UpdateWorld(ID);
@@ -594,12 +1325,28 @@
 -      BEGIN
 -      WriteString('Starbase #'+Int2Str(i)+'   ',2,1,7);
 -      IF i IN SetOfActiveStarbases THEN
--         BEGIN
++      ObjID.Index:=i;
++      WITH Zone[ZNumber] DO
++         GetRandomXY(Coord,x1,y1,x2,y2,True);
++      Safety:=0;
++      REPEAT
++         Class:=ClassTable[Rnd(1,100)];
++         Tech:=TechTable[Rnd(1,100)];
++         Inc(Safety);
++      UNTIL (Safety>100) OR (Tech>=MinTechForClass[Class]);
++      IF Safety>100 THEN
+          BEGIN
 -         ID.ObjTyp:=Base;  ID.Index:=i;
 -         UpdateWorld(ID);
--         END;
--      END;
--
++         ScenaError('ERROR: Incompatible class and tech tables.');
+          END;
++      CreateRndPlanet(ObjID,Coord,Class,Tech);
++      Reserves:=RandomTrillumReserves(Class,TriRes);
++      PutTrillumReserves(ObjID,Reserves);
++      { PATCH (fpc): GotoXY(1,WhereY) dropped -- see this relocation block's
++        own INTERFACE-section PATCH comment for why. }
+       END;
+ 
 -   { update construction }
 -   ClrScr;
 -   FOR i:=1 TO MaxNoOfConstrSites DO
@@ -608,23 +1355,74 @@
 -      IF i IN SetOfActiveConstructionSites THEN
 -         BEGIN
 -         UpdateConstruction(i);
--         END;
++   FirstWorld:=FirstWorld+NoOfWorlds;
++   END;  { CreateRandomWorlds }
++
++PROCEDURE CreateNebula{VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray};
++   VAR
++      XY,UpperLeft,LowerRight: XYCoord;
++      NTyp,x,y: Word;
++
++   BEGIN
++   NTyp:=NextInteger(SF);
++   GetNextXY(SF,XYPoint,Zone,False,UpperLeft);
++   GetNextXY(SF,XYPoint,Zone,False,LowerRight);
++   FOR x:=UpperLeft.x TO LowerRight.x DO
++      FOR y:=UpperLeft.y TO LowerRight.y DO
++         IF InGalaxy(x,y) THEN
++            BEGIN
++            XY.x:=x;  XY.y:=y;
++            PutNebula(XY,NebulaTypes(NTyp));
++            END;
++   END;  { CreateNebula }
++
++PROCEDURE CreateRandomNebula{VAR SF: TEXT};
++   VAR
++      Typ,Min,Max: Word;
++
++   BEGIN
++   Typ:=NextInteger(SF);
++   Min:=NextInteger(SF);
++   Max:=NextInteger(SF);
++   CASE Typ OF
++      1: BEGIN
++         NebulaeBand;
+          END;
 -      END;
--
++      2: BEGIN
++         NebulaePatches(Rnd(Min,Max));
++         END;
++      END;  { case }
++   END;  { CreateRandomNebula }
+ 
 -   ClrScr;
 -   WriteString('Updating Empires...',2,1,7);
 -   FOR Emp:=Empire1 TO Empire8 do
 -      IF EmpireActive(Emp) THEN
 -         UpdateEmpire(Emp);
--
++PROCEDURE CreateSRMs{VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray};
++   VAR
++      XY,UpperLeft,LowerRight: XYCoord;
++      E,x,y: Word;
++      ObjID: IDNumber;
+ 
 -   DeleteReadMessages;
 -
 -   CloseWindow;
 -   END;  { UpdateUniverse }
-+{ PATCH (fpc): UpdateUniverse deleted -- whole-galaxy tick loop plus
-+  screen progress window (ClrScr/OpenWindow/WriteString/CloseWindow, the only
-+  Crt/EIO/WND usage in this unit); this harness calls UpdateWorld directly
-+  per-planet instead. Note for later: it does confirm Year:=Year+1 is real
-+  global state (Environ's Year), matching Game.Year in the C# port. }
++   BEGIN
++   E:=NextInteger(SF);
++   GetNextXY(SF,XYPoint,Zone,False,UpperLeft);
++   GetNextXY(SF,XYPoint,Zone,False,LowerRight);
++   FOR x:=UpperLeft.x TO LowerRight.x DO
++      FOR y:=UpperLeft.y TO LowerRight.y DO
++         IF InGalaxy(x,y) THEN
++            BEGIN
++            XY.x:=x;  XY.y:=y;
++            GetObject(XY,ObjID);
++            IF ObjID.ObjTyp=Void THEN
++               PutMine(XY,Empire(E));
++            END;
++   END;  { CreateSRMs }
  
  END.

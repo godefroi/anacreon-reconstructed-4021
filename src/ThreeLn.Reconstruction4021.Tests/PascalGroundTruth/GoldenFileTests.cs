@@ -95,5 +95,9 @@ public class GoldenFileTests
         GoldenFile.Regenerate("rng", RngCases.All,
             c => $"{c.Seed},{c.Range},{c.Count}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "rng", .. args.Skip(1)]));
+
+        GoldenFile.Regenerate("scenario", ScenarioCases.All,
+            c => $"{Path.Combine(PascalHarness.RepoRoot, "reference", "scenarios", "dos_131", c.FileName)},{c.Seed},{c.NumPlayers}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "scenario", .. args.Skip(1)]));
     }
 }

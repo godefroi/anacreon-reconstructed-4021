@@ -14,12 +14,17 @@ namespace ThreeLn.Reconstruction4021.Tests;
 /// </summary>
 public class ScenarioLoaderTests
 {
-    /// <summary>Version 10 header (below the 12 threshold that gates CreateWorld's TriRes field and ReadModifierList's modifiers).</summary>
+    /// <summary>
+    /// Version 10 header (below the 12 threshold that gates CreateWorld's TriRes field and
+    /// ReadModifierList's modifiers), including the minimal BEGINTEXT/ENDTEXT block every real .SCN
+    /// file has — ScenarioIntroduction's own file-consumption runs unconditionally in real Pascal
+    /// (see ScenarioLoader.SkipIntroText), so a header without one isn't realistic scenario syntax.
+    /// </summary>
     private static string Header(int size, int firstYear = 4021) =>
-        $"ANACREON 10\r\nTest 0 1 4 {size} 10 1 100 200 {firstYear}\r\n";
+        $"ANACREON 10\r\nTest 0 1 4 {size} 10 1 100 200 {firstYear}\r\nBEGINTEXT\r\nENDTEXT\r\n";
 
     private static string Header12(int size, int firstYear = 4021) =>
-        $"ANACREON 12\r\nTest 0 1 4 {size} 10 1 100 200 {firstYear}\r\n";
+        $"ANACREON 12\r\nTest 0 1 4 {size} 10 1 100 200 {firstYear}\r\nBEGINTEXT\r\nENDTEXT\r\n";
 
     private static readonly ScenarioLoader.PlayerInfo[] _onePlayer = [new("Terra", "pw", IsEmpress: false)];
 
@@ -255,6 +260,22 @@ public class ScenarioLoaderTests
 
         await Assert.That(() => loader.Load(Header(20) + "NOTAREALCOMMAND\r\nENDSCENARIO", _onePlayer))
             .Throws<FormatException>();
+    }
+
+    [Test]
+    public async Task Load_IntroTextWithMultipleNewpagesIsSkippedEntirely()
+    {
+        // A real .SCN's BEGINTEXT block can span several NEWPAGE-delimited pages before ENDTEXT --
+        // real Pascal only cares about reaching ENDTEXT, not the count of pages in between.
+        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0));
+        var text = "ANACREON 10\r\nTest 0 1 4 20 10 1 100 200 4021\r\n" +
+            "BEGINTEXT\r\nPage one text.\r\nNEWPAGE\r\nPage two text.\r\nNEWPAGE\r\nPage three text.\r\nENDTEXT\r\n" +
+            "CREATEWORLD 1 1,1 9 3 6 8 100 50 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\r\n" +
+            "ENDSCENARIO";
+
+        var game = loader.Load(text, _onePlayer);
+
+        await Assert.That(game.Galaxy.Planets).Count().IsEqualTo(1);
     }
 
     [Test]

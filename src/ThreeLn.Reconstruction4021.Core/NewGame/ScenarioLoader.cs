@@ -104,6 +104,8 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         if (players.Count == 0)
             return game;
 
+        SkipIntroText(tokenizer);
+
         _zones[1] = (new Coordinate(0, 0), new Coordinate(sizeOfGalaxy - 1, sizeOfGalaxy - 1));
 
         while (true) {
@@ -150,6 +152,27 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         if (!int.TryParse(token, out var value))
             throw new FormatException($"ERROR: Illegal number format \"{token}\"");
         return value;
+    }
+
+    /// <summary>
+    /// NEWGAME.PAS:1388-1515 (ScenarioIntroduction), file-consumption only — the display/PressAnyKey
+    /// pagination and GetNoOfPlayers/NoChoice prompt are dead UI (player count is this call's own
+    /// input instead). NEWPAGE markers only affect how the real UI paginates, not where the text
+    /// block ends, so scanning straight for ENDTEXT (ignoring NEWPAGE) lands the cursor in the same
+    /// place a real page-by-page read would.
+    /// </summary>
+    private static void SkipIntroText(ScenarioTokenizer tokenizer)
+    {
+        string token;
+        do {
+            token = NextToken(tokenizer);
+        } while (token.ToUpperInvariant() != "BEGINTEXT" && !tokenizer.AtEnd);
+        tokenizer.ReadLine();
+
+        string line;
+        do {
+            line = tokenizer.ReadLine();
+        } while (!line.ToUpperInvariant().Contains("ENDTEXT") && !tokenizer.AtEnd);
     }
 
     /// <summary>NEWGAME.PAS:1372-1386 (SkipDescriptions) — whole-line reads, not tokens, until a line containing ENDDESCRIPTION or EoF.</summary>
