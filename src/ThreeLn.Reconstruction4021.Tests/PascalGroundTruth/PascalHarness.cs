@@ -42,8 +42,9 @@ internal static class PascalHarness
     {
         var verifyDir = Path.Combine(RepoRoot, "reference", "verify");
         var sourcePath = Path.Combine(verifyDir, harnessName + ".pas");
-        if (!File.Exists(sourcePath))
+        if (!File.Exists(sourcePath)) {
             throw new FileNotFoundException($"Harness source not found: {sourcePath}");
+        }
 
         RunProcess(FpcPath, [sourcePath], verifyDir);
 
@@ -58,8 +59,9 @@ internal static class PascalHarness
         var fields = new Dictionary<string, string>();
         foreach (var part in line.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) {
             var eq = part.IndexOf('=');
-            if (eq < 0)
+            if (eq < 0) {
                 continue;
+            }
             fields[part[..eq]] = part[(eq + 1)..];
         }
         return fields;
@@ -87,8 +89,9 @@ internal static class PascalHarness
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        foreach (var arg in args)
+        foreach (var arg in args) {
             startInfo.ArgumentList.Add(arg);
+        }
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start {fileName}");
@@ -99,9 +102,15 @@ internal static class PascalHarness
 
         var stdout = stdoutTask.Result;
         var stderr = stderrTask.Result;
-        if (process.ExitCode != 0)
-            throw new InvalidOperationException(
-                $"{fileName} {string.Join(' ', args)} exited {process.ExitCode}\nstdout:\n{stdout}\nstderr:\n{stderr}");
+        if (process.ExitCode != 0) {
+            throw new InvalidOperationException($"""
+                {fileName} {string.Join(' ', args)} exited {process.ExitCode}
+                stdout:
+                {stdout}
+                stderr:
+                {stderr}
+                """);
+        }
 
         return stdout;
     }

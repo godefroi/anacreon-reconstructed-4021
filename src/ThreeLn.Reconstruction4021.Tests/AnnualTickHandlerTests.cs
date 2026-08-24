@@ -258,6 +258,122 @@ public class AnnualTickHandlerRevolutionTests
 
         await Assert.That(owner.TotalRevolutionIndex).IsEqualTo(0);
     }
+
+    // The tier cascade at the end of UpdateRevolution (UPDATE.PAS:737-753) is a mutually-exclusive
+    // if/else-if chain, not one boolean condition -- these tests prove exactly one cascade headline
+    // fires per call, at the right tier, and that RevolutionIndex>75 genuinely has two sub-outcomes
+    // (Rebellion vs RebellionWarning4) rather than always calling Rebellion. Every case uses
+    // Type=Outpost (0% of DATACNST.PAS's OptMilitary table) with zero Legions/NinjaLegions, which
+    // collapses both the military-presence block's own Jitter(0,_) calls and Rebellion's own
+    // military-driven chanceToEndRebel to an exactly-zero, FixedRandom-independent result (Rnd's own
+    // degenerate-range guard, INT.PAS:114-115, returns Min outright when Max<=Min) -- so the only
+    // FixedRandom-sensitive steps left are UpdateRevolution's own initial ChangeRevIndex(empRevAdj+
+    // Rnd(-5,2)) decrease (also 0 here, since a fresh Empire's TotalRevIndex/RevolutionFactor are both
+    // 0, making that Jitter's own range degenerate too) and the cascade's own Rnd(1,100) roll. Cases
+    // read a planet's News for only the 6 cascade-specific headlines, ignoring unrelated noise from
+    // other UpdateWorld steps (e.g. IndustryLacksMetals from a fresh planet's own industry growth).
+    private static readonly HashSet<NewsType> _cascadeHeadlines = [
+        NewsType.RebellionWarning1, NewsType.RebellionWarning2, NewsType.RebellionWarning3, NewsType.RebellionWarning4,
+        NewsType.WorldRebelled, NewsType.RebellionSuppressed,
+    ];
+
+    private static Planet MakeCascadeTestPlanet(int revIndex, Empire owner)
+    {
+        var planet = new Planet {
+            Location = new Coordinate(0, 0),
+            Owner = owner,
+            Population = 1000,
+            Class = WorldClass.ClassM,
+            TechLevel = TechLevel.Warp,
+            Type = WorldType.Outpost, // OptMilitary[Outpost]=0% keeps the military-presence block inert.
+            RevolutionIndex = revIndex,
+        };
+        planet.Cargo.Supplies = 9999; // avoid UseUpFood starvation, which would also bump RevolutionIndex.
+        return planet;
+    }
+
+    [Test]
+    public async Task RevIndex76_RollSucceeds_FiresRebellionNotWarning()
+    {
+        // FixedRandom(5): initial decrease delta=Rnd(-5,2)=0, so RevolutionIndex stays exactly 76
+        // entering the cascade. Cascade roll Rnd(1,100)=6 < 76 -> Rebellion (chanceToEndRebel=0 there
+        // too, so it's the "world rebels" outcome specifically, not "empire puts down the rebellion").
+        var owner = new Empire { Name = "Test" };
+        var planet = MakeCascadeTestPlanet(76, owner);
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+
+        new AnnualTickHandler(new FixedRandom(5)).RunAnnualTick(game);
+
+        var cascadeNews = owner.News.Where(n => _cascadeHeadlines.Contains(n.Headline)).ToList();
+        await Assert.That(cascadeNews.Select(n => n.Headline)).IsEquivalentTo([NewsType.WorldRebelled]);
+        await Assert.That(planet.Owner).IsSameReferenceAs(Empire.Independent);
+    }
+
+    [Test]
+    public async Task RevIndex76_RollFails_FiresWarningNotRebellion()
+    {
+        // FixedRandom(75): initial decrease delta=Rnd(-5,2)=70, so Start=6 -> RevolutionIndex=76
+        // entering the cascade, same as the roll-succeeds case above. Cascade roll Rnd(1,100)=76 is
+        // NOT <76 -> RebellionWarning4, and Rebellion never runs at all (owner stays unchanged).
+        var owner = new Empire { Name = "Test" };
+        var planet = MakeCascadeTestPlanet(6, owner);
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+
+        new AnnualTickHandler(new FixedRandom(75)).RunAnnualTick(game);
+
+        var cascadeNews = owner.News.Where(n => _cascadeHeadlines.Contains(n.Headline)).ToList();
+        await Assert.That(cascadeNews.Select(n => n.Headline)).IsEquivalentTo([NewsType.RebellionWarning4]);
+        await Assert.That(planet.Owner).IsSameReferenceAs(owner);
+    }
+
+    [Test]
+    public async Task RevIndex75_FallsThroughToWarning4NotTheAbove75Branch()
+    {
+        // 75 is not >75, so it takes the plain ">70" tier (also RebellionWarning4) instead of ever
+        // reaching the roll -- proving the >75 branch's own boundary is exclusive, not inclusive.
+        var owner = new Empire { Name = "Test" };
+        var planet = MakeCascadeTestPlanet(75, owner);
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+
+        new AnnualTickHandler(new FixedRandom(5)).RunAnnualTick(game);
+
+        var cascadeNews = owner.News.Where(n => _cascadeHeadlines.Contains(n.Headline)).ToList();
+        await Assert.That(cascadeNews.Select(n => n.Headline)).IsEquivalentTo([NewsType.RebellionWarning4]);
+    }
+
+    [Test]
+    public async Task RevIndex44_FiresWarning2Only()
+    {
+        // Mid-tier sanity check: 44 is >43 but not >66, so exactly RebellionWarning2 fires -- not
+        // RebellionWarning1, RebellionWarning3, or more than one headline at once.
+        var owner = new Empire { Name = "Test" };
+        var planet = MakeCascadeTestPlanet(44, owner);
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+
+        new AnnualTickHandler(new FixedRandom(5)).RunAnnualTick(game);
+
+        var cascadeNews = owner.News.Where(n => _cascadeHeadlines.Contains(n.Headline)).ToList();
+        await Assert.That(cascadeNews.Select(n => n.Headline)).IsEquivalentTo([NewsType.RebellionWarning2]);
+    }
+
+    [Test]
+    public async Task RevIndex30_FiresNoCascadeHeadline()
+    {
+        // 30 is not >30 -- below every tier's threshold, so the cascade fires nothing at all.
+        var owner = new Empire { Name = "Test" };
+        var planet = MakeCascadeTestPlanet(30, owner);
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+
+        new AnnualTickHandler(new FixedRandom(5)).RunAnnualTick(game);
+
+        var cascadeNews = owner.News.Where(n => _cascadeHeadlines.Contains(n.Headline)).ToList();
+        await Assert.That(cascadeNews).IsEmpty();
+    }
 }
 
 /// <summary>
@@ -453,6 +569,19 @@ public class AnnualTickHandlerAmbrosiaTests
         await Assert.That((int)planet.TechLevel).IsEqualTo(int.Parse(expected["techlevel"]));
         await Assert.That(planet.Cargo.Ambrosia).IsEqualTo(int.Parse(expected["ambrosia"]));
         await Assert.That(planet.IsAddictedToAmbrosia).IsEqualTo(bool.Parse(expected["addicted"]));
+
+        // News spot-checks, by case name: the golden file itself only records final numeric state, not
+        // News (see GoldenFileTests), so these confirm the right headline fires for the case its own
+        // name identifies, without trying to hand-derive an exact Parm1.
+        var headlines = owner.News.Select(n => n.Headline).ToList();
+        switch (c.Name) {
+            case "ShortageRiot":
+                await Assert.That(headlines).Contains(NewsType.RiotDeaths);
+                break;
+            case "ShortageTechRegression":
+                await Assert.That(headlines).Contains(NewsType.TechLevelRegressed);
+                break;
+        }
     }
 
     [Test]

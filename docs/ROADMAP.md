@@ -371,17 +371,43 @@ also produced a validated, ready-to-use `SYSTEM2.PAS.patch` (fpc can't compile i
 mismatch or its x86 `INLINE` assembly — replaced with a plain Pascal loop) for whenever a future phase
 (Combat/NPE AI) actually needs that `Intrface`→`EIO`/`Fleet`/`Orders`/`NPE` chain to compile.
 
-## 4. News
+## 4. News — ✅ done
 
-Port `NEWS.PAS`'s per-empire event log (`AddNews`/`GetNewsList`/`GetNewsItem`/`EraseNews`). Not a UI
-nicety: confirmed from source that `ReviewNews` (present in every NPE personality —
-`NPE00.PAS`/`NPE01.PAS`/`NPE04.PAS`) calls `GetNewsList` and walks it as the AI's primary "what
-happened to me this turn" signal (attack severity, tech theft, deaths) — Phase 6 (NPE AI) has a real
-data dependency on this, not just a display one. Sequenced after Probes and before Combat/NPE AI:
-every prior phase (six sites in `AnnualTickHandler.*`, plus Probes' own `ProbeScout` destroy/
-first-contact events) has been dropping `AddNews` calls with an explicit "no news subsystem yet"
-comment — this phase is where all of those get retrofitted to call the real thing, in one pass,
-rather than each phase inventing its own placeholder.
+Ported `NEWS.PAS`'s per-empire event log. Not a UI nicety: confirmed from source that `ReviewNews`
+(present in every NPE personality — `NPE00.PAS`/`NPE01.PAS`/`NPE04.PAS`) calls `GetNewsList` and walks
+it as the AI's primary "what happened to me this turn" signal — Phase 6 (NPE AI) has a real data
+dependency on this, not just a display one.
+
+`GetNewsList`/`GetNewsItem`/`EraseNews` collapse to a plain `Empire.News: List<NewsItem>` — Pascal's
+hand-rolled linked list plus its `MaxAvail>20` heap guard exist only because of DOS's 640KB heap, not a
+game rule. `EraseNews`'s per-turn reset (Pascal clears it right after whichever consumer reads it) is
+deliberately *not* wired into `TurnEngine` yet: neither consumer (NPE AI, human UI) exists yet to
+validate that timing against — `empire.News.Clear()` is sitting there ready for whichever phase adds
+the first real reader.
+
+`NewsItem`'s `Loc: Location` union (an entity reference almost always, but a bare `Coordinate` for
+`ConstructionCompleted` specifically — `UPDATE.PAS:215` discards the newly-built object's own ID and
+uses the raw XY instead) became two real nullable fields (`Subject: ISectorObject?`/
+`Position: Coordinate?`), typed via a new `ISectorObject` interface (`Coordinate Location`/
+`Empire Owner`) rather than `object` — earned by a genuine third/fourth occurrence, not invented for
+this: `VisibilityHandler.FindProbeTarget` (Phase 3) already dispatched across the same four concrete
+types by hand. The recurring Pascal `(Loc,Emp)` shape (most combat/interaction headlines carry a second
+empire via `Ord(Emp)`, since `Parm1..3` were its only generic slots) became a real `Empire? OtherEmpire`
+field for the same reason. `NCapTech`'s `Ord(NewTech)` needed the same treatment: this port has no flat
+`TechnologyTypes` ordinal to port (already deliberately split into four typed enums), so
+`TechCatalog.MissingTechAt` now pairs each grant with a `TechGrantIdentity` (category + that category's
+own ordinal) alongside its unlock delegate.
+
+Investigating every real `AddNews`/`AddGlobalNews` call site in code this port had already written
+turned up more than the six `AnnualTickHandler.*` sites plus Probes' own two that earlier phases had
+flagged as dropped — `UpdateRevolution`'s rebellion-warning tier cascade (`RevIndex>75/>70/>66/>43/>30`,
+`UPDATE.PAS:737-753`) had collapsed into a single boolean condition with no representation at all for
+the tiers below 75 or for the `RevIndex>75`-but-the-roll-failed sub-case, and `Rebellion`'s "world goes
+independent" branch needed a from-scratch `Game.AddGlobalNews` (broadcast to every empire that's
+scouted the source, filtered by an `Exclude` set) since nothing had needed it before. Restructuring the
+cascade into an explicit if/else-if chain (see `AnnualTickHandler.Revolution.cs`) was verified with
+boundary tests at each tier transition, including one proving `RevIndex>75` genuinely has two outcomes
+(`Rebellion` vs. a lone `RebellionWarning4`), not one.
 
 ## 5. Combat
 

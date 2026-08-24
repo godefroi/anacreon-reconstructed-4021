@@ -102,12 +102,12 @@ public sealed partial class AnnualTickHandler
     }
 
     /// <summary>
-    /// UPDATE.PAS:1032-1072. Skips AddNews (no news subsystem yet, same precedent as every other
-    /// UpdateWorld step). Independent worlds drift upward on their own (1-in-50 chance per tick);
-    /// owned worlds instead chase their empire's capital tech level up or down. A world with no
-    /// capital to compare against (Owner.Capital is null) is a state Pascal's GetCapital can't
-    /// produce for a real empire — every empire is founded with one — so this is purely a defensive
-    /// no-op for incomplete test/setup state, not a modeled game rule.
+    /// UPDATE.PAS:1032-1072. Independent worlds drift upward on their own (1-in-50 chance per tick);
+    /// owned worlds instead chase their empire's capital tech level up or down, firing
+    /// <c>TechLevelIncreased</c>/<c>TechLevelRegressed</c> (Parm1 = the new tech level) when they do. A
+    /// world with no capital to compare against (Owner.Capital is null) is a state Pascal's GetCapital
+    /// can't produce for a real empire — every empire is founded with one — so this is purely a
+    /// defensive no-op for incomplete test/setup state, not a modeled game rule.
     /// </summary>
     private void UpdateTechLevel(IEconomicWorld world)
     {
@@ -125,11 +125,15 @@ public sealed partial class AnnualTickHandler
             return;
 
         if (capitalTech > world.TechLevel) {
-            if (Rnd(1, 100) <= TechLevelIncreaseChance)
+            if (Rnd(1, 100) <= TechLevelIncreaseChance) {
                 world.TechLevel++;
+                world.Owner.AddNews(NewsType.TechLevelIncreased, world, p1: (int)world.TechLevel);
+            }
         } else if (capitalTech < world.TechLevel) {
-            if (Rnd(1, 15) == 1)
+            if (Rnd(1, 15) == 1) {
                 world.TechLevel--;
+                world.Owner.AddNews(NewsType.TechLevelRegressed, world, p1: (int)world.TechLevel);
+            }
         }
     }
 
@@ -151,6 +155,7 @@ public sealed partial class AnnualTickHandler
         world.Population += PascalRound(increase);
     }
 
+    /// <summary>UPDATE.PAS:1130-1160 (nested in UpdateWorld). Fires <c>Starv</c> to the world's owner when starvation actually occurs.</summary>
     private void UseUpFood(IEconomicWorld world)
     {
         var foodNeeded = ClampResource((world.Population / 100.0) * SuppliesPerBillion);
@@ -163,6 +168,7 @@ public sealed partial class AnnualTickHandler
             world.Population -= starve;
 
             if (starve > 0) {
+                world.Owner.AddNews(NewsType.PeopleStarving, world, p1: starve);
                 var revInc = Math.Min(
                     (int)(_starvationRevoltAdjustmentByTech[world.TechLevel] * (starve / 10.0)),
                     45);
@@ -174,9 +180,11 @@ public sealed partial class AnnualTickHandler
     }
 
     /// <summary>
-    /// UPDATE.PAS:1163-1276. Skips AddNews — no news subsystem yet (same precedent as UseUpFood and
-    /// UpdateRevolution) — but every state effect (population, efficiency, revolution index, tech
-    /// level, industry, addiction flag) is kept.
+    /// UPDATE.PAS:1163-1276. Fires <c>AddictsDied</c>/<c>RiotDeaths</c>/<c>IndustryDestroyed</c>/
+    /// <c>TechLevelRegressed</c>/<c>WorldNoLongerAddicted</c>/<c>WorldAddictedToAmbrosia</c> to the
+    /// world's owner, each gated exactly the way Pascal gates it (most only fire when the computed
+    /// effect is actually nonzero — <c>Die&gt;0</c>/<c>IndDest&gt;0</c> in the source — not
+    /// unconditionally whenever the branch runs).
     /// </summary>
     private void UseUpAmbrosia(IEconomicWorld world)
     {
@@ -196,6 +204,10 @@ public sealed partial class AnnualTickHandler
             var die = Math.Min(ClampResource(AddictDeathCoeff * lack), world.Population / 7);
             world.Population -= die;
 
+            if (die > 0) {
+                world.Owner.AddNews(NewsType.AddictsDied, world, p1: die);
+            }
+
             var effChange = Math.Min((int)(AddictEffCoeff * die), world.Efficiency);
             world.Efficiency -= effChange;
 
@@ -203,23 +215,37 @@ public sealed partial class AnnualTickHandler
 
             switch (Rnd(1, 10)) {
                 case >= 5 and <= 7:
-                    world.Population -= ClampResource((Rnd(50, 120) / 100.0) * die);
+                    var riotDeaths = ClampResource((Rnd(50, 120) / 100.0) * die);
+                    if (riotDeaths > 0) {
+                        world.Population -= riotDeaths;
+                        world.Owner.AddNews(NewsType.RiotDeaths, world, p1: riotDeaths);
+                    }
                     break;
                 case 8 or 9:
-                    foreach (var industry in Enum.GetValues<IndustryType>())
-                        world.Industry[industry] -= (int)(world.Industry[industry] * Rnd(0, 20) / 100.0);
+                    foreach (var industry in Enum.GetValues<IndustryType>()) {
+                        var indDest = (int)(world.Industry[industry] * Rnd(0, 20) / 100.0);
+                        world.Industry[industry] -= indDest;
+                        if (indDest > 0) {
+                            world.Owner.AddNews(NewsType.IndustryDestroyed, world, p1: indDest, p2: (int)industry);
+                        }
+                    }
                     break;
                 case 10:
                     if (world.TechLevel > TechLevel.PreTech)
                         world.TechLevel--;
+                    world.Owner.AddNews(NewsType.TechLevelRegressed, world, p1: (int)world.TechLevel);
                     break;
             }
 
-            if (Rnd(1, 100) <= ChanceToAddict)
+            if (Rnd(1, 100) <= ChanceToAddict) {
                 world.IsAddictedToAmbrosia = false;
+                world.Owner.AddNews(NewsType.WorldNoLongerAddicted, world);
+            }
         } else if (world.Cargo.Ambrosia > 0) {
-            if (ambNeeded <= world.Cargo.Ambrosia && Rnd(1, 100) < ChanceToAddict)
+            if (ambNeeded <= world.Cargo.Ambrosia && Rnd(1, 100) < ChanceToAddict) {
                 world.IsAddictedToAmbrosia = true;
+                world.Owner.AddNews(NewsType.WorldAddictedToAmbrosia, world);
+            }
 
             ambNeeded /= 2;
             world.Cargo.Ambrosia = Math.Max(0, world.Cargo.Ambrosia - ambNeeded);

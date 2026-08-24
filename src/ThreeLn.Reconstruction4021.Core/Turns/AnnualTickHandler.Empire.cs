@@ -13,7 +13,8 @@ public sealed partial class AnnualTickHandler
     /// <summary>
     /// UPDATE.PAS:224-428 (NewTechLevel). UpdateEmpire's other line (committing NewTotalRevIndex) is
     /// already handled in <see cref="RunAnnualTick"/>; this is UpdateEmpire's only other behavior.
-    /// Skips AddNews — no news subsystem yet, same precedent as every other UpdateWorld step.
+    /// Fires <c>EmpireGainedTechnology</c>/<c>EmpireGainedTechLevel</c> to <paramref name="emp"/>,
+    /// subject = the winning lab.
     /// </summary>
     private void NewTechLevel(Empire emp, Game game)
     {
@@ -33,7 +34,9 @@ public sealed partial class AnnualTickHandler
 
         if (missingAtCurrentLevel.Count > 0) {
             // "new technology" branch (UPDATE.PAS:388-401): TechSet<>TechDev[Tech] still.
-            missingAtCurrentLevel[Rnd(1, missingAtCurrentLevel.Count) - 1](emp.Technology);
+            var (identity, unlock) = missingAtCurrentLevel[Rnd(1, missingAtCurrentLevel.Count) - 1];
+            unlock(emp.Technology);
+            emp.AddNews(NewsType.EmpireGainedTechnology, lab, techGrant: identity);
             return;
         }
 
@@ -42,6 +45,7 @@ public sealed partial class AnnualTickHandler
         // again relative to the higher TechDev[Tech].
         var newTech = tech + 1;
         emp.TechnologyLevel = newTech;
+        emp.AddNews(NewsType.EmpireGainedTechLevel, lab, p1: (int)newTech);
 
         // A null lab only happens when GetChanceForNewTech found zero labs (chance=0), which already
         // returned above via the Rnd(1,100)>chance check — defensive, not a modeled game state, same

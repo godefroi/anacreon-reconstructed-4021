@@ -71,12 +71,12 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
     /// ProbeScout (INTRFACE.PAS:1289-1344): scans the destination's 3x3 ring in Pascal's fixed
     /// order. A cell already Scouted by this empire is skipped entirely (no re-roll, no re-mark). An
     /// unscouted occupant with legions present risks the probe: a successful destroy roll stops the
-    /// scan for the rest of the ring (matching ProbeScout's Exit — UpdateProbes still returns this
-    /// probe to Ready either way, so "destroyed" only means less of the ring gets scouted this call).
-    /// A Dark Nebula cell stops the scan too, regardless of what else happened at that cell. AddNews
-    /// (destroy/first-contact notifications) is dropped — no news subsystem yet, same precedent as
-    /// every other UpdateWorld step; tracked as a real upcoming phase in docs/ROADMAP.md, not a
-    /// dismissal.
+    /// scan for the rest of the ring, firing <c>ProbeDestroyed</c> to the probe's own empire and
+    /// <c>ProbeDestroyedByYou</c> to the occupant's owner (matching ProbeScout's Exit — UpdateProbes
+    /// still returns this probe to Ready either way, so "destroyed" only means less of the ring gets
+    /// scouted this call). Otherwise, first contact with a not-yet-Known, not-own-territory occupant
+    /// fires <c>ProbeOk</c>. A Dark Nebula cell stops the scan too, regardless of what else happened
+    /// at that cell.
     /// </summary>
     private void ScoutFromProbe(Empire empire, Coordinate destination, Game game)
     {
@@ -94,7 +94,13 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
             if (target is { AlreadyScouted: false } occupant) {
                 var chanceToDestroy = PascalMath.ISqrt(occupant.Legions);
                 if (occupant.Owner != Empire.Independent && PascalMath.Rnd(random, 1, 100) < chanceToDestroy) {
+                    empire.AddNews(Types.NewsType.ProbeDestroyed, occupant.Entity);
+                    occupant.Owner.AddNews(Types.NewsType.ProbeDestroyedByYou, occupant.Entity, otherEmpire: empire);
                     return;
+                }
+
+                if (!occupant.AlreadyKnown && occupant.Owner != empire) {
+                    empire.AddNews(Types.NewsType.ProbeOk, occupant.Entity);
                 }
 
                 occupant.MarkScouted();
@@ -107,44 +113,49 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
     }
 
     /// <summary>
-    /// GetObject/GetStatus/GetCargo/Scouted (PRIMINTR.PAS) as ProbeScout uses them: whichever single
-    /// non-fleet entity (Sector[x]^[y].Obj) occupies a cell, or null for Void. Fleets never factor in
-    /// here — ProbeScout only ever calls GetObject, never GetFleets.
+    /// GetObject/GetStatus/GetCargo/Scouted/Known (PRIMINTR.PAS) as ProbeScout uses them: whichever
+    /// single non-fleet entity (Sector[x]^[y].Obj) occupies a cell, or null for Void. Fleets never
+    /// factor in here — ProbeScout only ever calls GetObject, never GetFleets.
     /// </summary>
     private static ProbeTarget? FindProbeTarget(Coordinate cell, Empire empire, Game game)
     {
         foreach (var planet in game.Galaxy.Planets) {
             if (planet.Location == cell) {
-                return new ProbeTarget(planet.Owner, planet.Cargo.Legions,
-                    empire.Planets.Scouted.Contains(planet), () => empire.Planets.MarkScouted(planet));
+                return new ProbeTarget(planet, planet.Owner, planet.Cargo.Legions,
+                    empire.Planets.Known.Contains(planet), empire.Planets.Scouted.Contains(planet),
+                    () => empire.Planets.MarkScouted(planet));
             }
         }
 
         foreach (var starbase in game.Galaxy.Starbases) {
             if (starbase.Location == cell) {
-                return new ProbeTarget(starbase.Owner, starbase.Cargo.Legions,
-                    empire.Starbases.Scouted.Contains(starbase), () => empire.Starbases.MarkScouted(starbase));
+                return new ProbeTarget(starbase, starbase.Owner, starbase.Cargo.Legions,
+                    empire.Starbases.Known.Contains(starbase), empire.Starbases.Scouted.Contains(starbase),
+                    () => empire.Starbases.MarkScouted(starbase));
             }
         }
 
         foreach (var stargate in game.Galaxy.Stargates) {
             if (stargate.Location == cell) {
-                return new ProbeTarget(stargate.Owner, Legions: 0,
-                    empire.Stargates.Scouted.Contains(stargate), () => empire.Stargates.MarkScouted(stargate));
+                return new ProbeTarget(stargate, stargate.Owner, Legions: 0,
+                    empire.Stargates.Known.Contains(stargate), empire.Stargates.Scouted.Contains(stargate),
+                    () => empire.Stargates.MarkScouted(stargate));
             }
         }
 
         foreach (var constr in game.Galaxy.ConstructionSites) {
             if (constr.Location == cell) {
-                return new ProbeTarget(constr.Owner, Legions: 0,
-                    empire.ConstructionSites.Scouted.Contains(constr), () => empire.ConstructionSites.MarkScouted(constr));
+                return new ProbeTarget(constr, constr.Owner, Legions: 0,
+                    empire.ConstructionSites.Known.Contains(constr), empire.ConstructionSites.Scouted.Contains(constr),
+                    () => empire.ConstructionSites.MarkScouted(constr));
             }
         }
 
         return null;
     }
 
-    private readonly record struct ProbeTarget(Empire Owner, int Legions, bool AlreadyScouted, Action MarkScouted);
+    private readonly record struct ProbeTarget(
+        ISectorObject Entity, Empire Owner, int Legions, bool AlreadyKnown, bool AlreadyScouted, Action MarkScouted);
 
     private static void ScoutFleets(Empire empire, Game game)
     {

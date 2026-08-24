@@ -3,7 +3,7 @@ using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Core.Entities;
 
-public sealed class Stargate
+public sealed class Stargate : ISectorObject
 {
     public required Coordinate Location { get; set; }
     public Empire Owner { get; set; } = Empire.Independent;

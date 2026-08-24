@@ -144,6 +144,69 @@ public class VisibilityHandlerProbeTests
     }
 
     [Test]
+    public async Task SuccessfulDestroyRoll_NotifiesBothEmpires()
+    {
+        var human = new Empire { Name = "Human" };
+        var enemy = new Empire { Name = "Enemy" };
+        var game = BuildGame(human, enemy);
+
+        var armedWorld = new Planet { Owner = enemy, Location = new Coordinate(10, 10) };
+        armedWorld.Cargo.Legions = 100; // ISqrt(100) = 10
+        game.Galaxy.Planets.Add(armedWorld);
+        human.TryLaunchProbe(new Coordinate(10, 10));
+
+        new VisibilityHandler(_alwaysSucceeds).RefreshVisibility(human, game);
+
+        await Assert.That(human.News).Count().IsEqualTo(1);
+        await Assert.That(human.News[0].Headline).IsEqualTo(NewsType.ProbeDestroyed);
+        await Assert.That(human.News[0].Subject).IsSameReferenceAs(armedWorld);
+
+        await Assert.That(enemy.News).Count().IsEqualTo(1);
+        await Assert.That(enemy.News[0].Headline).IsEqualTo(NewsType.ProbeDestroyedByYou);
+        await Assert.That(enemy.News[0].Subject).IsSameReferenceAs(armedWorld);
+        await Assert.That(enemy.News[0].OtherEmpire).IsSameReferenceAs(human);
+    }
+
+    [Test]
+    public async Task FirstContactWithUnknownEnemyWorld_NotifiesTheProbeOwner()
+    {
+        var human = new Empire { Name = "Human" };
+        var enemy = new Empire { Name = "Enemy" };
+        var game = BuildGame(human, enemy);
+
+        var unknownWorld = new Planet { Owner = enemy, Location = new Coordinate(10, 10) };
+        game.Galaxy.Planets.Add(unknownWorld);
+        human.TryLaunchProbe(new Coordinate(10, 10));
+
+        new VisibilityHandler(_alwaysFails).RefreshVisibility(human, game);
+
+        await Assert.That(human.News).Count().IsEqualTo(1);
+        await Assert.That(human.News[0].Headline).IsEqualTo(NewsType.ProbeOk);
+        await Assert.That(human.News[0].Subject).IsSameReferenceAs(unknownWorld);
+    }
+
+    [Test]
+    public async Task ProbingOwnTerritory_NeverFiresProbeOk()
+    {
+        // Uses a Starbase, not a Planet: an owned Planet is always self-scouted by ScoutObjects'
+        // own-location adjacency scan before probe resolution runs in the same RefreshVisibility call
+        // (see AlreadyScoutedCell_NeverRollsForDestruction), which would make this case pass for the
+        // wrong reason (the AlreadyScouted gate, not the Owner!=empire check). ScoutObjects only
+        // self-scouts owned planets/fleets, not starbases, so an isolated owned starbase genuinely
+        // reaches ScoutFromProbe's Owner!=empire check unscouted.
+        var human = new Empire { Name = "Human" };
+        var game = BuildGame(human);
+
+        var ownStarbase = new Starbase { Owner = human, Location = new Coordinate(10, 10) };
+        game.Galaxy.Starbases.Add(ownStarbase);
+        human.TryLaunchProbe(new Coordinate(10, 10));
+
+        new VisibilityHandler(_alwaysFails).RefreshVisibility(human, game);
+
+        await Assert.That(human.News).IsEmpty();
+    }
+
+    [Test]
     public async Task IndependentWorldWithLegions_NeverDestroysTheProbe()
     {
         var human = new Empire { Name = "Human" };

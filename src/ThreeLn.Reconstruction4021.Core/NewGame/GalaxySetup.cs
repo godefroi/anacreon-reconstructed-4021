@@ -117,7 +117,7 @@ public sealed class GalaxySetup(Random random)
         ShipCounts shipBase, CargoHold cargoBase, DefenseCounts defenseBase, bool checkTech)
     {
         world.Type = type;
-        world.Owner = owner;
+        world.Reassign(owner);
         world.TechLevel = tech;
         world.Population = population;
         world.Efficiency = efficiency;

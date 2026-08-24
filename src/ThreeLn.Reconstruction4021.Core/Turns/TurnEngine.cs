@@ -29,8 +29,9 @@ public sealed class TurnEngine(
         fleetMovement.AdvanceFleets(game, current, next);
         fleetMovement.AdvanceStarbases(game, next);
 
-        if (game.IsFirstEmpire(next))
+        if (game.IsFirstEmpire(next)) {
             annualTick.RunAnnualTick(game);
+        }
 
         game.CurrentEmpire = next;
     }

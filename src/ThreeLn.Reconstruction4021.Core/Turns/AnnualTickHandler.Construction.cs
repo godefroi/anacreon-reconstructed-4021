@@ -12,16 +12,18 @@ public sealed partial class AnnualTickHandler
 
     /// <summary>
     /// UPDATE.PAS:103-220 (UpdateConstruction, nested UseUpRawMaterial) plus ConstructStarbase/
-    /// ConstructStargate (UPDATE.PAS:58-100) for the completion branch. Skips AddNews and the naming
-    /// system (Location2Index/GetDefinedName/DeleteName/AddName) — neither exists in the port yet,
-    /// same precedent as every other AddNews skip. Sector-occupancy clearing
-    /// (Sector[XY.x]^[XY.y].Obj:=EmptyQuadrant) has no C# equivalent to update — Galaxy defers
-    /// sector-occupancy indexing to the movement phase.
+    /// ConstructStargate (UPDATE.PAS:58-100) for the completion branch. Skips the naming system
+    /// (Location2Index/GetDefinedName/DeleteName/AddName) — it doesn't exist in this port yet, and
+    /// nothing here depends on it. Sector-occupancy clearing (Sector[XY.x]^[XY.y].Obj:=EmptyQuadrant)
+    /// has no C# equivalent to update — Galaxy defers sector-occupancy indexing to the movement phase.
+    /// <c>ConsDone</c> fires with the raw <see cref="Coordinate"/>, not the new starbase/stargate, as
+    /// its subject — matching Pascal's own <c>Loc.ID:=EmptyQuadrant; Loc.XY:=XY</c> at UPDATE.PAS:215,
+    /// which discards the newly-created object's ID rather than using it.
     /// </summary>
     private void UpdateConstruction(ConstructionSite site, Game game)
     {
         var fleets = game.Galaxy.Fleets.Where(f => f.Location == site.Location && f.Owner == site.Owner).ToList();
-        if (!UseUpRawMaterial(site.Building, fleets))
+        if (!UseUpRawMaterial(site, fleets))
             return;
 
         site.YearsToCompletion--;
@@ -41,6 +43,8 @@ public sealed partial class AnnualTickHandler
                 game.Galaxy.Starbases.Add(CreateStarbase(site));
                 break;
         }
+
+        site.Owner.AddNews(NewsType.ConstructionCompleted, position: site.Location, p1: (int)site.Building);
     }
 
     /// <summary>
@@ -48,13 +52,14 @@ public sealed partial class AnnualTickHandler
     /// ConsCargoNeeded on a local scratch copy first; only commits the scratch copy back to the real
     /// fleets if every cargo type in <see cref="_constructionRawMaterialTypes"/> was fully satisfied —
     /// a shortfall partway through consumes *nothing*, not even the types already found sufficient
-    /// (Pascal's goto ExitLoop discards the whole scratch copy on the first shortfall). PutCargo
+    /// (Pascal's goto ExitLoop discards the whole scratch copy on the first shortfall, firing
+    /// <c>ConsLack</c> for the cargo type that came up short before exiting). PutCargo
     /// (PRIMINTR.PAS:599-607) is a plain unclamped assignment, not PutTotalCargo's ThgLmt-clamped one
     /// — no clamp needed on write-back here either.
     /// </summary>
-    private static bool UseUpRawMaterial(ConstructionType building, List<Fleet> fleets)
+    private static bool UseUpRawMaterial(ConstructionSite site, List<Fleet> fleets)
     {
-        var needed = _constructionCargoNeeded[building];
+        var needed = _constructionCargoNeeded[site.Building];
         var scratch = fleets.ToDictionary(f => f, f => _constructionRawMaterialTypes.ToDictionary(t => t, t => f.Cargo[t]));
 
         foreach (var cargoType in _constructionRawMaterialTypes) {
@@ -66,8 +71,10 @@ public sealed partial class AnnualTickHandler
                 rawNeeded -= used;
             }
 
-            if (rawNeeded > 0)
+            if (rawNeeded > 0) {
+                site.Owner.AddNews(NewsType.ConstructionLacksRawMaterial, site, p1: (int)cargoType);
                 return false;
+            }
         }
 
         foreach (var fleet in fleets)

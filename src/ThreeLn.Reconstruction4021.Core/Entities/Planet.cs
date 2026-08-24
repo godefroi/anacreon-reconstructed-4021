@@ -55,4 +55,6 @@ public sealed class Planet : IEconomicWorld
     }
 
     bool IEconomicWorld.IsPlanet => true;
+
+    void IEconomicWorld.Reassign(Empire newOwner) => Owner = newOwner;
 }

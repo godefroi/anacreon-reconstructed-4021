@@ -1,5 +1,6 @@
 using ThreeLn.Reconstruction4021.Core.Entities;
 using ThreeLn.Reconstruction4021.Core.Turns;
+using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Core;
 
@@ -34,4 +35,39 @@ public sealed class Game(Galaxy.Galaxy galaxy)
         Empires.Count > 0 && ReferenceEquals(Empires[0], empire);
 
     public bool AnyHumanPlayersRemain => Empires.Any(e => TurnHandlers[e].IsHuman);
+
+    /// <summary>
+    /// AddGlobalNews (NEWS.PAS:230-243): broadcasts one news item to every empire that isn't in
+    /// <paramref name="exclude"/> and has scouted <paramref name="source"/>. Pascal's own
+    /// <c>EmpireActive(Emp)</c> conjunct is redundant here for the same reason <see cref="Empire.AddNews"/>
+    /// drops it — <see cref="Empires"/> only ever holds real, in-use empires.
+    /// </summary>
+    public void AddGlobalNews(
+        IEnumerable<Empire> exclude,
+        ISectorObject source,
+        NewsType headline,
+        Empire? otherEmpire = null,
+        int p1 = 0,
+        int p2 = 0,
+        int p3 = 0)
+    {
+        var excluded = exclude as ICollection<Empire> ?? [.. exclude];
+
+        foreach (var empire in Empires) {
+            if (excluded.Contains(empire) || !HasScouted(empire, source)) {
+                continue;
+            }
+
+            empire.AddNews(headline, source, otherEmpire: otherEmpire, p1: p1, p2: p2, p3: p3);
+        }
+    }
+
+    /// <summary>Scouted(Emp,Source) (PRIMINTR.PAS) dispatched across the four ISectorObject kinds.</summary>
+    private static bool HasScouted(Empire empire, ISectorObject source) => source switch {
+        Planet p => empire.Planets.Scouted.Contains(p),
+        Starbase s => empire.Starbases.Scouted.Contains(s),
+        Stargate g => empire.Stargates.Scouted.Contains(g),
+        ConstructionSite c => empire.ConstructionSites.Scouted.Contains(c),
+        _ => false,
+    };
 }

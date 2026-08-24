@@ -39,23 +39,28 @@ internal static class PatchHarness
             if (_builtDrivers.Count == 0 || !Directory.Exists(outDir)) {
                 var pristineDir = Path.Combine(PascalHarness.RepoRoot, "reference", "DOSAnacreonSource131");
 
-                if (Directory.Exists(outDir))
+                if (Directory.Exists(outDir)) {
                     Directory.Delete(outDir, recursive: true);
+                }
+
                 Directory.CreateDirectory(outDir);
 
-                foreach (var source in Directory.EnumerateFiles(pristineDir, "*.PAS"))
+                foreach (var source in Directory.EnumerateFiles(pristineDir, "*.PAS")) {
                     File.Copy(source, Path.Combine(outDir, Path.GetFileName(source)));
+                }
 
                 var patchesDir = Path.Combine(verifyDir, "patches");
-                foreach (var patch in Directory.EnumerateFiles(patchesDir, "*.patch").OrderBy(p => p, StringComparer.Ordinal))
+                foreach (var patch in Directory.EnumerateFiles(patchesDir, "*.patch").OrderBy(p => p, StringComparer.Ordinal)) {
                     PascalHarness.RunProcess(PascalHarness.GitPath, ["apply", "-p1", patch], outDir);
+                }
 
                 _builtDrivers.Clear();
             }
 
             var driverPath = Path.Combine(verifyDir, driverName + ".pas");
-            if (!File.Exists(driverPath))
+            if (!File.Exists(driverPath)) {
                 throw new FileNotFoundException($"Patch-based driver source not found: {driverPath}");
+            }
             File.Copy(driverPath, Path.Combine(outDir, driverName + ".pas"), overwrite: true);
 
             PascalHarness.RunProcess(PascalHarness.FpcPath, ["-Mtp", "-CfSSE2", driverName + ".pas"], outDir);

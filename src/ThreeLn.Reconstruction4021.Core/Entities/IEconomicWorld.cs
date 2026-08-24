@@ -12,10 +12,18 @@ namespace ThreeLn.Reconstruction4021.Core.Entities;
 /// differently from a planet for exactly these four things, so each implementation encodes one
 /// accessor's Base-case behavior instead of a shared field.
 /// </summary>
-public interface IEconomicWorld
+public interface IEconomicWorld : ISectorObject
 {
-    Coordinate Location { get; }
-    Empire Owner { get; set; }
+    /// <summary>
+    /// Changes this world's owner (Rebellion in UPDATE.PAS reassigns to Indep; GalaxySetup's
+    /// ApplySetup assigns the starting owner). A method rather than exposing a settable <c>Owner</c>
+    /// through this interface: <see cref="ISectorObject.Owner"/> stays read-only everywhere except
+    /// through this one choke point, so any future invariant ownership changes need to keep in sync
+    /// (e.g. Empire-side bookkeeping) has one place to live instead of every call site that currently
+    /// assigns <c>.Owner</c> directly.
+    /// </summary>
+    void Reassign(Empire newOwner);
+
     WorldType Type { get; set; }
     TechLevel TechLevel { get; set; }
     int Efficiency { get; set; }

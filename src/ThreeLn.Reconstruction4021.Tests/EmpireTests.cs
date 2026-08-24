@@ -1,5 +1,6 @@
 using ThreeLn.Reconstruction4021.Core.Entities;
 using ThreeLn.Reconstruction4021.Core.Galaxy;
+using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Tests;
 
@@ -58,5 +59,25 @@ public class EmpireTests
 
         await Assert.That(launched).IsFalse();
         await Assert.That(empire.ProbesInTransit.Count).IsEqualTo(Empire.MaxProbesInTransit);
+    }
+
+    [Test]
+    public async Task AddNews_OwnedEmpire_RecordsTheItem()
+    {
+        var empire = new Empire { Name = "Human" };
+
+        empire.AddNews(NewsType.PeopleStarving, p1: 5);
+
+        await Assert.That(empire.News).Count().IsEqualTo(1);
+        await Assert.That(empire.News[0].Headline).IsEqualTo(NewsType.PeopleStarving);
+        await Assert.That(empire.News[0].Parm1).IsEqualTo(5);
+    }
+
+    [Test]
+    public async Task AddNews_Independent_IsANoOp()
+    {
+        Empire.Independent.AddNews(NewsType.PeopleStarving);
+
+        await Assert.That(Empire.Independent.News).IsEmpty();
     }
 }

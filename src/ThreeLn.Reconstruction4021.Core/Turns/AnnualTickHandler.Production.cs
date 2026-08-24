@@ -364,16 +364,21 @@ public sealed partial class AnnualTickHandler
 
     /// <summary>
     /// ReportPlanetLack (UPDATE.PAS:39-56): the first time a given resource type is reported lacking
-    /// in a tick, bumps RevolutionIndex by 1 — real state, not just a notification, so it's kept even
-    /// though AddNews itself is skipped (no news subsystem yet, same precedent as elsewhere).
-    /// reportedShortfalls mirrors Pascal's OtherReports (a ResourceSet threaded through the whole
-    /// per-tick UpdateWorld call, not reset between call sites) — <see cref="HashSet{T}.Add"/> already
-    /// returns whether the item was new, so the guard and the insert are one call.
+    /// in a tick, fires <paramref name="headline"/> (Parm1 = the resource's ordinal) and bumps
+    /// RevolutionIndex by 1. Takes the headline as a parameter since Pascal's own two call sites pass
+    /// different ones for the same underlying "not enough raw material" shape — <c>Lack</c> from
+    /// Production's raw-material check (UPDATE.PAS:905), <c>IndLack</c> from UpdateIndustry's metals
+    /// check (UPDATE.PAS:971). reportedShortfalls mirrors Pascal's OtherReports (a ResourceSet threaded
+    /// through the whole per-tick UpdateWorld call, not reset between call sites) —
+    /// <see cref="HashSet{T}.Add"/> already returns whether the item was new, so the guard and the
+    /// insert are one call.
     /// </summary>
-    private static void ReportResourceShortfall(IEconomicWorld world, CargoType resource, HashSet<CargoType> reportedShortfalls)
+    private static void ReportResourceShortfall(IEconomicWorld world, CargoType resource, NewsType headline, HashSet<CargoType> reportedShortfalls)
     {
-        if (reportedShortfalls.Add(resource))
+        if (reportedShortfalls.Add(resource)) {
+            world.Owner.AddNews(headline, world, p1: (int)resource);
             ChangeRevIndex(world, 1);
+        }
     }
 
     /// <summary>
@@ -499,10 +504,11 @@ public sealed partial class AnnualTickHandler
 
     /// <summary>
     /// Decrements trillum reserves by the amount produced, throttling production and raising the
-    /// revolution index as reserves run low (UPDATE.PAS:757-795). Skips AddNews — no news subsystem yet.
-    /// A starbase's TrillumReserve reads as MaxResources and discards writes (see IEconomicWorld), so
-    /// this is a guaranteed no-op past the first line for one — matching TrillumReserves/
-    /// PutTrillumReserves's Base cases (PRIMINTR.PAS:487,496) exactly.
+    /// revolution index as reserves run low (UPDATE.PAS:757-795), firing
+    /// <c>OutOfTrillumReserves</c>/<c>TrillumReservesVeryLow</c>/<c>TrillumReservesLow</c> alongside
+    /// each of the three tiers. A starbase's TrillumReserve reads as MaxResources and discards writes
+    /// (see IEconomicWorld), so this is a guaranteed no-op past the first line for one — matching
+    /// TrillumReserves/PutTrillumReserves's Base cases (PRIMINTR.PAS:487,496) exactly.
     /// </summary>
     private int ProduceTrillum(IEconomicWorld world, int production, int currentTrillumCargo)
     {
@@ -512,10 +518,13 @@ public sealed partial class AnnualTickHandler
         var reserves = world.TrillumReserve;
         if (reserves == 0) {
             production = 0;
+            world.Owner.AddNews(NewsType.OutOfTrillumReserves, world);
             ChangeRevIndex(world, Rnd(10, 20));
         } else if (reserves * 20L < production) {
+            world.Owner.AddNews(NewsType.TrillumReservesVeryLow, world);
             ChangeRevIndex(world, Rnd(5, 10));
         } else if (reserves * 10L < production && Rnd(1, 2) == 1) {
+            world.Owner.AddNews(NewsType.TrillumReservesLow, world);
             ChangeRevIndex(world, Rnd(3, 5));
         }
 
@@ -625,7 +634,7 @@ public sealed partial class AnnualTickHandler
                     // above, so this branch (rawNeeded > Cargo.Metals >= 0) can't be reached for it.
                     consRate = (int)(100 * (world.Cargo.Metals / (double)metalCost));
                     rawNeeded = world.Cargo.Metals;
-                    ReportResourceShortfall(world, CargoType.Metals, reportedShortfalls);
+                    ReportResourceShortfall(world, CargoType.Metals, NewsType.IndustryLacksMetals, reportedShortfalls);
                 }
             } else if (current > optimumLevel) {
                 consRate = Math.Min(-1, -PascalRound(world.Efficiency / 2.0));
@@ -735,7 +744,7 @@ public sealed partial class AnnualTickHandler
                 production = ClampResource(world.Cargo[rawMaterial] / (double)costPer100 * 100);
                 needed = ClampResource(production * (costPer100 / 100.0));
                 if (world.IsPlanet)
-                    ReportResourceShortfall(world, rawMaterial, reportedShortfalls);
+                    ReportResourceShortfall(world, rawMaterial, NewsType.LacksRawMaterial, reportedShortfalls);
             }
             rawNeeded[rawMaterial] = needed;
         }

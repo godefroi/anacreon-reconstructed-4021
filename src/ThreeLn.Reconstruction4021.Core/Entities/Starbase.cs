@@ -50,4 +50,6 @@ public sealed class Starbase : IMovable, IEconomicWorld
     void IEconomicWorld.InitializeSelfSufficiency() { }
 
     bool IEconomicWorld.IsPlanet => false;
+
+    void IEconomicWorld.Reassign(Empire newOwner) => Owner = newOwner;
 }

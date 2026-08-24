@@ -70,4 +70,37 @@ public sealed class Empire
     public EntityVisibility<Fleet> Fleets { get; } = new();
     public EntityVisibility<Stargate> Stargates { get; } = new();
     public EntityVisibility<ConstructionSite> ConstructionSites { get; } = new();
+
+    /// <summary>
+    /// GetNewsList/GetNewsItem (NEWS.PAS:139-205) collapse to this plain list once <see cref="NewsItem"/>
+    /// is a real record: Pascal's hand-rolled singly-linked list plus its heap-availability guard
+    /// (<c>MaxAvail&gt;20</c>) exist only because of DOS's 640KB heap, not a game rule, so neither is
+    /// ported. EraseNews (NEWS.PAS:245-264) is just <c>News.Clear()</c> — no wrapper method, since
+    /// nothing yet calls it (see docs/ROADMAP.md's Phase 4 notes on why the per-turn reset isn't wired
+    /// yet: no consumer exists to validate the timing against).
+    /// </summary>
+    public List<NewsItem> News { get; } = [];
+
+    /// <summary>
+    /// AddNews (NEWS.PAS:207-228). Inlines Pascal's <c>(Player&lt;&gt;Indep) AND EmpireActive(Player)</c>
+    /// guard as just <c>IsIndependent</c> — this port's <see cref="Game.Empires"/> only ever holds real,
+    /// in-use empires by construction, so <c>EmpireActive</c>'s <c>InUse</c> check is redundant with
+    /// list membership (same reasoning already applied to <see cref="ProbesInTransit"/>).
+    /// </summary>
+    public void AddNews(
+        NewsType headline,
+        ISectorObject? subject = null,
+        Coordinate? position = null,
+        Empire? otherEmpire = null,
+        TechCatalog.TechGrantIdentity? techGrant = null,
+        int p1 = 0,
+        int p2 = 0,
+        int p3 = 0)
+    {
+        if (IsIndependent) {
+            return;
+        }
+
+        News.Add(new NewsItem(headline, subject, position, otherEmpire, techGrant, p1, p2, p3));
+    }
 }

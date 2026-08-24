@@ -13,8 +13,25 @@ namespace ThreeLn.Reconstruction4021.Core.Entities;
 /// gate) and new-game empire creation (seeding TechDev[Pred(Tech)] for a starting empire) — both need
 /// the exact same "what's unlockable at tech level X" answer.
 /// </summary>
+/// <summary>Which of <see cref="UnlockedTechnology"/>'s 4 buckets a <see cref="TechCatalog.TechGrantIdentity"/> names.</summary>
+public enum TechCategory
+{
+    Defense,
+    Ship,
+    Cargo,
+    Construction,
+}
+
 public static class TechCatalog
 {
+    /// <summary>
+    /// Identifies one catalog entry without boxing its concrete enum value: <see cref="Ordinal"/> is
+    /// that value cast to <c>int</c>, disambiguated by <see cref="Category"/> since Pascal's single
+    /// flat <c>TechnologyTypes</c> ordinal was already deliberately split into four typed enums when
+    /// this port's data model was built — a bare <c>int</c> alone would be ambiguous across them.
+    /// </summary>
+    public readonly record struct TechGrantIdentity(TechCategory Category, int Ordinal);
+
     public static readonly FrozenDictionary<CargoType, TechLevel> MinTechForCargo = new Dictionary<CargoType, TechLevel> {
         [CargoType.Supplies] = TechLevel.PreTech,
         [CargoType.Legion] = TechLevel.Primitive,
@@ -64,27 +81,36 @@ public static class TechCatalog
     /// on is declared earlier in this same file, and C# runs one class's static field initializers in
     /// textual declaration order.
     /// </summary>
-    private static readonly (TechLevel MinTech, Func<UnlockedTechnology, bool> IsUnlocked, Action<UnlockedTechnology> Unlock)[] _catalog = BuildCatalog();
+    private static readonly (TechLevel MinTech, Func<UnlockedTechnology, bool> IsUnlocked, Action<UnlockedTechnology> Unlock, TechGrantIdentity Identity)[] _catalog = BuildCatalog();
 
-    private static (TechLevel, Func<UnlockedTechnology, bool>, Action<UnlockedTechnology>)[] BuildCatalog()
+    private static (TechLevel, Func<UnlockedTechnology, bool>, Action<UnlockedTechnology>, TechGrantIdentity)[] BuildCatalog()
     {
-        var entries = new List<(TechLevel, Func<UnlockedTechnology, bool>, Action<UnlockedTechnology>)>();
+        var entries = new List<(TechLevel, Func<UnlockedTechnology, bool>, Action<UnlockedTechnology>, TechGrantIdentity)>();
 
         foreach (var type in Enum.GetValues<DefenseType>())
-            entries.Add((MinTechForDefense[type], t => t.Defenses.Contains(type), t => t.Defenses.Add(type)));
+            entries.Add((MinTechForDefense[type], t => t.Defenses.Contains(type), t => t.Defenses.Add(type),
+                new TechGrantIdentity(TechCategory.Defense, (int)type)));
         foreach (var type in Enum.GetValues<ShipType>())
-            entries.Add((MinTechForShip[type], t => t.Ships.Contains(type), t => t.Ships.Add(type)));
+            entries.Add((MinTechForShip[type], t => t.Ships.Contains(type), t => t.Ships.Add(type),
+                new TechGrantIdentity(TechCategory.Ship, (int)type)));
         foreach (var type in Enum.GetValues<CargoType>())
-            entries.Add((MinTechForCargo[type], t => t.Resources.Contains(type), t => t.Resources.Add(type)));
+            entries.Add((MinTechForCargo[type], t => t.Resources.Contains(type), t => t.Resources.Add(type),
+                new TechGrantIdentity(TechCategory.Cargo, (int)type)));
         foreach (var type in Enum.GetValues<ConstructionType>())
-            entries.Add((MinTechForConstruction[type], t => t.Constructions.Contains(type), t => t.Constructions.Add(type)));
+            entries.Add((MinTechForConstruction[type], t => t.Constructions.Contains(type), t => t.Constructions.Add(type),
+                new TechGrantIdentity(TechCategory.Construction, (int)type)));
 
         return [.. entries];
     }
 
-    /// <summary>Every catalog item unlocked by <paramref name="tech"/> but not yet in <paramref name="owned"/>, in catalog order (GetNewTech's PossibleTechSet-TechSet, UPDATE.PAS:370).</summary>
-    public static List<Action<UnlockedTechnology>> MissingTechAt(UnlockedTechnology owned, TechLevel tech) =>
-        [.. _catalog.Where(e => e.MinTech <= tech && !e.IsUnlocked(owned)).Select(e => e.Unlock)];
+    /// <summary>
+    /// Every catalog item unlocked by <paramref name="tech"/> but not yet in <paramref name="owned"/>,
+    /// in catalog order (GetNewTech's PossibleTechSet-TechSet, UPDATE.PAS:370). Pairs each grant with
+    /// its <see cref="TechGrantIdentity"/> so a caller that picks one (NewTechLevel, for its
+    /// <c>NCapTech</c> news) knows which one it granted, not just how to grant it.
+    /// </summary>
+    public static List<(TechGrantIdentity Identity, Action<UnlockedTechnology> Unlock)> MissingTechAt(UnlockedTechnology owned, TechLevel tech) =>
+        [.. _catalog.Where(e => e.MinTech <= tech && !e.IsUnlocked(owned)).Select(e => (e.Identity, e.Unlock))];
 
     /// <summary>
     /// A single named grant, for callers building an explicit tech list by real type (e.g. empire

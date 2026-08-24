@@ -53,7 +53,7 @@ public static class EmpireFactory
     private static void SeedTechnology(UnlockedTechnology technology, TechLevel techLevel, IReadOnlyList<Action<UnlockedTechnology>> extraTechs)
     {
         if (techLevel > TechLevel.PreTech) {
-            foreach (var unlock in TechCatalog.MissingTechAt(new UnlockedTechnology(), techLevel - 1)) {
+            foreach (var (_, unlock) in TechCatalog.MissingTechAt(new UnlockedTechnology(), techLevel - 1)) {
                 unlock(technology);
             }
         }
@@ -64,7 +64,7 @@ public static class EmpireFactory
 
         var allowedAtTech = new UnlockedTechnology();
 
-        foreach (var unlock in TechCatalog.MissingTechAt(new UnlockedTechnology(), techLevel)) {
+        foreach (var (_, unlock) in TechCatalog.MissingTechAt(new UnlockedTechnology(), techLevel)) {
             unlock(allowedAtTech);
         }
 

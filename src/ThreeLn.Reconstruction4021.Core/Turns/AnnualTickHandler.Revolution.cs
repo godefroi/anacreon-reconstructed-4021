@@ -49,7 +49,15 @@ public sealed partial class AnnualTickHandler
                 world.Cargo.Legions + world.Population / 10.0 * (_optimumMilitaryByType[world.Type] / 100.0));
     }
 
-    private void UpdateRevolution(IEconomicWorld world, Dictionary<Empire, int> newTotalRevIndex)
+    /// <summary>
+    /// UPDATE.PAS:681-755. The rebellion-trigger tail (UPDATE.PAS:737-753) is a mutually-exclusive
+    /// tier cascade, not one boolean condition: <c>RevolutionIndex&gt;75</c> either calls
+    /// <see cref="Rebellion"/> or (roll failed, or the world is a capital) fires
+    /// <c>RebellionWarning4</c> — it does NOT fall through to the lower tiers, which are real
+    /// <c>else if</c> alternatives to the &gt;75 case, each firing exactly one warning headline with no
+    /// state effect of its own.
+    /// </summary>
+    private void UpdateRevolution(IEconomicWorld world, Game game, Dictionary<Empire, int> newTotalRevIndex)
     {
         var owner = world.Owner;
 
@@ -72,19 +80,34 @@ public sealed partial class AnnualTickHandler
             if (world.RevolutionIndex > 30) {
                 var factor = Rnd(1, (military - optimumMilitary) / 100);
                 ChangeRevIndex(world, -factor);
+                if (factor > 5)
+                    owner.AddNews(NewsType.RebellionQuietedByMilitary, world);
             } else if (world.Type != WorldType.Capital && world.Type != WorldType.Base) {
-                if (Rnd(1, 5) == 1)
+                if (Rnd(1, 5) == 1) {
                     ChangeRevIndex(world, Rnd(5, 15));
+                    owner.AddNews(NewsType.TroopsWantOut, world);
+                }
             }
         }
 
-        // Rebellion trigger (UPDATE.PAS:737-753). The news-only threshold tiers below 75 (RebelW1-4)
-        // have no state effect and are skipped — no news subsystem yet.
-        if (world.RevolutionIndex > 75 && Rnd(1, 100) < world.RevolutionIndex && world.Type != WorldType.Capital)
-            Rebellion(world, military, newTotalRevIndex);
+        // Rebellion trigger cascade (UPDATE.PAS:737-753).
+        if (world.RevolutionIndex > 75) {
+            if (Rnd(1, 100) < world.RevolutionIndex && world.Type != WorldType.Capital)
+                Rebellion(world, military, game, newTotalRevIndex);
+            else
+                owner.AddNews(NewsType.RebellionWarning4, world);
+        } else if (world.RevolutionIndex > 70) {
+            owner.AddNews(NewsType.RebellionWarning4, world);
+        } else if (world.RevolutionIndex > 66) {
+            owner.AddNews(NewsType.RebellionWarning3, world);
+        } else if (world.RevolutionIndex > 43) {
+            owner.AddNews(NewsType.RebellionWarning2, world);
+        } else if (world.RevolutionIndex > 30) {
+            owner.AddNews(NewsType.RebellionWarning1, world);
+        }
     }
 
-    private void Rebellion(IEconomicWorld world, int military, Dictionary<Empire, int> newTotalRevIndex)
+    private void Rebellion(IEconomicWorld world, int military, Game game, Dictionary<Empire, int> newTotalRevIndex)
     {
         var owner = world.Owner;
         var rebels = Math.Max(1, ClampResource(Math.Sqrt(world.Population) * 65));
@@ -100,16 +123,22 @@ public sealed partial class AnnualTickHandler
         if (Rnd(1, 100) < chanceToEndRebel) {
             // Empire puts down the rebellion.
             ChangeRevIndex(world, Rnd(-15, 5));
+            owner.AddNews(NewsType.RebellionSuppressed, world, p1: menLost);
             newTotalRevIndex[owner] = newTotalRevIndex.GetValueOrDefault(owner) - Rnd(1, 5);
         } else {
             // World rebels and goes independent.
-            world.Owner = Empire.Independent;
+            world.Reassign(Empire.Independent);
             world.Type = WorldType.Independent;
             // InitializeISSP resets a planet's self-sufficiency to DefaultISSP ($5555 — all four
             // dials at the midpoint of the 0-10 range, DATACNST.PAS:516); a no-op for a starbase
             // (PRIMINTR.PAS:627-633 has no Base case) — see IEconomicWorld.
             world.InitializeSelfSufficiency();
             ChangeRevIndex(world, -Rnd(40, 50));
+            // GLBRev/Rebel fire with the *old* owner ("owner", captured above) even though Reassign
+            // already flipped world.Owner to Independent — matching Pascal's own Emp local, captured
+            // once at Rebellion's start and never re-read (UPDATE.PAS:637,656,666-667).
+            game.AddGlobalNews([owner], world, NewsType.WorldRevoltedGlobal, otherEmpire: owner);
+            owner.AddNews(NewsType.WorldRebelled, world);
             world.Cargo.Legions = rebels;
             newTotalRevIndex[owner] = newTotalRevIndex.GetValueOrDefault(owner) + Rnd(5, 10);
         }

@@ -39,14 +39,14 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
         var newTotalRevIndex = new Dictionary<Empire, int>();
 
         foreach (var planet in game.Galaxy.Planets) {
-            UpdateWorld(planet, newTotalRevIndex);
+            UpdateWorld(planet, game, newTotalRevIndex);
         }
 
         // Starbases run after every planet has completed its own full tick (UPDATE.PAS:1450-1466's
         // planet loop, then starbase loop) — SupplyLink pulls from neighbouring planets' this-year
         // cargo, not last year's.
         foreach (var starbase in game.Galaxy.Starbases) {
-            UpdateStarbase(starbase, game.Galaxy, newTotalRevIndex);
+            UpdateStarbase(starbase, game, newTotalRevIndex);
         }
 
         // Snapshot: UpdateConstruction removes a completed site from this same list mid-iteration.
@@ -75,7 +75,7 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
     /// HostileLife (if Class == Hostile)
     /// </code>
     /// </summary>
-    private void UpdateWorld(Planet planet, Dictionary<Empire, int> newTotalRevIndex)
+    private void UpdateWorld(Planet planet, Game game, Dictionary<Empire, int> newTotalRevIndex)
     {
         RunProductionPipeline(planet);
         UpdateEfficiency(planet);
@@ -84,7 +84,7 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
         UseUpFood(planet);
         UseUpAmbrosia(planet);
         UpdateMilitary(planet);
-        UpdateRevolution(planet, newTotalRevIndex);
+        UpdateRevolution(planet, game, newTotalRevIndex);
 
         if (planet.Class == WorldClass.Hostile) {
             HostileLife(planet);
@@ -99,12 +99,12 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
     /// for industrial complexes (STyp=cmp), gating the *entire* pipeline on being a complex, not just
     /// production (UPDATE.PAS:1420-1427).
     /// </summary>
-    private void UpdateStarbase(Starbase starbase, Galaxy.Galaxy galaxy, Dictionary<Empire, int> newTotalRevIndex)
+    private void UpdateStarbase(Starbase starbase, Game game, Dictionary<Empire, int> newTotalRevIndex)
     {
         var isComplex = starbase.Kind == StarbaseKind.IndustrialComplex;
 
         if (isComplex) {
-            RunProductionPipeline(starbase, () => SupplyLink(starbase, galaxy), () => SurplusLink(starbase, galaxy));
+            RunProductionPipeline(starbase, () => SupplyLink(starbase, game.Galaxy), () => SurplusLink(starbase, game.Galaxy));
         }
 
         UpdateEfficiency(starbase);
@@ -115,7 +115,7 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
             UseUpFood(starbase);
             UseUpAmbrosia(starbase);
             UpdateMilitary(starbase);
-            UpdateRevolution(starbase, newTotalRevIndex);
+            UpdateRevolution(starbase, game, newTotalRevIndex);
         }
     }
 
