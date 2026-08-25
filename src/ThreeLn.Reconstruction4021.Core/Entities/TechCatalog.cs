@@ -113,6 +113,22 @@ public static class TechCatalog
         [.. _catalog.Where(e => e.MinTech <= tech && !e.IsUnlocked(owned)).Select(e => (e.Identity, e.Unlock))];
 
     /// <summary>
+    /// A fresh, fully-unlocked-at-<paramref name="tech"/> set (Pascal's <c>TechDev[tech]</c> constant
+    /// table, computed rather than stored — see EmpireFactory.SeedTechnology's own doc comment for why).
+    /// Shared by EmpireFactory (a new empire's starting set) and Combat/CombatOutcome.cs's ConquerEmpire
+    /// (a surviving empire's tech reset when it gets a new, differently-teched capital, Phase 5 commit
+    /// 5f) — both need the identical "everything TechDev grants by this level" answer.
+    /// </summary>
+    public static UnlockedTechnology FullSetAt(TechLevel tech)
+    {
+        var full = new UnlockedTechnology();
+        foreach (var (_, unlock) in MissingTechAt(new UnlockedTechnology(), tech)) {
+            unlock(full);
+        }
+        return full;
+    }
+
+    /// <summary>
     /// A single named grant, for callers building an explicit tech list by real type (e.g. empire
     /// creation's scenario-specified "extra techs") rather than walking the whole catalog. Kept here
     /// rather than callers writing <c>t => t.Ships.Add(type)</c> inline so every grant of a given

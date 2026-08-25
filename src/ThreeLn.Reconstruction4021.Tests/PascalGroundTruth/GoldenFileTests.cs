@@ -62,7 +62,8 @@ public class GoldenFileTests
 
         GoldenFile.Regenerate("npeattack", NpeAttackCases.All,
             c => $"{(int)c.DefenderTech},{(int)c.DefenderClass},{(c.AttackerCarriesTroops ? 1 : 0)}," +
-                 $"{c.DefenderFgt},{c.DefenderHkr},{c.DefenderMen},{(int)c.Intent},{(c.TargetIsFleet ? 1 : 0)},{c.RngFixedValue}",
+                 $"{c.DefenderFgt},{c.DefenderHkr},{c.DefenderMen},{(int)c.Intent},{(c.TargetIsFleet ? 1 : 0)},{c.RngFixedValue}," +
+                 $"{(c.Planet3Present ? 1 : 0)},{c.Planet3X},{c.Planet3Y},{c.Planet3Population},{c.Planet3RevIndex},{(int)c.Planet3Tech}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "npeattack", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("techlevel", TechLevelCases.All,

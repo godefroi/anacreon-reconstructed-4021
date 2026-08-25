@@ -409,7 +409,7 @@ cascade into an explicit if/else-if chain (see `AnnualTickHandler.Revolution.cs`
 boundary tests at each tier transition, including one proving `RevIndex>75` genuinely has two outcomes
 (`Rebellion` vs. a lone `RebellionWarning4`), not one.
 
-## 5. Combat — in progress, 5a-5e landed
+## 5. Combat — in progress, 5a-5f landed
 
 Attack resolution, fleet/starbase destruction, capital loss and empire elimination. The original
 one-paragraph version of this section undersold the real scope, the same way "8 known News sites"
@@ -559,9 +559,70 @@ Sub-commits:
   (30-round retreat timeout vs. real surrender/destruction), both dispatch targets
   (`WorldEngage`/`FleetEngage`), and the intent-driven targeting bias; a 6th, hardcoded C# case covers
   `AttackerDestroyed`, the one termination path no golden case's parameter space happened to reach.
-- **5f, outcome application + empire elimination** — `ResolveAttack`/`ConquerWorld`/
-  `ConquerEmpire`/`DestroyEmpire` using the plain-`List.Remove`/`DefeatedBy` model above, plus
-  `DestroyFleet`/`AbortFleet`.
+- ✅ **5f, outcome application + empire elimination** (`Combat/CombatOutcome.cs`) — `ConquerWorld`
+  (reassign + efficiency drop + a revolution-index tier cascade keyed on the world's own pre-conquest
+  index + `Scout`), `ConquerEmpire` (the per-planet cascade once a capital falls: immediate conquest/
+  forced independence/distance-conquest/new-capital-candidate, then either `DestroyEmpire` or
+  `NewCapital`'s tech-reset+handover — the disabled starbase-recapture loop, `(* ... *)`-commented in
+  source, stays unported, same treatment as `BATTLE.PAS`/`BOMBER.PAS`), `RestoreCombatant`,
+  `ResolveAttack` (the News-firing switch gluing the others together, including `DestroyFleet`/
+  `AbortFleet`), `DestroyEmpire` — using the plain-`List.Remove`/`DefeatedBy` model from this
+  section's own design notes above. `Booty` (`PlanetSet`, threaded from `ConquerEmpire` through
+  `ResolveAttack` up to `NPEAttack`) isn't modeled at all — read all three bodies directly, confirmed
+  none of them ever reads it back, only ever writes it; its only prospective reader is Phase 8's
+  human order compiler.
+
+  Two shared primitives got promoted from `private` to `internal` rather than duplicated a second
+  place: `AnnualTickHandler.ChangeRevIndex` (the `[0,100]` revolution-index clamp `ConquerWorld`/
+  `NewCapital` both need) and `VisibilityHandler.ScoutAdjacent` (which already *is* `Scout(Emp,XY)`'s
+  own stand-in, gaps and all — no `POk` news on first contact, no dark-nebula early exit, both
+  pre-existing from Phase 3, not new here). Real Pascal keeps both in `PRIMINTR.PAS`, a shared
+  primitives unit both `ATTACK.PAS` and `UPDATE.PAS`/`INTRFACE.PAS` USE — this mirrors that shape
+  instead of introducing a new file for two one-line callers.
+
+  A real, first-occurrence gap surfaced in the existing News plumbing: `GLBDest`/`GLBConq`/
+  `GLBCapConq`/`GLBLAMStrk` are `(Loc,Attacker,Defender)`-shaped — two empire references, not
+  `NewsItem`'s existing single `OtherEmpire` slot's one. Pascal packs both into `Parm1`/`Parm2` via
+  raw `Ord()`, exactly the pattern `OtherEmpire` itself was added to avoid; fixed the same way —
+  `NewsItem`/`Empire.AddNews`/`Game.AddGlobalNews` all gained a second, real `Defender: Empire?`
+  field rather than falling back to a raw int. `Fleet` also joined `ISectorObject` here (it already
+  had `Location`/`Owner`), and `Game.AddGlobalNews`'s `HasScouted` switch gained a `Fleet` arm — the
+  first phase to fire a Global-scoped news item with a fleet as its subject.
+
+  `RestoreCombatant`'s Fleet branch skips its own `FleetCargoSpace<0 THEN BalanceFleet` + `FuelCap`
+  clamp: no fuel/cargo-capacity system exists anywhere in this port yet (`FuelCap`/`FuelCons` tables,
+  `FleetCargoSpace`, `BalanceFleet`), and `RestoreCombatant` only ever *reduces* ships/cargo, which
+  can only free up capacity, never exceed it — tracked as a gap below, same category as the
+  stargate/fortress and starbase-movement gaps already there, not built just to support one
+  Pascal-side clamp this method structurally can't ever trigger.
+
+  Needed `ATTACK.PAS.patch` extended (not a third patch file): un-commented `ConquerWorld`/
+  `ConquerEmpire`/`RestoreCombatant`/`ResolveAttack` against five new local no-op stand-ins for the
+  Intrface/Fleet routines they call (`Scout`/`DestroyEmpire`/`DestroyFleet`/`AbortFleet`/
+  `FleetNameDestruction`) plus a sixth for `BalanceFleet` — confirmed by a real link attempt that
+  `FuelCapacity`/`FleetCargoSpace`/`GetFleetFuel`/`SetFleetFuel` all resolve fine (`Misc`/`PrimIntr`,
+  already in scope) and only `BalanceFleet` itself needs `Intrface`. `ATTNPE.PAS.patch` similarly
+  restores `NPEAttack`'s full body (still excluding the `Con`/`Gate` dispatch branch, 5g's scope).
+  This harness only checks these procedures' own directly-observable effects (world ownership/
+  efficiency/RevIndex/type, Casualties/Killed, Result) — not what the six stand-ins would really do;
+  those stay covered by direct source reading plus the two hardcoded C# tests below instead.
+
+  Extended the `npeattack` golden domain (not a new domain) with a second, optional Empire2 world
+  (`Planet3`) positioned/populated by the case, plus `def_owner`/`def_eff`/`def_rev`/`def_type` and
+  (when `Planet3` is present) `p3_owner`/`p3_eff`/`p3_rev`/`p3_type`/`newcap_idx` output fields —
+  letting a case drive `ConquerEmpire`'s own per-planet cascade deliberately once Empire2's capital
+  falls, not just observe `Casualties`/`Killed`. Two new cases exercise its two most structurally
+  distinct branches directly against real Pascal: `ConquerEmpireImmediateConquestOfSecondWorld`
+  (branch 1: far from the old capital, close to the conqueror's, low population) and
+  `ConquerEmpireNewCapitalChosen` (the new-capital-candidate path: high population/moderate
+  revolution index fails all three conquest branches, `Bio`-level tech clears the `>JmpTchLvl` bar).
+  The other two per-planet branches (forced independence, distance-conquest) share the identical
+  distance+population+revolution-index+single-`Rnd`-threshold shape already verified correct by
+  these two — not separately golden-covered, a proportionate stopping point given the RNG-order
+  discipline was already validated. Two hardcoded C# tests (`CombatOutcomeTests.cs`) cover what the
+  harness can't reach at all: a human empire's defeat (`Capital=null`/`DefeatedBy` set, not removed
+  from `Game.Empires`) versus an NPE's (`DestroyEmpire`, removed) — the Pascal harness never marks an
+  empire `IsAPlayer`, so `EmpirePlayer(EnemyEmp)` is always `False` there.
 - **5g, standalone mechanics** — `HolocaustWorld`, `LAMAttack`, `DestroyConstructionOrGate`,
   `SelfDestructObject` (ported with no caller wired up yet, same precedent as `Empire.News.Clear()`).
 - **5h, minefield damage + disrupter blocking + minefield visibility** — folded additively into
@@ -586,6 +647,16 @@ its scope):
   `GetNewBasePos` route a mobile starbase around obstacles and charge fuel;
   `FleetMovementHandler.AdvanceStarbases` steps straight toward the destination with no fuel cost
   and no obstacle check.
+- **Fleet fuel/cargo-capacity system** (surfaced by Phase 5f). Real Pascal tracks a fleet's maximum
+  fuel (`MISC.PAS`'s `FuelCapacity`, from each ship type's `FuelCap`) and maximum cargo space
+  (`FleetCargoSpace`, from `TrnAdj`/`CargoSpace`), with `BalanceFleet` (`INTRFACE.PAS`) discarding
+  cargo by priority when a fleet ends up over capacity. This port tracks `Fleet.Fuel` as a plain
+  counter (fuel *cost* per move already exists, `FleetMovementHandler.ConsumeFuel`) but has no
+  capacity ceiling for either fuel or cargo anywhere. `RestoreCombatant`'s Fleet branch is the one
+  place this gap is currently visible (its own `FleetCargoSpace<0 THEN BalanceFleet` + `FuelCap`
+  clamp is unported) — harmless there since that method only ever *reduces* ships/cargo, never
+  increases them, but a real gap for whichever later phase needs fleets to actually respect a
+  capacity limit (loading cargo, refueling, `AbortFleet`'s own cargo transfer).
 
 ## 6. NPE AI
 

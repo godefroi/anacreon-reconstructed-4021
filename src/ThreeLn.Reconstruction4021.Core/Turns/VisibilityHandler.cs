@@ -221,7 +221,15 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
         DetermineIfScouted(game.Galaxy.Stargates, empire.Stargates, empire, game, g => g.Location, g => g.Owner);
     }
 
-    private static void ScoutAdjacent(Coordinate center, Empire empire, Game game)
+    /// <summary>
+    /// ScoutAdjacent doubles as PRIMINTR.PAS's own <c>Scout(Emp,XY)</c> primitive — internal, not
+    /// private, so Combat/CombatOutcome.cs's ConquerWorld (Phase 5 commit 5f) can call it directly for
+    /// its own <c>Scout(Emp,XY)</c> call rather than reimplementing a second, inevitably-diverging copy.
+    /// The gaps already noted below (no POk news on first contact, no dark-nebula early exit) apply
+    /// equally to that caller — real Pascal's Scout has both; this port's stand-in has neither yet,
+    /// tracked here, not duplicated as a second gap description at the new call site.
+    /// </summary>
+    internal static void ScoutAdjacent(Coordinate center, Empire empire, Game game)
     {
         foreach (var (dx, dy) in _adjacentOffsets) {
             var x = center.X + dx;

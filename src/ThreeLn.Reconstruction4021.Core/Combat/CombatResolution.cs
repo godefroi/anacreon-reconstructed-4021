@@ -8,17 +8,14 @@ namespace ThreeLn.Reconstruction4021.Core.Combat;
 public sealed record CombatEngagementResult(AttackResultType Result, AttackTally Casualties, AttackTally Killed);
 
 /// <summary>
-/// The multi-round, multi-shell resolution loop (ATTNPE.PAS, Phase 5 commit 5e): repeatedly runs
-/// CombatEngine.Battle across every shell, advances/retreats groups between rounds, and decides when
-/// an engagement is over — culminating in <see cref="NPEAttack"/>, the entry point Phase 6 (NPE AI)
-/// and Phase 8 (human auto-resolve) will both call. Deliberately stops at <see cref="AttackResultType"/>
-/// plus the final Casualties/Killed tallies: outcome application (RestoreCombatant/ResolveAttack,
-/// which consume those tallies to actually destroy ships/conquer worlds/eliminate empires) is a later
-/// commit's scope (5f), matching the "build the primitive, wire it up when the real consumer exists"
-/// precedent from Phases 3/4 — <see cref="NPEAttack"/>'s real Pascal body also calls
-/// DestroyConstructionOrGate for a construction-site/stargate target (5g); this port's Target is
-/// always an <see cref="IEconomicWorld"/> or <see cref="Fleet"/> (enforced by CombatEngine's own
-/// CalculateCombatData/GetEnemy), so that branch has no equivalent here yet either.
+/// The multi-round, multi-shell resolution loop (ATTNPE.PAS) plus outcome application (ATTACK.PAS,
+/// Phase 5 commit 5f): repeatedly runs CombatEngine.Battle across every shell, advances/retreats
+/// groups between rounds, decides when an engagement is over, then hands the result to
+/// Combat/CombatOutcome.cs to actually apply it — culminating in <see cref="NPEAttack"/>, the entry
+/// point Phase 6 (NPE AI) and Phase 8 (human auto-resolve) will both call. <see cref="NPEAttack"/>'s
+/// real Pascal body also calls DestroyConstructionOrGate for a construction-site/stargate target
+/// (5g); this port's Target is always an <see cref="IEconomicWorld"/> or <see cref="Fleet"/> (enforced
+/// by CombatEngine's own CalculateCombatData/GetEnemy), so that branch has no equivalent here yet.
 ///
 /// <see cref="RetrIndex"/> (Pascal's <c>RetrIndex</c>/<c>RetreatIndex</c> parameter, threaded through
 /// NPEAttack/FleetEngage/WorldEngage/FleetRetreats in real Pascal) is dropped entirely — confirmed by
@@ -31,20 +28,37 @@ public static class CombatResolution
     private static readonly ShellPosition[] _allShellPositions = Enum.GetValues<ShellPosition>();
 
     /// <summary>
-    /// NPEAttack (ATTNPE.PAS:386-429), trimmed to its resolution half — see this class's own doc
-    /// comment for what's deferred. <paramref name="target"/> must be an <see cref="IEconomicWorld"/>
-    /// (dispatches to <see cref="WorldEngage"/>) or a <see cref="Fleet"/> (dispatches to
-    /// <see cref="FleetEngage"/>), matching real Pascal's own <c>Target.ObjTyp=Flt</c> check.
+    /// NPEAttack (ATTNPE.PAS:386-424): the round-robin resolution loop (FleetEngage/WorldEngage),
+    /// then RestoreCombatant against both combatants and ResolveAttack to apply the outcome —
+    /// <paramref name="target"/> must be an <see cref="IEconomicWorld"/> (dispatches to
+    /// <see cref="WorldEngage"/>) or a <see cref="Fleet"/> (dispatches to <see cref="FleetEngage"/>),
+    /// matching real Pascal's own <c>Target.ObjTyp=Flt</c> check. <c>Capture</c> is real Pascal's own
+    /// <c>IF Intent=DestTrnAIT THEN Capture:=False ELSE Capture:=True</c> — every intent except
+    /// DestroyTransports captures a conquered fleet's remains rather than letting them scatter.
     /// </summary>
-    public static CombatEngagementResult NPEAttack(Empire attacker, Fleet attackerFleet, object target, AttackIntentionType intent, Random random)
+    public static CombatEngagementResult NPEAttack(Empire attacker, Fleet attackerFleet, object target, AttackIntentionType intent, Game game, Random random)
     {
+        var targetOwner = target switch {
+            IEconomicWorld w => w.Owner,
+            Fleet f => f.Owner,
+            _ => throw new ArgumentException($"NPEAttack: unexpected target type {target.GetType()}.", nameof(target)),
+        };
+        var hkSurprise = CombatEngine.ForcesUnknown(attackerFleet, targetOwner);
         var combatData = CombatEngine.CalculateCombatData(attacker, target);
         var groups = CombatEngine.DefaultDistribution(attackerFleet);
         var enemy = CombatEngine.GetEnemy(target);
 
-        return target is Fleet
+        var engagement = target is Fleet
             ? FleetEngage(groups, enemy, combatData, intent, random)
             : WorldEngage(groups, enemy, combatData, intent, random);
+
+        CombatOutcome.RestoreCombatant(attackerFleet, engagement.Casualties);
+        CombatOutcome.RestoreCombatant(target, engagement.Killed);
+
+        var capture = intent != AttackIntentionType.DestroyTransports;
+        CombatOutcome.ResolveAttack(engagement.Result, attackerFleet, target, hkSurprise, capture, engagement.Casualties, engagement.Killed, game, random);
+
+        return engagement;
     }
 
     /// <summary>FleetEngage (ATTNPE.PAS:221-286): the round-robin loop for a fleet-vs-fleet engagement.</summary>

@@ -1,5 +1,7 @@
-case=WeakDefenderNoAttackerTroopsRetreats;result=2;cas_fgt=32;cas_hkr=12;cas_jtn=0;cas_nnj=0;kill_fgt=8;kill_hkr=10;kill_men=50
-case=WeakDefenderWithAttackerTroopsConquers;result=3;cas_fgt=17;cas_hkr=12;cas_jtn=1;cas_nnj=3;kill_fgt=8;kill_hkr=10;kill_men=50
-case=StrongDefenderNoAttackerTroopsRetreats;result=2;cas_fgt=200;cas_hkr=124;cas_jtn=0;cas_nnj=0;kill_fgt=160;kill_hkr=200;kill_men=22
-case=FleetTargetWithAttackerTroopsSurrenders;result=3;cas_fgt=2;cas_hkr=2;cas_jtn=0;cas_nnj=0;kill_fgt=0;kill_hkr=5;kill_men=0
-case=DestroyTransportsIntent;result=3;cas_fgt=17;cas_hkr=12;cas_jtn=1;cas_nnj=3;kill_fgt=8;kill_hkr=10;kill_men=50
+case=WeakDefenderNoAttackerTroopsRetreats;result=2;cas_fgt=32;cas_hkr=12;cas_jtn=0;cas_nnj=0;kill_fgt=8;kill_hkr=10;kill_men=50;def_owner=1;def_eff=0;def_rev=0;def_type=4;newcap_idx=2
+case=WeakDefenderWithAttackerTroopsConquers;result=3;cas_fgt=17;cas_hkr=12;cas_jtn=1;cas_nnj=3;kill_fgt=8;kill_hkr=10;kill_men=50;def_owner=0;def_eff=0;def_rev=10;def_type=6;newcap_idx=2
+case=StrongDefenderNoAttackerTroopsRetreats;result=2;cas_fgt=200;cas_hkr=124;cas_jtn=0;cas_nnj=0;kill_fgt=160;kill_hkr=200;kill_men=22;def_owner=1;def_eff=0;def_rev=0;def_type=4;newcap_idx=2
+case=FleetTargetWithAttackerTroopsSurrenders;result=3;cas_fgt=2;cas_hkr=2;cas_jtn=0;cas_nnj=0;kill_fgt=5;kill_hkr=5;kill_men=0;def_owner=1;def_eff=0;def_rev=0;def_type=4;newcap_idx=2
+case=DestroyTransportsIntent;result=3;cas_fgt=17;cas_hkr=12;cas_jtn=1;cas_nnj=3;kill_fgt=8;kill_hkr=10;kill_men=50;def_owner=0;def_eff=0;def_rev=10;def_type=6;newcap_idx=2
+case=ConquerEmpireImmediateConquestOfSecondWorld;result=3;cas_fgt=17;cas_hkr=12;cas_jtn=1;cas_nnj=3;kill_fgt=8;kill_hkr=10;kill_men=50;def_owner=0;def_eff=0;def_rev=10;def_type=6;p3_owner=0;p3_eff=0;p3_rev=15;p3_type=0;newcap_idx=2
+case=ConquerEmpireNewCapitalChosen;result=3;cas_fgt=17;cas_hkr=12;cas_jtn=1;cas_nnj=3;kill_fgt=8;kill_hkr=10;kill_men=50;def_owner=0;def_eff=0;def_rev=10;def_type=6;p3_owner=1;p3_eff=40;p3_rev=0;p3_type=4;newcap_idx=3

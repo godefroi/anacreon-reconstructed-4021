@@ -62,11 +62,7 @@ public static class EmpireFactory
             grant(technology);
         }
 
-        var allowedAtTech = new UnlockedTechnology();
-
-        foreach (var (_, unlock) in TechCatalog.MissingTechAt(new UnlockedTechnology(), techLevel)) {
-            unlock(allowedAtTech);
-        }
+        var allowedAtTech = TechCatalog.FullSetAt(techLevel);
 
         technology.Defenses.IntersectWith(allowedAtTech.Defenses);
         technology.Ships.IntersectWith(allowedAtTech.Ships);

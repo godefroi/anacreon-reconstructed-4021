@@ -33,11 +33,22 @@
                 carrying 1000 nnj cargo to the attacker's fleet when nonzero),DefenderFgt,DefenderHkr,
                 DefenderMen,IntentOrd(AttackIntentionTypes ordinal, NoAIT..CaptTrnAIT -- same ordinal
                 order as the C# port's own AttackIntentionType),TargetIsFleet(0=Planet[2] via
-                WorldEngage,1=Fleet[2] via FleetEngage),RngFixedValue
+                WorldEngage,1=Fleet[2] via FleetEngage),RngFixedValue,
+                Planet3Present(0/1 -- a second Empire2 world, positioned/populated by the next 5
+                fields, letting a case drive ConquerEmpire's per-planet cascade once Planet[2]'s
+                capital falls; ignored/all-zero when 0),Planet3X,Planet3Y,Planet3Pop,Planet3RevIndex,
+                Planet3TechOrd
                 -> "result=<AttackResultTypes ordinal>;cas_fgt=<v>;cas_hkr=<v>;cas_jtn=<v>;cas_nnj=<v>;
-                    kill_fgt=<v>;kill_hkr=<v>;kill_men=<v>" -- real NPEAttack end to end (its own
-                multi-round FleetRetreats/Targetting/GroupEngage/AdvanceGroups loop, not one round in
-                isolation); see RunNpeAttackCase's own comment
+                    kill_fgt=<v>;kill_hkr=<v>;kill_men=<v>;def_owner=<Empire ordinal>;def_eff=<v>;
+                    def_rev=<v>;def_type=<WorldTypes ordinal>[;p3_owner=<v>;p3_eff=<v>;p3_rev=<v>;
+                    p3_type=<v> -- only when Planet3Present];newcap_idx=<Empire2's post-attack capital
+                    Planet index, 0 if none>" -- real NPEAttack end to end (its own multi-round
+                FleetRetreats/Targetting/GroupEngage/AdvanceGroups loop, not one round in isolation),
+                now including outcome application (ResolveAttack/ConquerWorld/ConquerEmpire/
+                RestoreCombatant, Phase 5 commit 5f); see RunNpeAttackCase's own comment. Note:
+                Planet3X/Y are laid out relative to Planet[1]=(0,0) (attacker capital) and
+                Planet[2]=(50,50) (defender capital), both fixed by RunNpeAttackCase itself, not
+                caller-supplied
      starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue  -> "starbaseChe=<v>;neighborChe=<v>"
      ambrosia   Addicted,Ambrosia,RngFixedValue                    -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
      revolution PlanetPop,ClassOrd,TechOrd,Efficiency,RevIndex,Legions,RngFixedValue
@@ -455,31 +466,40 @@ procedure RunCombatCase(const arg: String);
    end;
 
 procedure RunNpeAttackCase(const arg: String);
-   { Runs real ATTNPE.PAS's own NPEAttack (patched to stop at Result/Casualties/Killed -- see
-     ATTNPE.PAS.patch) end to end: Empire1's fleet (200 fgt, 200 hkr, plus an optional troop-carrying
-     jtn group when AttackerCarriesTroops<>0) attacks either Empire2's capital planet (WorldEngage) or
-     Empire2's own fleet (FleetEngage), through NPEAttack's real multi-round round-robin loop --
-     FleetRetreats/Targetting/GroupEngage/AdvanceGroups, all real, unmodified logic. Empire2's
+   { Runs real ATTNPE.PAS's own NPEAttack end to end -- now the FULL body (Phase 5 commit 5f restored
+     ATTACK.PAS's ConquerWorld/ConquerEmpire/RestoreCombatant/ResolveAttack, see ATTACK.PAS.patch),
+     not just the Casualties/Killed/Result-producing resolution loop 5e covered: Empire1's fleet (200
+     fgt, 200 hkr, plus an optional troop-carrying jtn group when AttackerCarriesTroops<>0) attacks
+     either Empire2's capital planet (WorldEngage) or Empire2's own fleet (FleetEngage). Empire2's
      DefenseSettings is the same InitDefenseRecord distribution EmpireFactory.SeedDefenseSettings
-     seeds on the C# side. This domain exercises the resolution *loop* itself (round count, when it
-     terminates and how); reference/verify's own `combat` domain already covers one round's math in
-     isolation. }
+     seeds on the C# side.
+
+     Planet[1] (attacker capital) sits at (0,0); Planet[2] (defender capital, the usual Planet target)
+     sits at (50,50) -- fixed, distinct locations so ConquerEmpire's own Dist/DistToConq math (relative
+     to each capital) is exercised meaningfully once Planet[2] falls and EmpireConquered fires
+     ConquerEmpire. Planet[3] is optional (Planet3Present<>0): a second world of Empire2's, positioned
+     and populated by the caller, letting a case drive any one of ConquerEmpire's four per-planet
+     branches (immediate conquest / forced independence / distance-conquest / new-capital-candidate)
+     deliberately -- see NpeAttackCases.cs's own doc comment for which case drives which branch. }
    var
-      parts: array[0..8] of LongInt;
-      AttackerCapID, DefenderCapID, TargetID, FltID: IDNumber;
+      parts: array[0..14] of LongInt;
+      AttackerCapID, DefenderCapID, TargetID, FltID, Planet2ID, Planet3ID, NewCapID: IDNumber;
       Result: AttackResultTypes;
       Killed, Casualties: AttackArray;
+      Planet3Present: Boolean;
    begin
    ParseFields(arg,parts);
+   Planet3Present:=parts[9]<>0;
 
    New(Universe);
    FillChar(Universe^,SizeOf(Universe^),0);
-   NoOfPlanets:=2;
+   NoOfPlanets:=3;
 
    Universe^.Planet[1].Cls:=ClsM;
    Universe^.Planet[1].Typ:=CapTyp;
    Universe^.Planet[1].Tech:=JmpTchLvl;
    Universe^.Planet[1].Emp:=Empire1;
+   Universe^.Planet[1].XY.x:=0;  Universe^.Planet[1].XY.y:=0;
 
    Universe^.Planet[2].Cls:=WorldClass(parts[1]);
    Universe^.Planet[2].Typ:=CapTyp;
@@ -488,10 +508,26 @@ procedure RunNpeAttackCase(const arg: String);
    Universe^.Planet[2].Ships[hkr]:=parts[4];
    Universe^.Planet[2].Cargo[men]:=parts[5];
    Universe^.Planet[2].Emp:=Empire2;
+   Universe^.Planet[2].XY.x:=50;  Universe^.Planet[2].XY.y:=50;
 
    SetOfActivePlanets:=[1,2];
    SetOfPlanetsOf[Empire1]:=[1];
    SetOfPlanetsOf[Empire2]:=[2];
+
+   if Planet3Present then
+      begin
+      { Planet3X,Planet3Y,Planet3Pop,Planet3RevIndex,Planet3TechOrd -- parts[10..14]. }
+      Universe^.Planet[3].Cls:=ClsM;
+      Universe^.Planet[3].Typ:=AgrTyp;
+      Universe^.Planet[3].Tech:=TechLevel(parts[14]);
+      Universe^.Planet[3].XY.x:=parts[10];  Universe^.Planet[3].XY.y:=parts[11];
+      Universe^.Planet[3].Pop:=parts[12];
+      Universe^.Planet[3].RevIndex:=parts[13];
+      Universe^.Planet[3].Emp:=Empire2;
+
+      SetOfActivePlanets:=SetOfActivePlanets+[3];
+      SetOfPlanetsOf[Empire2]:=SetOfPlanetsOf[Empire2]+[3];
+      end;
 
    Universe^.EmpireData[Empire1].InUse:=True;
    AttackerCapID.ObjTyp:=Pln;  AttackerCapID.Index:=1;
@@ -539,9 +575,32 @@ procedure RunNpeAttackCase(const arg: String);
 
    NPEAttack(FltID,TargetID,AttackIntentionTypes(parts[6]),0,Result,Killed,Casualties);
 
-   WriteLn('result=',Ord(Result),
-           ';cas_fgt=',Casualties[fgt],';cas_hkr=',Casualties[hkr],';cas_jtn=',Casualties[jtn],';cas_nnj=',Casualties[nnj],
-           ';kill_fgt=',Killed[fgt],';kill_hkr=',Killed[hkr],';kill_men=',Killed[men]);
+   Write('result=',Ord(Result),
+         ';cas_fgt=',Casualties[fgt],';cas_hkr=',Casualties[hkr],';cas_jtn=',Casualties[jtn],';cas_nnj=',Casualties[nnj],
+         ';kill_fgt=',Killed[fgt],';kill_hkr=',Killed[hkr],';kill_men=',Killed[men]);
+
+   { Planet[2]'s post-attack state -- observable even when the target was a Fleet (unattacked, so
+     unchanged) or the attacker retreated/was destroyed (also unchanged); only meaningfully different
+     from the pre-attack input once ConquerWorld actually ran on it. }
+   Planet2ID.ObjTyp:=Pln;  Planet2ID.Index:=2;
+   Write(';def_owner=',Ord(GetStatus(Planet2ID)),';def_eff=',GetEfficiency(Planet2ID),
+         ';def_rev=',GetRevIndex(Planet2ID),';def_type=',Ord(GetType(Planet2ID)));
+
+   if Planet3Present then
+      begin
+      Planet3ID.ObjTyp:=Pln;  Planet3ID.Index:=3;
+      Write(';p3_owner=',Ord(GetStatus(Planet3ID)),';p3_eff=',GetEfficiency(Planet3ID),
+            ';p3_rev=',GetRevIndex(Planet3ID),';p3_type=',Ord(GetType(Planet3ID)));
+      end;
+
+   { Empire2's post-attack capital, if any -- 0 when ConquerEmpire's "totally destroyed" branch fired
+     (DestroyEmpire's own no-op stub can't be observed directly, see ATTACK.PAS.patch) instead of
+     choosing a new one. }
+   GetCapital(Empire2,NewCapID);
+   if NewCapID.ObjTyp=Pln then
+      WriteLn(';newcap_idx=',NewCapID.Index)
+   else
+      WriteLn(';newcap_idx=0');
 
    Dispose(Universe^.Fleet[1]);
    if parts[7]<>0 then

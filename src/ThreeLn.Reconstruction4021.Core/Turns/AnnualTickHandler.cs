@@ -130,14 +130,19 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
         UpdateDefenses(starbase, reportedShortfalls);
     }
 
-    /// <summary>Clamps a world's revolution index to [0,100] (PRIMINTR.PAS:ChangeRevIndex).</summary>
-    private static void ChangeRevIndex(IEconomicWorld world, int change) =>
+    /// <summary>
+    /// Clamps a world's revolution index to [0,100] (PRIMINTR.PAS:ChangeRevIndex). Internal, not
+    /// private: Combat/CombatOutcome.cs's ConquerWorld/ConquerEmpire (Phase 5 commit 5f) need this same
+    /// primitive — PRIMINTR.PAS is itself a shared unit both ATTACK.PAS and UPDATE.PAS USES, so this
+    /// mirrors that shape rather than duplicating the clamp a second place.
+    /// </summary>
+    internal static void ChangeRevIndex(IEconomicWorld world, int change) =>
         world.RevolutionIndex = Math.Clamp(world.RevolutionIndex + change, 0, 100);
 
     /// <summary>Clamps a produced/consumed quantity to [0,MaxResources], truncating (Pascal source: MISC.PAS's ThgLmt).</summary>
     private static int ClampResource(double x) => PascalMath.ClampResource(x);
 
-    /// <summary>Pascal's Round: nearest integer, halves away from zero (not banker's rounding).</summary>
+    /// <summary>Pascal's Round: nearest integer, with exact halves rounded to the nearest even integer (banker's rounding) — see PascalMath.PascalRound's own doc comment.</summary>
     private static int PascalRound(double x) => PascalMath.PascalRound(x);
 
     /// <summary>Random integer in [min,max] inclusive; returns min if the range is empty or inverted (INT.PAS:Rnd).</summary>

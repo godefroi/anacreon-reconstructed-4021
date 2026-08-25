@@ -21,4 +21,17 @@ public sealed class UnlockedTechnology
     public HashSet<DefenseType> Defenses { get; } = [];
     public HashSet<ConstructionType> Constructions { get; } = [];
     public HashSet<CargoType> Resources { get; } = [];
+
+    /// <summary>
+    /// Overwrites this set's contents with <paramref name="other"/>'s (ConquerEmpire's NewCapital,
+    /// ATTACK.PAS:1003-1019's <c>SetEmpireTechnology(Emp,NewTech,TechDev[...])</c> — a full replace, not
+    /// a union, unlike NewTechLevel's own incremental grants).
+    /// </summary>
+    public void ReplaceWith(UnlockedTechnology other)
+    {
+        Ships.Clear(); Ships.UnionWith(other.Ships);
+        Defenses.Clear(); Defenses.UnionWith(other.Defenses);
+        Constructions.Clear(); Constructions.UnionWith(other.Constructions);
+        Resources.Clear(); Resources.UnionWith(other.Resources);
+    }
 }

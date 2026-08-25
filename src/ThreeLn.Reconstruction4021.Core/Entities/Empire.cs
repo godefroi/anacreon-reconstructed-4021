@@ -25,6 +25,20 @@ public sealed class Empire
     /// SetCapital too, not just CreateWorld) — IEconomicWorld, not Planet, so both are representable.
     /// </summary>
     public IEconomicWorld? Capital { get; set; }
+
+    /// <summary>
+    /// Set once this empire's capital falls and it has no other world to fall back to. Pascal instead
+    /// overloads Capital itself for this (ATTACK.PAS:1120-1131's ConquerEmpire: <c>NewCapID.ObjTyp:=Void;
+    /// NewCapID.Index:=Ord(Player); SetCapital(EnemyEmp,NewCapID)</c> — a type-tagged sentinel stuffed
+    /// into the one field that already means "no capital" via null here), the same shape of problem
+    /// NewsItem.Loc had before Phase 4 split it into Subject/Position — a second, unambiguous field for
+    /// the second fact instead of overloading the first. Only ever set for a human empire (an NPE empire
+    /// with no capital left is torn down outright via DestroyEmpire, never left defeated-in-place); no
+    /// human ITurnHandler exists yet (Phase 8) to read it, matching the "port the real write, leave it
+    /// unread until its phase exists" precedent from News.Clear() (Phase 4).
+    /// </summary>
+    public Empire? DefeatedBy { get; set; }
+
     public DefenseSettings DefenseSettings { get; } = new();
 
     /// <summary>NoOfProbesPerEmpire (TYPES.PAS:33) — the fixed-size probe pool every empire draws from.</summary>
@@ -95,12 +109,13 @@ public sealed class Empire
         TechCatalog.TechGrantIdentity? techGrant = null,
         int p1 = 0,
         int p2 = 0,
-        int p3 = 0)
+        int p3 = 0,
+        Empire? defender = null)
     {
         if (IsIndependent) {
             return;
         }
 
-        News.Add(new NewsItem(headline, subject, position, otherEmpire, techGrant, p1, p2, p3));
+        News.Add(new NewsItem(headline, subject, position, otherEmpire, techGrant, p1, p2, p3, defender));
     }
 }

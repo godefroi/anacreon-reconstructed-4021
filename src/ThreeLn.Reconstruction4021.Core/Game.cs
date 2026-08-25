@@ -34,7 +34,7 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     public bool IsFirstEmpire(Empire empire) =>
         Empires.Count > 0 && ReferenceEquals(Empires[0], empire);
 
-    public bool AnyHumanPlayersRemain => Empires.Any(e => TurnHandlers[e].IsHuman);
+    public bool AnyHumanPlayersRemain => Empires.Any(e => TurnHandlers[e].IsHuman && e.DefeatedBy is null);
 
     /// <summary>
     /// AddGlobalNews (NEWS.PAS:230-243): broadcasts one news item to every empire that isn't in
@@ -49,7 +49,8 @@ public sealed class Game(Galaxy.Galaxy galaxy)
         Empire? otherEmpire = null,
         int p1 = 0,
         int p2 = 0,
-        int p3 = 0)
+        int p3 = 0,
+        Empire? defender = null)
     {
         var excluded = exclude as ICollection<Empire> ?? [.. exclude];
 
@@ -58,7 +59,7 @@ public sealed class Game(Galaxy.Galaxy galaxy)
                 continue;
             }
 
-            empire.AddNews(headline, source, otherEmpire: otherEmpire, p1: p1, p2: p2, p3: p3);
+            empire.AddNews(headline, source, otherEmpire: otherEmpire, p1: p1, p2: p2, p3: p3, defender: defender);
         }
     }
 
@@ -68,6 +69,7 @@ public sealed class Game(Galaxy.Galaxy galaxy)
         Starbase s => empire.Starbases.Scouted.Contains(s),
         Stargate g => empire.Stargates.Scouted.Contains(g),
         ConstructionSite c => empire.ConstructionSites.Scouted.Contains(c),
+        Fleet f => empire.Fleets.Scouted.Contains(f),
         _ => false,
     };
 }

@@ -1,20 +1,22 @@
 --- a/ATTACK.PAS
 +++ b/ATTACK.PAS
-@@ -10,13 +10,23 @@
+@@ -10,13 +10,25 @@
  
  INTERFACE
  
-+{ PATCH (Phase 5 commit 5d): Intrface dropped from USES -- every getter the kept
-+  procedures below need (GetStatus/GetTech/GetShips/GetCargo/GetDefns/GetCapital/
-+  GetEmpireTechnology/GetBaseType/GetClass/GetRevIndex/TypeOfFleet/Scouted/
-+  GetDefenseSettings) already lives in PrimIntr, still USES'd here. Intrface's own
-+  IMPLEMENTATION USES pulls in Fleet/Orders/NPE (confirmed directly, same finding
-+  UPDATE.PAS.patch already documents for its own Intrface avoidance), which in turn
-+  drag in Crt/EIO/WND -- a real GUI blast radius this harness doesn't cross. The
-+  only real callers of Intrface-only routines (Scout/AddNews/DestroyEmpire, inside
-+  ConquerWorld/ConquerEmpire/ResolveAttack/RestoreCombatant) are commented out
-+  below alongside this drop, deferred to whichever future commit's patch update
-+  ports outcome application -- see this file's other PATCH comments. }
++{ PATCH (Phase 5 commit 5d, kept as-is by 5f): Intrface dropped from USES -- every
++  getter the procedures below need (GetStatus/GetTech/GetShips/GetCargo/GetDefns/
++  GetCapital/GetEmpireTechnology/GetBaseType/GetClass/GetRevIndex/TypeOfFleet/
++  Scouted/GetDefenseSettings/GetCoord/SetStatus/SetType/SetEfficiency/ChangeRevIndex/
++  SetCapital/SetEmpireTechnology/ChangeTotalRevIndex) already lives in PrimIntr,
++  still USES'd here. Intrface's own IMPLEMENTATION USES pulls in Fleet/Orders/NPE,
++  which in turn drag in Crt/EIO/WND -- a real GUI blast radius this harness doesn't
++  cross. Commit 5f restores ConquerWorld/ConquerEmpire/RestoreCombatant/
++  ResolveAttack (below) against local stand-ins for the six Intrface/Fleet routines
++  they call (Scout/DestroyEmpire/DestroyFleet/AbortFleet/FleetNameDestruction/
++  BalanceFleet) -- see the IMPLEMENTATION section's own PATCH comment for why
++  that's a legitimate way to check these four procedures' own directly-observable
++  effects without linking Crt. }
  USES Int,
       Types,
       Galaxy,
@@ -25,22 +27,20 @@
       DataStrc,
       News;
  
-@@ -92,9 +102,12 @@
-                  VAR Casualties,Killed: AttackArray);
- PROCEDURE CalculateCombatData(Attacker: Empire; FltID,TargetID: IDNumber;
+@@ -94,7 +106,11 @@
                                VAR CombatData: CombatDataRecord);
--PROCEDURE ConquerWorld(WorldID: IDNumber; Emp: Empire);
-+{ PATCH (Phase 5 commit 5d): forward decls for ConquerWorld/DestroyConstructionOrGate/
-+  HolocaustEffectiveness/HolocaustWorld/LAMAttack/ResolveAttack/RestoreCombatant dropped
-+  here, their IMPLEMENTATION bodies commented out below -- outcome application/
-+  bombardment/gate-destruction is a later commit's scope, and every one of them needs
-+  Intrface (Scout/AddNews/DestroyEmpire) or Fleet, dropped above. }
+ PROCEDURE ConquerWorld(WorldID: IDNumber; Emp: Empire);
  PROCEDURE DefaultDistribution(FltID: IDNumber; VAR NoOfGroups: Byte; VAR Gp: GroupArray);
 -PROCEDURE DestroyConstructionOrGate(Emp: Empire; ForcesUnk: Boolean; TargetID: IDNumber);
++{ PATCH (Phase 5 commit 5d, kept as-is by 5f): forward decls for
++  DestroyConstructionOrGate/HolocaustEffectiveness/HolocaustWorld/LAMAttack dropped
++  here, their IMPLEMENTATION bodies still commented out below -- standalone
++  mechanics (bombardment, LAM strikes, gate/construction destruction) are 5g's
++  scope, not 5f's. }
  FUNCTION EnemySurrenders(NoOfGroups: Byte;
                           VAR Gp: GroupArray;
                           VAR En: EnemyArray;
-@@ -102,27 +115,13 @@
+@@ -102,15 +118,6 @@
                           CombatData: CombatDataRecord): Boolean;
  FUNCTION ForcesUnknown(FltID,Target: IDNumber): Boolean;
  PROCEDURE GetEnemy(Target: IDNumber; VAR En: EnemyArray);
@@ -53,424 +53,66 @@
 -PROCEDURE LAMAttack(Player: Empire; LAMToUse: Resources; Target: IDNumber;
 -                    VAR ShipsDest: ShipArray;
 -                    VAR DefnsDest: DefnsArray);
--PROCEDURE ResolveAttack(Result: AttackResultTypes;
--                        FltID,Target: IDNumber;
--                        HKAttack,Capture: Boolean;
--                        VAR Casualties,Killed: AttackArray;
--                        VAR Booty: PlanetSet);
--PROCEDURE RestoreCombatant(ObjID: IDNumber; VAR Casualties: AttackArray);
+ PROCEDURE ResolveAttack(Result: AttackResultTypes;
+                         FltID,Target: IDNumber;
+                         HKAttack,Capture: Boolean;
+@@ -120,8 +127,53 @@
  
-+{ PATCH (Phase 5 commit 5d): "USES Fleet;" dropped here -- only the deferred
-+  procedures below (see the two forward-decl PATCH comments above) call into
-+  Fleet; every procedure kept in this build touches only its own VAR parameters
-+  plus PrimIntr getters, Int, and Misc, all still USES'd above. }
  IMPLEMENTATION
  
 -USES
 -	Fleet;
--
++{ PATCH (Phase 5 commit 5d, kept as-is by 5f): "USES Fleet;" dropped here -- no
++  procedure kept in this build (5f included) touches Fleet directly; the six
++  Fleet/Intrface routines ConquerWorld/ConquerEmpire/RestoreCombatant/
++  ResolveAttack call are given local stand-ins below instead. }
++
++{ PATCH (Phase 5 commit 5f): local stand-ins for Scout/DestroyEmpire (normally
++  Intrface) and DestroyFleet/AbortFleet/FleetNameDestruction/BalanceFleet (normally
++  Fleet/Intrface) -- their real bodies need Crt/EIO/WND through Intrface's own
++  IMPLEMENTATION USES, which this harness can't link (see the INTERFACE section's
++  own PATCH comment). ConquerWorld/ConquerEmpire/RestoreCombatant/ResolveAttack
++  below are restored verbatim from source; this harness's combat/npeattack cases
++  only assert on their own directly-observable effects (world
++  ownership/efficiency/RevIndex, Casualties/Killed, Result, Booty) -- not on what
++  these six stand-ins would really do (scouting a newly-conquered world, tearing
++  down a destroyed empire's fleets/starbases, transferring a destroyed fleet's
++  cargo to whatever's co-located, rebalancing an over-capacity fleet's cargo). Those
++  stay covered by direct source reading plus C# unit tests instead (see
++  docs/ROADMAP.md's Phase 5 commit 5f notes). BalanceFleet in particular is a no-op
++  here regardless: no golden case ever gives RestoreCombatant's Flt branch a fleet
++  whose FleetCargoSpace goes negative (only casualties -- i.e. fewer ships/cargo --
++  are ever applied here, which can only free up space, never exceed it). }
++PROCEDURE Scout(Emp: Empire; XY: XYCoord);
++   BEGIN
++   END;
++
++PROCEDURE DestroyEmpire(Emp: Empire);
++   BEGIN
++   END;
++
++PROCEDURE DestroyFleet(FltID: IDNumber);
++   BEGIN
++   END;
++
++PROCEDURE AbortFleet(Flt1,GroundID: IDNumber; Report: Boolean);
++   BEGIN
++   END;
++
++PROCEDURE FleetNameDestruction(Emp: Empire; FltID: IDNumber; VAR NewLoc: Location);
++   BEGIN
++   NewLoc.XY:=Limbo;
++   NewLoc.ID:=FltID;
++   END;
++
++PROCEDURE BalanceFleet(VAR Sh: ShipArray; VAR Cr: CargoArray);
++   BEGIN
++   END;
++
+ 
  CONST
     { CombatTechAdj:
-      Adjustment of destructive power of AttTech vs DefTech.  100 means
-@@ -912,391 +911,12 @@
-       END;
-    END;  { Battle }
- 
--PROCEDURE ConquerWorld(WorldID: IDNumber; Emp: Empire);
--{ ConquerWorld: ----------------------------------------------------------------
--   This procedure will handle the conquering of WorldID by Emp.  The
--   status of the world is changed, efficiency is decreased because of the
--   administrative take-over, and the revolution index is changed according 
--   to how satisfied the world was with its previous empire/government.  If
--   the revolution index is low, then it will rise because the people yearn
--   for the old status quo.  If the revolution index is high, then it will 
--   be lowered because the people, tired of their old government, will be 
--   ready for change.  Of course, some random factors are thrown in. 
-------------------------------------------------------------------------------- }
--
--   VAR
--      XY: XYCoord;
--      Dir: Directions;
--      x,y: Integer;
--
--   PROCEDURE ChangeEfficiency(WorldID: IDNumber);
--      VAR
--         temp: Integer;
--         NewEfficiency: Index;
--
--      BEGIN
--      temp:=Rnd(10,20);
--      IF GetEfficiency(WorldID)-temp<0 THEN
--         NewEfficiency:=0
--      ELSE
--         NewEfficiency:=GetEfficiency(WorldID)-temp;
--      SetEfficiency(WorldID,NewEfficiency);
--      END;  { ChangeEfficiency }
--
--   PROCEDURE ChangeRevolutionIndex(WorldID: IDNumber);
--      VAR
--         Rev: Index;
--
--      BEGIN
--      Rev:=GetRevIndex(WorldID);
--      CASE Rev OF
--         0..10 : ChangeRevIndex(WorldID,Rnd(10,20));
--        11..30 : BEGIN
--                 CASE Rnd(1,100) OF
--                    1..20 : ChangeRevIndex(WorldID,-Rnd(5,15));
--                   21..50 : ChangeRevIndex(WorldID,-Rnd(3,10));
--                   51..90 : ChangeRevIndex(WorldID,Rnd(10,15));
--                  91..100 : ChangeRevIndex(WorldID,Rnd(20,30));
--                 END;  { case }
--                 END;
--        31..55 : BEGIN
--                 CASE Rnd(1,100) OF
--                    1..50 : ChangeRevIndex(WorldID,-Rnd(10,20));
--                   51..75 : ChangeRevIndex(WorldID,-Rnd(5,10));
--                   76..90 : ChangeRevIndex(WorldID,Rnd(1,5));
--                  91..100 : ChangeRevIndex(WorldID,Rnd(5,15));
--                 END;  { case }
--                 END;
--        56..75 : ChangeRevIndex(WorldID,-Rnd(40,55));
--        76..90 : ChangeRevIndex(WorldID,-Rnd(50,65));
--       91..100 : ChangeRevIndex(WorldID,-Rnd(30,40));
--      END;  { case }
--      END;  { ChangeRevolutionIndex }
--
--   { ConquerWorld: MAIN PROCEDURE }
--   BEGIN
--   SetStatus(WorldID,Emp);
--   ChangeEfficiency(WorldID);
--   ChangeRevolutionIndex(WorldID);
--   GetCoord(WorldID,XY);
--   Scout(Emp,XY);
--   END;  { ConquerWorld }
--
--PROCEDURE ConquerEmpire(Player,EnemyEmp: Empire; VAR Booty: PlanetSet);
--{ ConquerEmpire:
--   This procedure will implement the conquest of EnemyEmp by Player.  All
--   small (low population) worlds far from the enemy capital will
--   automatically become part of the conquering empire.  All large worlds will
--   remain with the enemy empire if their revolution index is not too high,
--   else they will become independent.  If there is at least one large world
--   that remains with the empire, then it will become the new capital.  All
--   starbases and fleets will remain with the enemy empire. }
--
--   VAR
--      XY,CapXY,ConqXY: XYCoord;
--      Loc: Location;
--      EnemyCapID,WorldID,NewCapID,PlayCapID: IDNumber;
--      Pop: Population;
--      RevI: Index;
--      Dist,DistToConq,i: Integer;
--
--   PROCEDURE NewCapital(Emp: Empire; NewCap: IDNumber);
--      VAR
--         OldTech,NewTech: TechLevel;
--         OldTechnology: TechnologySet;
--
--      BEGIN
--      GetEmpireTechnology(Emp,OldTech,OldTechnology);
--      NewTech:=GetTech(NewCap);
--      IF OldTech>NewTech THEN
--         SetEmpireTechnology(Emp,NewTech,TechDev[NewTech])
--      ELSE IF OldTech<NewTech THEN
--         SetEmpireTechnology(Emp,NewTech,TechDev[Pred(NewTech)]);
--      SetCapital(Emp,NewCap);
--      SetType(NewCap,CapTyp);
--      ChangeRevIndex(NewCap,-Rnd(30,50));
--      SetEfficiency(NewCap,Rnd(40,60));
--      END;  { NewCapital }
--
--   { ConquerEmpire: MAIN PROCEDURE }
--   BEGIN
--   GetCapital(EnemyEmp,EnemyCapID);
--   GetCapital(Player,PlayCapID);
--   GetCoord(EnemyCapID,CapXY);
--   GetCoord(PlayCapID,ConqXY);
--   NewCapID:=EmptyQuadrant;
--   Booty:=[];
--
--   Loc.XY:=Limbo;
--   WorldID.ObjTyp:=Pln;
--   FOR i:=1 TO NoOfPlanets DO
--      IF i IN SetOfPlanetsOf[EnemyEmp] THEN
--         BEGIN
--         WorldID.Index:=i;
--         Loc.ID:=WorldID;
--         GetCoord(WorldID,XY);
--
--         Dist:=Distance(XY,CapXY);
--         DistToConq:=Distance(XY,ConqXY);
--         Pop:=GetPopulation(WorldID);
--         RevI:=GetRevIndex(WorldID);
--
--         IF ((Dist>10) AND (DistToConq<10) AND (Pop<Rnd(900,1100))) THEN
--            BEGIN
--            ConquerWorld(WorldID,Player);
--            AddNews(EnemyEmp,Join,Loc,Integer(Player),0,0);
--            Booty:=Booty+[i];
--            END
--         ELSE IF (Pop>Rnd(900,1100)) AND (RevI>50) AND (Rnd(1,100)<75) THEN
--            BEGIN
--            SetStatus(WorldID,Indep);
--            SetType(WorldID,IndTyp);
--            AddNews(EnemyEmp,DInd,Loc,0,0,0);
--            END
--         ELSE IF (DistToConq<10) AND (Rnd(1,100)<60) AND (RevI>35) THEN
--            BEGIN
--            ConquerWorld(WorldID,Player);
--            AddNews(EnemyEmp,Join,Loc,Integer(Player),0,0);
--            Booty:=Booty+[i];
--            END
--         ELSE
--            BEGIN
--            { CHOOSE NEW CAPITAL }
--            IF SameID(NewCapID,EmptyQuadrant) THEN
--               BEGIN
--               IF GetTech(WorldID)>JmpTchLvl THEN
--                  NewCapID:=WorldID;
--               END
--            ELSE
--               BEGIN
--               IF GetTech(WorldID)>GetTech(NewCapID) THEN
--                  NewCapID:=WorldID
--               ELSE IF GetTech(WorldID)=GetTech(NewCapID) THEN
--
--                  { ASSERT: new world at least as advanced as NewCapID. }
--                  BEGIN
--                  IF NOT (GetType(NewCapID) IN [BseTyp,BseSTyp,JmpTyp,JmpSTyp,StrTyp,StrSTyp]) THEN
--
--                     { ASSERT: NewCapID not a base planet }
--                     BEGIN
--                     IF (Pop>GetPopulation(NewCapID)) OR
--                        (GetType(WorldID) IN [BseTyp,BseSTyp,JmpTyp,JmpSTyp,StrTyp,StrSTyp]) THEN
--                        NewCapID:=WorldID;
--                     END
--                  ELSE
--
--                     { ASSERT: NewCapID is a base planet }
--                     BEGIN
--                     IF (GetType(WorldID) IN [BseTyp,BseSTyp,JmpTyp,JmpSTyp,StrTyp,StrSTyp]) AND
--                        (Pop>GetPopulation(NewCapID)) THEN
--                           NewCapID:=WorldID;
--                     END;
--                  END;
--               END;
--            END;
--         END;  { loop }
--
--	(*
--   WorldID.ObjTyp:=Base;
--   FOR i:=1 TO MaxNoOfStarbases DO
--      IF i IN SetOfStarbasesOf[EnemyEmp] THEN
--         BEGIN
--         WorldID.Index:=i;
--			if GetBaseType(WorldID) in [cmm,frt] then
--				begin
--         	Pop:=GetPopulation(WorldID);
--
--         	IF SameID(NewCapID,EmptyQuadrant) THEN
--            	NewCapID:=WorldID
--         	ELSE
--            	BEGIN
--            	IF Pop>GetPopulation(NewCapID) THEN
--               	NewCapID:=WorldID;
--            	END;
--				end;
--         END;  { loop }
--	*)
--
--   IF CentralizedCapital(EnemyEmp) OR SameID(NewCapID,EmptyQuadrant) THEN
--      { ASSERT: enemy empire totally destroyed. }
--      BEGIN
--      IF EmpirePlayer(EnemyEmp) THEN
--         BEGIN
--         NewCapID.ObjTyp:=Void;
--         NewCapID.Index:=Ord(Player);
--         SetCapital(EnemyEmp,NewCapID);
--         END
--      ELSE
--         DestroyEmpire(EnemyEmp);
--      END
--   ELSE
--      BEGIN
--      NewCapital(EnemyEmp,NewCapID);
--      Loc.ID:=NewCapID;
--      AddNews(EnemyEmp,NewCap,Loc,0,0,0);
--      GetCoord(NewCapID,CapXY);
--      END;
--   END;  { ConquerEmpire }
--
--PROCEDURE RestoreCombatant(ObjID: IDNumber; VAR Casualties: AttackArray);
--
--   VAR
--      Sh: ShipArray;
--      Cr: CargoArray;
--      Df: DefnsArray;
--      ThgI: AttackTypes;
--      FuelCap: Real;
--
--   BEGIN
--   GetShips(ObjID,Sh);
--   GetCargo(ObjID,Cr);
--
--   FOR ThgI:=fgt TO trn DO
--      Sh[ThgI]:=GreaterInt(0,Sh[ThgI]-Casualties[ThgI]);
--   FOR ThgI:=men TO nnj DO
--      Cr[ThgI]:=GreaterInt(0,Cr[ThgI]-Casualties[ThgI]);
--
--   CASE ObjID.ObjTyp OF
--      Pln, Base: BEGIN
--         GetDefns(ObjID,Df);
--         FOR ThgI:=LAM TO ion DO
--            Df[ThgI]:=GreaterInt(0,Df[ThgI]-Casualties[ThgI]);
--
--         PutShips(ObjID,Sh);
--         PutCargo(ObjID,Cr);
--         PutDefns(ObjID,Df);
--         END;
--      Flt: BEGIN
--         IF FleetCargoSpace(Sh,Cr)<0 THEN
--            BalanceFleet(Sh,Cr);
--
--         PutShips(ObjID,Sh);
--         PutCargo(ObjID,Cr);
--
--         FuelCap:=FuelCapacity(Sh);
--         IF GetFleetFuel(ObjID)>FuelCap THEN
--            SetFleetFuel(ObjID,FuelCap);
--         END;
--   END;  { case }
--   END;  { RestoreCombatant }
--
--PROCEDURE ResolveAttack(Result: AttackResultTypes;
--                        FltID,Target: IDNumber;
--                        HKAttack,Capture: Boolean;
--                        VAR Casualties,Killed: AttackArray;
--                        VAR Booty: PlanetSet);
--   VAR
--      Emp,EnemyEmp: Empire;
--      Loc: Location;
--      RevChange: Integer;
--      ShpI: ResourceTypes;
--      Sh: ShipArray;
--      EmpireConquered: Boolean;
--
--   PROCEDURE ReportLosses(Emp: Empire; Loc: Location; VAR Killed: AttackArray);
--      VAR
--         ShpI: ResourceTypes;
--
--      BEGIN
--      FOR ShpI:=LAM TO nnj DO
--         IF Killed[ShpI]>0 THEN
--            AddNews(Emp,DestDetail,Loc,Killed[ShpI],Integer(ShpI),0);
--      END;  { ReportLosses }
--
--   { ResolveAttack: MAIN PROCEDURE }
--   BEGIN
--   Loc.ID:=Target;  Loc.XY:=Limbo;
--   Emp:=GetStatus(FltID);
--   EnemyEmp:=GetStatus(Target);
--   EmpireConquered:=False;
--   Booty:=[];
--
--   CASE Result OF
--      AttDestroyedART: BEGIN
--         IF EnemyEmp=Indep THEN
--            ChangeTotalRevIndex(Emp,Rnd(1,4))
--         ELSE
--            BEGIN
--            ChangeTotalRevIndex(Emp,Rnd(2,5));
--            ChangeTotalRevIndex(EnemyEmp,-Rnd(3,6));
--            AddNews(EnemyEmp,BattleW1,Loc,Ord(Emp),0,0);
--            ReportLosses(EnemyEmp,Loc,Killed);
--            AddGlobalNews([Emp,EnemyEmp],Target,GLBDest,Loc,Ord(Emp),Ord(EnemyEmp),0);
--            END;
--
--			DestroyFleet(FltID);
--         END;
--      AttRetreatsART: BEGIN
--         IF EnemyEmp=Indep THEN
--            BEGIN
--            END
--         ELSE
--            BEGIN
--            IF HKAttack THEN
--               AddNews(EnemyEmp,BattleW2UNK,Loc,0,0,0)
--            ELSE
--               BEGIN
--               AddNews(EnemyEmp,BattleW2,Loc,Ord(Emp),0,0);
--               AddGlobalNews([Emp,EnemyEmp],Target,GLBDest,Loc,Ord(Emp),Ord(EnemyEmp),0);
--               END;
--
--            ReportLosses(EnemyEmp,Loc,Killed);
--            ChangeTotalRevIndex(Emp,Rnd(1,3));
--            ChangeTotalRevIndex(EnemyEmp,-Rnd(1,3));
--            END;
--         END;
--      DefConqueredART: BEGIN
--         IF Target.ObjTyp IN [Pln,Base] THEN
--            BEGIN
--            ConquerWorld(Target,Emp);
--            IF GetType(Target)=CapTyp THEN
--               BEGIN
--               SetType(Target,IndTyp);
--               EmpireConquered:=True;
--               RevChange:=Rnd(25,50);
--               AddGlobalNews([Emp,EnemyEmp],Target,GLBCapConq,Loc,Ord(Emp),Ord(EnemyEmp),0);
--               END
--            ELSE
--               BEGIN
--               RevChange:=Rnd(5,10);
--               AddGlobalNews([Emp,EnemyEmp],Target,GLBConq,Loc,Ord(Emp),Ord(EnemyEmp),0);
--               END;
--            END
--         ELSE
--            BEGIN
--            GetShips(Target,Sh);
--            FOR ShpI:=fgt TO trn DO
--               Killed[ShpI]:=Killed[ShpI]+Sh[ShpI];
--
--            FleetNameDestruction(EnemyEmp,Target,Loc);
--
--            IF (Target.Index IN SetOfActiveFleets) AND Capture THEN
--               AbortFleet(Target,FltID,False);
--
--            DestroyFleet(Target);
--            RevChange:=Rnd(1,5);
--            AddGlobalNews([Emp,EnemyEmp],Target,GLBConq,Loc,Ord(Emp),Ord(EnemyEmp),0);
--            END;
--
--         IF EnemyEmp=Indep THEN
--            ChangeTotalRevIndex(Emp,-Rnd(2,4))
--         ELSE
--            BEGIN
--            IF (HKAttack) AND (Target.ObjTyp=Flt) THEN
--               AddNews(EnemyEmp,BattleLUNK,Loc,0,0,0)
--            ELSE
--               AddNews(EnemyEmp,BattleL,Loc,Ord(Emp),0,0);
--
--            ReportLosses(EnemyEmp,Loc,Killed);
--            ChangeTotalRevIndex(Emp,-Rnd(3,6));
--            ChangeTotalRevIndex(EnemyEmp,RevChange);
--            END;
--
--         IF EmpireConquered THEN
--            ConquerEmpire(Emp,EnemyEmp,Booty);
--         END;
--   END;  { case }
--   END;  { ResolveAttack }
-+{ PATCH (Phase 5 commit 5d): ConquerWorld/ConquerEmpire/RestoreCombatant/
-+  ResolveAttack bodies removed here -- outcome application + empire elimination is
-+  a later commit's scope (see docs/ROADMAP.md's Phase 5 checklist), and all four
-+  need Intrface (Scout/AddNews/DestroyEmpire) or Fleet, dropped above. Restore
-+  them verbatim from reference/DOSAnacreonSource131/ATTACK.PAS when that commit's
-+  own patch update gives them a real (non-GUI) path to what they need. }
- 
- PROCEDURE DefaultGroup(VAR Sh: ShipArray; VAR Cr: CargoArray;
-                        VAR Gp: GroupRecord;
-@@ -1436,300 +1056,13 @@
+@@ -1436,300 +1488,10 @@
        ForcesUnknown:=False;
     END;  { ForcesUnknown }
  
@@ -769,13 +411,10 @@
 -         END;
 -      END;
 -   END;  { DestroyConstructionOrGate }
-+{ PATCH (Phase 5 commit 5d): HolocaustEffectiveness/HolocaustWorld/LAMAttack/
-+  DestroyConstructionOrGate bodies removed here -- standalone mechanics
-+  (bombardment, LAM strikes, gate/construction destruction) are a later commit's
-+  scope (see docs/ROADMAP.md's Phase 5 checklist); DestroyConstructionOrGate in
-+  particular calls AddNews/GetCoord in ways that, unlike the getters this build
-+  keeps, need Intrface. Restore verbatim from
-+  reference/DOSAnacreonSource131/ATTACK.PAS when that commit's own patch update
-+  gives them a real (non-GUI) path to what they need. }
++{ PATCH (Phase 5 commit 5d, kept as-is by 5f): HolocaustEffectiveness/HolocaustWorld/
++  LAMAttack/DestroyConstructionOrGate bodies removed here -- standalone mechanics
++  (bombardment, LAM strikes, gate/construction destruction) are 5g's scope, not
++  5f's. Restore verbatim from reference/DOSAnacreonSource131/ATTACK.PAS when that
++  commit's own patch update gives them a real (non-GUI) path to what they need. }
  
  END.

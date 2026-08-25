@@ -14,7 +14,14 @@ namespace ThreeLn.Reconstruction4021.Core.Entities;
 /// <see cref="Entities.Empire"/> reference to use instead. <c>TechGrant</c> exists for the same
 /// reason, scoped to <c>NCapTech</c>: Pascal passed <c>Ord(NewTech)</c>, a flat ordinal this port has
 /// no equivalent for since <see cref="TechCatalog"/> splits it into four typed enums — see
-/// <see cref="TechCatalog.TechGrantIdentity"/>.
+/// <see cref="TechCatalog.TechGrantIdentity"/>. <c>Defender</c> exists for the same reason as
+/// <c>OtherEmpire</c>, one level further: the four Global combat headlines (<c>GLBDest</c>/
+/// <c>GLBConq</c>/<c>GLBCapConq</c>/<c>GLBLAMStrk</c>) are <c>(Loc,Attacker,Defender)</c>-shaped, not
+/// <c>(Loc,Emp)</c> — Pascal packs both empires into <c>Parm1</c>/<c>Parm2</c> (<c>Ord(Emp),
+/// Ord(EnemyEmp)</c>) for exactly these four, the one place a single generic empire slot wasn't
+/// enough (ATTACK.PAS's ResolveAttack, Phase 5 commit 5f). <c>OtherEmpire</c> holds the attacker for
+/// these; <c>Defender</c> is the second, added rather than reused because every other headline's
+/// single <c>OtherEmpire</c> already means "the empire this news item is about," a different role.
 /// </summary>
 public sealed record NewsItem(
     NewsType Headline,
@@ -24,4 +31,5 @@ public sealed record NewsItem(
     TechCatalog.TechGrantIdentity? TechGrant = null,
     int Parm1 = 0,
     int Parm2 = 0,
-    int Parm3 = 0);
+    int Parm3 = 0,
+    Empire? Defender = null);

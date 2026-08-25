@@ -1,14 +1,8 @@
 --- a/ATTNPE.PAS
 +++ b/ATTNPE.PAS
-@@ -12,15 +12,22 @@
- 
+@@ -13,14 +13,13 @@ UNIT AttNPE;
  INTERFACE
  
-+{ PATCH (fpc): CRT dropped -- unused outside the IFDEF-Debug debug-window code (ClrScr, inside
-+  WorldEngage), and Pascal USES clauses aren't conditionally resolved on demand, so it still needed
-+  finding at compile time even with Debug undefined (the DEFINE-Debug line above is missing its
-+  leading dollar sign, so it's inert -- a plain comment, not a real directive -- confirmed by testing
-+  directly: dropping CRT alone was sufficient, no IFDEF-Debug block ever actually compiled in). }
  USES Int,
 -     CRT,
       Types,
@@ -16,26 +10,28 @@
       PrimIntr,
       Attack;
  
-+{ PATCH (Phase 5 commit 5e): signature extended with VAR Killed,Casualties -- see the matching PATCH
-+  comment at this procedure's IMPLEMENTATION for why (RestoreCombatant/ResolveAttack, which consumed
-+  them internally in real Pascal, are commented out below). }
  PROCEDURE NPEAttack(FltID,Target: IDNumber; Intent: AttackIntentionTypes; RetrIndex: Index;
 -                    VAR Result: AttackResultTypes);
 +                    VAR Result: AttackResultTypes; VAR Killed,Casualties: AttackArray);
  
  IMPLEMENTATION
  
-@@ -383,45 +390,33 @@
+@@ -383,45 +382,47 @@ PROCEDURE WorldEngage(NoOfGroups: Byte;
     {$ENDIF}
     END;  { WorldEngage }
  
-+{ PATCH (Phase 5 commit 5e): NPEAttack trimmed to its resolution half -- everything through
-+  FleetEngage/WorldEngage (Result/Casualties/Killed). RestoreCombatant/ResolveAttack (outcome
-+  application) and the Con/Gate branch's DestroyConstructionOrGate call are all later commits' scope
-+  (5f/5g), and all three need Intrface/Fleet, dropped from ATTACK.PAS.patch for the same reason.
-+  Restore verbatim from reference/DOSAnacreonSource131/ATTNPE.PAS -- the Capture/Booty/AttEmp/DefEmp
-+  locals and the ELSE IF Target.ObjTyp IN [Con,Gate] branch -- when those commits give this a real
-+  (non-GUI) path to what it needs. }
++{ PATCH (Phase 5 commit 5f): signature still carries the VAR Killed,Casualties
++  extension 5e added (real Pascal keeps both as local VARs) -- purely a
++  test-observability affordance, harmless since RestoreCombatant only reads
++  Casualties/Killed, never writes them, so their values are identical whether
++  they're locals or VAR params. DefEmp dropped: assigned in real Pascal
++  (GetStatus(Target)) but never read anywhere in this body, confirmed by reading
++  -- ResolveAttack recomputes its own EnemyEmp internally instead. The outer
++  Target.ObjTyp IN [Pln,Base,Flt] / [Con,Gate] dispatch is gone too: this
++  harness's own callers only ever pass Pln or Flt targets (Base is untested
++  either way, matching 5d/5e's own scope), and the Con/Gate branch needs
++  DestroyConstructionOrGate, still 5g's scope. Restore the full dispatch verbatim
++  from reference/DOSAnacreonSource131/ATTNPE.PAS when 5g lands it. }
  PROCEDURE NPEAttack(FltID,Target: IDNumber; Intent: AttackIntentionTypes; RetrIndex: Index;
 -                    VAR Result: AttackResultTypes);
 +                    VAR Result: AttackResultTypes; VAR Killed,Casualties: AttackArray);
@@ -45,13 +41,13 @@
        NoOfGroups: Byte;
        Gp: GroupArray;
        En: EnemyArray;
--      Capture,HKSurprise: Boolean;
+       Capture,HKSurprise: Boolean;
 -      AttEmp,DefEmp: Empire;
--      Booty: PlanetSet;
 +      AttEmp: Empire;
+       Booty: PlanetSet;
  
     BEGIN
--   HKSurprise:=ForcesUnknown(FltID,Target);
+    HKSurprise:=ForcesUnknown(FltID,Target);
     AttEmp:=GetStatus(FltID);
 -   DefEmp:=GetStatus(Target);
  
@@ -60,17 +56,23 @@
 -      CalculateCombatData(AttEmp,FltID,Target,CombatData);
 -      DefaultDistribution(FltID,NoOfGroups,Gp);
 -      GetEnemy(Target,En);
--
++   CalculateCombatData(AttEmp,FltID,Target,CombatData);
++   DefaultDistribution(FltID,NoOfGroups,Gp);
++   GetEnemy(Target,En);
+ 
 -      IF Target.ObjTyp=Flt THEN
 -         FleetEngage(NoOfGroups,Gp,En,CombatData,RetrIndex,Intent,Casualties,Killed,Result)
 -      ELSE
 -         WorldEngage(NoOfGroups,Gp,En,CombatData,RetrIndex,Intent,Casualties,Killed,Result);
--
++   IF Target.ObjTyp=Flt THEN
++      FleetEngage(NoOfGroups,Gp,En,CombatData,RetrIndex,Intent,Casualties,Killed,Result)
++   ELSE
++      WorldEngage(NoOfGroups,Gp,En,CombatData,RetrIndex,Intent,Casualties,Killed,Result);
+ 
 -      RestoreCombatant(FltID,Casualties);
 -      RestoreCombatant(Target,Killed);
-+   CalculateCombatData(AttEmp,FltID,Target,CombatData);
-+   DefaultDistribution(FltID,NoOfGroups,Gp);
-+   GetEnemy(Target,En);
++   RestoreCombatant(FltID,Casualties);
++   RestoreCombatant(Target,Killed);
  
 -      IF Intent=DestTrnAIT THEN Capture:=False ELSE Capture:=True;
 -      ResolveAttack(Result,FltID,Target,HKSurprise,Capture,Casualties,Killed,Booty);
@@ -80,10 +82,8 @@
 -      DestroyConstructionOrGate(AttEmp,HKSurprise,Target);
 -      Result:=DefConqueredART;
 -      END;
-+   IF Target.ObjTyp=Flt THEN
-+      FleetEngage(NoOfGroups,Gp,En,CombatData,RetrIndex,Intent,Casualties,Killed,Result)
-+   ELSE
-+      WorldEngage(NoOfGroups,Gp,En,CombatData,RetrIndex,Intent,Casualties,Killed,Result);
++   IF Intent=DestTrnAIT THEN Capture:=False ELSE Capture:=True;
++   ResolveAttack(Result,FltID,Target,HKSurprise,Capture,Casualties,Killed,Booty);
     END;  { NPEAttack }
  
  END.
