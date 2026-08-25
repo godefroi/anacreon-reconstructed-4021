@@ -79,7 +79,7 @@ Ported `NEWS.PAS`'s per-empire event log — a real data dependency for Phase 6 
 `EraseNews`'s per-turn reset isn't wired into `TurnEngine` yet — no consumer exists to validate the
 timing against.
 
-## 5. Combat — in progress, 5a-5f landed
+## 5. Combat — in progress, 5a-5h landed
 
 Attack resolution, fleet/starbase destruction, capital loss and empire elimination. Design decisions
 (empire-elimination model, `Empire.DefeatedBy`, `AttackType`) are in `PORT_DESIGN.md`; dead-code and
@@ -111,26 +111,42 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, etc.) are in
   addition. Extended `npeattack.golden` with a second Empire2 world to exercise `ConquerEmpire`'s
   per-planet cascade directly; two hardcoded tests (`CombatOutcomeTests.cs`) cover the human-defeat
   branch the harness can't reach.
-- **5g, standalone mechanics** — `HolocaustWorld`, `LAMAttack`, `DestroyConstructionOrGate`,
-  `SelfDestructObject` (ported with no caller wired up yet, same precedent as `Empire.News.Clear()`).
-- **5h, minefield damage + disrupter blocking + minefield visibility** — folded additively into
-  `FleetMovementHandler`'s existing step loop; new per-cell `Galaxy` mine-visibility structure
-  (can't reuse `EntityVisibility<T>`, which is keyed by entity reference, not coordinate).
+- ✅ **5g, standalone mechanics** (`Combat/CombatStandalone.cs`) — `LAMAttack` and
+  `DestroyConstructionOrGate` are live Pascal (`ATTCOMM.PAS`/`DESIGN.PAS`/`NPE00`/`NPE03`/`NPEINTR`
+  callers), ported and wired: `DestroyConstructionOrGate` is now `CombatResolution.NPEAttack`'s own
+  Con/Gate branch, matching `ATTNPE.PAS`'s real dispatch (5e had deferred it — no `ConstructionSite`/
+  `Stargate` target type existed yet at the time). `HolocaustWorld`/`HolocaustEffectiveness` are
+  **not ported** — confirmed genuinely dead code, not "no caller wired up yet": `MSCCOMM.PAS`'s
+  `HolocaustCommand` is wrapped in a Pascal comment (forward declaration included), and its
+  `PLAYTURN.PAS` dispatch entry sits inside a separate disabled `(*ARTIFACTS*)` block, in both the
+  1.31 and 2.0 source trees — see `CombatStandalone.cs`'s own doc comment and
+  `docs/QUESTIONS_FOR_GEORGE.md`. `SelfDestructObject` is ported with no port-side caller yet (Phase 8,
+  same `Empire.News.Clear()` precedent) — its own Pascal caller (`MSCCOMM.PAS`'s
+  `SelfDestructCommand`) *is* live, an earlier research-pass claim to the contrary was wrong and has
+  been corrected. `LAMAttack` is golden-file-backed (`lamattack.golden`, `LamAttackTests` — the only
+  Phase 5 procedure with zero `Rnd` calls, a pure deterministic check of its proportional-distribution
+  formula); `DestroyConstructionOrGate`/`SelfDestructObject` are covered by hardcoded C# tests instead
+  (`CombatStandaloneTests.cs` — `DestroyConstruction`/`DestroyStargate` need `Intrface`, not linked
+  into this harness's patched build; `SBASE.PAS` was never patched in at all). See
+  `reference/verify/README.md`'s domain catalog for the full harness-coverage story.
+- ✅ **5h, minefield damage + disrupter blocking + minefield visibility** (`Turns/FleetMovementHandler.cs`,
+  `Galaxy/Galaxy.cs`) — `MineFieldDamage`/`InRangeOfDisrupter` folded additively into
+  `FleetMovementHandler.AdvanceFleet`'s step loop, now a real per-cell walk for `JumpFleet`/
+  `HunterKillerFleet` (Pascal's own `FltTyp IN [JumpFleet,HKFleet]` gate) instead of the single bulk
+  step other fleet types keep; a mine or disrupter hit stops movement for the turn but the fleet still
+  lands on the cell it was hit at, matching source exactly (verified by reading `FLEET.PAS:646-859`'s
+  `GOTO ExitMoveLoop` fallthrough directly, not assumed). New `Galaxy._mineScoutedBy` (`MarkMineScouted`/
+  `ClearMineScouted`/`IsMineScoutedBy`) — can't reuse `EntityVisibility<T>`, which is keyed by entity
+  reference, not coordinate. `FleetMovementHandler` now takes a constructor-injected `Random`, matching
+  `AnnualTickHandler`'s own convention. Covered by hardcoded tests (`FleetMovementHandlerTests.cs`) —
+  same precedent as 5g's `CombatStandaloneTests.cs`; no golden-file domain, since `FleetMovementHandler`
+  was never linked into the patch-based harness in the first place. While tracing the exact move loop, a
+  second movement-fidelity gap surfaced beyond the two already tracked below: dense-nebula movement
+  blocking (`GetNewPos`'s own `Pos:=Limbo` branch, `FLEET.PAS:437-450`) isn't ported either — found but
+  not fixed here, since it's a terrain effect applying to every fleet type, not a combat mechanic; added
+  to 6a's list below alongside the other two.
 - **5i, `HostileLife` news fix + roadmap wrap-up** — a small Phase 1/4 gap (`HostileLife`, shipped
   Phase 1, calls no `AddNews` despite the relevant `NewsType` members already existing).
-
-### Tracked gaps in already-shipped movement (surfaced by Phase 5, not fixed by it)
-
-Deliberately simplified straight-line steppers in `FleetMovementHandler` (Phase 2/3) next to what real
-Pascal does — found while scoping Combat, but movement fidelity, not a combat mechanic, so not fixed
-in Phase 5 (see `PORT_DESIGN.md` for why each is out of scope for now):
-
-- **Stargate teleportation / fortress pass-through jumps** (`FLEET.PAS:646-860`'s `UpdateFleet`).
-- **Starbase obstacle-avoidance and fuel cost** (`SBASE.PAS:88-263`'s `MovePlayerStarbases`/
-  `GetNewBasePos`).
-- **Fleet fuel/cargo-capacity system** (surfaced by 5f) — no `FuelCapacity`/`FleetCargoSpace`/
-  `BalanceFleet` equivalent anywhere in this port yet. Currently only visible as a gap in
-  `RestoreCombatant`'s Fleet branch (harmless there — see `PORT_DESIGN.md`).
 
 ## 6. NPE AI
 
@@ -140,6 +156,24 @@ handler-per-empire design (`Game.TurnHandlers`) already supports adding an "adva
 Moved after Probes/News/Combat (was Phase 3 originally): NPE decision-making is written against
 combat primitives from the start (`NPE01.PAS`'s `USES` clause pulls in `Attack`/`AttNPE`) and reads
 the News feed as a real sensory input, not just a display concern.
+
+- **6a, fleet/starbase movement fidelity (prerequisite).** `FleetMovementHandler`'s `AdvanceFleet`/
+  `AdvanceStarbases` (shipped pre-Phase-1, in the initial skeleton) are deliberately simplified
+  straight-line steppers next to what real Pascal does — found while scoping Combat (Phase 5), not
+  fixed there since it's movement fidelity, not a combat mechanic (see `PORT_DESIGN.md`). Belongs
+  here rather than Phase 5 or Phase 8: `NPE01.PAS`'s decision logic (fuel-aware retreat, stargate
+  routing) can't be reasoned about correctly until these are real, and it's simulation core, not UI,
+  so it lands before Phase 8 per this roadmap's own bottom-up ordering. Land it as prep before the
+  actual AI commits:
+  - Fleet stargate teleportation / fortress pass-through jumps (`FLEET.PAS:646-860`'s `UpdateFleet`).
+  - Starbase obstacle-avoidance and fuel cost (`SBASE.PAS:88-263`'s `MovePlayerStarbases`/
+    `GetNewBasePos`).
+  - Fleet fuel/cargo-capacity system (`FuelCapacity`/`FleetCargoSpace`/`GetFleetFuel`/`SetFleetFuel`/
+    `BalanceFleet` — surfaced by 5f's `RestoreCombatant`, which stubs out the `BalanceFleet` call
+    since real Pascal's own version lives in `Intrface`, dropped from this port's scope so far).
+  - Dense-nebula movement blocking (`FLEET.PAS:437-450`'s `GetNewPos`) — surfaced by 5h while tracing
+    the exact per-step move loop for mine/disrupter checks; applies to every fleet type, not just
+    `JumpFleet`/`HunterKillerFleet`, so it's a terrain effect rather than a combat mechanic.
 
 ## 7. Save/load
 
@@ -167,3 +201,4 @@ Not scheduled, pull in only if/when needed: v2 gameplay changes and new features
 - options-based enable/disable v2 features, as well as other future enhancements
 - fleet orders to build a minefield across an entire area, either a list of coordinates, or a bounded area
 - improved scenario format without so many "magic" numbers
+- address shortcomings mentioned (or implied) in Jerry Pournelle's review: https://archive.org/details/byte-magazine-1989-01/page/n137/mode/2up

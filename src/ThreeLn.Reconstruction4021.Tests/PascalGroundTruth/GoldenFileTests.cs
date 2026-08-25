@@ -66,6 +66,10 @@ public class GoldenFileTests
                  $"{(c.Planet3Present ? 1 : 0)},{c.Planet3X},{c.Planet3Y},{c.Planet3Population},{c.Planet3RevIndex},{(int)c.Planet3Tech}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "npeattack", .. args.Skip(1)]));
 
+        GoldenFile.Regenerate("lamattack", LamAttackCases.All,
+            c => $"{(c.TargetIsFleet ? 1 : 0)},{c.LamToUse},{c.Fgt},{c.Hkr},{c.Pen},{c.Trn},{c.Lam},{c.Def},{c.Gdm},{c.Ion}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "lamattack", .. args.Skip(1)]));
+
         GoldenFile.Regenerate("techlevel", TechLevelCases.All,
             c => $"{(int)c.Tech},{(c.IsIndependent ? 1 : 0)},{(int)c.CapitalTech},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "techlevel", .. args.Skip(1)]));

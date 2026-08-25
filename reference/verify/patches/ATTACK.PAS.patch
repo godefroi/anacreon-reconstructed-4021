@@ -1,6 +1,6 @@
 --- a/ATTACK.PAS
 +++ b/ATTACK.PAS
-@@ -10,13 +10,25 @@
+@@ -10,13 +10,25 @@ UNIT Attack;
  
  INTERFACE
  
@@ -27,20 +27,24 @@
       DataStrc,
       News;
  
-@@ -94,7 +106,11 @@
+@@ -94,7 +106,15 @@ PROCEDURE CalculateCombatData(Attacker: Empire; FltID,TargetID: IDNumber;
                                VAR CombatData: CombatDataRecord);
  PROCEDURE ConquerWorld(WorldID: IDNumber; Emp: Empire);
  PROCEDURE DefaultDistribution(FltID: IDNumber; VAR NoOfGroups: Byte; VAR Gp: GroupArray);
 -PROCEDURE DestroyConstructionOrGate(Emp: Empire; ForcesUnk: Boolean; TargetID: IDNumber);
-+{ PATCH (Phase 5 commit 5d, kept as-is by 5f): forward decls for
-+  DestroyConstructionOrGate/HolocaustEffectiveness/HolocaustWorld/LAMAttack dropped
-+  here, their IMPLEMENTATION bodies still commented out below -- standalone
-+  mechanics (bombardment, LAM strikes, gate/construction destruction) are 5g's
-+  scope, not 5f's. }
++{ PATCH (Phase 5 commit 5g): forward decls for DestroyConstructionOrGate/
++  HolocaustEffectiveness/HolocaustWorld dropped here, their IMPLEMENTATION bodies
++  still commented out below -- HolocaustWorld is confirmed dead code (see
++  CombatStandalone.cs's own doc comment), not ported at all; DestroyConstructionOrGate
++  is live but tested via hardcoded C# tests instead of this harness (its own
++  DestroyConstruction/DestroyStargate calls need Intrface, which this build doesn't
++  link -- see the IMPLEMENTATION section's own PATCH comment). LAMAttack is restored
++  below: it has no Rnd calls at all and needs nothing Intrface/Fleet-only, so it's a
++  clean patch-based domain (runworld.pas's own lamattack case). }
  FUNCTION EnemySurrenders(NoOfGroups: Byte;
                           VAR Gp: GroupArray;
                           VAR En: EnemyArray;
-@@ -102,15 +118,6 @@
+@@ -102,12 +122,6 @@ FUNCTION EnemySurrenders(NoOfGroups: Byte;
                           CombatData: CombatDataRecord): Boolean;
  FUNCTION ForcesUnknown(FltID,Target: IDNumber): Boolean;
  PROCEDURE GetEnemy(Target: IDNumber; VAR En: EnemyArray);
@@ -50,13 +54,10 @@
 -                         VAR IndusDest: IndusArray; VAR Deaths: Population;
 -                         VAR Revert: Boolean;
 -                         VAR Result: HoloResultTypes);
--PROCEDURE LAMAttack(Player: Empire; LAMToUse: Resources; Target: IDNumber;
--                    VAR ShipsDest: ShipArray;
--                    VAR DefnsDest: DefnsArray);
- PROCEDURE ResolveAttack(Result: AttackResultTypes;
-                         FltID,Target: IDNumber;
-                         HKAttack,Capture: Boolean;
-@@ -120,8 +127,53 @@
+ PROCEDURE LAMAttack(Player: Empire; LAMToUse: Resources; Target: IDNumber;
+                     VAR ShipsDest: ShipArray;
+                     VAR DefnsDest: DefnsArray);
+@@ -120,8 +134,53 @@ PROCEDURE RestoreCombatant(ObjID: IDNumber; VAR Casualties: AttackArray);
  
  IMPLEMENTATION
  
@@ -112,7 +113,7 @@
  
  CONST
     { CombatTechAdj:
-@@ -1436,300 +1488,10 @@
+@@ -1436,190 +1495,17 @@ FUNCTION ForcesUnknown(FltID,Target: IDNumber): Boolean;
        ForcesUnknown:=False;
     END;  { ForcesUnknown }
  
@@ -300,89 +301,24 @@
 -   ChangeTotalRevIndex(EnemyEmp,EnemyRev);
 -   END;  { HolocaustWorld }
 -
--PROCEDURE LAMAttack(Player: Empire; LAMToUse: Resources; Target: IDNumber;
--                    VAR ShipsDest: ShipArray;
--                    VAR DefnsDest: DefnsArray);
--   VAR
--      ResI: ResourceTypes;
--      Ships: ShipArray;
--      Cargo: CargoArray;
--      TotalShipSpace: Real;
--      TotalDefns: LongInt;
--      LAMsPerType: Resources;
--      Loc: Location;
--      Defns: DefnsArray;
--      ChanceToDestroy: Integer;
--      Emp: Empire;
--
--   { LAMAttack }
--   BEGIN
--   FillChar(ShipsDest,SizeOf(ShipsDest),0);
--   FillChar(DefnsDest,SizeOf(DefnsDest),0);
--   Loc.ID:=Target;  Loc.XY:=Limbo;
--   Emp:=GetStatus(Target);
--   IF Target.ObjTyp=Flt THEN
--      { ASSERT: Target is a fleet. }
--      BEGIN
--      GetShips(Target,Ships);
--      TotalShipSpace:=0;
--      FOR ResI:=fgt TO trn DO
--         TotalShipSpace:=TotalShipSpace+(Ships[ResI]*(ProtecNeeded[ResI]/100));
--      IF TotalShipSpace=0 THEN
--         TotalShipSpace:=1;
--
--      FOR ResI:=fgt TO trn DO
--         BEGIN
--         LAMsPerType:=Round(LAMToUse*((Ships[ResI]*(ProtecNeeded[ResI]/100))/TotalShipSpace));
--         ShipsDest[ResI]:=LesserInt(Trunc((LAMsPerType/100)*CombatTable[LAM,ResI]),Ships[ResI]);
--         Ships[ResI]:=Ships[ResI]-ShipsDest[ResI];
--         END;
--
--      IF NoShips(Ships) THEN
--         BEGIN
--         FleetNameDestruction(Emp,Target,Loc);
--         AddNews(Emp,LAMDs,Loc,Integer(Player),0,0);
--         DestroyFleet(Target);
--         END
--      ELSE
--         BEGIN
--         AddNews(GetStatus(Target),LAMDm,Loc,Integer(Player),0,0);
--         GetCargo(Target,Cargo);
--         BalanceFleet(Ships,Cargo);
--         PutShips(Target,Ships);
--         PutCargo(Target,Cargo);
--         END;
--
--      FOR ResI:=fgt TO trn DO
--         IF ShipsDest[ResI]>0 THEN
--            AddNews(Emp,DestDetail,Loc,Integer(ShipsDest[ResI]),Integer(ResI),0);
--      END
--   ELSE
--      { ASSERT: Target is a world. }
--      BEGIN
--      AddNews(Emp,LAMDef,Loc,Integer(Player),0,0);
--      GetDefns(Target,Defns);
--      TotalDefns:=0;
--      FOR ResI:=LAM TO ion DO
--         Inc(TotalDefns,Defns[ResI]);
--      IF TotalDefns=0 THEN
--         TotalDefns:=1;
--
--      FOR ResI:=LAM TO ion DO
--         BEGIN
--         LAMsPerType:=Round((LAMToUse/TotalDefns)*Defns[ResI]);
--         DefnsDest[ResI]:=LesserInt(Trunc((LAMsPerType/100)*CombatTable[LAM,ResI]),Defns[ResI]);
--         Dec(Defns[ResI],DefnsDest[ResI]);
--         IF DefnsDest[ResI]>0 THEN
--            AddNews(Emp,DestDetail,Loc,Integer(DefnsDest[ResI]),Integer(ResI),0);
--         END;
--
--      PutDefns(Target,Defns);
--      END;
--
--   AddGlobalNews([Emp,Player],Target,GLBLAMStrk,Loc,Ord(Player),Ord(Emp),0);
--   END;  { LAMAttack }
--
++{ PATCH (Phase 5 commit 5g): HolocaustEffectiveness/HolocaustWorld bodies stay removed
++  here -- confirmed dead code (see CombatStandalone.cs's own doc comment: even
++  HolocaustCommand's own forward interface declaration in MSCCOMM.PAS is commented
++  out, in both the 1.31 and 2.0 source trees), not ported at all.
++  DestroyConstructionOrGate's body also stays removed: it's live (wired into this
++  port's NPEAttack), but its own DestroyConstruction/DestroyStargate calls live in
++  Intrface, which this build doesn't link (see the INTERFACE section's own PATCH
++  comment) -- tested via hardcoded C# tests instead (CombatStandaloneTests.cs), not
++  this harness. LAMAttack (below) needs neither Intrface nor Fleet -- every getter/
++  setter it calls is already in PrimIntr/Misc/DataCnst/News, all in this unit's USES
++  clause -- so it's restored verbatim as runworld.pas's own lamattack domain. }
+ PROCEDURE LAMAttack(Player: Empire; LAMToUse: Resources; Target: IDNumber;
+                     VAR ShipsDest: ShipArray;
+                     VAR DefnsDest: DefnsArray);
+@@ -1703,33 +1589,4 @@ PROCEDURE LAMAttack(Player: Empire; LAMToUse: Resources; Target: IDNumber;
+    AddGlobalNews([Emp,Player],Target,GLBLAMStrk,Loc,Ord(Player),Ord(Emp),0);
+    END;  { LAMAttack }
+ 
 -PROCEDURE DestroyConstructionOrGate(Emp: Empire; ForcesUnk: Boolean; TargetID: IDNumber);
 -   VAR
 -      EnemyEmp: Empire;
@@ -411,10 +347,5 @@
 -         END;
 -      END;
 -   END;  { DestroyConstructionOrGate }
-+{ PATCH (Phase 5 commit 5d, kept as-is by 5f): HolocaustEffectiveness/HolocaustWorld/
-+  LAMAttack/DestroyConstructionOrGate bodies removed here -- standalone mechanics
-+  (bombardment, LAM strikes, gate/construction destruction) are 5g's scope, not
-+  5f's. Restore verbatim from reference/DOSAnacreonSource131/ATTACK.PAS when that
-+  commit's own patch update gives them a real (non-GUI) path to what they need. }
- 
+-
  END.

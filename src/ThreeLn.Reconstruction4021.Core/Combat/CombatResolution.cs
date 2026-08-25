@@ -13,9 +13,10 @@ public sealed record CombatEngagementResult(AttackResultType Result, AttackTally
 /// groups between rounds, decides when an engagement is over, then hands the result to
 /// Combat/CombatOutcome.cs to actually apply it — culminating in <see cref="NPEAttack"/>, the entry
 /// point Phase 6 (NPE AI) and Phase 8 (human auto-resolve) will both call. <see cref="NPEAttack"/>'s
-/// real Pascal body also calls DestroyConstructionOrGate for a construction-site/stargate target
-/// (5g); this port's Target is always an <see cref="IEconomicWorld"/> or <see cref="Fleet"/> (enforced
-/// by CombatEngine's own CalculateCombatData/GetEnemy), so that branch has no equivalent here yet.
+/// real Pascal body also calls DestroyConstructionOrGate for a construction-site/stargate target —
+/// wired in below as an early branch, matching Pascal's own <c>Target.ObjTyp IN [Con,Gate]</c> check,
+/// which entirely bypasses CalculateCombatData/GetEnemy/the group-engage loop (see
+/// Combat/CombatStandalone.cs, Phase 5 commit 5g).
 ///
 /// <see cref="RetrIndex"/> (Pascal's <c>RetrIndex</c>/<c>RetreatIndex</c> parameter, threaded through
 /// NPEAttack/FleetEngage/WorldEngage/FleetRetreats in real Pascal) is dropped entirely — confirmed by
@@ -41,9 +42,17 @@ public static class CombatResolution
         var targetOwner = target switch {
             IEconomicWorld w => w.Owner,
             Fleet f => f.Owner,
+            ConstructionSite c => c.Owner,
+            Stargate g => g.Owner,
             _ => throw new ArgumentException($"NPEAttack: unexpected target type {target.GetType()}.", nameof(target)),
         };
         var hkSurprise = CombatEngine.ForcesUnknown(attackerFleet, targetOwner);
+
+        if (target is ConstructionSite or Stargate) {
+            CombatStandalone.DestroyConstructionOrGate(attacker, hkSurprise, target, game, random);
+            return new CombatEngagementResult(AttackResultType.DefenderConquered, new AttackTally(), new AttackTally());
+        }
+
         var combatData = CombatEngine.CalculateCombatData(attacker, target);
         var groups = CombatEngine.DefaultDistribution(attackerFleet);
         var enemy = CombatEngine.GetEnemy(target);

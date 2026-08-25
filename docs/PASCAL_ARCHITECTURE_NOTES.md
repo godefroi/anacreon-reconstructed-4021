@@ -496,6 +496,28 @@ something worth reviving deliberately.
 Declared, empty body, never called anywhere including from within its own unit — same treatment as
 `BATTLE.PAS`/`BOMBER.PAS`. Not ported.
 
+### `HolocaustCommand`/`HolocaustWorld`/`HolocaustEffectiveness` are confirmed dead code
+
+A full nuclear-bombardment mechanic (`ATTACK.PAS`) — surrender chance, population deaths, industry
+destruction, tech regression — with no way to reach it in a shipped build. `MSCCOMM.PAS`'s
+`HolocaustCommand` (the only caller of `HolocaustWorld`/`HolocaustEffectiveness`) is wrapped in a
+Pascal comment block, and so is its own forward interface declaration a few lines above it — the unit
+couldn't even export the symbol. `PLAYTURN.PAS`'s command-dispatch entry for it
+(`HoloCom : HolocaustCommand;`) sits inside a separate `(*ARTIFACTS ... *)` commented block alongside
+`TransactionCommand`/`ArtifactCommand`, itself nested one level inside a live `{$IFNDEF Demo}` region
+(so those three specifically are cut, not the whole surrounding command table). Identical in both the
+1.31 and 2.0 source trees. `SelfDestructCommand`/`SelfDestructObject` and `LAMCom`/`LaunchLAM` sit
+right next to the `(*ARTIFACTS*)` block in the same command table but *outside* it — real, reachable
+commands, unlike Holocaust. Not ported (see `Core/Combat/CombatStandalone.cs`'s own doc comment); see
+`docs/QUESTIONS_FOR_GEORGE.md` for the open question of why Holocaust specifically got bundled into
+the same cut as the artifacts feature.
+
+An earlier research pass (Phase 5 commit 5a's scoping) also claimed `SelfDestructObject` had no
+caller anywhere in the source tree. That was wrong — missed by not checking `MSCCOMM.PAS`'s own
+command procedures closely enough — and has since been corrected (`SelfDestructCommand` calls it
+directly, MSCCOMM.PAS:519). Worth remembering as a reminder that "grepped every caller, found none" is
+only as good as which files were actually searched.
+
 ### FreePascal's `Round` is banker's rounding, not Turbo Pascal's
 
 `PascalMath.PascalRound` was originally implemented as half-away-from-zero (matching an assumption

@@ -287,8 +287,8 @@ public static class CombatOutcome
         }
     }
 
-    /// <summary>DestroyFleet (FLEET.PAS:211-244) — "is it live" is just "is it in Galaxy.Fleets" (see Galaxy's own doc comment), so this is a plain removal; no SetOfActiveFleets/sector-flag/order bookkeeping to keep in sync.</summary>
-    private static void DestroyFleet(Fleet fleet, Game game) => game.Galaxy.Fleets.Remove(fleet);
+    /// <summary>DestroyFleet (FLEET.PAS:211-244) — "is it live" is just "is it in Galaxy.Fleets" (see Galaxy's own doc comment), so this is a plain removal; no SetOfActiveFleets/sector-flag/order bookkeeping to keep in sync. Internal (not private): 5g's CombatStandalone.cs reuses this exact primitive rather than duplicating it (LAMAttack/SelfDestructObject both destroy fleets outside the ResolveAttack pipeline).</summary>
+    internal static void DestroyFleet(Fleet fleet, Game game) => game.Galaxy.Fleets.Remove(fleet);
 
     /// <summary>
     /// AbortFleet (FLEET.PAS:150-209) — transfers <paramref name="source"/>'s ships/cargo onto
@@ -388,8 +388,8 @@ public static class CombatOutcome
         _ => (null, null),
     };
 
-    /// <summary>ChangeTotalRevIndex (PRIMINTR.PAS:1085-1096) — a real-time mutator distinct from AnnualTickHandler's own NewTotalRevIndex scratch-accumulate-then-commit dictionary (Phase 1); the two never run simultaneously, only at different times within the same year.</summary>
-    private static void ChangeTotalRevIndex(Empire emp, int change)
+    /// <summary>ChangeTotalRevIndex (PRIMINTR.PAS:1085-1096) — a real-time mutator distinct from AnnualTickHandler's own NewTotalRevIndex scratch-accumulate-then-commit dictionary (Phase 1); the two never run simultaneously, only at different times within the same year. Internal (not private): 5g's CombatStandalone.cs reuses this exact primitive rather than duplicating it.</summary>
+    internal static void ChangeTotalRevIndex(Empire emp, int change)
     {
         if (!emp.IsIndependent) {
             emp.TotalRevolutionIndex += change;

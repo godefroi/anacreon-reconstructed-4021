@@ -21,6 +21,7 @@ public sealed class Galaxy(int size)
 
     private readonly Dictionary<Coordinate, NebulaType> _nebulae = [];
     private readonly Dictionary<Coordinate, Empire> _minefields = [];
+    private readonly Dictionary<Coordinate, HashSet<Empire>> _mineScoutedBy = [];
 
     public List<Planet> Planets { get; } = [];
     public List<Starbase> Starbases { get; } = [];
@@ -45,4 +46,28 @@ public sealed class Galaxy(int size)
     public void SetMine(Coordinate coordinate, Empire owner) => _minefields[coordinate] = owner;
 
     public void ClearMine(Coordinate coordinate) => _minefields.Remove(coordinate);
+
+    /// <summary>
+    /// Which empires know a minefield exists at this coordinate — a separate fact from
+    /// <see cref="GetMineOwner"/> (who owns it), matching Pascal's own two independent per-sector
+    /// fields (GALAXY.PAS:35's <c>MineScout: ScoutSet</c> bitmask vs. PutMine/EnemyMine's Special-byte
+    /// nibble). SetMineScout/ClrMineScout (GALAXY.PAS:57-73) are ported as MarkMineScouted/
+    /// ClearMineScouted below; no port-side reader exists yet beyond <see cref="IsMineScoutedBy"/>
+    /// itself (real Pascal's only reader is MAPWIND.PAS's map-rendering code, Phase 8) — same
+    /// "port the real write, leave it unread until its phase exists" precedent as Empire.DefeatedBy.
+    /// </summary>
+    public void MarkMineScouted(Empire empire, Coordinate coordinate)
+    {
+        if (!_mineScoutedBy.TryGetValue(coordinate, out var scouts)) {
+            scouts = [];
+            _mineScoutedBy[coordinate] = scouts;
+        }
+
+        scouts.Add(empire);
+    }
+
+    public void ClearMineScouted(Coordinate coordinate) => _mineScoutedBy.Remove(coordinate);
+
+    public bool IsMineScoutedBy(Empire empire, Coordinate coordinate) =>
+        _mineScoutedBy.TryGetValue(coordinate, out var scouts) && scouts.Contains(empire);
 }

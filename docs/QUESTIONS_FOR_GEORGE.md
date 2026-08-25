@@ -22,9 +22,17 @@ quirk findings these questions are drawn from, with more detail on how each was 
   within its own unit. Its name suggests merging groups (maybe collapsing multiple surviving groups
   of the same `AttackType`/target after a round?) — was that the intent, and if so why was it never
   wired into `GroupEngage`'s round loop?
-- **`SelfDestructObject` (`SBASE.PAS`).** No caller anywhere in the source tree, including
-  `ATTCOMM.PAS`/`FLTCOMM.PAS`'s human-order compilers. Was there ever a player-facing "scuttle this
-  starbase" command, or was it infrastructure for something else that got cut?
+- **`HolocaustCommand`/`HolocaustWorld`/`HolocaustEffectiveness` (`MSCCOMM.PAS`/`ATTACK.PAS`).** A
+  full nuclear-bombardment mechanic — surrender chance, population deaths, industry destruction, tech
+  regression — with no way to reach it in a shipped build: `HolocaustCommand`'s own forward interface
+  declaration in `MSCCOMM.PAS` is wrapped in a Pascal comment, its body sits in a separate
+  `(*ARTIFACTS ... *)` commented block alongside `TransactionCommand`/`ArtifactCommand`, and
+  `PLAYTURN.PAS`'s dispatch entry for it is inside that same disabled block — identical in both the
+  1.31 and 2.0 source trees. `SelfDestructCommand`/`SelfDestructObject` and `LAMCom`/`LaunchLAM` sit
+  right next to it in the same command table but *outside* the `(*ARTIFACTS*)` wrapper, so they're
+  real, reachable commands in the shipped game — only Holocaust (and Transaction/Artifact) were cut.
+  Was Holocaust part of the same "artifacts" feature as those two, or a separate casualty that just
+  happened to get bundled into the same disabled block?
 - **`ProbeStatus`'s unused `PAtDest`/`PLost` states** (`TYPES.PAS:125`, `INTRFACE.PAS:1346-1370`) —
   see "An earlier, simpler combat-resolution design" in `PASCAL_ARCHITECTURE_NOTES.md` for the combat
   analog; this is the same shape of question for probes. Was multi-turn probe travel (arrive, sit at

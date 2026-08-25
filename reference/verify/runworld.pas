@@ -49,6 +49,17 @@
                 Planet3X/Y are laid out relative to Planet[1]=(0,0) (attacker capital) and
                 Planet[2]=(50,50) (defender capital), both fixed by RunNpeAttackCase itself, not
                 caller-supplied
+     lamattack  TargetIsFleet(0=Planet[1]'s Defns,1=Fleet[1]'s Ships),LAMToUse,
+                Fgt,Hkr,Pen,Trn(Fleet[1]'s ship counts, ignored when TargetIsFleet=0),
+                Lam,Def,Gdm,Ion(Planet[1]'s defense counts, ignored when TargetIsFleet=1)
+                -> "shipsdest_fgt=<v>;shipsdest_hkr=<v>;shipsdest_pen=<v>;shipsdest_trn=<v>;
+                    defnsdest_lam=<v>;defnsdest_def=<v>;defnsdest_gdm=<v>;defnsdest_ion=<v>" --
+                real ATTACK.PAS's own LAMAttack called directly (not through NPEAttack -- LAMAttack
+                has no Rnd calls at all, so no RngFixedValue field here), see RunLamAttackCase's own
+                comment. Both target and player are always Empire2/Empire1 respectively; DestroyFleet
+                is the same no-op stand-in ATTACK.PAS.patch already carries for 5f, so this domain
+                only asserts LAMAttack's own ShipsDest/DefnsDest VAR out-params, not whether a
+                totally-destroyed fleet was actually removed.
      starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue  -> "starbaseChe=<v>;neighborChe=<v>"
      ambrosia   Addicted,Ambrosia,RngFixedValue                    -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
      revolution PlanetPop,ClassOrd,TechOrd,Efficiency,RevIndex,Legions,RngFixedValue
@@ -605,6 +616,75 @@ procedure RunNpeAttackCase(const arg: String);
    Dispose(Universe^.Fleet[1]);
    if parts[7]<>0 then
       Dispose(Universe^.Fleet[2]);
+   Dispose(Universe);
+   end;
+
+procedure RunLamAttackCase(const arg: String);
+   { Runs real ATTACK.PAS's own LAMAttack directly (Phase 5 commit 5g) -- not through NPEAttack,
+     since LAMAttack has no Rnd calls at all (pure proportional-distribution arithmetic, Round/Trunc
+     against ProtecNeeded/CombatTable), so there's no combat-engine setup to exercise, only the
+     formula itself. Player is always Empire1; the target (Fleet[1] or Planet[1], whichever
+     TargetIsFleet selects) is always owned by Empire2. DestroyFleet/FleetNameDestruction/
+     BalanceFleet reuse the same no-op stand-ins ATTACK.PAS.patch already carries for 5f -- this
+     domain reports LAMAttack's own ShipsDest/DefnsDest VAR out-params directly, not whatever state
+     those stand-ins would have left behind. }
+   var
+      parts: array[0..9] of LongInt;
+      TargetIsFleet: Boolean;
+      LAMToUse: Resources;
+      TargetID: IDNumber;
+      ShipsDest: ShipArray;
+      DefnsDest: DefnsArray;
+   begin
+   ParseFields(arg,parts);
+   TargetIsFleet:=parts[0]<>0;
+   LAMToUse:=parts[1];
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire2].InUse:=True;
+   NoOfPlanets:=0;
+
+   if TargetIsFleet then
+      begin
+      New(Universe^.Fleet[1]);
+      FillChar(Universe^.Fleet[1]^,SizeOf(Universe^.Fleet[1]^),0);
+      Universe^.Fleet[1]^.Emp:=Empire2;
+      Universe^.Fleet[1]^.XY.x:=5;  Universe^.Fleet[1]^.XY.y:=5;
+      Universe^.Fleet[1]^.Ships[fgt]:=parts[2];
+      Universe^.Fleet[1]^.Ships[hkr]:=parts[3];
+      Universe^.Fleet[1]^.Ships[pen]:=parts[4];
+      Universe^.Fleet[1]^.Ships[trn]:=parts[5];
+      SetOfActiveFleets:=[1];
+      TargetID.ObjTyp:=Flt;  TargetID.Index:=1;
+      end
+   else
+      begin
+      NoOfPlanets:=1;
+      Universe^.Planet[1].Cls:=ClsM;
+      Universe^.Planet[1].Typ:=CapTyp;
+      Universe^.Planet[1].Tech:=WrpTchLvl;
+      Universe^.Planet[1].Emp:=Empire2;
+      Universe^.Planet[1].XY.x:=5;  Universe^.Planet[1].XY.y:=5;
+      Universe^.Planet[1].Defns[LAM]:=parts[6];
+      Universe^.Planet[1].Defns[def]:=parts[7];
+      Universe^.Planet[1].Defns[GDM]:=parts[8];
+      Universe^.Planet[1].Defns[ion]:=parts[9];
+      SetOfActivePlanets:=[1];
+      SetOfPlanetsOf[Empire2]:=[1];
+      TargetID.ObjTyp:=Pln;  TargetID.Index:=1;
+      end;
+
+   LAMAttack(Empire1,LAMToUse,TargetID,ShipsDest,DefnsDest);
+
+   WriteLn('shipsdest_fgt=',ShipsDest[fgt],';shipsdest_hkr=',ShipsDest[hkr],
+           ';shipsdest_pen=',ShipsDest[pen],';shipsdest_trn=',ShipsDest[trn],
+           ';defnsdest_lam=',DefnsDest[LAM],';defnsdest_def=',DefnsDest[def],
+           ';defnsdest_gdm=',DefnsDest[GDM],';defnsdest_ion=',DefnsDest[ion]);
+
+   if TargetIsFleet then
+      Dispose(Universe^.Fleet[1]);
    Dispose(Universe);
    end;
 
@@ -1663,6 +1743,8 @@ procedure RunCaseMode;
          RunCombatCase(ParamStr(i))
       else if domain='npeattack' then
          RunNpeAttackCase(ParamStr(i))
+      else if domain='lamattack' then
+         RunLamAttackCase(ParamStr(i))
       else if domain='starbase' then
          RunStarbaseCase(ParamStr(i))
       else if domain='ambrosia' then

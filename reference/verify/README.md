@@ -2,438 +2,363 @@
 
 ## What this is
 
-An alternative to the per-procedure transcription pattern used by
-`reference/verify/*.pas` (see `docs/PORT_DESIGN.md`'s "Ground-truth harness
-generation" section for that baseline). Instead of hand-transcribing a
-procedure into a fresh file, this maintains small patches against the real
-`reference/DOSAnacreonSource131/*.PAS` source, applies them to a disposable
-copy at build time, and calls the real, only-minimally-touched Pascal code
-directly against a hand-assembled `Universe^`.
+An alternative to the per-procedure transcription pattern used by `reference/verify/*.pas` (see
+`docs/PORT_DESIGN.md`'s "Ground-truth harness generation" section for that baseline). Instead of
+hand-transcribing a procedure into a fresh file, this maintains small patches against the real
+`reference/DOSAnacreonSource131/*.PAS` source, applies them to a disposable copy at build time, and
+calls the real, only-minimally-touched Pascal code directly against a hand-assembled `Universe^`.
 
-**Status: in production for all ground-truth domains that exist so far
-(`techlevel.golden`, `military.golden`, `starbase.golden`, `ambrosia.golden`,
-`revolution.golden`, `production.golden`, `empire.golden`, `construction.golden`,
-`empirecreate.golden`, `trillumreserves.golden`, `randomplanet.golden`,
-`nebula.golden`, `rng.golden` — see `docs/PORT_DESIGN.md`'s "Ground-truth harness generation" section).
-`reference/verify/*.pas`'s
-per-procedure transcription pattern has had no domains on it since
-`production.golden`'s migration — `production.pas` was the last file using
-it, and `common.pas` (its only remaining shared dependency) was deleted
-alongside it. The pattern itself isn't retired: it's still the right call for
-a genuinely isolated, parameter-only procedure (see "Recommendation" below) —
-there's just nothing currently using it.**
+**Status: in production for every ground-truth domain that exists — see the catalog below.**
+`reference/verify/*.pas`'s per-procedure transcription pattern has had no domains on it since
+`production.golden`'s migration (`production.pas` was the last file using it, and `common.pas`, its
+only remaining shared dependency, was deleted alongside it). The pattern itself isn't retired: it's
+still the right call for a genuinely isolated, parameter-only procedure (see "Recommendation" below)
+— there's just nothing currently using it.
 
 ## Layout
 
 - `patches/*.PAS.patch` — unified diffs against the matching pristine file in
-  `reference/DOSAnacreonSource131/`. This is the maintained artifact.
-  `reference/DOSAnacreonSource131/` itself is never edited.
-- `runworld.pas` — a driver program (not a patch target, a genuinely new
-  file): assembles a minimal `Universe^` and calls the real `UpdateWorld`.
-  Machine-parseable CLI: `case <domain> <case1> <case2> ...`, where `<domain>`
-  selects the case shape/output line (`techlevel`, `military`, `starbase`,
-  `ambrosia`, `revolution`, `production`, `empire`, `construction`, or `empirecreate` so far — see
-  the file's own header comment). One driver, not one per domain, so
-  `PatchHarness.CompileAndRun` only has to copy/patch/compile the whole
-  patched tree once per `dotnet test` run regardless of how many domains use it.
-- `build.ps1` — deletes and regenerates `patched/` from pristine source +
-  patches, then compiles `runworld.pas`. Run it, then run
-  `.\patched\runworld.exe case ...` for manual iteration. The C# test suite
-  doesn't shell out to this script — `PatchHarness.cs` (in
-  `src/ThreeLn.Reconstruction4021.Tests/PascalGroundTruth/`) does the same
-  copy/patch/compile/run steps directly, so `GoldenFileTests` can call it
-  like any other harness.
-- `patched/` — disposable build output, gitignored, never a source of truth.
-  If you need to iterate on a patch: run `build.ps1`, edit the file directly
-  under `patched/`, verify it compiles/runs, then regenerate that file's
-  `.patch` from the diff against the pristine original and overwrite it in
+  `reference/DOSAnacreonSource131/`. This is the maintained artifact. `reference/DOSAnacreonSource131/`
+  itself is never edited.
+- `runworld.pas` — a driver program (not a patch target, a genuinely new file): assembles a minimal
+  `Universe^` and calls the real Pascal procedure(s) under test. Machine-parseable CLI:
+  `case <domain> <case1> <case2> ...`, where `<domain>` selects the case shape/output line — see the
+  file's own header comment for the exact field list of every domain. One driver, not one per domain,
+  so `PatchHarness.CompileAndRun` only has to copy/patch/compile the whole patched tree once per
+  `dotnet test` run regardless of how many domains use it.
+- `build.ps1` — deletes and regenerates `patched/` from pristine source + patches, then compiles
+  `runworld.pas`. Run it, then run `.\patched\runworld.exe case ...` for manual iteration. The C# test
+  suite doesn't shell out to this script — `PatchHarness.cs` (in
+  `src/ThreeLn.Reconstruction4021.Tests/PascalGroundTruth/`) does the same copy/patch/compile/run steps
+  directly, so `GoldenFileTests` can call it like any other harness.
+- `patched/` — disposable build output, gitignored, never a source of truth. If you need to iterate on
+  a patch: run `build.ps1`, edit the file directly under `patched/`, verify it compiles/runs, then
+  regenerate that file's `.patch` from the diff against the pristine original and overwrite it in
   `patches/`. Never hand-edit a `.patch` file.
+
+To add a new domain: give `runworld.pas` a new `case <domain>` branch (document its field shape in the
+file's own header comment, matching the convention every existing domain already follows), add a
+`GoldenFile.Regenerate(...)` call in `GoldenFileTests.cs`, and if the target procedure isn't reachable
+from the patched build yet, restore it — see "Restoring a removed procedure" below.
+
+## Domain catalog
+
+What each domain calls, what its `Universe^` setup needs to know, and anything non-obvious found while
+building it. Grouped by the roadmap phase that introduced it; field shapes and output keys live in
+`runworld.pas`'s own header comment, not repeated here.
+
+### Phase 1 — economy / annual tick (all via the real `UpdateWorld`, run end to end)
+
+- **`techlevel`** — `UpdateTechLevel`. The original proof of concept: reproduced
+  `TechLevelCases.OwnedWorldBehindCapitalAdvances` against a hand-assembled 2-planet `Universe^` before
+  any other domain existed, confirming the patched build was complete and self-sufficient (a from-scratch
+  `build.ps1` run reproduced it identically). All 8 `TechLevelCases` matched the prior transcription-based
+  `techlevel.golden` byte-for-byte.
+- **`military`** — `UpdateMilitary`. Running the real `UpdateWorld` end to end (instead of the retired
+  isolated harness) let `MilitaryCase` drop its old `HarnessPop` field — a hand-derived
+  post-`UpdatePopulation` value the isolated harness needed fed in separately; the real pipeline computes
+  it for free.
+- **`starbase`** — `SupplyLink`/`SurplusLink`. The first domain needing more than one world in the
+  `Universe^`: these resolve neighbors via `GetObject` (`Sector[x]^[y].Obj`), which `techlevel`/`military`
+  never touch — needs `Galaxy.InitializeSector` plus a direct `Sector[x]^[y].Obj` write for the neighbor
+  planet. Covers only `SupplyLink`/`SurplusLink`'s own arithmetic, not the rest of the starbase economy
+  pipeline (eligibility filtering, `Kind`-gating, Rebellion have no separate Pascal formula to cross-check
+  — `AnnualTickHandlerStarbaseTests` covers those hardcoded instead).
+- **`ambrosia`** — `UseUpAmbrosia`. Same `HarnessPop`-elimination as `military`; also dropped
+  `RevIndexStart` (the isolated harness's own `revindex` output was never asserted on by
+  `MatchesGoldenFile` in the first place).
+- **`revolution`** — `UpdateRevolution`/`Rebellion`. Caught a real gap shared by both the old isolated
+  harness and the C# port: neither modeled `UpdateIndustry`/`Production`'s `ReportPlanetLack` calls, a
+  real +1 `RevolutionIndex` bump (see `docs/PORT_DESIGN.md`'s "Resource-shortfall reporting" section for
+  the fix). Needed a second test-only observability hook alongside `ForcedRandomValue`:
+  `GetNewTotalRevIndex(Emp)`, exposing `NewTotalRevIndex` (an `Empire`-indexed accumulator `Rebellion`
+  writes to, normally committed by `UpdateEmpire`, unreachable from `UpdateWorld` alone) — read-only, no
+  behavior change. That accumulator never resets between cases in one batched CLI invocation (only the
+  never-called `UpdateUniverse` zeroes it), so `RunRevolutionCase` reads it before and after `UpdateWorld`
+  and reports the *difference*, not the raw value.
+- **`production`** — `ProduceRawMaterial`/`GetIndustrialDistribution`/`UpdateIndustry`/`Production`. The
+  last domain still on the transcription pattern before this one retired it. Found two bugs, both in the
+  *harness*, not the C# port: an empty `TechnologySet` (silently zeroed all raw-material production, since
+  `UpdateWorld` intersects it with `TechDev[Tech]`) and an unset ISSP dial (`ImpExp` left at its
+  `FillChar`-zeroed value instead of `DefaultISSP`, `$5555`) — both states are unreachable in real
+  gameplay (`CreateEmpire` always seeds `Technology`/`ImpExp` correctly), confirmed before trusting the
+  fix. Also surfaced a real C#-port gap: the real `UpdateWorld` calls `UpdateDefenses`, which
+  `AnnualTickHandler.RunAnnualTick` didn't call yet at the time — widened
+  `AnnualTickHandlerProductionTests.MatchesGoldenFile`'s exclusion list (`Cargo.Chemicals`/`Metals`, on
+  top of the already-excluded `Supplies`/`Ambrosia`/`Legions`).
+- **`empire`** — `UpdateEmpire` (not `UpdateWorld` — this is empire-level, not per-world) →
+  `NewTechLevel`/`GetChanceForNewTech`/`GetNewTech`. The first domain whose target procedure had been
+  deleted from the patched `UPDATE.PAS` entirely (unreachable from `UpdateWorld`) — required regenerating
+  the whole `UPDATE.PAS.patch` (see "Restoring a removed procedure" below). `Empire.Technology` is
+  encoded as a 26-bit mask (bit *i* = `TechnologyTypes(i+1)`) since the CLI's field parser only handles
+  plain integers. A fractional lab `Efficiency` case (needed to tell `Trunc` from `Round` in
+  `GetChanceForNewTech`'s formula) can't be a shared golden-file case here: the C# side can only reach the
+  private `NewTechLevel` via the full `RunAnnualTick`, which runs `UpdateEfficiency` first and perturbs
+  `Efficiency` by an RNG-dependent amount, while this domain calls `UpdateEmpire` directly and never
+  touches `Efficiency` at all — covered by a hardcoded C# test instead
+  (`AnnualTickHandlerEmpireTests.FractionalLabChanceTruncatesNotRounds`), its expected value confirmed
+  against a real Pascal run first.
+- **`construction`** — `UpdateConstruction` (nested `UseUpRawMaterial`) plus
+  `ConstructStarbase`/`ConstructStargate`. Same "deleted from the patched build, needs a full
+  `UPDATE.PAS.patch` regeneration" situation as `empire`; also relocated five small `Intrface`-only
+  helpers (`NextStarbaseSlot`, `CreateStarbase`(Pascal), `NextStargateSlot`, `CreateStargate`(Pascal),
+  `GetOptimumIndus`) verbatim. Hit the same `Sector[x]^[y]` access-violation gotcha `starbase` already
+  found (`PutMine`/`CreateStarbase`/`CreateStargate` all touch it; needs `Galaxy.InitializeSector`).
+
+### Phase 2 — galaxy / new-game setup
+
+- **`empirecreate`** — `CreateEmpire` directly. Unlike every domain before it, needed no new patch at
+  all: `CreateEmpire` was already exported from `PRIMINTR.PAS`'s own `INTERFACE` section. Rather than
+  pull in all of `NEWGAME.PAS` (and its much larger `USES` clause) just to reach
+  `CreatePlayerEmpire`/`CreateNPEmpire`, this domain reproduces their 3-line starting-tech-set formula
+  inline and calls `CreateEmpire` directly with the result. Fully deterministic, no RNG. 13 cases
+  exhaustively cross-check every row of `TechDev` plus both directions of the extra-tech intersect-clamp.
+- **`trillumreserves` / `randomplanet` / `nebula`** — relocated `CreatePlanet`
+  (`INTRFACE.PAS`) plus `RandomTrillumReserves`/`RndShips`/`RndCargo`/`RndDefns`/`SetUpWorld`/
+  `CreateRndPlanet`/`NebulaeBand`/`NebulaePatches` (`NEWGAME.PAS`) verbatim into the patched `UPDATE.PAS`
+  — all self-contained `Universe^`/`Misc`/`DataCnst`/`PrimIntr` logic, reachable with zero new unit
+  imports. `GetRandomXY`/`CreateRandomWorlds` are deliberately **not** covered here: under
+  `ForcedRandomValue`, every `Rnd` call in one invocation returns the same fixed offset, so a coordinate
+  blocked on the first roll is blocked on every retry too — there's no way to construct a case that
+  reaches "blocked, then a later retry succeeds" on either side of the comparison. Those two procedures'
+  own logic is simple enough that hardcoded `GalaxySetupTests` cover it instead; these three domains
+  target only the pieces with real formula risk (`CreateRndPlanet`'s `Trunc`/`Round`/tech-adjustment-table
+  math, `NebulaeBand`/`NebulaePatches`' coordinate-space arithmetic). This is where the
+  `ForcedRandomValue`-ordering bug was found — see "Landmines and gotchas" below.
+- **`scenario`** — `LoadScenario`, a real `.SCN` file loaded end to end. Output is an aggregate checksum
+  over the whole loaded `Universe^`, not a per-entity dump — a real `dos_131` file has up to ~160 worlds,
+  and a mismatch anywhere perturbs at least one sum. The C# side
+  (`ScenarioLoaderGoldenTests.MatchesGoldenFile`) only exact-matches a subset of these fields — every
+  field touched by a random draw anywhere in the file is fragile to RNG-stream-position drift between two
+  independently-written implementations, even fields that look deterministic on their face. See
+  `docs/PASCAL_ARCHITECTURE_NOTES.md`'s "Scenario golden-file testing can't be bit-exact, and why" section
+  for the full investigation, and "`-CfSSE2`" below for the float-precision half of that story.
+
+### Phase 3 — probes
+
+- **`probescout`** — `ProbeScout` directly, against one planet at the probe's destination and one at the
+  next ring cell in Pascal's own fixed offset order. Covers `ISqrt(Cargo[men])` and the
+  `Rnd(1,100)<ChanceToDestroy` threshold plus its Exit-before-`ScoutObject` sequencing; ring
+  ordering/early-exit control flow itself has no separate Pascal formula to cross-check, so
+  `VisibilityHandlerProbeTests` covers that hardcoded instead.
+
+### Phase 5 — combat
+
+- **`defenses`** — `UpdateDefenses` (commit 5b), via the real `UpdateWorld`. `DefenseType`-indexed
+  (`lam`/`def`/`gdm`/`ion`) growth on a world, gated by the same 26-bit `TechnologyBitmask` encoding as
+  `empire`.
+- **`combat`** — one round of the real `Battle` at the `DpSpc` shell (commit 5d) — the group/shell
+  combat engine's own per-round damage math, not a multi-round engagement (that's `npeattack`, below).
+  This is where the `PascalRound` banker's-rounding bug was found: `Round(2.5)` is `2`, not `3`, under
+  real FreePascal — see `docs/PASCAL_ARCHITECTURE_NOTES.md` for the full story.
+- **`npeattack`** — the full `NPEAttack` end to end (commits 5e/5f): its own multi-round
+  `FleetRetreats`/`Targetting`/`GroupEngage`/`AdvanceGroups` loop, then outcome application
+  (`ResolveAttack`/`ConquerWorld`/`ConquerEmpire`/`RestoreCombatant`). The attacker is always Empire1's
+  fleet (200 fighters, 200 hunter-killers, plus an optional troop-carrying jumptransport group); Empire1's
+  capital sits at (0,0), Empire2's (the usual target) at (50,50), fixed by the domain itself so
+  `ConquerEmpire`'s own distance-from-capital math is exercised meaningfully. An optional third world lets
+  a case drive any one of `ConquerEmpire`'s four per-planet branches deliberately.
+- **`lamattack`** — `LAMAttack` directly (commit 5g), not through `NPEAttack` — `LAMAttack` has no `Rnd`
+  call anywhere in its body, so there's no combat-engine setup to exercise, only the proportional-
+  distribution formula itself (`Round`/`Trunc` against `ProtecNeeded`/`CombatTable`, the same class of
+  arithmetic that produced the `PascalRound` bug in `combat`). The target is always Empire2's (a Fleet or
+  a Planet, whichever the case selects); `DestroyFleet` reuses the same no-op stand-in
+  `ATTACK.PAS.patch` already carries for `npeattack`, so this domain asserts `LAMAttack`'s own
+  `ShipsDest`/`DefnsDest` VAR out-params directly, not whatever state that stand-in would leave behind.
+  Two of commit 5g's other three procedures have no domain here at all:
+  `HolocaustWorld`/`HolocaustEffectiveness` are confirmed dead code (not ported — see
+  `Core/Combat/CombatStandalone.cs`'s own doc comment), and `DestroyConstructionOrGate` — live, wired
+  into this port's `NPEAttack` — needs `DestroyConstruction`/`DestroyStargate`, which live in `Intrface`
+  (not linked in this build); it's covered by hardcoded C# tests instead (`CombatStandaloneTests.cs`),
+  same treatment as `SelfDestructObject` (no Pascal-side ground truth built for it either, since
+  `SBASE.PAS` was never patched into this harness).
+
+### Not a `UpdateWorld`/`GalaxySetup` domain
+
+- **`rng`** — a standing regression fixture for `PascalRandom.cs`, the from-scratch port of fpc's actual
+  `Random`/`RandSeed` algorithm (needed once `nebula`'s multi-patch cases and `scenario`'s real `.SCN`
+  loads required a genuine multi-call RNG sequence, not just `ForcedRandomValue`'s fixed offset). See "A
+  real Pascal RNG" below for the full story of how that algorithm was identified.
+
+## Restoring a removed procedure
+
+When the patched `UPDATE.PAS`/`ATTACK.PAS` doesn't export the procedure a new domain needs (it was
+deleted back when the patch-based lane first stood up that unit, since nothing reachable at the time
+needed it), don't hand-splice a new hunk into the existing patch — regenerate the whole file's patch:
+
+1. Run `build.ps1` to get a fresh `patched/` tree, then hand-edit the target file under `patched/` to
+   restore the procedure (forward declaration in `INTERFACE`, body in `IMPLEMENTATION`).
+2. Compile it directly (`fpc -Mtp -CfSSE2 runworld.pas` from inside `patched/`) and confirm it compiles
+   and the new domain's manual test case runs.
+3. Diff the pristine source against the hand-edited file with `git diff --no-index` — on Windows, drive
+   this through a tool that reads raw bytes (e.g. PowerShell's `System.Diagnostics.Process` +
+   `MemoryStream`), not a Bash pipeline: some Git-Bash/MSYS mounts silently translate CRLF↔LF on
+   read/write through `sed`/`diff`, producing a patch that looks clean but won't `git apply` against the
+   real (CRLF) Pascal source.
+4. Strip the diff's extended-format header (`diff --git ...` / `index ...` lines, and the `---`/`+++`
+   lines' full paths) down to the plain `--- a/FILE.PAS` / `+++ b/FILE.PAS` form every other patch in
+   `patches/` already uses — `git apply` needs this even though `git diff --no-index` doesn't produce it
+   by default.
+5. Overwrite the `.patch` file, then run `build.ps1` fresh (deletes `patched/`, reapplies every patch,
+   recompiles) and confirm it reproduces the hand-edited file byte-identically and still compiles/runs.
+
+Done for `empire`/`construction` (`UPDATE.PAS.patch`) and `lamattack` (`ATTACK.PAS.patch`) so far.
+Relocating a small, self-contained procedure/formula out of a unit with a much larger `USES` clause than
+the domain needs (rather than pulling in the whole unit) is the same "don't drag in `Fleet`/`Orders`/
+`NPE`/`Crt`/... for one function" move used repeatedly above (`GetIndustrialDistribution`,
+`empirecreate`'s inline tech-set formula, `construction`'s five `Intrface` helpers, `trillumreserves`/
+`randomplanet`/`nebula`'s relocated `NEWGAME.PAS` procedures) — check whether the target procedure needs
+relocating at all before assuming a whole-unit `USES` pull is necessary.
+
+## Landmines and gotchas
+
+Cross-cutting lessons, not specific to browsing one domain — read before touching *any* patch or adding
+a new domain.
+
+- **`ABSOLUTE` overlays compile but lie.** `DATASTRC.PAS:235`:
+  `GlobalSets: GlobalSetsRecord ABSOLUTE SetOfActiveFleets;` overlays a whole record onto the memory
+  address of `SetOfActiveFleets`, relying on several separately-declared globals (`TYPES.PAS:180-188`)
+  being laid out contiguously in declaration order — Turbo Pascal's segment-based layout, not something
+  any modern compiler guarantees. `fpc` accepts the syntax silently. Writing through `GlobalSets.X` in
+  `runworld.pas` corrupted the `Universe` pointer itself (a genuine access violation, runtime error 216)
+  with no compile-time warning. Fix: never write through `GlobalSets`; use the real standalone vars
+  directly. This is exactly the "compiles fine, wrong at runtime" failure mode that makes this whole
+  approach riskier than transcription in a way that isn't just about compile effort.
+- **A hand-assembled `Universe^` is only as faithful as the fields it remembers to set.**
+  `production.golden`'s two harness bugs (an empty `TechnologySet`, an unset `ImpExp`) were both "field
+  defaults to zero instead of what `CreateEmpire`/settlement actually initializes it to" — worth a
+  deliberate check against real init code (`CreateEmpire`, `PRIMINTR.PAS`'s `Set*` procedures) for any new
+  domain's setup, not just trusting `FillChar` zero to be a reachable state.
+- **`ForcedRandomValue` was checked in the wrong order** (found via `nebula`'s `PatchesMultipleRng2`
+  case). The original `INT.PAS` patch had `Rnd` check `ForcedRandomValue>=0` *before* the real,
+  unconditional `Max<=Min` degenerate-range clamp — so a forced value could override that clamp, producing
+  a result outside `[Min,Max]` whenever `Min=Max` coincided with a nonzero forced offset.
+  `NebulaePatches`' own `Rnd(1,4-Abs(y-InitY))` hits exactly `Min=Max` at a patch's vertical extremes,
+  so a forced value of 2 exposed it: Pascal painted a full 6th row that `GalaxySetup.NebulaePatches` (via
+  `PascalMath.Rnd`, which has always checked the degenerate range first) correctly did not. The fix went
+  into the *Pascal test patch*, not `PascalMath.Rnd` — pristine `Rnd`'s degenerate-range clamp is real,
+  unconditional behavior; `ForcedRandomValue` is a test-only device layered on top of it, so the clamp has
+  to win first. Reordering `INT.PAS.patch` moved none of the other eleven already-committed golden files
+  at the time — confirming no earlier domain's cases had coincidentally depended on the wrong ordering. A
+  tempting-but-wrong fix worth naming explicitly: making `PascalMath.Rnd` call through to `random.Next()`
+  even when `min==max` (so `FixedRandom`'s override would "win" the same way the old, buggy ordering did)
+  breaks `NewTechLevel`'s `missingAtCurrentLevel[Rnd(1, missingAtCurrentLevel.Count) - 1]` indexing the
+  moment a shared `FixedRandom` offset exceeds a small `Count` — real Pascal's own equivalent never
+  crashes on this (its array is statically over-provisioned; a C# `List` has no such slack). Confirmed
+  empirically (four pre-existing Phase-1 tests broke instantly) before reverting in favor of the
+  `INT.PAS` reorder.
+- **`-CfSSE2`** (`build.ps1`/`PatchHarness.cs`'s compile flag). fpc's default i386 codegen keeps chained
+  `Real` expressions in the x87 FPU's 80-bit extended-precision stack until explicitly stored, while C#'s
+  `double` is always strict 64-bit IEEE754 — so a borderline expression can round to a different integer
+  in each language. `-CfSSE2` forces fpc to use strict 64-bit double throughout, aligning the harness with
+  the only precision C# has. Verified via `git diff --stat` on the regenerated golden files that it
+  changed none of the domains existing at the time it was added — but that's a snapshot, not a guarantee:
+  it changes float semantics harness-wide, so a future domain with its own borderline `Real` expression
+  will get different ground truth under it than under fpc's default. Kept as a deliberate baseline choice
+  regardless. Full writeup: `docs/PASCAL_ARCHITECTURE_NOTES.md`'s "Scenario golden-file testing can't be
+  bit-exact, and why" section.
 
 ## What it took to get UpdateWorld callable
 
-`UPDATE.PAS`'s own `USES` clause lists 14 units; `Intrface` alone further
-pulls in `Fleet`/`Orders`/`NPE`. Every blocker hit while getting
-`UpdateWorld` (and everything it actually calls) to compile turned out to be
-small and mechanical, not a case of "reconstruct a DOS UI stack":
+`UPDATE.PAS`'s own `USES` clause lists 14 units; `Intrface` alone further pulls in `Fleet`/`Orders`/`NPE`.
+Every blocker hit while getting `UpdateWorld` (and everything it actually calls) to compile turned out to
+be small and mechanical, not a case of "reconstruct a DOS UI stack":
 
-- **Dead UI/config code, deleted outright.** `Environ`'s `FeatureInActive`
-  (a demo-nag dialog) and `LoadConfiguration`/`SaveConfiguration` (directory
-  prefs), `UPDATE.PAS`'s `UpdateUniverse` (the whole-galaxy tick loop plus its
-  screen progress window — the *only* `Crt`/`WND` usage in the entire unit).
-  None of it is reachable from `UpdateWorld`.
-- **Trivial I/O helpers, duplicated instead of importing a whole unit for
-  them.** `WriteVariable`/`ReadVariable` (used by `Galaxy`'s
-  `SaveSector`/`LoadSector`, `Environ`'s `LoadEnvironment`/`SaveEnvironment`,
-  and `News`'s `LoadNewsData`/`SaveNewsData`) are just
-  `BlockRead`/`BlockWrite`+`IOResult` — no real coupling to the `Dos2` unit
-  they live in, which pulls in `Printer`/`CRT`/`DOS`/`EIO`/`WND`/`Menu`. Each
-  of those three save/load pairs was kept **verbatim** (this is real, wanted
-  logic — see "the save/load angle" below) with its own tiny local copy of
-  the two helpers instead.
-- **Turbo Pascal-isms with an obvious modern equivalent.** `STRG.PAS`'s
-  `AllUpCase` used raw 8086 opcodes via `Inline(...)` — replaced with a
-  2-line `UpCase` loop. `PRIMINTR.PAS`'s `GetNewName` gated allocation on
-  `MaxAvail` (TP's real-mode heap-free check, meaningless under virtual
-  memory) — replaced with `IF True THEN`. Several fixed-length-string
-  comparisons needed `{$V-}` (fpc's default `$V+` is stricter than TP about
-  exact string-length matching).
-- **One relocated (not rewritten) procedure.** `GetIndustrialDistribution` is
-  pure economy math (only calls `PrimIntr` getters and `Misc`/`DataCnst`
-  tables) but lives in `INTRFACE.PAS`, which would drag in `Fleet`/`Orders`/
-  `NPE` for one function. Moved verbatim into `UPDATE.PAS` — a real patch
-  spanning two files (delete from one, add to the other), documented as such
-  in the patch comments rather than silently dropping the provenance.
-- **A test-only RNG override**, added to `INT.PAS`: `ForcedRandomValue`,
-  when `>=0`, makes every `Rnd(Min,Max)` call return `Min+ForcedRandomValue`
-  — deliberately matching the existing C# harnesses' `FixedRandom`/
-  `RngFixedValue` convention exactly, so results are comparable to existing
-  golden files. `-1` (default) means "use the real RNG," unchanged.
-
-## A real landmine: `ABSOLUTE` overlays compile but lie
-
-`DATASTRC.PAS:235`: `GlobalSets: GlobalSetsRecord ABSOLUTE SetOfActiveFleets;`
-overlays a whole record onto the memory address of `SetOfActiveFleets`,
-relying on several separately-declared globals in `TYPES.PAS:180-188`
-(`SetOfActiveFleets`, `SetOfFleetsOf`, `SetOfActivePlanets`, `SetOfPlanetsOf`,
-etc.) being laid out contiguously in declaration order — Turbo Pascal's
-segment-based layout, not something any modern compiler guarantees. `fpc`
-accepts the syntax silently. Writing through `GlobalSets.X` in `runworld.pas`
-corrupted the `Universe` pointer itself (a genuine access violation, runtime
-error 216) with no compile-time warning. Fix: never write through
-`GlobalSets`; use the real standalone vars directly. This is exactly the
-"compiles fine, wrong at runtime" failure mode that makes this whole approach
-riskier than transcription in a way that isn't just about compile effort —
-worth remembering if this pattern gets reused elsewhere in the source.
+- **Dead UI/config code, deleted outright.** `Environ`'s `FeatureInActive` (a demo-nag dialog) and
+  `LoadConfiguration`/`SaveConfiguration` (directory prefs), `UPDATE.PAS`'s `UpdateUniverse` (the
+  whole-galaxy tick loop plus its screen progress window — the *only* `Crt`/`WND` usage in the entire
+  unit). None of it is reachable from `UpdateWorld`.
+- **Trivial I/O helpers, duplicated instead of importing a whole unit for them.**
+  `WriteVariable`/`ReadVariable` (used by `Galaxy`'s `SaveSector`/`LoadSector`, `Environ`'s
+  `LoadEnvironment`/`SaveEnvironment`, and `News`'s `LoadNewsData`/`SaveNewsData`) are just
+  `BlockRead`/`BlockWrite`+`IOResult` — no real coupling to the `Dos2` unit they live in, which pulls in
+  `Printer`/`CRT`/`DOS`/`EIO`/`WND`/`Menu`. Each of those three save/load pairs was kept **verbatim**
+  (real, wanted logic — see "The save/load angle" below) with its own tiny local copy of the two helpers
+  instead.
+- **Turbo Pascal-isms with an obvious modern equivalent.** `STRG.PAS`'s `AllUpCase` used raw 8086 opcodes
+  via `Inline(...)` — replaced with a 2-line `UpCase` loop. `PRIMINTR.PAS`'s `GetNewName` gated allocation
+  on `MaxAvail` (TP's real-mode heap-free check, meaningless under virtual memory) — replaced with
+  `IF True THEN`. Several fixed-length-string comparisons needed `{$V-}` (fpc's default `$V+` is stricter
+  than TP about exact string-length matching).
+- **One relocated (not rewritten) procedure.** `GetIndustrialDistribution` is pure economy math (only
+  calls `PrimIntr` getters and `Misc`/`DataCnst` tables) but lives in `INTRFACE.PAS`, which would drag in
+  `Fleet`/`Orders`/`NPE` for one function. Moved verbatim into `UPDATE.PAS` — a real patch spanning two
+  files (delete from one, add to the other), documented as such in the patch comments rather than
+  silently dropping the provenance.
+- **A test-only RNG override**, added to `INT.PAS`: `ForcedRandomValue`, when `>=0`, makes every
+  `Rnd(Min,Max)` call return `Min+ForcedRandomValue` — deliberately matching the existing C# harnesses'
+  `FixedRandom`/`RngFixedValue` convention exactly, so results are comparable to existing golden files.
+  `-1` (default) means "use the real RNG," unchanged.
 
 ## The save/load angle
 
-The original question this approach answered: could test fixtures be built
-by driving Pascal's *own* save/load machinery instead of hand-writing field
-assignments? Two things worth knowing, found but not used yet:
+The original question this approach answered: could test fixtures be built by driving Pascal's *own*
+save/load machinery instead of hand-writing field assignments? Two things worth knowing, found but not
+used yet:
 
-- `LOADSAVE.PAS`'s `InitializeUniverse(StartingYear, Size, Planets)` zero-
-  inits the whole `Universe^` and sets planet count — a better starting point
-  than a hand-rolled `FillChar`, but `LOADSAVE.PAS`'s own dependency list
-  (`Dos2, Intrface->Fleet/Orders/NPE, News, Mess, TMA, Environ, NPETypes,
-  NPE, Galaxy, Orders, Fleet`) is much larger than what `UpdateWorld` alone
-  needs, so pulling it in wasn't justified for this scope.
-- `LOADSAVE.PAS`'s `LoadGame`/`SaveGame` are the real binary `.SAV` format
-  round-trip (`SFSignature = 'Anacreon save file v1.3'`). No `.SAV` file
-  ships with the source, so building fixtures this way would mean either
-  capturing one from real gameplay (not available) or hand-authoring the
-  binary layout — not obviously cheaper than direct field assignment for
-  small scenarios.
+- `LOADSAVE.PAS`'s `InitializeUniverse(StartingYear, Size, Planets)` zero-inits the whole `Universe^` and
+  sets planet count — a better starting point than a hand-rolled `FillChar`, but `LOADSAVE.PAS`'s own
+  dependency list (`Dos2, Intrface->Fleet/Orders/NPE, News, Mess, TMA, Environ, NPETypes, NPE, Galaxy,
+  Orders, Fleet`) is much larger than what `UpdateWorld` alone needs, so pulling it in wasn't justified
+  for this scope.
+- `LOADSAVE.PAS`'s `LoadGame`/`SaveGame` are the real binary `.SAV` format round-trip
+  (`SFSignature = 'Anacreon save file v1.3'`). No `.SAV` file ships with the source, so building fixtures
+  this way would mean either capturing one from real gameplay (not available at the time) or
+  hand-authoring the binary layout — not obviously cheaper than direct field assignment for small
+  scenarios.
 
 Neither was pulled into this harness; `runworld.pas` does its own minimal
-`New(Universe); FillChar(Universe^,SizeOf(Universe^),0);` instead. Revisit if
-a future scenario needs a much larger/more realistic starting `Universe^`
-than a couple of hand-set fields can reasonably cover.
-
-## Validation
-
-Original proof of concept: `runworld.pas` reproduced
-`TechLevelCases.OwnedWorldBehindCapitalAdvances` (Tech=Warp, owned, capital
-ahead at Jump, `RngFixedValue=0`) by calling the real `UpdateWorld` against a
-hand-assembled 2-planet `Universe^` — `techlevel=6`, matching
-`techlevel.golden`. Rebuilt from scratch (`build.ps1` deletes `patched/`,
-reapplies every patch, recompiles) and reran with identical results — the
-patches are complete and sufficient on their own, not dependent on whatever
-`patched/` happened to contain from prior manual edits.
-
-Generalized from that one case into a CLI driver taking all of
-`TechLevelCases`' 8 cases, all 8 reproduced byte-identical to the
-already-committed, transcription-based `techlevel.golden` — confirming the
-extra fidelity (real `GetCapital`/`GetTech`, real `Emp=Indep` check) didn't
-silently change any of the previously-verified outcomes, before wiring it in
-as `techlevel.golden`'s new source of truth via `PatchHarness.cs` and
-`GoldenFileTests.RegenerateAllGoldenFiles`.
-
-Second domain, `military`: added a domain selector to the same `runworld.pas`
-rather than a second driver (see "Layout" above), retiring
-`reference/verify/military.pas`'s isolated `UpdateMilitaryScenario` call in
-favor of running the real `UpdateWorld` end to end. This also removed
-`MilitaryCase`'s old `HarnessPop` field — the isolated harness needed a
-hand-derived post-`UpdatePopulation` value fed in separately from the C#
-side's pre-tick `PlanetPop` (and per-case reasoning about whether
-`UpdateRevolution` could still touch `Cargo.Legions` afterward); running the
-real pipeline computes both for free.
-
-Third domain, `starbase`: the first domain needing more than one world in the
-`Universe^`. `SupplyLink`/`SurplusLink` resolve neighbors via `GetObject`
-(`Sector[x]^[y].Obj`), which techlevel/military's scenarios never touched —
-`Galaxy.InitializeSector` (already exported from the already-`USES`d `Galaxy`
-unit) plus a direct `Sector[x]^[y].Obj` write for the neighbor planet was
-enough, no new patches needed. Covers only `SupplyLink`/`SurplusLink`'s own
-arithmetic, not every branch of the starbase economy pipeline — the rest
-(eligibility filtering, `Kind`-gating, Rebellion) is pure C# logic with no
-separate Pascal formula to cross-check, so `AnnualTickHandlerStarbaseTests`
-covers those hardcoded instead (see that class's doc comment). Both cases
-(`SupplyLinkPull`, `SurplusLinkPush`) reproduced byte-identical to this
-session's own hand-derivation of the formula, confirming the C# port against
-the real Pascal source rather than just this session's own reading of it.
-
-Fourth domain, `ambrosia`: same `HarnessPop`-elimination pattern as `military` —
-retired `reference/verify/ambrosia.pas`'s isolated `UseUpAmbrosiaScenario` call
-in favor of the real `UpdateWorld`, which let `AmbrosiaCase` drop both its old
-`HarnessPop` field and its `RevIndexStart` field (the isolated harness's own
-`revindex` output was never asserted on by `MatchesGoldenFile` in the first
-place, and the real pipeline's own `UpdateRevolution` run determines the
-starting value now, not a hand-fed one). All 6 `AmbrosiaCases` reproduced
-byte-identical to the prior transcription-based `ambrosia.golden`, aside from
-that dropped field.
-
-Fifth domain, `revolution`: same pattern again, retiring `revolution.pas`'s
-isolated `UpdateRevolutionScenario`/`RebellionScenario` pair (which chained
-`common.pas`'s `UpdateMilitaryScenario` to match `UpdateMilitary`'s real call
-order — now dead, deleted along with its `OptMilitary` table). This is the
-domain that actually earned its keep: it caught a real gap shared by both the
-isolated harness and the C# port (neither modeled `UpdateIndustry`/
-`Production`'s `ReportPlanetLack` calls, a real +1 `RevolutionIndex` bump —
-see `docs/PORT_DESIGN.md`'s "Resource-shortfall reporting" section for the fix). Needed a second
-test-only observability hook alongside `ForcedRandomValue`:
-`GetNewTotalRevIndex(Emp)`, exposing `NewTotalRevIndex` (an `Empire`-indexed
-accumulator `Rebellion` writes to, declared in `UPDATE.PAS`'s own
-`IMPLEMENTATION` section and normally committed by `UpdateEmpire`, a later
-commit unreachable from `UpdateWorld`) — read-only, no behavior change. That
-accumulator is also never reset between cases in the same batched CLI
-invocation (only the never-called `UpdateUniverse` zeroes it), so
-`RunRevolutionCase` reads it before and after `UpdateWorld` and reports the
-difference rather than the raw value — a naive absolute read looked like a
-second bug (values compounding across cases) until this fixed it. All 4
-`RevolutionCases` reproduced byte-identical to the prior transcription-based
-`revolution.golden` except `revindex` (+1 in every case, the real fix, not a
-regression).
-
-Sixth domain, `production`: retired `production.pas`'s isolated `FullPipeline`
-(`ProduceRawMaterial`/`GetIndustrialDistribution`/`UpdateIndustry`/`Production`
-only) for the real `UpdateWorld` — the last domain still on the transcription
-pattern, so `common.pas` (its only remaining shared dependency) was deleted
-alongside it. This one caught two bugs, but both were in the *harness*, not
-the C# port or the old transcription: `runworld.pas` initially left the
-planet's owning empire with an empty `TechnologySet`, which — because
-`UpdateWorld` intersects it with `TechDev[Tech]` to gate production
-(`UPDATE.PAS:1367-1368`) — silently zeroed out raw-material production
-entirely; and it left the planet's ISSP dial (`ImpExp`) at its
-`FillChar`-zeroed value instead of `DefaultISSP` (`$5555`,
-`DATACNST.PAS:516`), which every real planet gets at settlement
-(`PRIMINTR.PAS:631`) and which `GetIndustrialDistribution`'s sqrt-based
-formulas are sensitive to. Both states are unreachable in real gameplay
-(`CreateEmpire` always seeds a new empire's `Technology` from
-`TechDev[Pred(Tech)]`, `NEWGAME.PAS:1203,1240`) — confirmed before trusting
-the fix, not assumed. Once both were set unconditionally, industry levels,
-ship counts, and `Cargo.Trillum`/`TrillumReserve` reproduced byte-identical to
-the prior transcription-based `production.golden` for all 4 `ProductionCases`.
-
-It also surfaced a real, previously-invisible gap in the *C# port*: the real
-`UpdateWorld` calls `UpdateDefenses` (`UPDATE.PAS:1278-1351`), which draws down
-`Cargo[che..tri]` building defenses toward a population-driven target —
-something the old isolated `FullPipeline` never modeled (it never called
-`UpdateDefenses` at all) and `AnnualTickHandler.RunAnnualTick` doesn't call yet
-(`UpdateDefenses` is still on the roadmap, unimplemented). This widened
-`AnnualTickHandlerProductionTests.MatchesGoldenFile`'s exclusion list:
-`Cargo.Chemicals` and `Cargo.Metals` join the already-excluded
-`Cargo.Supplies`/`Cargo.Ambrosia`/`Cargo.Legions`, for the same reason each of
-those was already excluded — a real UpdateWorld step this tick that the C#
-port doesn't yet run.
-
-Seventh domain, `empire`: the first domain that isn't a `UpdateWorld` sub-branch — `UpdateEmpire`
-(and its nested `NewTechLevel`/`GetChanceForNewTech`/`GetNewTech`) had been deleted from the patched
-`UPDATE.PAS` entirely, back when the patch-based lane first stood up `UpdateWorld` as callable,
-since nothing reachable from `UpdateWorld` needed it. Restoring it required regenerating the whole
-`UPDATE.PAS.patch` (not hand-splicing hunks — safer to diff the pristine source against a fully
-hand-edited target and let `git diff --no-index` produce the new patch, then strip its two
-extended-format header lines per the `git apply` gotcha noted elsewhere in this session's memory)
-rather than adding a new domain to an unchanged patch set, since this domain's target procedure
-wasn't exported yet. `runworld.pas`'s `empire` domain calls the now-exported `UpdateEmpire` directly
-— not `UpdateWorld` — since `NewTechLevel` is empire-level, not per-world, so there's no need to run
-a full per-planet tick to exercise it. `Empire.Technology` is encoded as a 26-bit mask (bit *i* =
-`TechnologyTypes(i+1)`, matching Pascal's own enum-declaration order) since the CLI's field parser
-only handles plain integers.
-
-All 5 `EmpireCases` reproduced exactly what hand-derivation against the real `Trunc`/`Rnd` formulas
-predicted before any code ran — confirmed case by case against a manually-invoked, freshly-compiled
-`runworld.exe` before wiring the C# side, catching one thing along the way: a static-field
-initialization-order bug on the C# side (a lazy-vs-eager field-initializer issue across two partial
-class files), not a Pascal-side finding, but exactly the kind of thing this session's "verify against
-real behavior before trusting a golden value" discipline is meant to catch either direction. Also
-surfaced a genuine harness-design limit: a fractional lab `Efficiency` (needed to tell `Trunc` from
-`Round` in `GetChanceForNewTech`'s formula — every other case uses `Efficiency=100`, where the two
-are indistinguishable) can't be a shared golden-file case, because the C# test can only reach the
-private `NewTechLevel` via the full `RunAnnualTick` — which runs Commit 3's `UpdateEfficiency` on
-every lab planet first, growing a non-100 `Efficiency` by an RNG-dependent amount before
-`NewTechLevel` reads it — while `runworld.pas`'s `empire` domain calls `UpdateEmpire` directly and
-never touches `Efficiency` at all. Landed as a hardcoded C# test instead, with its expected value
-still confirmed against a real Pascal run first (see `AnnualTickHandlerEmpireTests.
-FractionalLabChanceTruncatesNotRounds`), rather than silently trusting the C# formula alone.
-
-Eighth domain, `construction`: `UpdateConstruction` (nested `UseUpRawMaterial`) plus
-`ConstructStarbase`/`ConstructStargate` had been deleted from the patched `UPDATE.PAS` for the same
-reason `UpdateEmpire` had — unreachable from `UpdateWorld` when the patch-based lane first stood up.
-Restoring them required a second whole-`UPDATE.PAS.patch` regeneration, same technique as `empire`'s:
-diff the pristine source against a fully hand-edited target, strip the two extended-format header
-lines, verify the new patch reapplies byte-identical to the hand-edited target before installing it.
-This restoration also relocated five small `Intrface`-only helpers (`NextStarbaseSlot`,
-`CreateStarbase`(Pascal), `NextStargateSlot`, `CreateStargate`(Pascal), `GetOptimumIndus`) verbatim
-into `UPDATE.PAS`, the same dodge `GetIndustrialDistribution` used earlier to avoid pulling in
-`Fleet`/`Orders`/`NPE` via the real `Intrface` unit. `runworld.pas`'s `construction` domain calls the
-now-exported `UpdateConstruction` directly, assembling a `Constr[1]` site plus up to two fleets at the
-same location. First run crashed with a runtime error 216 (access violation): `PutMine`/
-`CreateStarbase`/`CreateStargate` all touch `Sector[x]^[y]`, and unlike `starbase`'s domain this one
-never called `Galaxy.InitializeSector` — same class of gotcha `starbase` had already hit and
-documented, fixed the same way.
-
-All 6 `ConstructionCases` reproduced exactly what hand-derivation against `ConsCargoNeeded`'s raw
-material thresholds predicted, confirmed case by case against a manually-invoked, freshly-compiled
-`runworld.exe` before any C# test code was written — including the scratch-copy-discard behavior
-(`InsufficientMaterialLeavesEverythingUnchanged`) and the completion branches for all three dispatch
-targets (mine, starbase, stargate).
-
-Ninth domain, `empirecreate` (Phase 2 commit 2b): unlike every domain before it, this one needed no
-new patch at all — `CreateEmpire` (`PRIMINTR.PAS:982`) was already in that unit's own `INTERFACE`
-section, since it's `NEWGAME.PAS`'s own real call target. Rather than pull in all of `NEWGAME.PAS`
-(and its much larger `USES` clause — `Crt`/`Dos`/`DOS2`/`EIO`/`WND`/`Menu`/`DFA`/`LoadSave`/`NPE`/
-`NPETypes`) just to reach `CreatePlayerEmpire`/`CreateNPEmpire`, `runworld.pas`'s `empirecreate`
-domain reproduces their 3-line starting-tech-set formula inline (`KnownTechs:=TechDev[Pred(Tech)];
-KnownTechs:=KnownTechs+extras; KnownTechs:=KnownTechs*TechDev[Tech]`) and calls the real `CreateEmpire`
-directly with the result — the same "relocate the small formula, not the whole unit" precedent
-`GetIndustrialDistribution` set. No RNG anywhere in this domain; both the formula and `CreateEmpire`
-are fully deterministic.
-
-13 cases exhaustively cross-check all 11 rows of Pascal's real `TechDev` constant
-(`DATACNST.PAS:359-370`) against the C# port's own `TechCatalog` min-tech tables (ten "no extra
-techs" cases, one per level from `Primitive` through `Gate` — with no extras, the result always
-collapses to exactly `TechDev[Pred(Tech)]`), plus both directions of the final intersect-clamp
-(`ExtraTechAtCurrentLevel` survives, `ExtraTechAboveCurrentLevel` gets silently dropped) and one case
-confirming `TechDev[Gate]` itself is the full 26-item set (`ExtraTechCompletesTopRow`). Every value
-was confirmed by hand against a manually-invoked, freshly-compiled `runworld.exe` before any C# test
-code was written, then matched byte-for-byte once wired in. `TechLevel.PreTech` is deliberately not
-a case here — `Pred(PreTchLvl)` is an out-of-range `TechDev` index in real Pascal (a range-check
-error that would crash the harness, not a well-defined empty set), and no real scenario file ever
-creates a player/NPE empire at that level anyway; it's covered by a hardcoded C# test instead.
-
-Tenth domain, `trillumreserves`/`randomplanet`/`nebula` (Phase 2 commit 2d): relocated
-`CreatePlanet` (`INTRFACE.PAS`) plus `RandomTrillumReserves`/`RndShips`/`RndCargo`/`RndDefns`/
-`SetUpWorld`/`CreateRndPlanet`/`NebulaeBand`/`NebulaePatches` (`NEWGAME.PAS`) verbatim into the
-patched `UPDATE.PAS`, same "relocate the small formula, not the whole unit" precedent as every domain
-before it — all of them are self-contained `Universe^`/`Misc`/`DataCnst`/`PrimIntr` logic, already
-confirmed reachable from `UPDATE.PAS`'s existing `USES` clause with zero new unit imports needed.
-`GetRandomXY`/`CreateRandomWorlds` are deliberately **not** relocated: under this harness's
-`ForcedRandomValue` convention, every `Rnd` call within one invocation returns the same fixed offset,
-so a coordinate blocked on the first roll is blocked on every retry too (the C# side hit the identical
-wall — see `GalaxySetupTests.GetRandomXY_ThrowsAfterTooManyRetriesOnAnOccupiedCell`) — there is no way
-to construct a golden-file case that reaches "blocked, then a later retry succeeds" on either side of
-the comparison, on principle, not from lack of trying. Those two procedures' own logic (percentile
-table lookups, the safety-loop compatibility check, occupancy/nebula rejection) is simple enough that
-hand-derived hardcoded tests (`GalaxySetupTests`) fully cover it instead — the golden-file domains here
-target only the pieces with real formula risk: `CreateRndPlanet`'s `Trunc`/`Round`/tech-adjustment-table
-math and `NebulaeBand`/`NebulaePatches`' coordinate-space arithmetic.
-
-All three domains reproduced this session's own hand-derivations exactly on the first real Pascal run
-(`randomplanet`'s `EarthLikeWarpRng0` case matched `GalaxySetupTests.
-CreateRndPlanet_ComputesPopulationMilitaryIndexAndAppliesTechGate` field-for-field; `nebula`'s band/patch
-single-case grids matched their own hardcoded tests) — good confirmation the C# port and the relocated
-Pascal agree, but a multi-patch nebula case (`PatchesMultipleRng2`, three patches under one forced
-value) caught a real bug in this harness's own `ForcedRandomValue` test convention, not in the C# port:
-
-**A real landmine: `ForcedRandomValue` was checked in the wrong order.** The original `INT.PAS` patch
-had `Rnd` check `ForcedRandomValue>=0` *before* the real, unconditional `Max<=Min` degenerate-range
-clamp — so a forced value could override that clamp, producing a result outside `[Min,Max]` whenever
-`Min=Max` coincided with a nonzero forced offset. `NebulaePatches`' own `Rnd(1,4-Abs(y-InitY))` hits
-exactly `Min=Max` (`4-Abs(y-InitY)=1`) at a patch's vertical extremes, so `PatchesMultipleRng2` (forced
-value 2) exposed it: Pascal painted a full 6th row that `GalaxySetup.NebulaePatches` (via
-`PascalMath.Rnd`, which has always checked the degenerate range first, matching pristine `Rnd`'s own
-"If Min>Max then Min is returned" semantics) correctly did not. The fix went into the *Pascal test
-patch*, not `PascalMath.Rnd` — pristine `Rnd`'s degenerate-range clamp is real, unconditional behavior;
-`ForcedRandomValue` is a test-only device layered on top of it, so the clamp has to win first, the same
-order `PascalMath.Rnd`+`FixedRandom` already used. Reordering `INT.PAS.patch` to check `Max<=Min`
-before `ForcedRandomValue` fixed `nebula.golden` and, checked directly via `git status`, moved none of
-the other eleven already-committed golden files — confirming no earlier domain's cases had
-coincidentally depended on the wrong ordering. A tempting-but-wrong fix worth naming explicitly: making
-`PascalMath.Rnd` call through to `random.Next()` even when `min==max` (so `FixedRandom`'s override
-would "win" the same way the old, buggy `INT.PAS` ordering did) breaks `NewTechLevel`'s
-`missingAtCurrentLevel[Rnd(1, missingAtCurrentLevel.Count) - 1]` indexing the moment a shared
-`FixedRandom` offset exceeds a small `Count` — real Pascal's own equivalent (`Tech[Rnd(1,TechNumber)]`
-against a fixed `ARRAY[1..30]`) never crashes on this, it just reads a stale slot, since the array is
-statically over-provisioned; a C# `List` has no such slack. Confirmed empirically (four pre-existing
-Phase-1 tests broke instantly when this alternate fix was tried) before reverting it in favor of the
-`INT.PAS` reorder above.
+`New(Universe); FillChar(Universe^,SizeOf(Universe^),0);` instead. Revisit if a future scenario needs a
+much larger/more realistic starting `Universe^` than a couple of hand-set fields can reasonably cover —
+a real TP 1.31 `.SAV` file now sits at `reference/saves/INTRO_1.SAV` for whenever the save/load phase
+(Phase 7) is picked up, addressing the "no `.SAV` file ships with the source" gap above.
 
 ## A real Pascal RNG, not a stand-in: `rng.golden` and `PascalRandom`
 
-Every domain above needs only one `Rnd()` value per case, so `ForcedRandomValue` (a fixed offset every
-call resolves to) has always been enough. Phase 2 commit 2e's `CREATERANDOMWORLDS` breaks that: it
-retries a random coordinate on collision, and a fixed offset always re-rolls the *same* coordinate, so
-placing a second world in a zone that already has one always blows through the 100-retry cap on both
-sides. Comparing real `.SCN` scenario files end to end needs a real, non-degenerate multi-call sequence
-instead — which means matching this project's actual fpc runtime's `Random`/`RandSeed` algorithm, not
-a fixed stand-in.
+Every domain above `rng` needs only one `Rnd()` value per case, so `ForcedRandomValue` (a fixed offset
+every call resolves to) has always been enough. `nebula`'s multi-patch cases and a genuine end-to-end
+`.SCN` load (`scenario`) both break that: they retry/redraw multiple times per run, and a fixed offset
+always re-rolls the *same* value, so (for `CreateRandomWorlds`) placing a second world in a zone that
+already has one always blows through the retry cap on both sides. Comparing real multi-draw sequences
+needs matching this project's actual fpc runtime's `Random`/`RandSeed` algorithm, not a fixed stand-in.
 
 That algorithm isn't the classic Turbo Pascal LCG a DOS-era codebase might suggest, and guessing at it
 from memory would have been exactly the kind of unverified recall this project avoids: fpc's RNG
-implementation changed over its history, and which one a given installed compiler uses has to be
-checked, not assumed. A quick probe program (`RandSeed:=12345; WriteLn(Random(100));` a few times)
-compiled with this repo's actual installed fpc (3.2.2) and compared against candidate algorithms pulled
-from fpc's own RTL source at matching tags settled it empirically: fpc's `main`/trunk source now uses a
-SplitMix64-seeded Xoshiro128** generator (didn't match); the `release_3_2_2` tag's `rtl/inc/system.inc`
-uses a Mersenne Twister (MT19937) variant with its own reseed/tempering convention (`mtwist_init`/
-`mtwist_update_state`/`mtwist_u32rand` — matched exactly, including a mid-run reseed, a fresh-seed
-replay, and a draw crossing the generator's 624-word internal state refill).
+implementation changed over its history, and which one a given installed compiler uses has to be checked,
+not assumed. A quick probe program (`RandSeed:=12345; WriteLn(Random(100));` a few times) compiled with
+this repo's actual installed fpc (3.2.2) and compared against candidate algorithms pulled from fpc's own
+RTL source at matching tags settled it empirically: fpc's `main`/trunk source now uses a SplitMix64-seeded
+Xoshiro128** generator (didn't match); the `release_3_2_2` tag's `rtl/inc/system.inc` uses a Mersenne
+Twister (MT19937) variant with its own reseed/tempering convention (`mtwist_init`/`mtwist_update_state`/
+`mtwist_u32rand` — matched exactly, including a mid-run reseed, a fresh-seed replay, and a draw crossing
+the generator's 624-word internal state refill).
 
-`src/ThreeLn.Reconstruction4021.Tests/PascalRandom.cs` is a from-scratch `System.Random` subclass
-porting that exact algorithm, test-only (production code has no need for Pascal-bit-exact randomness —
-only a golden-file comparison does). `rng.golden`/`RngCases.cs`/`PascalRandomTests.cs` are a standing
-regression fixture for it: `runworld.pas`'s `RunRngCase` sets a real `RandSeed` and draws a real
-sequence via `Random()` (no `ForcedRandomValue` involved at all), and `PascalRandomTests.MatchesGoldenFile`
-checks the C# port reproduces it exactly, including a 701-draw case that crosses the state refill
-boundary. This isn't a `UpdateWorld`/`GalaxySetup` domain — it exists so that any future domain needing
-a real RNG sequence (2e's `CREATERANDOMWORLDS`, and potentially a genuine end-to-end `.SCN` file load)
-can build on an already-verified foundation instead of re-deriving it under pressure.
-
-## `build.ps1`/`PatchHarness.cs` compile with `-CfSSE2`
-
-Phase 2 commit 2e's scenario domain (see below) found that fpc's default i386 codegen keeps chained
-`Real` expressions in the x87 FPU's 80-bit extended-precision stack until explicitly stored, while
-C#'s `double` is always strict 64-bit IEEE754 — so a borderline expression can round to a different
-integer in each language. `-CfSSE2` forces fpc to use strict 64-bit double throughout, aligning the
-harness with the only precision C# has. Verified via `git diff --stat` on the regenerated golden
-files that it changed none of the 13 golden domains existing at the switch — but that's a snapshot,
-not a guarantee: it changes float semantics harness-wide, so a future domain with its own borderline
-`Real` expression will get different ground truth under it than under fpc's default. Kept as a
-deliberate baseline choice regardless. Full writeup of what this does and doesn't fix:
-`docs/PASCAL_ARCHITECTURE_NOTES.md`'s "Scenario golden-file testing can't be bit-exact, and why" section.
+`src/ThreeLn.Reconstruction4021.Tests/PascalRandom.cs` is a from-scratch `System.Random` subclass porting
+that exact algorithm, test-only (production code has no need for Pascal-bit-exact randomness — only a
+golden-file comparison does). `rng.golden`/`RngCases.cs`/`PascalRandomTests.cs` are a standing regression
+fixture for it: `runworld.pas`'s `RunRngCase` sets a real `RandSeed` and draws a real sequence via
+`Random()` (no `ForcedRandomValue` involved at all), and `PascalRandomTests.MatchesGoldenFile` checks the
+C# port reproduces it exactly, including a 701-draw case that crosses the state refill boundary.
 
 ## Recommendation
 
-Reach for this approach whenever it would improve testing fidelity, with an
-eye toward eventually building up a maximum-fidelity harness — the
-per-harness patch-authoring cost is accepted deliberately, in exchange for
-being able to run the real Pascal code against known states across wide
-slices of the game systems as those slices grow, not just the one procedure
-under test:
+Reach for this approach whenever it would improve testing fidelity, with an eye toward eventually
+building up a maximum-fidelity harness — the per-harness patch-authoring cost is accepted deliberately,
+in exchange for being able to run the real Pascal code against known states across wide slices of the
+game systems as those slices grow, not just the one procedure under test:
 
-- That's most clearly the case when a procedure's fidelity risk is high
-  enough to justify it: many state-shaped lookups (`GetCapital`/`GetTech`-style
-  calls that transcription would otherwise have to simplify into plain
-  parameters), or when the thing worth testing is call *ordering* across
-  multiple steps in the same real pipeline — exactly the "cross-cutting
-  field" bug class hit twice with transcription (`UpdateMilitary` mutating
-  `Cargo.Legions` before `UpdateRevolution` reads it, discovered only because
+- That's most clearly the case when a procedure's fidelity risk is high enough to justify it: many
+  state-shaped lookups (`GetCapital`/`GetTech`-style calls that transcription would otherwise have to
+  simplify into plain parameters), or when the thing worth testing is call *ordering* across multiple
+  steps in the same real pipeline — exactly the "cross-cutting field" bug class transcription hit twice
+  (`UpdateMilitary` mutating `Cargo.Legions` before `UpdateRevolution` reads it, discovered only because
   the isolated harnesses didn't model the mutation).
-- Transcription (`reference/verify/*.pas`'s per-procedure pattern) is still
-  fine for genuinely isolated, parameter-only procedures with no real-state
-  dependency — cheap and bounded, and proven across four roadmap commits
-  before `production.golden`'s migration retired its last domain. Nothing
-  currently uses it, but reach for it again if a future case fits that
-  description better than a hand-assembled `Universe^` would.
-- Don't expand this into combat/fleet movement/NPE AI territory by default.
-  `Intrface`'s `Fleet`/`Orders`/`NPE` dependency was dodged here by relocating
-  one function; the next subsystem's dependency web is an open question, not
-  something this session's results generalize to. Treat each new area as its
-  own exploration, not an assumed extension of this one.
-- A hand-assembled `Universe^` is still only as faithful as the fields it
-  remembers to set. `production.golden`'s two harness bugs (an empty
-  `TechnologySet`, an unset `ImpExp`) were both "field defaults to zero
-  instead of what `CreateEmpire`/settlement actually initializes it to" —
-  worth a deliberate check against real init code (`CreateEmpire`,
-  `PRIMINTR.PAS`'s `Set*` procedures) for any new domain's setup, not just
-  trusting `FillChar` zero to be a reachable state.
+- Transcription (`reference/verify/*.pas`'s per-procedure pattern) is still fine for genuinely isolated,
+  parameter-only procedures with no real-state dependency — cheap and bounded, and proven across four
+  roadmap commits before `production.golden`'s migration retired its last domain. Nothing currently uses
+  it, but reach for it again if a future case fits that description better than a hand-assembled
+  `Universe^` would.
+- Don't expand this into fleet-movement/NPE-AI territory by default just because combat is now covered.
+  `Intrface`'s `Fleet`/`Orders`/`NPE` dependency has been dodged repeatedly by relocating one function at
+  a time, not by pulling in a whole subsystem's dependency web — treat each new area as its own
+  exploration, not an assumed extension of what combat's domains already proved.

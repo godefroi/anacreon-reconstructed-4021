@@ -157,6 +157,42 @@ regardless of a reader; nothing reads `DefeatedBy` yet (no human `ITurnHandler` 
 job), matching the "port the real branch, leave it unread until its phase exists" precedent already
 set by `Empire.News.Clear()` (Phase 4).
 
+## Standalone attack mechanics: port what's live, skip what's dead
+
+`Combat/CombatStandalone.cs` (Phase 5g) covers four ATTACK.PAS/SBASE.PAS procedures that sit outside
+`CombatResolution.NPEAttack`'s own group/shell round loop — each its own separate Pascal entry point,
+not a branch that loop reaches on its own:
+
+- **`LAMAttack` and `DestroyConstructionOrGate` are ported.** Both are live in the shipped 1.31 game
+  (confirmed by tracing every caller, not assumed) — `LAMAttack` from `DESIGN.PAS`'s `LaunchLAM` (human
+  command, Phase 8) and `NPE00`/`NPE03`/`NPEINTR`'s guardian/NPE strikes (Phase 6); `ATTNPE.PAS`'s own
+  `NPEAttack` calls `DestroyConstructionOrGate` directly for a construction-site/stargate target — a
+  real branch of *already-ported* code (`CombatResolution.NPEAttack`), not a future consumer, so it's
+  wired in now rather than left for later. `LAMAttack`'s `Random` parameter is dropped entirely (not
+  threaded through unused) — confirmed by reading, it has no `Rnd` call anywhere in its body, the only
+  Phase 5 procedure with that property.
+- **`HolocaustWorld`/`HolocaustEffectiveness` are NOT ported — confirmed dead code, not deferred.**
+  Their only caller (`MSCCOMM.PAS`'s `HolocaustCommand`) is wrapped in a Pascal comment, along with its
+  own forward interface declaration and its `PLAYTURN.PAS` dispatch entry — the real game could not
+  have called it, in either the 1.31 or 2.0 source. Same treatment as `BATTLE.PAS`/`BOMBER.PAS`/
+  `Consolidate` (see `PASCAL_ARCHITECTURE_NOTES.md`'s "Findings from porting" section) — a different
+  category from "live Pascal, no port-side caller yet" (`SelfDestructObject`, below), and important not
+  to conflate: the first is never worth porting, the second is a real primitive waiting on a phase.
+- **`SelfDestructObject` is ported with no port-side caller yet** (Phase 8's `SelfDestructCommand`
+  doesn't exist), same `Empire.News.Clear()` precedent as `DefeatedBy` above — but *is* real, reachable
+  Pascal (`MSCCOMM.PAS:519`, dispatched live from `PLAYTURN.PAS`, outside the `(*ARTIFACTS*)` block that
+  disables Holocaust). An earlier research pass claimed otherwise; that claim was wrong and has been
+  corrected (`PASCAL_ARCHITECTURE_NOTES.md` again) rather than left standing.
+- **Ground truth is split three ways, not uniformly golden-file-backed**: `LAMAttack` has real formula
+  risk (`Round`/`Trunc` proportional distribution, the same arithmetic shape that produced the
+  `PascalRound` bug in `combat.golden`) and no `Rnd` calls to complicate a harness case, so it gets a
+  new patch-based domain (`lamattack.golden`). `DestroyConstructionOrGate`/`SelfDestructObject` have
+  much less formula risk (plain removal, a linear `Rnd(min,max)` RevIndex change) and would need real
+  new harness infrastructure to reach (`DestroyConstruction`/`DestroyStargate` need `Intrface`, not
+  linked into the patched build; `SBASE.PAS` was never patched in at all) — covered by hardcoded C#
+  tests instead (`CombatStandaloneTests.cs`), the same "harness can't reach it, cover it directly"
+  precedent as `CombatOutcomeTests`' own human-defeat branch.
+
 ## Probes: no position field, because Pascal has none either
 
 `Empire.Probes`/`Probe`/`ProbeStatus` (a pre-existing stub literally mirroring Pascal's 4-state

@@ -1,0 +1,4 @@
+case=FleetPartialDamage;shipsdest_fgt=12;shipsdest_hkr=9;shipsdest_pen=10;shipsdest_trn=5;defnsdest_lam=0;defnsdest_def=0;defnsdest_gdm=0;defnsdest_ion=0
+case=FleetTotalDestruction;shipsdest_fgt=5;shipsdest_hkr=2;shipsdest_pen=0;shipsdest_trn=0;defnsdest_lam=0;defnsdest_def=0;defnsdest_gdm=0;defnsdest_ion=0
+case=WorldPartialDamage;shipsdest_fgt=0;shipsdest_hkr=0;shipsdest_pen=0;shipsdest_trn=0;defnsdest_lam=20;defnsdest_def=8;defnsdest_gdm=5;defnsdest_ion=2
+case=WorldNoDefenses;shipsdest_fgt=0;shipsdest_hkr=0;shipsdest_pen=0;shipsdest_trn=0;defnsdest_lam=0;defnsdest_def=0;defnsdest_gdm=0;defnsdest_ion=0
