@@ -149,6 +149,7 @@ public sealed partial class AnnualTickHandler
 
     private void HostileLife(Planet planet)
     {
+        var owner = planet.Owner;
         var menAdj = (planet.Efficiency + 50) * ((planet.Cargo.Legions + 5 * planet.Cargo.NinjaLegions) / 100.0);
         var chanceOfAttack = Math.Max(0, 25 - PascalRound((menAdj - 2000) / 100.0));
 
@@ -157,14 +158,18 @@ public sealed partial class AnnualTickHandler
                 var popKilled = Math.Min(planet.Population, Rnd(10, 50));
                 planet.Population -= popKilled;
                 ChangeRevIndex(planet, Rnd(5, 15));
+                owner.AddNews(NewsType.HostileLifeKilledPopulation, planet, p1: popKilled);
             } else {
                 var menKilled = Math.Min(planet.Cargo.Legions, Rnd(200, 300));
                 var nnjKilled = Math.Min(planet.Cargo.NinjaLegions, Rnd(20, 50));
                 planet.Cargo.Legions -= menKilled;
                 planet.Cargo.NinjaLegions -= nnjKilled;
+                owner.AddNews(NewsType.HostileLifeAttackedTroops, planet, p1: menKilled, p2: nnjKilled);
             }
-        } else if (!planet.Owner.IsIndependent && Rnd(1, 100) <= 20) {
-            planet.Cargo.NinjaLegions += Rnd(50, 150);
+        } else if (!owner.IsIndependent && Rnd(1, 100) <= 20) {
+            var aliensJoined = Rnd(50, 150);
+            planet.Cargo.NinjaLegions += aliensJoined;
+            owner.AddNews(NewsType.HostileLifeJoinedTroops, planet, p1: aliensJoined);
         }
     }
 

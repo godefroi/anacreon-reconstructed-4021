@@ -79,17 +79,17 @@ Ported `NEWS.PAS`'s per-empire event log — a real data dependency for Phase 6 
 `EraseNews`'s per-turn reset isn't wired into `TurnEngine` yet — no consumer exists to validate the
 timing against.
 
-## 5. Combat — in progress, 5a-5h landed
+## 5. Combat — ✅ done, all 9 commits landed
 
-Attack resolution, fleet/starbase destruction, capital loss and empire elimination. Design decisions
+Attack resolution, fleet/starbase destruction, capital loss and empire elimination, plus the
+standalone mechanics (LAM strikes, minefield/disrupter movement, self-destruct) that sit outside the
+main group-combat round loop. Started with a scoping pass (5a) over `ATTACK.PAS`/`ATTCOMM.PAS`/
+`ATTNPE.PAS`/`BATTLE.PAS`/`BOMBER.PAS`/`FLEET.PAS`/`FLTCOMM.PAS`/`SBASE.PAS`/`ORDERS.PAS` plus relevant
+`UPDATE.PAS`/`DATACNST.PAS`/`DATASTRC.PAS`/`ANACREON.PAS`/`INTRFACE.PAS` sections. Design decisions
 (empire-elimination model, `Empire.DefeatedBy`, `AttackType`) are in `PORT_DESIGN.md`; dead-code and
-quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, etc.) are in
+quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`, etc.) are in
 `PASCAL_ARCHITECTURE_NOTES.md`.
 
-- ✅ **5a, scoping.** Research pass over `ATTACK.PAS`/`ATTCOMM.PAS`/`ATTNPE.PAS`/`BATTLE.PAS`/
-  `BOMBER.PAS`/`FLEET.PAS`/`FLTCOMM.PAS`/`SBASE.PAS`/`ORDERS.PAS` plus relevant `UPDATE.PAS`/
-  `DATACNST.PAS`/`DATASTRC.PAS`/`ANACREON.PAS`/`INTRFACE.PAS` sections. Findings recorded in
-  `PASCAL_ARCHITECTURE_NOTES.md`/`PORT_DESIGN.md`.
 - ✅ **5b, `UpdateDefenses` + `Defns` state** (`AnnualTickHandler.Defenses.cs`) — `DefenseType`-indexed
   growth on `IEconomicWorld`. Golden-file-backed (`defenses.golden`, `AnnualTickHandlerDefensesTests`).
 - ✅ **5c, combat constants + `AttackType`** (`Types/AttackType.cs`, `Combat/CombatConstants.cs`) — see
@@ -145,8 +145,17 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, etc.) are in
   blocking (`GetNewPos`'s own `Pos:=Limbo` branch, `FLEET.PAS:437-450`) isn't ported either — found but
   not fixed here, since it's a terrain effect applying to every fleet type, not a combat mechanic; added
   to 6a's list below alongside the other two.
-- **5i, `HostileLife` news fix + roadmap wrap-up** — a small Phase 1/4 gap (`HostileLife`, shipped
-  Phase 1, calls no `AddNews` despite the relevant `NewsType` members already existing).
+- ✅ **5i, `HostileLife` news fix** (`Turns/AnnualTickHandler.Revolution.cs`) — `HostileLife`
+  (UPDATE.PAS:458-515, Phase 1) had the real population/troop/revolution-index arithmetic but called
+  no `AddNews` at all, despite `HostileLifeKilledPopulation`/`HostileLifeAttackedTroops`/
+  `HostileLifeJoinedTroops` already existing in `NewsType.cs` — a dropped call site Phase 4 should
+  have caught (it's in `AnnualTickHandler.*`, Phase 4's own stated scope) but didn't, surfaced instead
+  during Phase 5's scoping pass. `HLfCls` is a real, live-reachable world class, not dead code — its
+  `UpdateWorld` call site is unconditional (`IF Cls=HLfCls THEN HostileLife(World)`, no disabled
+  block), and `dos_131/INTRO.SCN`'s own `ClassTable` gives it a nonzero weight (1, same tier as
+  Ambrosia/Paradise/Ruins) — about 1-in-100 for any randomly-generated world. Covered by hardcoded
+  tests (`AnnualTickHandlerHostileLifeTests`) exploiting `FixedRandom(N)`'s `min+N` resolution to
+  deterministically pick each of the three branches.
 
 ## 6. NPE AI
 

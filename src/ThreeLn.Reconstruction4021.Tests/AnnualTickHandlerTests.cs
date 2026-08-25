@@ -377,6 +377,115 @@ public class AnnualTickHandlerRevolutionTests
 }
 
 /// <summary>
+/// Verifies HostileLife's News reporting (UPDATE.PAS:458-515) — Phase 1 ported the real population/
+/// troop/revolution-index arithmetic, but no AddNews call at all, despite HostileLifeKilledPopulation/
+/// HostileLifeAttackedTroops/HostileLifeJoinedTroops already existing in NewsType.cs. Caught during
+/// Phase 5's scoping pass (it should have been a Phase 4 News catch, since it's in AnnualTickHandler.*)
+/// and fixed here as Phase 5 commit 5i. FixedRandom(N) makes every Rnd(min,max) call resolve to min+N
+/// regardless of range (see AnnualTickHandlerRevolutionTests's own RevIndex76 comments for this same
+/// fact) — so the same roll value drives both the attack-trigger check and its own sub-branch
+/// threshold, which is how a single FixedRandom seed can deterministically pick each branch below.
+/// </summary>
+public class AnnualTickHandlerHostileLifeTests
+{
+    private static Game BuildGame(Planet planet)
+    {
+        var game = new Game(new Galaxy(size: 20));
+        game.Galaxy.Planets.Add(planet);
+        return game;
+    }
+
+    // Efficiency=0, Legions=300, NinjaLegions=100 -> menAdj=(0+50)*((300+500)/100)=400,
+    // chanceOfAttack=Max(0,25-PascalRound((400-2000)/100))=41. Any FixedRandom(N) with 1+N<=41
+    // triggers the attack; the same roll then decides pop-killed (<=25) vs troops-killed (>25).
+    private static Planet MakeAttackablePlanet(Empire owner)
+    {
+        var planet = new Planet {
+            Location = new Coordinate(0, 0),
+            Owner = owner,
+            Population = 1000,
+            Class = WorldClass.Hostile,
+            Type = WorldType.Agricultural,
+            TechLevel = TechLevel.Warp,
+            Efficiency = 0,
+        };
+        planet.Cargo.Legions = 300;
+        planet.Cargo.NinjaLegions = 100;
+        planet.Cargo.Supplies = 9999;
+        return planet;
+    }
+
+    private static readonly HashSet<NewsType> _hostileLifeHeadlines = [
+        NewsType.HostileLifeKilledPopulation, NewsType.HostileLifeAttackedTroops, NewsType.HostileLifeJoinedTroops,
+    ];
+
+    [Test]
+    public async Task Attack_LowRoll_KillsPopulationAndReportsIt()
+    {
+        var owner = new Empire { Name = "Test" };
+        var planet = MakeAttackablePlanet(owner);
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+
+        // Roll=1+0=1: attack triggers (1<=41) and lands in the <=25 sub-branch.
+        // popKilled = Min(1000, Rnd(10,50)=10) = 10.
+        new AnnualTickHandler(new FixedRandom(0)).RunAnnualTick(game);
+
+        var news = owner.News.Where(n => _hostileLifeHeadlines.Contains(n.Headline)).ToList();
+        await Assert.That(news.Select(n => n.Headline)).IsEquivalentTo([NewsType.HostileLifeKilledPopulation]);
+        await Assert.That(news[0].Parm1).IsEqualTo(10);
+        await Assert.That(news[0].Subject).IsSameReferenceAs(planet);
+    }
+
+    [Test]
+    public async Task Attack_HighRoll_KillsTroopsAndReportsThem()
+    {
+        var owner = new Empire { Name = "Test" };
+        var planet = MakeAttackablePlanet(owner);
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+
+        // Roll=1+30=31: attack triggers (31<=41) and lands in the >25 sub-branch.
+        // menKilled = Min(300, Rnd(200,300)=230) = 230; nnjKilled = Min(100, Rnd(20,50)=50) = 50.
+        new AnnualTickHandler(new FixedRandom(30)).RunAnnualTick(game);
+
+        var news = owner.News.Where(n => _hostileLifeHeadlines.Contains(n.Headline)).ToList();
+        await Assert.That(news.Select(n => n.Headline)).IsEquivalentTo([NewsType.HostileLifeAttackedTroops]);
+        await Assert.That(news[0].Parm1).IsEqualTo(230);
+        await Assert.That(news[0].Parm2).IsEqualTo(50);
+    }
+
+    [Test]
+    public async Task NoAttack_AliensJoinTroopsAndReportIt()
+    {
+        var owner = new Empire { Name = "Test" };
+        // Efficiency=100, Legions=3000 -> menAdj=150*30=4500, chanceOfAttack=Max(0,25-PascalRound(25))=0
+        // -- the attack roll (1<=0) never fires, so the else-if roll (1<=20) does instead.
+        var planet = new Planet {
+            Location = new Coordinate(0, 0),
+            Owner = owner,
+            Population = 1000,
+            Class = WorldClass.Hostile,
+            Type = WorldType.Agricultural,
+            TechLevel = TechLevel.Warp,
+            Efficiency = 100,
+        };
+        planet.Cargo.Legions = 3000;
+        planet.Cargo.Supplies = 9999;
+        var game = BuildGame(planet);
+        game.Empires.Add(owner);
+
+        // aliensJoined = Rnd(50,150) = 50.
+        new AnnualTickHandler(new FixedRandom(0)).RunAnnualTick(game);
+
+        var news = owner.News.Where(n => _hostileLifeHeadlines.Contains(n.Headline)).ToList();
+        await Assert.That(news.Select(n => n.Headline)).IsEquivalentTo([NewsType.HostileLifeJoinedTroops]);
+        await Assert.That(news[0].Parm1).IsEqualTo(50);
+        await Assert.That(planet.Cargo.NinjaLegions).IsEqualTo(50);
+    }
+}
+
+/// <summary>
 /// Verifies Commit 2 of the economy phase: raw material and ship/cargo production for planets
 /// (UPDATE.PAS's ProduceRawMaterial/GetIndustrialDistribution/UpdateIndustry/Production, called via
 /// AnnualTickHandler.RunProductionPipeline). MatchesGoldenFile checks the real Pascal arithmetic —
