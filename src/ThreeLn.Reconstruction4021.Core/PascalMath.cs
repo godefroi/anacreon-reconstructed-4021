@@ -1,9 +1,10 @@
 namespace ThreeLn.Reconstruction4021.Core;
 
 /// <summary>
-/// Pascal-semantics numeric helpers (INT.PAS's Rnd/RndVar, MISC.PAS's ThgLmt, and Pascal's
-/// half-away-from-zero Round) shared between the annual-tick handler and new-game setup — both need
-/// the exact same randomness/rounding behavior to stay comparable against real Pascal output.
+/// Pascal-semantics numeric helpers (INT.PAS's Rnd/RndVar/IntLmt, MISC.PAS's ThgLmt, and Pascal's
+/// banker's-rounding Round) shared across the annual-tick handler, new-game setup, and the combat
+/// engine — all need the exact same randomness/rounding behavior to stay comparable against real
+/// Pascal output.
 /// </summary>
 public static class PascalMath
 {
@@ -27,11 +28,28 @@ public static class PascalMath
         return Rnd(random, value - spread, value + spread);
     }
 
-    /// <summary>Pascal's Round: nearest integer, halves away from zero (not banker's rounding).</summary>
-    public static int PascalRound(double x) => x >= 0 ? (int)(x + 0.5) : (int)(x - 0.5);
+    /// <summary>
+    /// Pascal's Round: nearest integer, with exact halves rounded to the nearest even integer
+    /// (confirmed directly against the ground-truth harness's own FreePascal compiler:
+    /// <c>Round(2.5)=2</c>, <c>Round(3.5)=4</c>, <c>Round(-2.5)=-2</c> — banker's rounding, not
+    /// half-away-from-zero as this method previously assumed and documented. That assumption went
+    /// unnoticed through every earlier phase's golden-file coverage because none of their formulas
+    /// happened to land exactly on a .5 boundary; Phase 5's combat GetEnemy split (clean 5%/10%/15%
+    /// percentages against round ship counts) was the first to actually hit one. <see cref="Math.Round(double)"/>
+    /// with <see cref="MidpointRounding.ToEven"/> is this exact behavior, not an approximation.
+    /// </summary>
+    public static int PascalRound(double x) => (int)Math.Round(x, MidpointRounding.ToEven);
 
     /// <summary>Clamps a produced/consumed quantity to [0,MaxResources], truncating (Pascal source: MISC.PAS's ThgLmt).</summary>
     public static int ClampResource(double x) => x > MaxResources ? MaxResources : x < 0 ? 0 : (int)x;
+
+    /// <summary>
+    /// Truncates to Turbo Pascal's 16-bit signed Integer range (<see cref="short.MaxValue"/>, exactly
+    /// Pascal's <c>MaxInt</c>), clamping rather than overflowing (INT.PAS's IntLmt) — combat's own
+    /// overflow guard before further arithmetic, distinct from <see cref="ClampResource"/>'s narrower
+    /// [0,MaxResources] game-balance clamp.
+    /// </summary>
+    public static int IntLmt(double x) => x > short.MaxValue ? short.MaxValue : x < -short.MaxValue ? -short.MaxValue : (int)x;
 
     /// <summary>
     /// Integer square root, rounded to the nearest integer (Pascal source: INT.PAS's ISqrt,

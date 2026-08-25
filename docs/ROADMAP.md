@@ -409,7 +409,7 @@ cascade into an explicit if/else-if chain (see `AnnualTickHandler.Revolution.cs`
 boundary tests at each tier transition, including one proving `RevIndex>75` genuinely has two outcomes
 (`Rebellion` vs. a lone `RebellionWarning4`), not one.
 
-## 5. Combat — in progress, 5a-5c landed
+## 5. Combat — in progress, 5a-5d landed
 
 Attack resolution, fleet/starbase destruction, capital loss and empire elimination. The original
 one-paragraph version of this section undersold the real scope, the same way "8 known News sites"
@@ -496,11 +496,44 @@ Sub-commits:
   order before trusting positional array transcription. Tests: enum order, full key-space coverage
   per table, a handful of known values, and the `AttackType`↔`DefenseType`/`ShipType` mapping
   round-trips — no combat logic exists yet to exercise these tables against.
-- **5d, group/shell combat engine core** — the actual per-round damage math (`GetEnemy`,
-  `CalculateCombatData`, `Battle`/`GroupAttack`/`EnemyAttack`, targeting/priority arrays,
-  `EnemySurrenders`). The bulk of the phase; golden-file-backed via a new patch-based
-  `reference/verify/` domain, not hand-derivation — this is the least hand-verifiable logic in the
-  port so far.
+- ✅ **5d, group/shell combat engine core** (`Combat/CombatState.cs`, `Combat/CombatEngine.cs`) — the
+  actual per-round damage math: `CalculateCombatData`, `GetEnemy`, `DefaultDistribution`/
+  `DefaultGroup`, `ForcesUnknown`, `Battle` (`GetConflict`/`TotalProtection`/`GetTargetArray`+
+  `BuildPriority1`/`BuildPriority2`/`BuildTargetArray`/`GroupAttack`/`EnemyAttack`/
+  `UpdateGroupsDestroyed`/`UpdateEnemyDestroyed`), `EnemySurrenders`. Deliberately stops short of
+  the multi-round/multi-shell driver (`AdvanceGroups` and the rest of `ATTNPE.PAS`) and outcome
+  application (`ResolveAttack`/`ConquerWorld`/`ConquerEmpire`) — both later commits. A group's own
+  `Trg` staying unset (`AttackType?` null) is real, expected Pascal behavior here, not a degenerate
+  case: nothing in this commit's scope ever assigns it (that's 5e/8's targeting logic), so
+  `GroupAttack`'s own output is 0 for every group by default and only the defender's counterattack
+  does real damage — exactly what the golden cases below exercise, plus one case that manually
+  forces a group's `Trg` to exercise `GroupAttack`'s real-damage path too.
+
+  Needed a real `ATTACK.PAS.patch` (mirroring `UPDATE.PAS.patch`'s own precedent) to link at all:
+  `Attack`'s `INTERFACE` pulls in `Intrface`, whose own `IMPLEMENTATION` pulls in `Fleet`/`Orders`/
+  `NPE`, which pull in `Crt`/`EIO`/`WND` — a real GUI blast radius, confirmed directly by a throwaway
+  link attempt before writing any C#. Every procedure this commit ports only ever needs `PrimIntr`'s
+  getters, already in scope; the patch drops `Intrface`/`Fleet` from `Attack`'s `USES` and comments
+  out the procedures that genuinely need them (`ConquerWorld`/`ConquerEmpire`/`RestoreCombatant`/
+  `ResolveAttack`/`HolocaustWorld`/`HolocaustEffectiveness`/`LAMAttack`/`DestroyConstructionOrGate`),
+  each with a `PATCH` comment pointing at the future commit that restores it. The new `combat` golden
+  domain (`reference/verify/runworld.pas`) exercises `CalculateCombatData`/`GetEnemy`/
+  `DefaultDistribution`/`Battle`/`EnemySurrenders` together for one round at the DpSpc shell (ground-
+  troop groups only exist after `AdvanceGroups`, 5e, so this domain never reaches `Grnd`);
+  `ShipsDestroyed`/`ForcesUnknown`/the advancing-group damage bonus/hunter-killer cloak/
+  in-vs-out-of-range defenses are hardcoded C# tests instead, isolating small hand-derivable branches
+  the golden domain's own fixed fleet/target shape doesn't reach.
+
+  **Real bug found and fixed along the way, with wide blast radius**: `PascalMath.PascalRound` was
+  half-away-from-zero; FreePascal's actual `Round` is half-to-even (banker's rounding) at exact `.5`
+  boundaries — confirmed directly against the ground-truth compiler (`Round(2.5)=2`, `Round(3.5)=4`,
+  `Round(-2.5)=-2`), not assumed. `GetEnemy`'s clean-percentage shell split (5%/10%/15% of a round
+  ship count) was the first formula in the whole port to land exactly on a `.5` boundary, so this went
+  undetected through every earlier phase's own golden-file coverage until now. Fixed to
+  `Math.Round(x, MidpointRounding.ToEven)` (C#'s own default rounding, not an approximation) and
+  re-ran the *entire* golden-file suite across every phase to check for fallout — none: no earlier
+  phase's formula ever depended on the old, wrong tie-breaking direction, confirmed empirically, not
+  assumed.
 - **5e, resolution loop + `NPEAttack` entry point** — `ATTNPE.PAS`'s round driver culminating in
   the one public entry point Phase 6/8 will call later.
 - **5f, outcome application + empire elimination** — `ResolveAttack`/`ConquerWorld`/

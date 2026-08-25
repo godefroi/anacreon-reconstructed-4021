@@ -17,6 +17,18 @@
                 -> "lam=<v>;def=<v>;gdm=<v>;ion=<v>" -- TechnologyBitmask uses the same
                 26-bit encoding as the empire domain (bit i = TechnologyTypes(i+1));
                 only bits 0-3 (LAM,def,GDM,ion) matter here
+     combat     AttackerCapTechOrd,DefenderTechOrd,DefenderClassOrd,DefenderRevIndex,
+                AttackerFgt,AttackerHkr,AttackerJmp,AttackerPen,AttackerSsp,
+                DefenderFgt,DefenderHkr,DefenderJmp,DefenderJtn,DefenderPen,DefenderSsp,DefenderTrn,
+                DefenderLam,DefenderDef,DefenderGdm,DefenderIon,
+                FighterGroupTargetOrd(0=NoRes else 1+the C# port's own AttackType ordinal, LAM..nnj
+                with no NoRes slot -- Pascal's own AttackTypes ordinal for the same value is exactly
+                one more, from its leading NoRes=0 member),RngFixedValue
+                -> "groups=<v>;g<N>num=<v>;g<N>sta=<GroupStatus ordinal>;
+                    en_fgt=<v>;en_hkr=<v>;en_jmp=<v>;en_pen=<v>;en_ssp=<v>;
+                    kill<ShpI>=<v>;cas<ShpI>=<v> (fgt..ssp, ShpI=ShipTypes ordinal);
+                    surrenders=<0|1>" -- one round of real Battle at the DpSpc shell; see
+                RunCombatCase's own comment
      starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue  -> "starbaseChe=<v>;neighborChe=<v>"
      ambrosia   Addicted,Ambrosia,RngFixedValue                    -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
      revolution PlanetPop,ClassOrd,TechOrd,Efficiency,RevIndex,Legions,RngFixedValue
@@ -102,7 +114,7 @@ PROGRAM RunWorld;
   relaxation, not a behavior change. }
 {$V-}
 
-USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, DFA, Strg;
+USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, DFA, Strg;
 
 function ParseLongInt(const s: String): LongInt;
    var
@@ -318,6 +330,118 @@ procedure RunDefensesCase(const arg: String);
            ';gdm=',Universe^.Planet[1].Defns[GDM],
            ';ion=',Universe^.Planet[1].Defns[ion]);
 
+   Dispose(Universe);
+   end;
+
+procedure RunCombatCase(const arg: String);
+   { One round of real ATTACK.PAS group/shell combat at the DpSpc shell: Empire1's fleet (built via
+     DefaultDistribution, one group each of fgt/hkr/jmp/pen/ssp -- fixed order, deliberately no jtn/trn
+     since ground-troop groups only exist after the not-yet-ported AdvanceGroups swap) attacks Empire2's
+     capital planet. CalculateCombatData/GetEnemy/DefaultDistribution/Battle/EnemySurrenders are all
+     exercised for real; Empire2's DefenseSettings is seeded from the same InitDefenseRecord constant
+     the C# side's EmpireFactory.SeedDefenseSettings copies, so GetEnemy's per-shell ship split is
+     nonzero and comparable on both sides. FighterGroupTargetOrd optionally aims the fighter group's own
+     Trg at a real AttackType (rather than leaving it NoRes, the default DefaultDistribution produces)
+     so GroupAttack's actual-damage path gets exercised too, not just the defender's counterattack. }
+   var
+      parts: array[0..21] of LongInt;
+      AttackerCapID, DefenderCapID, TargetID, FltID: IDNumber;
+      NoOfGroups: Byte;
+      Gp: GroupArray;
+      En: EnemyArray;
+      Details: DetailArray;
+      Casualties, Killed: AttackArray;
+      CombatData: CombatDataRecord;
+      GroupsDestroyed: GroupSet;
+      i: Integer;
+      ShpI: AttackTypes;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   NoOfPlanets:=2;
+
+   { Attacker's capital: Planet[1], Empire1, tech only (nothing else read by this domain). }
+   Universe^.Planet[1].Cls:=ClsM;
+   Universe^.Planet[1].Typ:=CapTyp;
+   Universe^.Planet[1].Tech:=TechLevel(parts[0]);
+   Universe^.Planet[1].Emp:=Empire1;
+
+   { Defender: Planet[2], Empire2, also its own capital. }
+   Universe^.Planet[2].Cls:=WorldClass(parts[2]);
+   Universe^.Planet[2].Typ:=CapTyp;
+   Universe^.Planet[2].Tech:=TechLevel(parts[1]);
+   Universe^.Planet[2].RevIndex:=parts[3];
+   Universe^.Planet[2].Ships[fgt]:=parts[9];
+   Universe^.Planet[2].Ships[hkr]:=parts[10];
+   Universe^.Planet[2].Ships[jmp]:=parts[11];
+   Universe^.Planet[2].Ships[jtn]:=parts[12];
+   Universe^.Planet[2].Ships[pen]:=parts[13];
+   Universe^.Planet[2].Ships[ssp]:=parts[14];
+   Universe^.Planet[2].Ships[trn]:=parts[15];
+   Universe^.Planet[2].Defns[LAM]:=parts[16];
+   Universe^.Planet[2].Defns[def]:=parts[17];
+   Universe^.Planet[2].Defns[GDM]:=parts[18];
+   Universe^.Planet[2].Defns[ion]:=parts[19];
+   Universe^.Planet[2].Emp:=Empire2;
+
+   SetOfActivePlanets:=[1,2];
+   SetOfPlanetsOf[Empire1]:=[1];
+   SetOfPlanetsOf[Empire2]:=[2];
+
+   Universe^.EmpireData[Empire1].InUse:=True;
+   AttackerCapID.ObjTyp:=Pln;  AttackerCapID.Index:=1;
+   Universe^.EmpireData[Empire1].Capital:=AttackerCapID;
+
+   Universe^.EmpireData[Empire2].InUse:=True;
+   Universe^.EmpireData[Empire2].DefenseSettings:=InitDefenseRecord;
+   DefenderCapID.ObjTyp:=Pln;  DefenderCapID.Index:=2;
+   Universe^.EmpireData[Empire2].Capital:=DefenderCapID;
+
+   { Attacker's fleet: Fleet[1], Empire1. }
+   New(Universe^.Fleet[1]);
+   FillChar(Universe^.Fleet[1]^,SizeOf(Universe^.Fleet[1]^),0);
+   Universe^.Fleet[1]^.XY.x:=5;  Universe^.Fleet[1]^.XY.y:=5;
+   Universe^.Fleet[1]^.Emp:=Empire1;
+   Universe^.Fleet[1]^.Ships[fgt]:=parts[4];
+   Universe^.Fleet[1]^.Ships[hkr]:=parts[5];
+   Universe^.Fleet[1]^.Ships[jmp]:=parts[6];
+   Universe^.Fleet[1]^.Ships[pen]:=parts[7];
+   Universe^.Fleet[1]^.Ships[ssp]:=parts[8];
+   SetOfActiveFleets:=[1];
+
+   ForcedRandomValue:=parts[21];
+
+   FltID.ObjTyp:=Flt;  FltID.Index:=1;
+   TargetID.ObjTyp:=Pln;  TargetID.Index:=2;
+
+   CalculateCombatData(Empire1,FltID,TargetID,CombatData);
+   GetEnemy(TargetID,En);
+   DefaultDistribution(FltID,NoOfGroups,Gp);
+
+   { parts[20]=1+X's C# AttackType ordinal (LAM..nnj, no NoRes slot) -- Pascal's own AttackTypes
+     ordinal for the same X is exactly one more than that (its own leading NoRes=0 member), so
+     AttackTypes(parts[20]) (not parts[20]-1) is the direct, unshifted conversion. }
+   if parts[20]<>0 then
+      Gp[1].Trg:=AttackTypes(parts[20]);
+
+   FillChar(Details,SizeOf(Details),0);
+   FillChar(Casualties,SizeOf(Casualties),0);
+   FillChar(Killed,SizeOf(Killed),0);
+
+   Battle(NoOfGroups,Gp,GroupsDestroyed,En,DpSpc,CombatData,Details,Casualties,Killed);
+
+   Write('groups=',NoOfGroups);
+   for i:=1 to NoOfGroups do
+      Write(';g',i,'num=',Gp[i].Num,';g',i,'sta=',Ord(Gp[i].Sta));
+   Write(';en_fgt=',En[DpSpc][fgt],';en_hkr=',En[DpSpc][hkr],';en_jmp=',En[DpSpc][jmp],
+         ';en_pen=',En[DpSpc][pen],';en_ssp=',En[DpSpc][ssp]);
+   for ShpI:=fgt to ssp do
+      Write(';kill',Ord(ShpI),'=',Killed[ShpI],';cas',Ord(ShpI),'=',Casualties[ShpI]);
+   WriteLn(';surrenders=',Ord(EnemySurrenders(NoOfGroups,Gp,En,Casualties,Killed,CombatData)));
+
+   Dispose(Universe^.Fleet[1]);
    Dispose(Universe);
    end;
 
@@ -1372,6 +1496,8 @@ procedure RunCaseMode;
          RunMilitaryCase(ParamStr(i))
       else if domain='defenses' then
          RunDefensesCase(ParamStr(i))
+      else if domain='combat' then
+         RunCombatCase(ParamStr(i))
       else if domain='starbase' then
          RunStarbaseCase(ParamStr(i))
       else if domain='ambrosia' then
