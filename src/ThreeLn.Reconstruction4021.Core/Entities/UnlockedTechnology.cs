@@ -13,7 +13,7 @@ namespace ThreeLn.Reconstruction4021.Core.Entities;
 /// is a real set-equality check across every category including resources — production's own
 /// CargoTechAvailable (AnnualTickHandler.Production.cs) still gates purely on TechLevel via a
 /// derived min-tech-level table, not this set; the two are deliberately not wired together yet (see
-/// docs/ROADMAP.md's Commit 5 design decisions).
+/// docs/PORT_DESIGN.md's "Technology tracking" section).
 /// </summary>
 public sealed class UnlockedTechnology
 {

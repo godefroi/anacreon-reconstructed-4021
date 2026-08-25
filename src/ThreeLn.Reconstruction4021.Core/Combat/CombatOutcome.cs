@@ -13,7 +13,7 @@ namespace ThreeLn.Reconstruction4021.Core.Combat;
 /// known; nothing in 5d/5e read those tallies for anything beyond returning them.
 ///
 /// Empire elimination is plain <c>Game.Empires.Remove</c>, not a ported <c>InUse</c> flag — see
-/// docs/ROADMAP.md's Phase 5 design decisions for why that self-heals <see cref="Game.NextEmpire"/>/
+/// docs/PORT_DESIGN.md's "Empire elimination" section for why that self-heals <see cref="Game.NextEmpire"/>/
 /// <see cref="Game.IsFirstEmpire"/> with no new guard needed anywhere. A human empire is never torn
 /// down this way — <see cref="Empire.DefeatedBy"/> is set instead, matching Pascal's own
 /// <c>EmpirePlayer</c> branch in ConquerEmpire.

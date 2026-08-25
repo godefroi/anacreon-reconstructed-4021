@@ -24,7 +24,7 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// comment explaining that domain's own rationale, then one `GoldenFile.Regenerate(...)` call below.
 /// The format-string lambda is the only place the C#-side field order has to match `runworld.pas`'s
 /// parser field-for-field — keep the two in view together when changing either. See
-/// `docs/ROADMAP.md`'s "Ground-truth harness generation" section and `reference/verify/README.md`
+/// `docs/PORT_DESIGN.md`'s "Ground-truth harness generation" section and `reference/verify/README.md`
 /// for the full mechanics and investigation history; domain-specific rationale belongs in each
 /// `&lt;Domain&gt;Cases.cs`, not repeated here.
 /// </summary>

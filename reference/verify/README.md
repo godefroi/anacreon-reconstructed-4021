@@ -3,7 +3,7 @@
 ## What this is
 
 An alternative to the per-procedure transcription pattern used by
-`reference/verify/*.pas` (see `docs/ROADMAP.md`'s "Ground-truth harness
+`reference/verify/*.pas` (see `docs/PORT_DESIGN.md`'s "Ground-truth harness
 generation" section for that baseline). Instead of hand-transcribing a
 procedure into a fresh file, this maintains small patches against the real
 `reference/DOSAnacreonSource131/*.PAS` source, applies them to a disposable
@@ -14,7 +14,7 @@ directly against a hand-assembled `Universe^`.
 (`techlevel.golden`, `military.golden`, `starbase.golden`, `ambrosia.golden`,
 `revolution.golden`, `production.golden`, `empire.golden`, `construction.golden`,
 `empirecreate.golden`, `trillumreserves.golden`, `randomplanet.golden`,
-`nebula.golden`, `rng.golden` — see `docs/ROADMAP.md`'s "Ground-truth harness generation" section).
+`nebula.golden`, `rng.golden` — see `docs/PORT_DESIGN.md`'s "Ground-truth harness generation" section).
 `reference/verify/*.pas`'s
 per-procedure transcription pattern has had no domains on it since
 `production.golden`'s migration — `production.pas` was the last file using
@@ -189,7 +189,7 @@ order — now dead, deleted along with its `OptMilitary` table). This is the
 domain that actually earned its keep: it caught a real gap shared by both the
 isolated harness and the C# port (neither modeled `UpdateIndustry`/
 `Production`'s `ReportPlanetLack` calls, a real +1 `RevolutionIndex` bump —
-see `docs/ROADMAP.md`'s Commit 1 bullet for the fix). Needed a second
+see `docs/PORT_DESIGN.md`'s "Resource-shortfall reporting" section for the fix). Needed a second
 test-only observability hook alongside `ForcedRandomValue`:
 `GetNewTotalRevIndex(Emp)`, exposing `NewTotalRevIndex` (an `Empire`-indexed
 accumulator `Rebellion` writes to, declared in `UPDATE.PAS`'s own
@@ -399,8 +399,8 @@ harness with the only precision C# has. Verified via `git diff --stat` on the re
 files that it changed none of the 13 golden domains existing at the switch — but that's a snapshot,
 not a guarantee: it changes float semantics harness-wide, so a future domain with its own borderline
 `Real` expression will get different ground truth under it than under fpc's default. Kept as a
-deliberate baseline choice regardless. Full writeup of what this does and doesn't fix: the root
-`README.md`'s "Known limitation: scenario golden-file testing can't be bit-exact" section.
+deliberate baseline choice regardless. Full writeup of what this does and doesn't fix:
+`docs/PASCAL_ARCHITECTURE_NOTES.md`'s "Scenario golden-file testing can't be bit-exact, and why" section.
 
 ## Recommendation
 
