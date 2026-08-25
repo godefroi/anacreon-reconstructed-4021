@@ -60,6 +60,11 @@ public class GoldenFileTests
                  $"{(c.FighterGroupTarget is { } t ? (int)t + 1 : 0)},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "combat", .. args.Skip(1)]));
 
+        GoldenFile.Regenerate("npeattack", NpeAttackCases.All,
+            c => $"{(int)c.DefenderTech},{(int)c.DefenderClass},{(c.AttackerCarriesTroops ? 1 : 0)}," +
+                 $"{c.DefenderFgt},{c.DefenderHkr},{c.DefenderMen},{(int)c.Intent},{(c.TargetIsFleet ? 1 : 0)},{c.RngFixedValue}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "npeattack", .. args.Skip(1)]));
+
         GoldenFile.Regenerate("techlevel", TechLevelCases.All,
             c => $"{(int)c.Tech},{(c.IsIndependent ? 1 : 0)},{(int)c.CapitalTech},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "techlevel", .. args.Skip(1)]));

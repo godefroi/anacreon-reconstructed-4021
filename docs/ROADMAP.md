@@ -409,7 +409,7 @@ cascade into an explicit if/else-if chain (see `AnnualTickHandler.Revolution.cs`
 boundary tests at each tier transition, including one proving `RevIndex>75` genuinely has two outcomes
 (`Rebellion` vs. a lone `RebellionWarning4`), not one.
 
-## 5. Combat — in progress, 5a-5d landed
+## 5. Combat — in progress, 5a-5e landed
 
 Attack resolution, fleet/starbase destruction, capital loss and empire elimination. The original
 one-paragraph version of this section undersold the real scope, the same way "8 known News sites"
@@ -534,8 +534,31 @@ Sub-commits:
   re-ran the *entire* golden-file suite across every phase to check for fallout — none: no earlier
   phase's formula ever depended on the old, wrong tie-breaking direction, confirmed empirically, not
   assumed.
-- **5e, resolution loop + `NPEAttack` entry point** — `ATTNPE.PAS`'s round driver culminating in
-  the one public entry point Phase 6/8 will call later.
+- ✅ **5e, resolution loop + `NPEAttack` entry point** (`Combat/CombatResolution.cs`) —
+  `ATTNPE.PAS`'s round driver: `AdvanceGroups`, `AllAdvance`/`TrnAdvance`, `FleetRetreats` (a fixed
+  30-round timeout, not actually parametrized by its own `RetrIndex` argument — confirmed by reading;
+  dropped that unused parameter entirely, same "confirmed by reading" precedent as 5d's
+  `CalculateCombatData`), `TransportsLeft`, `GroupEngage` (one round: `Battle` at every shell, then
+  `AdvanceGroups`, then the termination checks), `FleetEngage`/`WorldEngage`'s own `Targetting`
+  (`GetTargetArray`/`PrioritizeTargetArray`/`GetBestTarget`, a different, per-round-driver-only
+  `TargetArray` shape from `ATTACK.PAS`'s own), culminating in `NPEAttack` — trimmed to its
+  resolution half (`Result`/`Casualties`/`Killed`), the same scope boundary the golden harness itself
+  needed (see below). `Consolidate` (ATTNPE.PAS) is confirmed dead code (declared, empty body, never
+  called anywhere including from within its own unit) — not ported, same treatment as
+  `BATTLE.PAS`/`BOMBER.PAS`.
+
+  Needed a second patch, `ATTNPE.PAS.patch`: `AttNPE`'s own `INTERFACE` unconditionally lists `CRT` in
+  its `USES` (needed only by a debug window behind `{$IFDEF Debug}` — confirmed inert: the enabling
+  `{DEFINE Debug}` line above it is missing its leading `$`, so it's a plain comment, not a real
+  directive), and Pascal doesn't resolve `USES` lazily, so it still had to be dropped to link. Also
+  trims `NPEAttack`'s own body to what this commit covers — its full real body calls
+  `RestoreCombatant`/`ResolveAttack` (5f) and, for a construction-site/stargate target,
+  `DestroyConstructionOrGate` (5g), none of which exist yet; each elided piece is a `PATCH` comment
+  pointing at 5f/5g. New `npeattack` golden domain runs real `NPEAttack` end to end (not one round in
+  isolation, already covered by 5d's `combat` domain) across 5 cases spanning both termination paths
+  (30-round retreat timeout vs. real surrender/destruction), both dispatch targets
+  (`WorldEngage`/`FleetEngage`), and the intent-driven targeting bias; a 6th, hardcoded C# case covers
+  `AttackerDestroyed`, the one termination path no golden case's parameter space happened to reach.
 - **5f, outcome application + empire elimination** — `ResolveAttack`/`ConquerWorld`/
   `ConquerEmpire`/`DestroyEmpire` using the plain-`List.Remove`/`DefeatedBy` model above, plus
   `DestroyFleet`/`AbortFleet`.

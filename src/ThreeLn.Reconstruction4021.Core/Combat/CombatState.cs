@@ -12,9 +12,29 @@ public enum GroupStatus
     Destroyed,
 }
 
+/// <summary>Pascal's AttackIntentionTypes (ATTACK.PAS:27-30): what an attack is trying to accomplish — biases targeting toward or away from transports.</summary>
+public enum AttackIntentionType
+{
+    None,
+    Conquer,
+    DestroyTransports,
+    CaptureTransports,
+}
+
+/// <summary>Pascal's AttackResultTypes (ATTACK.PAS:32-33): how an engagement ended.</summary>
+public enum AttackResultType
+{
+    None,
+    AttackerDestroyed,
+    AttackerRetreats,
+    DefenderConquered,
+    DefenderCaptured,
+}
+
 /// <summary>
-/// One group of like ships (or, after a not-yet-ported AdvanceGroups troop swap, ground troops)
-/// moving and fighting together (ATTACK.PAS:57-67's GroupRecord). A mutable class, not a record or
+/// One group of like ships (or, after AdvanceGroups' own transport-to-troop swap on reaching the
+/// ground, ground troops) moving and fighting together (ATTACK.PAS:57-67's GroupRecord). A mutable
+/// class, not a record or
 /// struct — every field is reassigned in place by CombatEngine as combat proceeds (matching Pascal's
 /// own VAR-array-element mutation), and reference identity is what a <see cref="HashSet{T}"/> of
 /// groups (Pascal's <c>GroupSet</c>) keys on.
@@ -36,8 +56,8 @@ public sealed class GroupRecord
     /// <summary>Null unless <see cref="Gat"/> is a real troop cargo (Legion or NinjaLegion).</summary>
     public AttackType? GatTyp { get; set; }
 
-    /// <summary>Temporary storage for a transport group's own ship type, written by the not-yet-ported
-    /// AdvanceGroups when it swaps Typ to the carried troop type on reaching the ground.</summary>
+    /// <summary>Temporary storage for a transport group's own ship type, written by AdvanceGroups when
+    /// it swaps Typ to the carried troop type on reaching the ground (Combat/CombatResolution.cs).</summary>
     public ShipType? TrnTyp { get; set; }
 
     /// <summary>Whether a hunter-killer group's cloak is off (it uncloaks the instant it attacks).</summary>

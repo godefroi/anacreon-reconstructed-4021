@@ -1,0 +1,5 @@
+case=WeakDefenderNoAttackerTroopsRetreats;result=2;cas_fgt=32;cas_hkr=12;cas_jtn=0;cas_nnj=0;kill_fgt=8;kill_hkr=10;kill_men=50
+case=WeakDefenderWithAttackerTroopsConquers;result=3;cas_fgt=17;cas_hkr=12;cas_jtn=1;cas_nnj=3;kill_fgt=8;kill_hkr=10;kill_men=50
+case=StrongDefenderNoAttackerTroopsRetreats;result=2;cas_fgt=200;cas_hkr=124;cas_jtn=0;cas_nnj=0;kill_fgt=160;kill_hkr=200;kill_men=22
+case=FleetTargetWithAttackerTroopsSurrenders;result=3;cas_fgt=2;cas_hkr=2;cas_jtn=0;cas_nnj=0;kill_fgt=0;kill_hkr=5;kill_men=0
+case=DestroyTransportsIntent;result=3;cas_fgt=17;cas_hkr=12;cas_jtn=1;cas_nnj=3;kill_fgt=8;kill_hkr=10;kill_men=50

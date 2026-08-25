@@ -29,6 +29,15 @@
                     kill<ShpI>=<v>;cas<ShpI>=<v> (fgt..ssp, ShpI=ShipTypes ordinal);
                     surrenders=<0|1>" -- one round of real Battle at the DpSpc shell; see
                 RunCombatCase's own comment
+     npeattack  DefenderTechOrd,DefenderClassOrd,AttackerCarriesTroops(0/1 -- adds a 20-ship jtn group
+                carrying 1000 nnj cargo to the attacker's fleet when nonzero),DefenderFgt,DefenderHkr,
+                DefenderMen,IntentOrd(AttackIntentionTypes ordinal, NoAIT..CaptTrnAIT -- same ordinal
+                order as the C# port's own AttackIntentionType),TargetIsFleet(0=Planet[2] via
+                WorldEngage,1=Fleet[2] via FleetEngage),RngFixedValue
+                -> "result=<AttackResultTypes ordinal>;cas_fgt=<v>;cas_hkr=<v>;cas_jtn=<v>;cas_nnj=<v>;
+                    kill_fgt=<v>;kill_hkr=<v>;kill_men=<v>" -- real NPEAttack end to end (its own
+                multi-round FleetRetreats/Targetting/GroupEngage/AdvanceGroups loop, not one round in
+                isolation); see RunNpeAttackCase's own comment
      starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue  -> "starbaseChe=<v>;neighborChe=<v>"
      ambrosia   Addicted,Ambrosia,RngFixedValue                    -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
      revolution PlanetPop,ClassOrd,TechOrd,Efficiency,RevIndex,Legions,RngFixedValue
@@ -114,7 +123,7 @@ PROGRAM RunWorld;
   relaxation, not a behavior change. }
 {$V-}
 
-USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, DFA, Strg;
+USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, AttNPE, DFA, Strg;
 
 function ParseLongInt(const s: String): LongInt;
    var
@@ -442,6 +451,101 @@ procedure RunCombatCase(const arg: String);
    WriteLn(';surrenders=',Ord(EnemySurrenders(NoOfGroups,Gp,En,Casualties,Killed,CombatData)));
 
    Dispose(Universe^.Fleet[1]);
+   Dispose(Universe);
+   end;
+
+procedure RunNpeAttackCase(const arg: String);
+   { Runs real ATTNPE.PAS's own NPEAttack (patched to stop at Result/Casualties/Killed -- see
+     ATTNPE.PAS.patch) end to end: Empire1's fleet (200 fgt, 200 hkr, plus an optional troop-carrying
+     jtn group when AttackerCarriesTroops<>0) attacks either Empire2's capital planet (WorldEngage) or
+     Empire2's own fleet (FleetEngage), through NPEAttack's real multi-round round-robin loop --
+     FleetRetreats/Targetting/GroupEngage/AdvanceGroups, all real, unmodified logic. Empire2's
+     DefenseSettings is the same InitDefenseRecord distribution EmpireFactory.SeedDefenseSettings
+     seeds on the C# side. This domain exercises the resolution *loop* itself (round count, when it
+     terminates and how); reference/verify's own `combat` domain already covers one round's math in
+     isolation. }
+   var
+      parts: array[0..8] of LongInt;
+      AttackerCapID, DefenderCapID, TargetID, FltID: IDNumber;
+      Result: AttackResultTypes;
+      Killed, Casualties: AttackArray;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   NoOfPlanets:=2;
+
+   Universe^.Planet[1].Cls:=ClsM;
+   Universe^.Planet[1].Typ:=CapTyp;
+   Universe^.Planet[1].Tech:=JmpTchLvl;
+   Universe^.Planet[1].Emp:=Empire1;
+
+   Universe^.Planet[2].Cls:=WorldClass(parts[1]);
+   Universe^.Planet[2].Typ:=CapTyp;
+   Universe^.Planet[2].Tech:=TechLevel(parts[0]);
+   Universe^.Planet[2].Ships[fgt]:=parts[3];
+   Universe^.Planet[2].Ships[hkr]:=parts[4];
+   Universe^.Planet[2].Cargo[men]:=parts[5];
+   Universe^.Planet[2].Emp:=Empire2;
+
+   SetOfActivePlanets:=[1,2];
+   SetOfPlanetsOf[Empire1]:=[1];
+   SetOfPlanetsOf[Empire2]:=[2];
+
+   Universe^.EmpireData[Empire1].InUse:=True;
+   AttackerCapID.ObjTyp:=Pln;  AttackerCapID.Index:=1;
+   Universe^.EmpireData[Empire1].Capital:=AttackerCapID;
+
+   Universe^.EmpireData[Empire2].InUse:=True;
+   Universe^.EmpireData[Empire2].DefenseSettings:=InitDefenseRecord;
+   DefenderCapID.ObjTyp:=Pln;  DefenderCapID.Index:=2;
+   Universe^.EmpireData[Empire2].Capital:=DefenderCapID;
+
+   New(Universe^.Fleet[1]);
+   FillChar(Universe^.Fleet[1]^,SizeOf(Universe^.Fleet[1]^),0);
+   Universe^.Fleet[1]^.XY.x:=5;  Universe^.Fleet[1]^.XY.y:=5;
+   Universe^.Fleet[1]^.Emp:=Empire1;
+   Universe^.Fleet[1]^.Ships[fgt]:=200;
+   Universe^.Fleet[1]^.Ships[hkr]:=200;
+   if parts[2]<>0 then
+      begin
+      Universe^.Fleet[1]^.Ships[jtn]:=20;
+      Universe^.Fleet[1]^.Cargo[nnj]:=1000;
+      end;
+   SetOfActiveFleets:=[1];
+
+   FltID.ObjTyp:=Flt;  FltID.Index:=1;
+
+   if parts[7]<>0 then
+      begin
+      { Fleet target: Fleet[2], Empire2, same fgt/hkr strength as the Planet[2] case above -- Cargo[men]
+        is irrelevant here, GetEnemy's Flt branch never reads it. }
+      New(Universe^.Fleet[2]);
+      FillChar(Universe^.Fleet[2]^,SizeOf(Universe^.Fleet[2]^),0);
+      Universe^.Fleet[2]^.XY.x:=5;  Universe^.Fleet[2]^.XY.y:=5;
+      Universe^.Fleet[2]^.Emp:=Empire2;
+      Universe^.Fleet[2]^.Ships[fgt]:=parts[3];
+      Universe^.Fleet[2]^.Ships[hkr]:=parts[4];
+      SetOfActiveFleets:=SetOfActiveFleets+[2];
+      TargetID.ObjTyp:=Flt;  TargetID.Index:=2;
+      end
+   else
+      begin
+      TargetID.ObjTyp:=Pln;  TargetID.Index:=2;
+      end;
+
+   ForcedRandomValue:=parts[8];
+
+   NPEAttack(FltID,TargetID,AttackIntentionTypes(parts[6]),0,Result,Killed,Casualties);
+
+   WriteLn('result=',Ord(Result),
+           ';cas_fgt=',Casualties[fgt],';cas_hkr=',Casualties[hkr],';cas_jtn=',Casualties[jtn],';cas_nnj=',Casualties[nnj],
+           ';kill_fgt=',Killed[fgt],';kill_hkr=',Killed[hkr],';kill_men=',Killed[men]);
+
+   Dispose(Universe^.Fleet[1]);
+   if parts[7]<>0 then
+      Dispose(Universe^.Fleet[2]);
    Dispose(Universe);
    end;
 
@@ -1498,6 +1602,8 @@ procedure RunCaseMode;
          RunDefensesCase(ParamStr(i))
       else if domain='combat' then
          RunCombatCase(ParamStr(i))
+      else if domain='npeattack' then
+         RunNpeAttackCase(ParamStr(i))
       else if domain='starbase' then
          RunStarbaseCase(ParamStr(i))
       else if domain='ambrosia' then
