@@ -1,6 +1,7 @@
 using ThreeLn.Reconstruction4021.Core.Entities;
 using ThreeLn.Reconstruction4021.Core.Galaxy;
 using ThreeLn.Reconstruction4021.Core.NewGame;
+using ThreeLn.Reconstruction4021.Core.Turns;
 using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Tests;
@@ -106,6 +107,9 @@ public class ScenarioLoaderTests
 
         await Assert.That(game.Empires).Count().IsEqualTo(1);
         await Assert.That(game.Empires[0].Name).IsEqualTo("Aaraavon"); // FixedRandom(0) -> Rnd(1,59)=1 -> first name
+        // ET=3 -> Kingdom2, so this empire should get NpeType recorded and a real KingdomTurnHandler.
+        await Assert.That(game.Empires[0].NpeType).IsEqualTo(NpeEmpireType.Kingdom2);
+        await Assert.That(game.TurnHandlers[game.Empires[0]]).IsTypeOf<KingdomTurnHandler>();
     }
 
     [Test]
@@ -117,6 +121,21 @@ public class ScenarioLoaderTests
         var game = loader.Load(text, _onePlayer);
 
         await Assert.That(game.Empires[0].Name).IsEqualTo("Kellandra");
+        // ET=2 -> Kingdom1, so this empire should also get a KingdomTurnHandler.
+        await Assert.That(game.Empires[0].NpeType).IsEqualTo(NpeEmpireType.Kingdom1);
+        await Assert.That(game.TurnHandlers[game.Empires[0]]).IsTypeOf<KingdomTurnHandler>();
+    }
+
+    [Test]
+    public async Task Load_CreateNPEmpireOfANonKingdomTypeRecordsTypeButRegistersNoTurnHandler()
+    {
+        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0));
+        var text = Header(20) + "CREATENPEMPIRE 4 1 \"Blackbeard\" 0 1 0\r\nENDSCENARIO"; // ET=1 -> Pirate
+
+        var game = loader.Load(text, _onePlayer);
+
+        await Assert.That(game.Empires[0].NpeType).IsEqualTo(NpeEmpireType.Pirate);
+        await Assert.That(game.TurnHandlers.ContainsKey(game.Empires[0])).IsFalse();
     }
 
     [Test]

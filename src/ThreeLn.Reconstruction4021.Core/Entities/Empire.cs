@@ -39,6 +39,18 @@ public sealed class Empire
     /// </summary>
     public Empire? DefeatedBy { get; set; }
 
+    /// <summary>
+    /// Which NPE AI personality this empire runs (NEWGAME.PAS:1219-1259's CreateNPEmpire reads this
+    /// as a raw ordinal), or null for a human/player empire. Real, needed-now state, not
+    /// speculative: ScenarioLoader.RunCreateNPEmpire already parsed and discarded this ordinal
+    /// (Phase 2 scope), Phase 7's save/load needs it regardless of which personalities are
+    /// implemented, and it's what lets ScenarioLoader decide whether to construct a
+    /// KingdomTurnHandler for a given empire. An empire whose NpeType isn't implemented yet
+    /// (Pirate/Berserker/Guardian/Trader) still gets this field set but no Game.TurnHandlers entry —
+    /// matches the existing "ai has no entry in TurnHandlers" precedent (TurnEngineTests.cs).
+    /// </summary>
+    public NpeEmpireType? NpeType { get; set; }
+
     public DefenseSettings DefenseSettings { get; } = new();
 
     /// <summary>NoOfProbesPerEmpire (TYPES.PAS:33) — the fixed-size probe pool every empire draws from.</summary>

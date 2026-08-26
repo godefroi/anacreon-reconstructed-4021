@@ -1,5 +1,6 @@
 using ThreeLn.Reconstruction4021.Core.Entities;
 using ThreeLn.Reconstruction4021.Core.Galaxy;
+using ThreeLn.Reconstruction4021.Core.Turns;
 using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Core.NewGame;
@@ -444,11 +445,17 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         game.Empires.Add(empire);
     }
 
-    /// <summary>NEWGAME.PAS:1219-1259 (CreateNPEmpire), minus InitializeNPE — see class doc comment on unmodeled NPE AI state (out of Phase 2 scope, same as EmpireFactory's own).</summary>
+    /// <summary>
+    /// NEWGAME.PAS:1219-1259 (CreateNPEmpire), minus InitializeNPE's persona/state seeding (Phase 6
+    /// commit 6d's job, once KingdomTurnHandler's real per-turn logic exists to consume it). Kingdom1/
+    /// Kingdom2 empires get a KingdomTurnHandler registered in Game.TurnHandlers now; other NPE types
+    /// (Pirate/Berserker/Guardian/Trader) get NpeType recorded but no handler, matching the existing
+    /// "ai has no entry in TurnHandlers" precedent (TurnEngineTests.cs) for AI not implemented yet.
+    /// </summary>
     private void RunCreateNPEmpire(ScenarioTokenizer tokenizer, Game game)
     {
         var e = NextInteger(tokenizer);
-        NextInteger(tokenizer); // NPEmpireTypes ordinal -- NPE AI behavior itself is out of Phase 2 scope
+        var npeType = (NpeEmpireType)NextInteger(tokenizer);
         var nameToken = NextToken(tokenizer);
         var revFactor = NextInteger(tokenizer);
         var tech = (TechLevel)NextInteger(tokenizer);
@@ -461,8 +468,13 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         var name = nameToken == "RndName" ? GetRandomEmpireName(game) : nameToken;
         var isEmpress = PascalMath.Rnd(random, 0, 1) != 0;
         var empire = EmpireFactory.CreateEmpire(name, null, isEmpress, tech, revFactor, centralModifier, game.Year, extraTechs);
+        empire.NpeType = npeType;
         _empireBySlot[e] = empire;
         game.Empires.Add(empire);
+
+        if (npeType is NpeEmpireType.Kingdom1 or NpeEmpireType.Kingdom2) {
+            game.TurnHandlers[empire] = new KingdomTurnHandler();
+        }
     }
 
     /// <summary>Shared "NoOfTechs then that many TechnologyTypes ordinals" tail of CreatePlayerEmpire/CreateNPEmpire.</summary>

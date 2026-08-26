@@ -621,6 +621,24 @@ not a bounded fix: it would need doing per-formula, verifying term order against
 implementations, in a system where a single remaining mismatch anywhere still cascades through the
 entire shared RNG stream. Given the stated goals above, it isn't worth attempting.
 
+### `TraderNPE` (`NPETYPES.PAS`) is confirmed dead code
+
+A sixth `NPEmpireTypes` value, declared but never given a real implementation: zero case arms in
+any of `NPE.PAS`'s five dispatch procedures (`CleanUpNPE`/`InitializeNPE`/`ImplementNPE`/
+`LoadNPE`/`SaveNPE`) — every one falls through its `ELSE` to the Pirate-personality procedure
+instead — no `TraderDataRecord` in `NPETYPES.PAS` alongside the other four personalities' real
+records, and zero usage across all 12 `dos_131/*.SCN` scenario files' `CreateNPEmpire` directives.
+Same treatment as Phase 5's `BATTLE.PAS`/`BOMBER.PAS`: not ported.
+
+### `DeployHarassFleet`/`ImplementDefendBMS` are confirmed no-op stubs
+
+`DeployHarassFleet` (`NPEINTR.PAS:777-782`) and `ImplementDefendBMS` (`NPE04.PAS:309-311`) are both
+declared, wired into their respective dispatch tables, and given a body that's just `BEGIN END` —
+present and callable, but do nothing. Confirmed identical in both the 1.31 and 2.0 source trees, so
+this isn't a regression introduced between versions; the original developers shipped both
+incomplete. Worth a note rather than a TODO when their host files are ported (Phase 6), since an
+empty body could otherwise look like a porting mistake instead of matched-to-source behavior.
+
 ---
 
 ## Outstanding Research (as of this draft)

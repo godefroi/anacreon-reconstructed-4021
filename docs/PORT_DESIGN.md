@@ -263,10 +263,12 @@ implementation to generalize from.
 `NPEINTR.PAS` (1,732 lines) is a real toolkit multiple personalities call in Pascal — fleet
 deployment, targeting, mission-dispatch, bookkeeping — not Kingdom-private code, so it's ported as
 its own service `KingdomTurnHandler` depends on rather than folded into Kingdom's own class; later
-personalities call the same methods. `Empire.NpeType` (recording which personality an empire is)
-is real, needed-now state regardless of how many personalities are implemented — Phase 7's
-save/load needs it, and `ScenarioLoader.RunCreateNPEmpire` already parses the ordinal and discards
-it today. Per-fleet AI mission state (Pascal's `FleetDataRecord`) gets a field-by-field audit
+personalities call the same methods. `Empire.NpeType: NpeEmpireType?` (recording which personality
+an empire is) is real, needed-now state regardless of how many personalities are implemented —
+Phase 7's save/load needs it, and (landed in 6b) `ScenarioLoader.RunCreateNPEmpire` now records it
+on every NPE empire and constructs a `KingdomTurnHandler` for `Kingdom1`/`Kingdom2` specifically;
+other types are recorded but left with no `Game.TurnHandlers` entry until their own personality
+lands. Per-fleet AI mission state (Pascal's `FleetDataRecord`) gets a field-by-field audit
 before anything is ported, not a verbatim mirror — some fields (`Waiting`, `Midway`) look
 derivable from state the port already tracks (`FleetStatus`, `Location`/`Destination`); only what
 survives the audit is new state, homed on the owning `ITurnHandler` instance (AI bookkeeping only

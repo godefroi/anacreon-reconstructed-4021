@@ -157,7 +157,7 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   tests (`AnnualTickHandlerHostileLifeTests`) exploiting `FixedRandom(N)`'s `min+N` resolution to
   deterministically pick each of the three branches.
 
-## 6. NPE AI — in progress, 6a landed
+## 6. NPE AI — in progress, 6a-6b landed
 
 Implement an `ITurnHandler` for computer empires. The roadmap's original one-line framing here
 ("start with one classic implementation") undersold this phase the way "8 known News sites"
@@ -224,11 +224,17 @@ original developers shipped incomplete, not a port gap.
   real needs). `GetNewBasePos`/`XY2Dir` (`SBASE.PAS`, starbase obstacle-avoidance) have no golden
   domain yet — `SBase` isn't patched in — covered by hardcoded tests in `FleetMovementHandlerTests.cs`
   instead, same "harness can't reach it yet" precedent as 5g's `DestroyConstructionOrGate`.
-- **6b, core NPE dispatch + state.** `Empire.NpeType` (name TBD), wiring `ScenarioLoader.
-  RunCreateNPEmpire` (currently reads and discards the ordinal) to record it and construct a
-  `KingdomTurnHandler` for Kingdom1/Kingdom2 empires only — other types stay unregistered in
-  `Game.TurnHandlers`, matching the existing "ai has no entry" precedent in `TurnEngineTests.cs`.
-  `RndVar` (`INT.PAS:120-131`, a trivial `Rnd` wrapper) added to `PascalMath.cs`.
+- ✅ **6b, core NPE dispatch + state** (`Types/NpeEmpireType.cs`, `Turns/KingdomTurnHandler.cs`) —
+  `Empire.NpeType: NpeEmpireType?`, wiring `ScenarioLoader.RunCreateNPEmpire` (previously read and
+  discarded the ordinal) to record it and construct a `KingdomTurnHandler` for Kingdom1/Kingdom2
+  empires only — other types stay unregistered in `Game.TurnHandlers`, matching the existing "ai
+  has no entry" precedent in `TurnEngineTests.cs`. `KingdomTurnHandler.PlayTurn` is a shell
+  (`NotImplementedException`) until 6d builds its real logic. `RndVar` (`INT.PAS:120-131`) turned
+  out to already be ported — `PascalMath.Jitter` is the exact same formula
+  (`Trunc(Value*(Variation/100))` then `Rnd(Value-temp,Value+temp)`), just named for what it does
+  rather than transcribed; no new method needed. `TraderNPE`'s dead-code finding and
+  `DeployHarassFleet`/`ImplementDefendBMS`'s confirmed-no-op finding are in
+  `PASCAL_ARCHITECTURE_NOTES.md`.
 - **6c, `NPEINTR.PAS` toolkit.** The shared fleet-deployment/targeting/mission-dispatch/bookkeeping
   service `KingdomTurnHandler` depends on, including a field-by-field audit of `FleetDataRecord`
   before any of it is mirrored onto `Fleet` (see `PORT_DESIGN.md`'s derive-don't-duplicate note).
