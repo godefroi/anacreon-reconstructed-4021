@@ -126,5 +126,14 @@ public class GoldenFileTests
         GoldenFile.Regenerate("probescout", ProbeScoutCases.All,
             c => $"{(c.DestOwnedByIndependent ? 8 : 1)},{c.DestLegions},{(c.DestAlreadyScouted ? 1 : 0)},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "probescout", .. args.Skip(1)]));
+
+        GoldenFile.Regenerate("fleetlogistics", FleetLogisticsCases.All,
+            c => $"{c.Fgt},{c.Hkr},{c.Jmp},{c.Jtn},{c.Pen},{c.Ssp},{c.Trn},{c.Men},{c.Nnj},{c.Amb},{c.Che},{c.Met},{c.Sup},{c.Tri}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "fleetlogistics", .. args.Skip(1)]));
+
+        GoldenFile.Regenerate("fleetmove", FleetMoveCases.All,
+            c => $"{c.PosX},{c.PosY},{c.DestX},{c.DestY},{c.NebulaX},{c.NebulaY}," +
+                 $"{c.GateKind},{c.GateOwner},{c.DestGateKind},{c.DestGateOwner},{(c.DestGateKnown ? 1 : 0)},{(c.FortressAtPos ? 1 : 0)}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "fleetmove", .. args.Skip(1)]));
     }
 }

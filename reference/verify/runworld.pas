@@ -101,6 +101,23 @@
                 -> "grid=<SizeOfGalaxy*SizeOfGalaxy chars, row-major y=1..Size then x=1..Size,
                     '1'=Nebula '0'=None>" -- GetRandomXY/CreateRandomWorlds have no domain here; see
                 the UPDATE.PAS patch's own relocation note for why
+     fleetlogistics Fgt,Hkr,Jmp,Jtn,Pen,Ssp,Trn,Men,Nnj,Amb,Che,Met,Sup,Tri -> "fuelcap=<v,6dp>;
+                fuelcons=<v,6dp>;cargospace=<v>;balanced_men=<v>;balanced_nnj=<v>;balanced_amb=<v>;
+                balanced_che=<v>;balanced_met=<v>;balanced_sup=<v>;balanced_tri=<v>" -- FuelCapacity/
+                FuelConsumption/FleetCargoSpace/BalanceFleet (MISC.PAS:168-222, INTRFACE.PAS:431-465
+                as trimmed into this harness's own INTRFACE.PAS -- see that file's header comment for
+                why), called directly against a hand-built ShipArray/CargoArray; no Universe^/Rnd
+                involved, these are pure functions over their parameters. balanced_* is Cr after
+                BalanceFleet runs, letting a case drive an over-capacity fleet and check the trim.
+     fleetmove  PosX,PosY,DestX,DestY,NebulaX,NebulaY(both 0 disables),GateKind(0=none,1=public
+                gte,2=private lnk)AtPos,GateOwnerOrd,DestGateKind(same encoding)AtDest,
+                DestGateOwnerOrd,FleetOwnerKnowsDestGate(0/1),FortressAtPos(0/1 -- mutually exclusive
+                with GateKind<>0 at Pos, matching real Pascal: a sector's Obj slot holds at most one
+                thing) -> "newpos_x=<v>;newpos_y=<v>;passgate=<0|1>;passfortress=<0|1>" -- GetNewPos
+                (FLEET.PAS:437-450) and PassingThroughGate/PassingThroughFortress (relocated into
+                this harness's own INTRFACE.PAS), against one Empire1 fleet at (PosX,PosY). Requires
+                InitializeSector plus direct Sector[x]^[y].Obj writes for the gate(s)/fortress, same
+                requirement as the starbase/probescout/construction domains.
      probescout DestOwnerOrd,DestLegions,DestAlreadyScouted(0/1),RngFixedValue -> "destscouted=<0|1>;
                 ringscouted=<0|1>" -- calls the already-exported ProbeScout (INTRFACE.PAS:1289-1344)
                 directly against one planet at the probe's destination (5,5) and one at the very next
@@ -145,7 +162,7 @@ PROGRAM RunWorld;
   relaxation, not a behavior change. }
 {$V-}
 
-USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, AttNPE, DFA, Strg;
+USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, AttNPE, Fleet, Intrface, DFA, Strg;
 
 function ParseLongInt(const s: String): LongInt;
    var
@@ -1666,6 +1683,119 @@ procedure RunScenarioCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunFleetLogisticsCase(const arg: String);
+   { FuelCapacity/FuelConsumption/FleetCargoSpace/BalanceFleet (MISC.PAS:168-222, INTRFACE.PAS:431-465
+     as trimmed into this harness's own INTRFACE.PAS -- see that file's header comment), called
+     directly against a hand-built ShipArray/CargoArray pair -- no Universe^ state needed, these are
+     pure functions over their own parameters. balanced_* reports Cr after BalanceFleet runs, so a
+     case with more cargo than the ship distribution can carry exercises the trim. }
+   var
+      parts: array[0..13] of LongInt;
+      Sh: ShipArray;
+      Cr: CargoArray;
+      cap,cons: Real;
+      space: Integer;
+   begin
+   ParseFields(arg,parts);
+   FillChar(Sh,SizeOf(Sh),0);
+   FillChar(Cr,SizeOf(Cr),0);
+   Sh[fgt]:=parts[0];  Sh[hkr]:=parts[1];  Sh[jmp]:=parts[2];  Sh[jtn]:=parts[3];
+   Sh[pen]:=parts[4];  Sh[ssp]:=parts[5];  Sh[trn]:=parts[6];
+   Cr[men]:=parts[7];  Cr[nnj]:=parts[8];  Cr[amb]:=parts[9];  Cr[che]:=parts[10];
+   Cr[met]:=parts[11]; Cr[sup]:=parts[12]; Cr[tri]:=parts[13];
+
+   cap:=FuelCapacity(Sh);
+   cons:=FuelConsumption(Sh,Cr);
+   space:=FleetCargoSpace(Sh,Cr);
+   BalanceFleet(Sh,Cr);
+
+   WriteLn('fuelcap=',cap:0:6,';fuelcons=',cons:0:6,';cargospace=',space,
+           ';balanced_men=',Cr[men],';balanced_nnj=',Cr[nnj],';balanced_amb=',Cr[amb],
+           ';balanced_che=',Cr[che],';balanced_met=',Cr[met],';balanced_sup=',Cr[sup],
+           ';balanced_tri=',Cr[tri]);
+   end;
+
+procedure RunFleetMoveCase(const arg: String);
+   { GetNewPos (FLEET.PAS:437-450) and PassingThroughGate/PassingThroughFortress (relocated into
+     this harness's own INTRFACE.PAS -- see that file's header comment), against one Empire1 fleet at
+     (PosX,PosY). A gate or fortress at Pos are mutually exclusive in a real case (Sector.Obj holds
+     at most one thing), matching source; this driver doesn't enforce that itself, since a bad case
+     is a test-authoring error, not something Pascal needs to guard against here. }
+   var
+      parts: array[0..11] of LongInt;
+      fltID,gateID: IDNumber;
+      pos,dest,neb: XYCoord;
+      newPos: XYCoord;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   InitializeSector(20);
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire2].InUse:=True;
+
+   pos.x:=parts[0];   pos.y:=parts[1];
+   dest.x:=parts[2];  dest.y:=parts[3];
+
+   New(Universe^.Fleet[1]);
+   FillChar(Universe^.Fleet[1]^,SizeOf(Universe^.Fleet[1]^),0);
+   Universe^.Fleet[1]^.Emp:=Empire1;
+   Universe^.Fleet[1]^.XY:=pos;
+   SetOfActiveFleets:=[1];
+   fltID.ObjTyp:=Flt;  fltID.Index:=1;
+
+   if (parts[4]<>0) or (parts[5]<>0) then
+      begin
+      neb.x:=parts[4];  neb.y:=parts[5];
+      PutNebula(neb,DenseNebula);
+      end;
+
+   if parts[6]<>0 then
+      begin
+      Universe^.Stargate[1].XY:=pos;
+      Universe^.Stargate[1].Emp:=Empire(parts[7]);
+      if parts[6]=1 then Universe^.Stargate[1].GTyp:=gte else Universe^.Stargate[1].GTyp:=lnk;
+      SetOfActiveGates:=[1];
+      gateID.ObjTyp:=Gate;  gateID.Index:=1;
+      Sector[pos.x]^[pos.y].Obj:=gateID;
+      end
+   else
+      SetOfActiveGates:=[];
+
+   if parts[8]<>0 then
+      begin
+      Universe^.Stargate[2].XY:=dest;
+      Universe^.Stargate[2].Emp:=Empire(parts[9]);
+      if parts[8]=1 then Universe^.Stargate[2].GTyp:=gte else Universe^.Stargate[2].GTyp:=lnk;
+      SetOfActiveGates:=SetOfActiveGates+[2];
+      gateID.ObjTyp:=Gate;  gateID.Index:=2;
+      Sector[dest.x]^[dest.y].Obj:=gateID;
+      if parts[10]<>0 then
+         Universe^.Stargate[2].KnownBy:=[Empire1];
+      end;
+
+   if parts[11]<>0 then
+      begin
+      Universe^.Starbase[1].XY:=pos;
+      Universe^.Starbase[1].Emp:=Empire1;
+      Universe^.Starbase[1].STyp:=frt;
+      SetOfActiveStarbases:=[1];
+      gateID.ObjTyp:=Base;  gateID.Index:=1;
+      Sector[pos.x]^[pos.y].Obj:=gateID;
+      end;
+
+   newPos:=pos;
+   GetNewPos(newPos,dest);
+
+   WriteLn('newpos_x=',newPos.x,';newpos_y=',newPos.y,
+           ';passgate=',Ord(PassingThroughGate(fltID,pos,dest)),
+           ';passfortress=',Ord(PassingThroughFortress(pos)));
+
+   Dispose(Universe^.Fleet[1]);
+   Dispose(Universe);
+   end;
+
 procedure RunProbeScoutCase(const arg: String);
    { ProbeScout (INTRFACE.PAS:1289-1344), called directly (already exported, no patch needed) against
      a hand-assembled Universe^: one planet at the probe's destination (5,5) with configurable
@@ -1771,6 +1901,10 @@ procedure RunCaseMode;
          RunScenarioCase(ParamStr(i))
       else if domain='probescout' then
          RunProbeScoutCase(ParamStr(i))
+      else if domain='fleetlogistics' then
+         RunFleetLogisticsCase(ParamStr(i))
+      else if domain='fleetmove' then
+         RunFleetMoveCase(ParamStr(i))
       else
          begin
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');

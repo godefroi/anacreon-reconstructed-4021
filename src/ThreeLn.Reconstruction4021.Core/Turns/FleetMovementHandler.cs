@@ -204,7 +204,7 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
     /// a stored link pointer, so <see cref="Stargate.LinkedTo"/> (a separate, not-yet-ported linking
     /// mechanic) plays no part here.
     /// </summary>
-    private static bool IsPassingThroughGate(Fleet fleet, Coordinate origin, Coordinate destination, Game game)
+    public static bool IsPassingThroughGate(Fleet fleet, Coordinate origin, Coordinate destination, Game game)
     {
         if (game.Galaxy.GetObjectAt(origin) is not Stargate gate)
             return false;
@@ -221,15 +221,31 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
             && fleet.Owner.Stargates.Known.Contains(destinationGate);
     }
 
-    private static bool IsAtFortress(Coordinate location, Game game) =>
+    public static bool IsAtFortress(Coordinate location, Game game) =>
         game.Galaxy.GetObjectAt(location) is Starbase { Kind: StarbaseKind.Fortress };
 
     /// <summary>
+    /// GetNewPos (FLEET.PAS:437-450) — a single Sgn-toward-destination step, or null if the candidate
+    /// cell is dense nebula. Pascal's own version writes a sentinel coordinate (<c>Limbo=(0,0)</c>)
+    /// into its VAR parameter instead of returning null; ported as a nullable return here since this
+    /// port has no equivalent sentinel need — see <see cref="StepFleet"/>'s own doc comment for why
+    /// that's observationally identical, not just a convenient rewrite.
+    /// </summary>
+    public static Coordinate? GetNewPos(Coordinate current, Coordinate destination, Game game)
+    {
+        var dx = Math.Sign(destination.X - current.X);
+        var dy = Math.Sign(destination.Y - current.Y);
+        var candidate = current with { X = current.X + dx, Y = current.Y + dy };
+
+        return game.Galaxy.GetNebula(candidate) == NebulaType.DenseNebula ? null : candidate;
+    }
+
+    /// <summary>
     /// The far-from-destination branch of fortress pass-through (FLEET.PAS:768-779) — up to 5
-    /// GetNewPos-style steps toward the destination, silently stopping at the first dense-nebula
-    /// block. No <c>FltBlocked</c> news fires here, unlike <see cref="StepFleet"/>'s own nebula check
-    /// — a real asymmetry in source (this branch never calls the news-firing code path at all), not
-    /// something to "fix" for consistency.
+    /// <see cref="GetNewPos"/> steps toward the destination, silently stopping at the first
+    /// dense-nebula block. No <c>FltBlocked</c> news fires here, unlike <see cref="StepFleet"/>'s own
+    /// nebula check — a real asymmetry in source (this branch never calls the news-firing code path
+    /// at all), not something to "fix" for consistency.
     /// </summary>
     private static Coordinate HopThroughFortress(Coordinate start, Coordinate destination, Game game)
     {
@@ -239,14 +255,10 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
             if (current == destination)
                 break;
 
-            var dx = Math.Sign(destination.X - current.X);
-            var dy = Math.Sign(destination.Y - current.Y);
-            var candidate = current with { X = current.X + dx, Y = current.Y + dy };
-
-            if (game.Galaxy.GetNebula(candidate) == NebulaType.DenseNebula)
+            if (GetNewPos(current, destination, game) is not { } next)
                 break;
 
-            current = candidate;
+            current = next;
         }
 
         return current;
@@ -277,11 +289,7 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
             if (current == destination)
                 break;
 
-            var dx = Math.Sign(destination.X - current.X);
-            var dy = Math.Sign(destination.Y - current.Y);
-            var candidate = current with { X = current.X + dx, Y = current.Y + dy };
-
-            if (game.Galaxy.GetNebula(candidate) == NebulaType.DenseNebula) {
+            if (GetNewPos(current, destination, game) is not { } candidate) {
                 fleet.Owner.AddNews(NewsType.FleetBlocked, fleet);
                 break;
             }

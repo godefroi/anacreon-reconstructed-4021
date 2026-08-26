@@ -1,0 +1,5 @@
+case=SingleFighterNoCargo;fuelcap=1.030000;fuelcons=1.010000;cargospace=0;balanced_men=0;balanced_nnj=0;balanced_amb=0;balanced_che=0;balanced_met=0;balanced_sup=0;balanced_tri=0
+case=OneOfEachShipType;fuelcap=93.520000;fuelcons=7.013000;cargospace=1;balanced_men=0;balanced_nnj=0;balanced_amb=0;balanced_che=0;balanced_met=0;balanced_sup=0;balanced_tri=0
+case=BalancedFleetNoTrimNeeded;fuelcap=199.800000;fuelcons=11.140000;cargospace=6;balanced_men=20;balanced_nnj=0;balanced_amb=0;balanced_che=0;balanced_met=0;balanced_sup=0;balanced_tri=0
+case=OverloadedSingleTierChemicals;fuelcap=31.430000;fuelcons=9.066000;cargospace=-166;balanced_men=0;balanced_nnj=0;balanced_amb=0;balanced_che=0;balanced_met=0;balanced_sup=0;balanced_tri=0
+case=OverloadedAcrossChemicalsAndMetalsTiers;fuelcap=20.880000;fuelcons=7.994000;cargospace=-199;balanced_men=0;balanced_nnj=0;balanced_amb=0;balanced_che=0;balanced_met=3;balanced_sup=0;balanced_tri=0

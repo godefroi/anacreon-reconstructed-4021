@@ -157,7 +157,7 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   tests (`AnnualTickHandlerHostileLifeTests`) exploiting `FixedRandom(N)`'s `min+N` resolution to
   deterministically pick each of the three branches.
 
-## 6. NPE AI — in progress, scoping pass done
+## 6. NPE AI — in progress, 6a landed
 
 Implement an `ITurnHandler` for computer empires. The roadmap's original one-line framing here
 ("start with one classic implementation") undersold this phase the way "8 known News sites"
@@ -200,25 +200,30 @@ not ported. `DeployHarassFleet` (`NPEINTR.PAS:777`) and `ImplementDefendBMS` (`N
 confirmed empty `BEGIN END` stubs in both the 1.31 and 2.0 source trees — intentional no-ops the
 original developers shipped incomplete, not a port gap.
 
-- **6a, fleet/starbase movement fidelity (prerequisite).** `FleetMovementHandler`'s `AdvanceFleet`/
-  `AdvanceStarbases` (shipped pre-Phase-1, in the initial skeleton) are deliberately simplified
-  straight-line steppers next to what real Pascal does — found while scoping Combat (Phase 5), not
-  fixed there since it's movement fidelity, not a combat mechanic (see `PORT_DESIGN.md`). Belongs
-  here rather than Phase 5 or Phase 8: `NPE01.PAS`'s decision logic (fuel-aware retreat, stargate
-  routing) can't be reasoned about correctly until these are real, and it's simulation core, not UI,
-  so it lands before Phase 8 per this roadmap's own bottom-up ordering. Also adds a `FLEET.PAS`
-  ground-truth patch to `reference/verify/patches/` — every NPE file needs `Fleet` in its own
-  `USES` clause, so this pays for 6a's own verification and every later NPE commit's ground truth
-  at once (see `reference/verify/README.md`). Land it as prep before the actual AI commits:
-  - Fleet stargate teleportation / fortress pass-through jumps (`FLEET.PAS:646-860`'s `UpdateFleet`).
-  - Starbase obstacle-avoidance and fuel cost (`SBASE.PAS:88-263`'s `MovePlayerStarbases`/
-    `GetNewBasePos`).
-  - Fleet fuel/cargo-capacity system (`FuelCapacity`/`FleetCargoSpace`/`GetFleetFuel`/`SetFleetFuel`/
-    `BalanceFleet` — surfaced by 5f's `RestoreCombatant`, which stubs out the `BalanceFleet` call
-    since real Pascal's own version lives in `Intrface`, dropped from this port's scope so far).
-  - Dense-nebula movement blocking (`FLEET.PAS:437-450`'s `GetNewPos`) — surfaced by 5h while tracing
-    the exact per-step move loop for mine/disrupter checks; applies to every fleet type, not just
-    `JumpFleet`/`HunterKillerFleet`, so it's a terrain effect rather than a combat mechanic.
+- ✅ **6a, fleet/starbase movement fidelity** (`Turns/FleetMovementHandler.cs`, `Entities/
+  FleetLogistics.cs`) — `AdvanceFleet`/`AdvanceStarbases` (shipped pre-Phase-1, deliberately
+  simplified straight-line steppers) are now the real thing. Fuel/cargo model: the prior
+  `_fuelBurnPerShip` table was invented, not ported — compared against DATACNST.PAS's real
+  `FuelCons`/`FuelCap` while scoping and found it backwards in places (Jumpships cheaper than
+  Starships, the reverse of source); replaced with `FleetLogistics` (`FuelCapacity`/
+  `FuelConsumption`/`FleetCargoSpace`/`BalanceFleet`, MISC.PAS/INTRFACE.PAS verbatim) and
+  `Fleet.Fuel` widened to `double` to match Pascal's own Real-typed arithmetic. Movement: dense-nebula
+  blocking is now a real per-step check for every fleet type (not just Jump/HK); stargate
+  teleportation and fortress pass-through jumps are real, including the non-obvious case where a
+  fortress hop landing short of teleport range still gets its ordinary per-turn movement allotment
+  on top, same turn (`FLEET.PAS:646-861`'s `UpdateFleet`, verified line-by-line); `UpdateAllFleets`'s
+  dispatch now checks gate occupancy owner-blind, via new `Galaxy.GetObjectAt`. Starbase movement
+  (`MovePlayerStarbases`/`GetNewBasePos`) is now obstacle-avoiding and fuel-costed instead of a
+  straight-line stepper — removed `YearsUntilNextMove`, an invented throttle with no source
+  counterpart (confirmed via `MovePlayerStarbases`'s actual `ANACREON.PAS` call sites: always once
+  per empire per turn, same cadence as fleets). Golden-file-backed (`fleetlogistics.golden`,
+  `fleetmove.golden`) — `FLEET.PAS` and (trimmed to just what it needs, not relocated elsewhere)
+  `INTRFACE.PAS` are now patched into `reference/verify/`, the first NPE-adjacent units this port's
+  ground-truth harness links; see that directory's own README for the "trim a unit down to size"
+  story (`EIO`/`Mess`/`Orders`/`NPE` all turned out to be reachable-but-unused from `FLEET.PAS`'s
+  real needs). `GetNewBasePos`/`XY2Dir` (`SBASE.PAS`, starbase obstacle-avoidance) have no golden
+  domain yet — `SBase` isn't patched in — covered by hardcoded tests in `FleetMovementHandlerTests.cs`
+  instead, same "harness can't reach it yet" precedent as 5g's `DestroyConstructionOrGate`.
 - **6b, core NPE dispatch + state.** `Empire.NpeType` (name TBD), wiring `ScenarioLoader.
   RunCreateNPEmpire` (currently reads and discards the ordinal) to record it and construct a
   `KingdomTurnHandler` for Kingdom1/Kingdom2 empires only — other types stay unregistered in

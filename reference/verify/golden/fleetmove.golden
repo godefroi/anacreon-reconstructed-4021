@@ -1,0 +1,7 @@
+case=PlainStepNoObstacles;newpos_x=1;newpos_y=1;passgate=0;passfortress=0
+case=DenseNebulaBlocksTheStep;newpos_x=0;newpos_y=0;passgate=0;passfortress=0
+case=PublicGateAlwaysPasses;newpos_x=1;newpos_y=1;passgate=1;passfortress=0
+case=PrivateLinkToKnownMatchingLinkPasses;newpos_x=1;newpos_y=1;passgate=1;passfortress=0
+case=PrivateLinkToUnknownMatchingLinkDoesNotPass;newpos_x=1;newpos_y=1;passgate=0;passfortress=0
+case=PrivateLinkOwnerMismatchDoesNotPass;newpos_x=1;newpos_y=1;passgate=0;passfortress=0
+case=FortressAtPositionDetected;newpos_x=1;newpos_y=1;passgate=0;passfortress=1

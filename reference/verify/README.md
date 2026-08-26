@@ -173,6 +173,24 @@ building it. Grouped by the roadmap phase that introduced it; field shapes and o
   same treatment as `SelfDestructObject` (no Pascal-side ground truth built for it either, since
   `SBASE.PAS` was never patched into this harness).
 
+### Phase 6 — NPE AI (movement-fidelity prerequisite, 6a)
+
+- **`fleetlogistics`** — `FuelCapacity`/`FuelConsumption`/`FleetCargoSpace`/`BalanceFleet` (MISC.PAS/
+  INTRFACE.PAS), called directly against a hand-built `ShipArray`/`CargoArray` — no `Universe^` state
+  needed, these are pure functions over their own parameters. Found (by comparing against these real
+  constants while scoping 6a) that `FleetMovementHandler`'s prior fuel model was invented, not ported —
+  replaced with `Core/Entities/FleetLogistics.cs`. `FleetCargoSpace`'s own `Round` call is the same
+  arithmetic-risk class that produced the `PascalRound` bug in `combat.golden`.
+- **`fleetmove`** — `GetNewPos` (`FLEET.PAS`) and `PassingThroughGate`/`PassingThroughFortress`
+  (relocated in place into `patches/INTRFACE.PAS.patch`, see "Trimming a unit down to size" below),
+  against one hand-placed fleet. Covers dense-nebula step-blocking and stargate/fortress teleport
+  determination — `FleetMovementHandler.GetNewPos`/`IsPassingThroughGate`/`IsAtFortress` are `public
+  static` specifically so this domain (and `FleetMoveTests`) can call them in isolation, the same
+  reason `CombatEngine`'s own formula methods are public statics rather than private instance helpers.
+  `GetNewBasePos`/`XY2Dir` (`SBASE.PAS`, starbase obstacle-avoidance) have no domain here yet — `SBase`
+  was never patched into this harness; `FleetMovementHandlerTests.cs` covers that hardcoded instead,
+  same "harness can't reach it yet, cover it directly" precedent as `DestroyConstructionOrGate` (5g).
+
 ### Not a `UpdateWorld`/`GalaxySetup` domain
 
 - **`rng`** — a standing regression fixture for `PascalRandom.cs`, the from-scratch port of fpc's actual
@@ -209,6 +227,43 @@ the domain needs (rather than pulling in the whole unit) is the same "don't drag
 `empirecreate`'s inline tech-set formula, `construction`'s five `Intrface` helpers, `trillumreserves`/
 `randomplanet`/`nebula`'s relocated `NEWGAME.PAS` procedures) — check whether the target procedure needs
 relocating at all before assuming a whole-unit `USES` pull is necessary.
+
+## Trimming a unit down to size
+
+A related but distinct move from relocation above, first needed for `fleetmove` (Phase 6, 6a): when the
+domain genuinely needs the procedure to live in its *real* unit — because that unit is about to become a
+real, growing dependency for later domains anyway, not a one-off — trim the unit itself down to just
+what's reachable, rather than copying the procedure out to somewhere already-linked. `FLEET.PAS` is
+exactly this case: `NPEINTR.PAS`'s own `USES` clause already needs the real `Fleet` unit for Phase 6's
+later commits (6c onward), so relocating `GetNewPos` out to `Misc` now would only have delayed building
+the real `FLEET.PAS` patch, not avoided it — decided explicitly this way rather than defaulted into,
+after weighing both.
+
+The process is the same discovery loop as "Restoring a removed procedure" above, but the goal is
+deletion, not restoration: add the unit to `runworld.pas`'s own `USES`, compile, and delete whatever the
+compiler complains about next (an unreachable dependency's own missing sub-dependency, a genuinely dead
+`USES` entry, a procedure that needs a unit nothing else does) until it links. Two rounds of this got
+`FLEET.PAS`/`INTRFACE.PAS` working:
+
+- `FLEET.PAS` lost `Orders` from its own `USES` and every procedure that only existed to execute a
+  fleet's queued orders (`ExecuteDestCOM`/`ExecuteTransCOM`/`ExecuteFleetOrders`, plus `DestroyFleet`'s
+  order-disposal lines) — real Pascal, but Phase 8's job (the order compiler), and this harness's test
+  fleets never carry orders regardless, so nothing observable changes by removing the dead branch.
+- `INTRFACE.PAS` (normally ~1700 lines) turned out to need `EIO` (DOS console I/O, needs `CRT` — not
+  available under this fpc target at all) transitively through `Mess` (the in-game mail system), and
+  `Orders`/`NPE` directly in its own `IMPLEMENTATION USES` — none of which anything `FLEET.PAS` actually
+  calls. Rather than trim procedure-by-procedure through 1700 lines, `patches/INTRFACE.PAS.patch`
+  replaces the whole file with just the three procedures `FLEET.PAS` needs
+  (`PassingThroughGate`/`PassingThroughFortress`/`BalanceFleet`, copied verbatim, unchanged, from the
+  real source line ranges cited in the patched file's own header comment) — everything else this unit
+  ever declared is gone from this harness's copy. `GetObject`/`GetStatus`/`GetBaseType`/`GetGateType`/
+  `Known` (which those three still call) already live in the already-linked `PrimIntr`, so nothing else
+  needed pulling in.
+
+`FleetMovementHandler.GetNewPos`/`IsPassingThroughGate`/`IsAtFortress` are `public static` on the C# side
+specifically so `fleetmove`'s own `FleetMoveTests` can call them in isolation this same way — check
+whether a new domain's C# counterpart needs the same visibility bump before assuming a golden-file
+comparison has to route through a much larger public entry point.
 
 ## Landmines and gotchas
 
