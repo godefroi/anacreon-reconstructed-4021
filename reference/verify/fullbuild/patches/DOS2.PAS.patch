@@ -1,0 +1,126 @@
+--- a/DOS2.PAS
++++ b/DOS2.PAS
+@@ -25,19 +25,6 @@ CONST
+    MaxNoOfDirEntries = 250;
+ 
+ TYPE
+-   PSPStructure = RECORD
+-      Int20H: Word;
+-      EndBlockSeg: Word;                           { End of alloc. block }
+-      R1: Byte;                                    { Reserved }
+-      LongCall: ARRAY [1..3] OF Byte;
+-      FuncDispSeg: Word;                           { Function dispatcher }
+-      ExitAddr: Pointer;                           { Exit addr (IP,CS) }
+-      CBrkAddr: Pointer;                           { Ctrl-C Addr (IP,CS) }
+-      HErrAddr: Pointer;                           { Hard error addr (IP,CS) }
+-      R2: ARRAY [1..22] OF Byte;                   { Reserved }
+-      EnvironSeg: Word;                            { Environment }
+-   END;
+-
+    FileLineFunction = FUNCTION(VAR Search: SearchRec; VAR Data): LineStr;
+ 
+    DirMenuStructure = RECORD
+@@ -54,9 +41,6 @@ TYPE
+       FilenameList: ARRAY [1..MaxNoOfDirEntries] OF String16;
+    END;
+ 
+-VAR
+-   PSP: ^PSPStructure;
+-
+ FUNCTION AddDefaultPath(Path,Filename: LineStr): LineStr;
+ PROCEDURE DOSSetDeviceBinaryMode(VAR F: File; VAR Error: Word);
+ PROCEDURE DOSShell;
+@@ -168,68 +152,33 @@ PROCEDURE PrintLine(Line: LineStr);
+ FUNCTION HomeDirectory: LineStr;
+ { HomeDirectory:
+    Returns the directory in which the current program resides relative to the
+-   default directory. }
+-   TYPE
+-      EnvArray = ARRAY [0..32767] OF Char;
++   default directory.
+ 
++   Pristine code branched on Lo(DosVersion)>=3 to walk the PSP's raw
++   environment-block bytes in real DOS memory (Ptr(PSP^.EnvironSeg,0)) instead
++   of using this ELSE branch's GetDir call. That branch is real-mode
++   segment:offset addressing -- meaningless under fpc's flat memory model
++   (same category of landmine as EIO.PAS's original RealScreen/VirtualScreen
++   aliasing, see reference/verify/fullbuild/README.md) and fpc's Windows Dos
++   unit doesn't even provide PrefixSeg to seed it. Since the branch existed
++   only to work around older DOS versions not reliably reporting the current
++   directory via GetDir -- a distinction with no meaning here -- this always
++   takes the GetDir path pristine code already used as its fallback. }
+    VAR
+       TempStr: LineStr;
+-      EnvPtr: ^EnvArray;
+-      i: Word;
+-      SingleZero,DoubleZero: Boolean;
+ 
+    BEGIN
+-   IF Lo(DosVersion)>=3 THEN
++   {$I-}
++   GetDir(0,TempStr);
++   {$I+}
++   IF IOResult=0 THEN
+       BEGIN
+-      EnvPtr:=Ptr(PSP^.EnvironSeg,0);
+-      DoubleZero:=False;
+-      SingleZero:=False;
+-      i:=0;
+-      REPEAT
+-         IF EnvPtr^[i]=Char(0) THEN
+-            BEGIN
+-            IF SingleZero THEN
+-               DoubleZero:=True
+-            ELSE
+-               SingleZero:=True;
+-            END
+-         ELSE
+-            SingleZero:=False;
+-         Inc(i);
+-      UNTIL DoubleZero;
+-
+-      WHILE (EnvPtr^[i]<>Char(0)) DO
+-         Inc(i);
+-
+-      Inc(i);
+-      TempStr:='';
+-      WHILE (EnvPtr^[i]<>Char(0)) DO
+-         BEGIN
+-         TempStr:=TempStr+EnvPtr^[i];
+-         Inc(i);
+-         END;
+-
+-      i:=Length(TempStr);
+-      WHILE TempStr[i]<>'\' DO
+-         Dec(i);
+-
+       AllUpCase(TempStr);
+-      HomeDirectory:=Copy(TempStr,1,i);
++      HomeDirectory:=TempStr;
+       END
+    ELSE
+       BEGIN
+-      {$I-}
+-      GetDir(0,TempStr);
+-      {$I+}
+-      IF IOResult=0 THEN
+-         BEGIN
+-         AllUpCase(TempStr);
+-         HomeDirectory:=TempStr;
+-         END
+-      ELSE
+-         BEGIN
+-         HomeDirectory:='';
+-         END;
++      HomeDirectory:='';
+       END;
+    END;  { HomeDirectory }
+ 
+@@ -559,7 +508,5 @@ PROCEDURE SelectFile(Path: LineStr; Mask: String16; VAR Filename: LineStr; VAR A
+    DMSCleanUp(DMS);
+    END;  { SelectFile }
+ 
+-BEGIN
+-PSP:=Ptr(PrefixSeg,0);
+ END.
+ 

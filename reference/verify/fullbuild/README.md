@@ -34,12 +34,18 @@ most that's ever needed from the screen/keyboard layer is `WriteLn`-level visibi
 **Nothing in this lane is committed to git yet** -- `git status` on `reference/verify/fullbuild/`
 will show it as untracked. Check current state before assuming anything below is stale.
 
-11 units compile clean from pristine source via `.\build.ps1` (run from this directory):
+All units in `build.ps1`'s tier arrays compile clean from pristine source via `.\build.ps1` (run
+from this directory):
 
 - **Tier 0** (no local `USES` clause at all): `INT`, `TYPES`, `REAL1`, `QSORT`, `WNDTYPES`,
   `BATTLE`, `RESOURCE` -- untouched, zero patches. `STRG` needed one (see below).
 - **Tier 1** (the screen/keyboard primitive layer): `SYSTEM2`, `EIO`, `WND` -- see "What got patched
   and why" below for what each needed.
+- **Tier 2** (menu system): `MENU` -- zero patches needed. Pure logic built entirely on tier1's
+  display primitives (`WriteString`, `ScrollUp`, `ScrollDown`, `ActivateWindow`, `OpenWindow`,
+  `CloseWindow`), no assembly or direct memory access.
+- **Tier 3** (DOS/file-path/config helpers): `DOS2` -- needed a real-mode-pointer patch and a new
+  `Printer` shim, see "What got patched and why" below.
 
 Verified working end to end from a clean checkout: `build.ps1` deletes and repopulates `scratch/`
 from pristine + `patches/*.patch` + `shims/*.PAS` every run, exactly like `reference/verify/build.ps1`
@@ -50,9 +56,9 @@ does for `patched/`.
 - `build.ps1` -- rebuilds `scratch/` from pristine source, this lane's own `patches/*.patch`, and
   `shims/*.PAS`, then compiles each tier's units standalone (`fpc -Mtp -CfSSE2 <unit>.PAS` per file,
   same flags as `reference/verify/build.ps1` -- see that file's README for why `-CfSSE2` matters).
-  The `$tier0`/`$tier1` arrays at the top are the actual source of truth for what's in scope; add a
-  unit to the right tier's array (and copy any `.INC` it needs, see `COLORS.INC`'s handling) rather
-  than hand-editing `scratch/`.
+  The `$tier0`/`$tier1`/`$tier2`/`$tier3` arrays at the top are the actual source of truth for what's
+  in scope; add a unit to the right tier's array (and copy any `.INC` it needs, see `COLORS.INC`'s
+  handling) rather than hand-editing `scratch/`.
 - `patches/*.PAS.patch` -- unified diffs against pristine `reference/DOSAnacreonSource131/`, same
   format and same generation tool as `reference/verify/patches/`. **Always regenerate these via
   `reference/verify/regenerate-patch.ps1`, never hand-write a diff** -- see "Tooling" below for why
@@ -69,6 +75,13 @@ does for `patched/`.
   source actually calls a no-op/plain-variable definition instead. Grown on demand -- add a symbol
   the moment fpc reports it missing while compiling a real unit, not speculatively. Its own header
   comment repeats this.
+- `shims/PRINTER.PAS` -- same idea, for Borland's `Printer` unit (the one pristine code uses for the
+  `Lst` text-file variable). fpc does ship a real `Printer` unit
+  (`units/i386-win32/rtl-extra/printer.ppu`) but it isn't on the default unit search path, and this
+  lane doesn't want it anyway -- talking to a real printer port is meaningless on a modern OS and out
+  of scope for a headless harness. The shim assigns `Lst` to the `NUL` device: a real `Text` file with
+  real `IOResult` semantics, so pristine `Write(Lst,...)`/`WriteLn(Lst,...)` calls stay valid, but
+  output goes nowhere.
 - `scratch/` -- disposable build output (gitignored via the repo root `.gitignore`, same convention
   as `reference/verify/patched/`). Never hand-edit files here as a source of truth; `build.ps1`
   deletes and repopulates it every run. If iterating on a new patch, the workflow is the same as the
@@ -131,6 +144,22 @@ does for `patched/`.
     `DOSErrorWindow` still computes its real error-message text (the `CASE Error OF ...` table is
     plain string formatting, ported unchanged) and calls `AttentionWindow` exactly as pristine code
     does, so a real I/O error still halts with an informative message instead of silently continuing.
+- **`DOS2.PAS`** -- file-path/config/shell-escape helpers. Needed `shims/PRINTER.PAS` (see "Layout"
+  above) plus one real landmine in `HomeDirectory`:
+  - Pristine code branched on `Lo(DosVersion)>=3` to walk the PSP's raw environment-block bytes via
+    `Ptr(PSP^.EnvironSeg,0)` -- real-mode segment:offset addressing, same category as `EIO.PAS`'s
+    original screen aliasing. fpc's Windows `Dos` unit doesn't even provide `PrefixSeg` to seed it
+    (`Fatal: Identifier not found "PrefixSeg"`), so the unit's init block (`PSP:=Ptr(PrefixSeg,0);`)
+    couldn't compile either. Since that branch existed only to work around older DOS versions not
+    reliably reporting the current directory through `GetDir` -- a distinction with no meaning under
+    a modern OS -- `HomeDirectory` now always takes the `GetDir`-based path pristine code already used
+    as its own fallback, and the now-dead `PSP`/`PSPStructure` declarations were removed (confirmed via
+    whole-tree grep that nothing outside `DOS2.PAS` ever read `PSP`).
+  - Everything else in `DOS2.PAS` -- `DOSShell` (real `Exec`), `DOSSetDeviceBinaryMode` (`Registers`/
+    `MSDos` IOCTL call), `DOSCopyFile`/`DOSCopyLine` (`BlockRead`/`BlockWrite`), the `DMS*` directory-menu
+    procedures (`FindFirst`/`FindNext`/`FExpand`) -- compiled unpatched: fpc's Windows `Dos` unit
+    genuinely implements `Registers`/`MSDos`/`Exec`/the file-search API as compatibility shims, so none
+    of it needed touching.
 
 ## Dead code found (excluded, not patched)
 
@@ -170,8 +199,12 @@ facts worth keeping, beyond what's already encoded in `build.ps1`'s tier arrays:
 
 - `WND.PAS` USES `Strg, Int, CRT, EIO`. `EIO.PAS` USES `Int, Strg, System2, DOS, CRT`.
 - `CdeTypes`/`NPETypes` (structurally tier-0 candidates, no other local unit dependency) both fail to
-  compile standalone with `Fatal: Can't find unit Galaxy` -- they genuinely need `Galaxy` (which only
-  needs `Types`) built first. Not a bug in either file; just means they're tier 2, not tier 0.
+  compile standalone with `Fatal: Can't find unit Galaxy` -- they genuinely need `Galaxy` built first.
+  Not a bug in either file; just means they're a later tier, not tier 0.
+- **Correction to an earlier claim in this file**: `Galaxy`'s `INTERFACE` only `USES Types`, but its
+  `IMPLEMENTATION` section separately `USES Dos2` (for `ReadVariable`/`WriteVariable`) -- confirmed by
+  reading `GALAXY.PAS` directly. So `Galaxy` is not the cheap one-dependency unit it looked like; it
+  needs `Dos2` built first, same as everything else waiting on `Dos2`.
 - One circular dependency the subagent flagged and this session did not verify by hand:
   `Artifact` <-> `Code` (mutual `IMPLEMENTATION USES`). Will need joint compilation or an interface
   split whenever this lane reaches that tier -- confirm the cycle is real before spending time on it.
@@ -184,15 +217,10 @@ facts worth keeping, beyond what's already encoded in `build.ps1`'s tier arrays:
 ## Suggested next steps
 
 Pick whichever unblocks what you actually need next, in roughly ascending cost:
-- **`Galaxy`** (needs only `Types`) unblocks `CdeTypes`/`NPETypes`, both otherwise-clean tier-0 units.
-- **`Menu`** (USES `Strg, Int, CRT, EIO, WND`) is the next natural rung up the UI-elimination ladder --
-  likely small given `EIO`/`WND` are already stubbed, and unblocks a large fraction of the
-  window/comm units (`MapWind`, `FltWind`, `StaWind`, `Display`, `SWindows`, ...).
-- **`Dos2`** (USES `Strg, Printer, CRT, DOS, EIO, WND, Menu`) -- real file-path/config logic mixed
-  with `Printer`/`CRT` calls; the production lane's README already found `Dos2`'s `WriteVariable`/
-  `ReadVariable` are trivial `BlockRead`/`BlockWrite` helpers not worth a whole-unit pull for callers
-  that only need those two -- worth checking whether the same relocation move applies here before
-  patching the whole unit.
+- **`Galaxy`** (`INTERFACE USES Types`, `IMPLEMENTATION USES Dos2`) unblocks `CdeTypes`/`NPETypes`,
+  both otherwise-clean tier-0 units. `Dos2` is now built, so this should be cheap.
+- Window/comm units that depend on `Menu` or `Dos2` (`MapWind`, `FltWind`, `StaWind`, `Display`,
+  `SWindows`, ...) should now be unblocked.
 
 Whatever's picked: add it to `build.ps1`'s tier arrays, run `.\build.ps1`, patch whatever fpc actually
 complains about (following the "halt loudly on real interactivity, no-op on pure display" split

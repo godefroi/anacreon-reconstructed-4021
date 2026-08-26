@@ -37,13 +37,24 @@ $tier0 = @('INT.PAS', 'TYPES.PAS', 'REAL1.PAS', 'QSORT.PAS', 'WNDTYPES.PAS', 'BA
 # them once here rather than per-domain like reference/verify/patches does today.
 $tier1 = @('SYSTEM2.PAS', 'EIO.PAS', 'WND.PAS')
 
+# Tier 2: menu system, built on tier1's display primitives
+$tier2 = @('MENU.PAS')
+
+# Tier 3: DOS/file-path/config helper library. Needed a landmine patch of its own -- see
+# "What got patched and why" in this lane's README -- for a real-mode PSP/environment-block walk
+# in HomeDirectory, same class of segment:offset landmine as EIO.PAS's original screen aliasing.
+$tier3 = @('DOS2.PAS')
+
 # CRT.PAS is not pristine source at all -- see shims/CRT.PAS's own header comment for why this
 # lane fakes the whole unit instead of pointing fpc at its real (but differently-behaved) Crt.
-$shims = @('CRT.PAS')
+# PRINTER.PAS is the same idea: fpc does ship a real Printer unit, but it's not on the default
+# unit search path and this lane doesn't want real printer-port output anyway -- see
+# shims/PRINTER.PAS's own header comment.
+$shims = @('CRT.PAS', 'PRINTER.PAS')
 
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out | Out-Null
-foreach ($f in $tier0 + $tier1) { Copy-Item (Join-Path $src $f) $out }
+foreach ($f in $tier0 + $tier1 + $tier2 + $tier3) { Copy-Item (Join-Path $src $f) $out }
 foreach ($f in $shims) { Copy-Item (Join-Path $PSScriptRoot "shims\$f") $out }
 Copy-Item (Join-Path $src 'COLORS.INC') $out
 
@@ -53,7 +64,7 @@ try {
     foreach ($p in $patches) {
         git apply -p1 --verbose $p.FullName
     }
-    foreach ($f in $tier0 + $tier1) {
+    foreach ($f in $tier0 + $tier1 + $tier2 + $tier3) {
         Write-Host "--- $f ---"
         fpc -Mtp -CfSSE2 $f
     }
@@ -61,4 +72,4 @@ try {
     Pop-Location
 }
 
-Write-Host "Build OK: $($tier0.Count + $tier1.Count) units compiled standalone."
+Write-Host "Build OK: $($tier0.Count + $tier1.Count + $tier2.Count + $tier3.Count) units compiled standalone."
