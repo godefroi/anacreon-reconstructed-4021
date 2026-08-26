@@ -49,6 +49,9 @@ from this directory):
   Types` only, `IMPLEMENTATION USES Dos2` for `ReadVariable`/`WriteVariable`), `CDETYPES`, and
   `NPETYPES` (both zero patches -- pure `TYPE`/`CONST`/`VAR` declaration units with empty
   `IMPLEMENTATION` sections, both `USES Galaxy`).
+- **Tier 4** (standalone dialog/utility units, full USES closure satisfied by tier0-3): `TMA`
+  (zero patches -- splash-screen/about-box text) and `PULLDOWN` (needed a `{$V-}` patch, see "What
+  got patched and why" below).
 
 Verified working end to end from a clean checkout: `build.ps1` deletes and repopulates `scratch/`
 from pristine + `patches/*.patch` + `shims/*.PAS` every run, exactly like `reference/verify/build.ps1`
@@ -166,6 +169,41 @@ does for `patched/`.
     procedures (`FindFirst`/`FindNext`/`FExpand`) -- compiled unpatched: fpc's Windows `Dos` unit
     genuinely implements `Registers`/`MSDos`/`Exec`/the file-search API as compatibility shims, so none
     of it needed touching.
+- **`PULLDOWN.PAS`** -- pull-down menu-bar library. `AdjustString`'s `VAR` parameter is declared
+  `MaxStr` (`STRING[255]`), but two call sites pass a `String32` (`STRING[32]`) actual parameter --
+  a real fixed-string-length mismatch that fpc's default `$V+` rejects (`Error: String types have
+  to match exactly in $V+ mode`). The original DOS build's `TPC.CFG` sets `/$V-` project-wide, so
+  this never mattered under real Turbo Pascal; same fix and same rationale as
+  `reference/verify/patches/PRIMINTR.PAS.patch`'s `{$V-}` (see that lane's README). Added `{$V-}`
+  right after `UNIT PullDown;`.
+
+## Encoding incident: Read/Edit tool corrupted CP437 bytes in two patches (found and fixed)
+
+While patching `PULLDOWN.PAS` in this session, the regenerated patch came back with an extra,
+unintended hunk changing box-drawing characters unrelated to the actual edit. Root cause: this
+codebase's `.PAS` files are CP437-encoded (DOS-era extended ASCII for box-drawing/graphics
+characters, e.g. `WriteString('³',...)`). The AI assistant's Read/Edit tools decode files as
+UTF-8; any byte outside the ASCII range that isn't valid UTF-8 gets silently replaced with U+FFFD
+on the next Edit-triggered write-back -- and per this incident's evidence, that round-trip
+apparently re-serializes the *whole file*, not just the edited region, so damage can land anywhere
+in the file, not only near the intended change (confirmed here: the edit was near the top of
+`PULLDOWN.PAS`, the corruption showed up ~200 lines later).
+
+**Scope confirmed via `grep`/byte-scan for the `EF BF BD` (U+FFFD) signature across every patch in
+this lane** (`reference/verify/fullbuild/patches/*.patch`) and, separately, the sibling
+`reference/verify/patches/*.patch` lane: `EIO.PAS.patch` (one corrupted byte, a password-mask
+block character in `InputPassword`) and `PULLDOWN.PAS.patch` (from this session's own edit) were
+affected; `DOS2.PAS.patch`/`STRG.PAS.patch`/`SYSTEM2.PAS.patch`/`WND.PAS.patch` in this lane and
+the entire sibling lane were not (either no non-ASCII bytes touched, or the box-drawing bytes
+present survived intact). Both corrupted patches were regenerated from byte-level-corrected
+`scratch/` copies (built via a small Python script operating on raw bytes, never through Read/Edit)
+and reverified clean.
+
+**Rule going forward**: never use the Read/Edit tools to touch a `.PAS` file that contains, or is
+near, a CP437 extended-ASCII byte (box-drawing/graphics characters, byte values 128-255) -- use a
+raw-byte script (Python/PowerShell reading/writing bytes directly) for the edit instead, even for
+an otherwise-trivial insertion. After *any* Edit touches such a file for any reason, re-scan the
+regenerated patch for the `EF BF BD` signature before trusting it.
 
 ## Dead code found (excluded, not patched)
 
@@ -195,35 +233,62 @@ silently pointing at the wrong folder -- the script now converts all three to ab
 for the same class of bug: anything that hands a **relative** path straight to a `[System.IO.File]`
 static method rather than a PowerShell cmdlet.
 
-## Dependency map (informal, not committed anywhere else)
+## Dependency map: `uses-map.json`
 
-A first-pass USES dependency map across all ~80 pristine units was built via a subagent, then
-partially spot-checked by hand (the subagent's tiering had some real inconsistencies -- duplicate
-tier placement for a few units, some `IMPLEMENTATION USES` clauses marked "not shown" meaning it
-didn't finish reading those files -- treat it as a discovery aid, not verified ground truth). Confirmed
-facts worth keeping, beyond what's already encoded in `build.ps1`'s tier arrays:
+`uses-map.json` is a committed, verified USES-clause map across all ~80 pristine units (plus
+`BITCOMP.PAS`, a standalone `PROGRAM` rather than a unit, included for completeness). It replaces
+an earlier first-pass map built by a subagent and only partially spot-checked by hand, which had
+real inconsistencies (duplicate tier placement, some `IMPLEMENTATION USES` clauses marked "not
+shown" because it hadn't finished reading those files) -- that map is gone from history, not just
+superseded, since it was never trustworthy enough to keep around.
 
-- `WND.PAS` USES `Strg, Int, CRT, EIO`. `EIO.PAS` USES `Int, Strg, System2, DOS, CRT`.
-- `CdeTypes`/`NPETypes` (structurally tier-0 candidates, no other local unit dependency) both fail to
-  compile standalone with `Fatal: Can't find unit Galaxy` -- they genuinely need `Galaxy` built first.
-  Not a bug in either file; just means they're a later tier, not tier 0.
-- **Correction to an earlier claim in this file**: `Galaxy`'s `INTERFACE` only `USES Types`, but its
-  `IMPLEMENTATION` section separately `USES Dos2` (for `ReadVariable`/`WriteVariable`) -- confirmed by
-  reading `GALAXY.PAS` directly. So `Galaxy` is not the cheap one-dependency unit it looked like; it
-  needs `Dos2` built first, same as everything else waiting on `Dos2`.
-- One circular dependency the subagent flagged and this session did not verify by hand:
-  `Artifact` <-> `Code` (mutual `IMPLEMENTATION USES`). Will need joint compilation or an interface
-  split whenever this lane reaches that tier -- confirm the cycle is real before spending time on it.
-- Since the map's reliability is mixed, the fastest way to extend a tier is still what this lane has
-  done twice now: pick a candidate unit, try to compile it standalone against what's already in
-  `scratch/`, and let fpc's own error ("can't find unit X" / "identifier not found" / a syntax error)
-  say exactly what's missing next -- not the map, and not `reference/verify/dos_131_callgraph.json`
-  (which has its own documented `{$IFDEF}` blind spot, see `reference/verify/README.md`).
+**How it was built, and why this one's trustworthy**: a fresh regex/read pass over the pristine
+source (never `reference/verify/dos_131_callgraph.json`, which has its own documented `{$IFDEF}`
+blind spot, see `reference/verify/README.md`), recording each unit's `interfaceUses` and
+`implementationUses` **separately** -- the two are frequently different sets (e.g. `Galaxy`:
+`INTERFACE USES Types` only, `IMPLEMENTATION USES Dos2`) and a unit's real compile dependency is
+the union of both. Two parse artifacts from the first extraction pass (`DFA`/`Misc` each showed a
+garbage token in `implementationUses`) were caught and hand-corrected by re-reading those two files
+directly before this was committed -- confirmed both actually have no `IMPLEMENTATION USES` clause
+at all.
+
+**How to use it for tiering**: a unit is ready for the next tier once every name in both its
+`interfaceUses` and `implementationUses` is either already built (in `build.ps1`'s tier arrays) or
+a shim/rtl unit (`CRT`, `DOS`, `Printer`). This is a closure computation over the JSON, not
+something to eyeball by re-reading source files one at a time -- that one-at-a-time approach is
+what led to picking `FltWind`/`MapWind`/`StaWind` as the "next layer" when they actually sit two or
+three layers higher (they need `DataStrc`, `DataCnst`, `Misc`, `PrimIntr`, `Environ`, and
+`Intrface` first). **Still verify by actually compiling** -- this map says what fpc *should* need,
+not a substitute for `build.ps1` actually succeeding.
+
+**Circular dependencies found** (`cycles` in the JSON): `MapWind`<->`SWindows`,
+`Artifact`<->`Code`, `Environ`<->`PrimIntr`, `Fleet`<->`Intrface` -- all four run entirely through
+`IMPLEMENTATION USES` on both sides, never through either unit's `INTERFACE USES`. Turbo
+Pascal/fpc's unit model elaborates interface sections first, and an interface section only needs
+its own `INTERFACE USES` satisfied -- so an implementation-only cycle like these is expected to
+compile fine (the earlier claim in this file that `Artifact`<->`Code` would need "joint compilation
+or an interface split" was wrong, and has been removed). Not yet empirically confirmed by an actual
+`build.ps1` run reaching that tier -- when it does, this note should be updated with the result,
+per this lane's "let fpc's own error be the authority" rule.
+
+If the pristine source ever changes, regenerate this file with a fresh extraction pass (and
+recheck for new parse artifacts by spot-reading a couple of files) rather than hand-editing entries
+in place.
 
 ## Suggested next steps
 
-Window/comm units that depend on `Menu`, `Dos2`, or `Galaxy` (`MapWind`, `FltWind`, `StaWind`,
-`Display`, `SWindows`, ...) should now be unblocked -- pick whichever's actually needed next.
+`uses-map.json`'s closure says the next fully-satisfied units beyond tier4 are the game
+data/state layer: `DataStrc`, `DataCnst`, `Misc`, `PrimIntr`, `Environ`, and (the big one)
+`Intrface`. **`Intrface` is a genuine scope call, not a mechanical next step**: pristine
+`INTRFACE.PAS` is exactly the file `reference/verify/patches/INTRFACE.PAS.patch` exists to trim
+down to only what's needed -- building the whole thing here is the core bet of this entire lane.
+Check its actual size/closure cost against `uses-map.json` and raise it with the user before
+sinking time into it, rather than assuming "build everything" was meant literally without a
+checkpoint.
+
+Once through that layer, the window/comm units that depend on `Menu`, `Dos2`, `Galaxy`, or
+`Intrface` (`MapWind`, `FltWind`, `StaWind`, `Display`, `SWindows`, ...) become reachable --
+including the `MapWind`<->`SWindows` cycle noted above.
 
 Whatever's picked: try compiling it standalone against what's already in `scratch/` first (fpc's
 own error says exactly what's missing). If it lands at the same dependency depth as an existing

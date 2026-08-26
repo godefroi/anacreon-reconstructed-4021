@@ -167,15 +167,6 @@
     END;  { SetCursor }
  
  PROCEDURE InputPassword(VAR Word: String8; VAR ESCHit: Boolean);
-@@ -496,7 +481,7 @@ PROCEDURE InputPassword(VAR Word: String8; VAR ESCHit: Boolean);
-          IF Length(Word)<8 THEN
-             BEGIN
-             Word:=Word+Inp;
--            Write('Þ');
-+            Write('ï¿½');
-             END;
-          END;
-    UNTIL Exit;
 @@ -554,9 +539,13 @@ CASE Lo(LastMode) OF
        END;
  END;  { case }

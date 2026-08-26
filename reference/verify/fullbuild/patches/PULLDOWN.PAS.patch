@@ -1,0 +1,14 @@
+--- a/PULLDOWN.PAS
++++ b/PULLDOWN.PAS
+@@ -119,6 +119,11 @@
+ 
+ UNIT PullDown;
+ 
++{ PATCH (fpc): the V- flag below relaxes fpc's strict fixed-string-length type
++  matching (Turbo Pascal treated e.g. String16/String32 as interchangeable by
++  content; fpc's default V+ requires an exact declared-length match). }
++{$V-}
++
+ INTERFACE
+ 
+ USES Strg,

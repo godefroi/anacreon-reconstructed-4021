@@ -49,6 +49,14 @@ $tier2 = @('MENU.PAS', 'DOS2.PAS')
 # Galaxy. None of the three have asm/memory/interrupt landmines of their own.
 $tier3 = @('GALAXY.PAS', 'CDETYPES.PAS', 'NPETYPES.PAS')
 
+# Tier 4: standalone dialog/utility units whose full USES closure (interface + implementation)
+# is already satisfied by tier0-3 -- found via a whole-tree USES-clause extraction (see chat
+# history) rather than picking a candidate file and discovering its deps one compile at a time.
+# TMA.PAS (splash-screen/about-box text) and PULLDOWN.PAS (pull-down menu-bar library) are the
+# only two genuinely new units the scan surfaced; the rest of its "ready" list was already-built
+# units or the deliberately-excluded dead DList/Sort/LSort trio.
+$tier4 = @('TMA.PAS', 'PULLDOWN.PAS')
+
 # CRT.PAS is not pristine source at all -- see shims/CRT.PAS's own header comment for why this
 # lane fakes the whole unit instead of pointing fpc at its real (but differently-behaved) Crt.
 # PRINTER.PAS is the same idea: fpc does ship a real Printer unit, but it's not on the default
@@ -58,7 +66,7 @@ $shims = @('CRT.PAS', 'PRINTER.PAS')
 
 # Flattened once so adding a unit to an existing tier's array above doesn't also require editing
 # a copy/compile/count expression down here.
-$allUnits = $tier0 + $tier1 + $tier2 + $tier3
+$allUnits = $tier0 + $tier1 + $tier2 + $tier3 + $tier4
 
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out | Out-Null
