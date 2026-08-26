@@ -157,14 +157,48 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   tests (`AnnualTickHandlerHostileLifeTests`) exploiting `FixedRandom(N)`'s `min+N` resolution to
   deterministically pick each of the three branches.
 
-## 6. NPE AI
+## 6. NPE AI — in progress, scoping pass done
 
-Implement an `ITurnHandler` for computer empires. Start with one "classic" implementation — the
-handler-per-empire design (`Game.TurnHandlers`) already supports adding an "advanced" variant later.
+Implement an `ITurnHandler` for computer empires. The roadmap's original one-line framing here
+("start with one classic implementation") undersold this phase the way "8 known News sites"
+undersold Phase 4: six parallel research forks read every NPE-adjacent Pascal file in full
+(`NPE.PAS`/`NPETYPES.PAS`/`NPE00`-`NPE04.PAS`/`NPEINTR.PAS`, ~4,400 lines of real decision logic)
+before planning. Design rationale and the full commit breakdown are in `PORT_DESIGN.md`; this
+section tracks status only.
 
 Moved after Probes/News/Combat (was Phase 3 originally): NPE decision-making is written against
 combat primitives from the start (`NPE01.PAS`'s `USES` clause pulls in `Attack`/`AttNPE`) and reads
 the News feed as a real sensory input, not just a display concern.
+
+**Corrected scope**: real Pascal has **four structurally distinct NPE personalities** (Pirate,
+Kingdom, Berserker, Guardian), each its own file with its own private data record, dispatched via
+`NPE.PAS`'s `NPEData[Emp].Typ: NPEmpireTypes` — not one AI with a "classic" and "advanced" tier.
+The one place that framing actually holds is `Kingdom1NPE`/`Kingdom2NPE`, which share one real
+implementation (`NPE02.PAS`) and differ only in their `NPECharacterRecord` persona seed (passive
+vs. aggressive). Reachability, checked against all 12 `dos_131/*.SCN` files' `CreateNPEmpire`
+directives (`NEWGAME.PAS:1219-1259` reads the type as a raw ordinal):
+
+| Ordinal | Type | Scenarios using it |
+|---|---|---|
+| 1 | Pirate | ARRONAX, GAUNTLET, JAKARTA |
+| 2 | Kingdom1 (passive) | AWAKEN, GAUNTLET, PERIPHER |
+| 3 | Kingdom2 (aggressive) | every scenario with any NPE at all |
+| 4 | Berserker | ARRONAX only |
+| 5 | Guardian | never — not used by any `dos_131` scenario |
+| 6 | Trader | never, and confirmed dead code (see below) |
+
+This phase builds **Kingdom only** (both persona presets, one implementation) — the personality
+that actually dominates real scenario content — plus the shared infrastructure (dispatch,
+per-empire/per-fleet AI state, the `NPEINTR.PAS` toolkit) sized so Pirate/Berserker/Guardian can
+slot in later without rework, per the user's explicit direction when this was scoped. Each gets
+its own future roadmap entry when picked up rather than being built speculatively now (Guardian
+in particular — zero `dos_131` usage — would be scope built ahead of any demonstrated need).
+`TraderNPE` is confirmed dead, not just unreachable: zero case arms in any of `NPE.PAS`'s 5
+dispatch procedures (every one falls through to Pirate behavior), no `TraderDataRecord` in
+`NPETYPES.PAS`, and zero scenario usage — same treatment as Phase 5's `BATTLE.PAS`/`BOMBER.PAS`,
+not ported. `DeployHarassFleet` (`NPEINTR.PAS:777`) and `ImplementDefendBMS` (`NPE04.PAS`) are
+confirmed empty `BEGIN END` stubs in both the 1.31 and 2.0 source trees — intentional no-ops the
+original developers shipped incomplete, not a port gap.
 
 - **6a, fleet/starbase movement fidelity (prerequisite).** `FleetMovementHandler`'s `AdvanceFleet`/
   `AdvanceStarbases` (shipped pre-Phase-1, in the initial skeleton) are deliberately simplified
@@ -172,8 +206,10 @@ the News feed as a real sensory input, not just a display concern.
   fixed there since it's movement fidelity, not a combat mechanic (see `PORT_DESIGN.md`). Belongs
   here rather than Phase 5 or Phase 8: `NPE01.PAS`'s decision logic (fuel-aware retreat, stargate
   routing) can't be reasoned about correctly until these are real, and it's simulation core, not UI,
-  so it lands before Phase 8 per this roadmap's own bottom-up ordering. Land it as prep before the
-  actual AI commits:
+  so it lands before Phase 8 per this roadmap's own bottom-up ordering. Also adds a `FLEET.PAS`
+  ground-truth patch to `reference/verify/patches/` — every NPE file needs `Fleet` in its own
+  `USES` clause, so this pays for 6a's own verification and every later NPE commit's ground truth
+  at once (see `reference/verify/README.md`). Land it as prep before the actual AI commits:
   - Fleet stargate teleportation / fortress pass-through jumps (`FLEET.PAS:646-860`'s `UpdateFleet`).
   - Starbase obstacle-avoidance and fuel cost (`SBASE.PAS:88-263`'s `MovePlayerStarbases`/
     `GetNewBasePos`).
@@ -183,6 +219,22 @@ the News feed as a real sensory input, not just a display concern.
   - Dense-nebula movement blocking (`FLEET.PAS:437-450`'s `GetNewPos`) — surfaced by 5h while tracing
     the exact per-step move loop for mine/disrupter checks; applies to every fleet type, not just
     `JumpFleet`/`HunterKillerFleet`, so it's a terrain effect rather than a combat mechanic.
+- **6b, core NPE dispatch + state.** `Empire.NpeType` (name TBD), wiring `ScenarioLoader.
+  RunCreateNPEmpire` (currently reads and discards the ordinal) to record it and construct a
+  `KingdomTurnHandler` for Kingdom1/Kingdom2 empires only — other types stay unregistered in
+  `Game.TurnHandlers`, matching the existing "ai has no entry" precedent in `TurnEngineTests.cs`.
+  `RndVar` (`INT.PAS:120-131`, a trivial `Rnd` wrapper) added to `PascalMath.cs`.
+- **6c, `NPEINTR.PAS` toolkit.** The shared fleet-deployment/targeting/mission-dispatch/bookkeeping
+  service `KingdomTurnHandler` depends on, including a field-by-field audit of `FleetDataRecord`
+  before any of it is mirrored onto `Fleet` (see `PORT_DESIGN.md`'s derive-don't-duplicate note).
+- **6d, Kingdom core loop.** `NPE00.PAS` (defense, expansion, exploration, logistics) plus
+  `NPE02.PAS`'s per-turn driver and both persona-seed presets. No diplomacy yet.
+- **6e, Kingdom diplomacy.** `StateDepartment`/`StateDeptReport`/`WarCabinet` and `ReviewNews`'s
+  policy-tier state machine — the piece most likely to need real `PascalRandom` sequences rather
+  than `ForcedRandomValue`, since its RNG draws depend on live-galaxy iteration order.
+- **6f, roadmap wrap-up.** Flip Kingdom to done here; explicit one-line disposition for each
+  deferred/dead personality so picking this phase back up doesn't require re-deriving the
+  reachability table above.
 
 ## 7. Save/load
 

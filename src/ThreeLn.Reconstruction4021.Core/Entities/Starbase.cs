@@ -22,9 +22,6 @@ public sealed class Starbase : IMovable, IEconomicWorld
     public DefenseCounts Defenses { get; } = new();
     public IndustryLevels Industry { get; } = new();
 
-    /// <summary>Years until this starbase (if mobile) takes its next move step (DATASTRC.PAS:73).</summary>
-    public int YearsUntilNextMove { get; set; }
-
     public Coordinate? Destination { get; set; }
     public FleetStatus Status { get; set; } = FleetStatus.Ready;
 

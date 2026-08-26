@@ -229,9 +229,50 @@ otherwise have to fake (`GetCapital`/`GetTech`-style lookups, other empires/plan
 call *ordering* across a real pipeline is what's being checked — transcription missed a real bug this
 way once (`UpdateMilitary` mutating `Cargo.Legions` before `UpdateRevolution` reads it). Transcription
 only for a procedure with no such dependency. Don't gate the choice on authoring cost — lean into
-patch-based broadly. Dependency-blast-radius judgment still applies: don't drag combat/fleet
-movement/NPE AI (`Intrface`'s `Fleet`/`Orders`/`NPE`) into scope prematurely — each new subsystem's
-dependency web is its own investigation, not something the domains above generalize to.
+patch-based broadly. Dependency-blast-radius judgment still applies: each new subsystem's dependency
+web is its own investigation, not something the domains above generalize to automatically — Phase 6
+is the first to actually pull in `Intrface`'s `Fleet`/`Orders`/`NPE` web (patching `FLEET.PAS` as
+part of its 6a), decided when that phase was scoped, not assumed in advance.
+
+## NPE AI: personality dispatch, not one generic AI
+
+Phase 6's own scoping pass (six research forks reading every NPE-adjacent Pascal file in full)
+found real Pascal implements **four structurally distinct NPE personalities** — Pirate, Kingdom,
+Berserker, Guardian, each its own file with its own private data record in `NPETYPES.PAS`
+(`PirateDataRecord`/`Kingdom1DataRecord`/`BerserkerDataRecord`/`GuardianDataRecord`) — dispatched
+from `NPE.PAS`'s `NPEData[Emp].Typ: NPEmpireTypes` via a classic Pascal variant-pointer union
+(`NPEDataRecord{Typ; Data: Pointer}`). `Kingdom1NPE`/`Kingdom2NPE` are the one place "one AI, two
+tiers" actually holds: both share `NPE02.PAS`'s single `Implement`/`CleanUp`/`Save` procedure,
+differing only in their `NPECharacterRecord` persona seed (`Kingdom1`: passive, `DefGene:=
+Rnd(50,75)`; `Kingdom2`: aggressive, `OffGene:=Rnd(50,100)`) — Pirate/Berserker/Guardian are
+separate code, not presets of one algorithm. A sixth type, `TraderNPE`, is declared but has zero
+case arms in any of `NPE.PAS`'s 5 dispatch procedures, no data record, and zero usage across all
+12 `dos_131/*.SCN` scenario files — confirmed dead, same treatment as `BATTLE.PAS`/`BOMBER.PAS`.
+
+**No `NPEDataRecord`-style tagged union in C#.** Pascal's variant pointer exists only because its
+dispatch array (`NPEData: ARRAY[Empire]`) needs one element type regardless of which AI runs. This
+port's `Game.TurnHandlers: Dictionary<Empire, ITurnHandler>` (pre-existing, Phase 1) already gets
+that for free through ordinary polymorphism — a parallel tagged-union type would port Pascal's
+workaround into a codebase that doesn't have the problem it works around, the same call already
+made for empire elimination above. `KingdomTurnHandler : ITurnHandler` is the one implementation
+Phase 6 builds; `PirateTurnHandler`/`BerserkerTurnHandler`/`GuardianTurnHandler` slot in later as
+their own classes when picked up — no shared AI base class invented ahead of a second real
+implementation to generalize from.
+
+**What genuinely is shared, and gets built now despite only one personality existing:**
+`NPEINTR.PAS` (1,732 lines) is a real toolkit multiple personalities call in Pascal — fleet
+deployment, targeting, mission-dispatch, bookkeeping — not Kingdom-private code, so it's ported as
+its own service `KingdomTurnHandler` depends on rather than folded into Kingdom's own class; later
+personalities call the same methods. `Empire.NpeType` (recording which personality an empire is)
+is real, needed-now state regardless of how many personalities are implemented — Phase 7's
+save/load needs it, and `ScenarioLoader.RunCreateNPEmpire` already parses the ordinal and discards
+it today. Per-fleet AI mission state (Pascal's `FleetDataRecord`) gets a field-by-field audit
+before anything is ported, not a verbatim mirror — some fields (`Waiting`, `Midway`) look
+derivable from state the port already tracks (`FleetStatus`, `Location`/`Destination`); only what
+survives the audit is new state, homed on the owning `ITurnHandler` instance (AI bookkeeping only
+some fleets have), not bolted onto `Fleet` itself.
+
+Full commit breakdown and reachability data: `docs/ROADMAP.md`'s Phase 6 section.
 
 **Adding a new patch-based domain:**
 1. If the target procedure isn't already exported from its unit's `INTERFACE`, add/extend a patch —

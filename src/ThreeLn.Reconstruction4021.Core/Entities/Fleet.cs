@@ -13,9 +13,14 @@ public sealed class Fleet : IMovable, ISectorObject
 
     /// <summary>
     /// Pascal splits this across FuelHigh/Fuel to dodge 16-bit Integer overflow
-    /// (FuelHigh*MaxInt + Fuel) — no reason to carry that split into C#.
+    /// (FuelHigh*MaxInt + Fuel) — no reason to carry that split into C#. Real (not int): Pascal's own
+    /// GetFleetFuel/SetFleetFuel expose it as a Real everywhere it's actually used
+    /// (UseUpFuel/FuelConsumption/FuelCapacity all compute fractionally, truncating only when the
+    /// value is written back to the underlying storage) — an int here would round a sub-1.0 yearly
+    /// consumption (a lone fighter burns ~0.01/year, MISC.PAS:394-396) to 0 or 1 every turn instead of
+    /// accumulating fractionally, a different mechanic, not just lost precision.
     /// </summary>
-    public int Fuel { get; set; }
+    public double Fuel { get; set; }
 
     public Coordinate? Destination { get; set; }
     public FleetStatus Status { get; set; } = FleetStatus.Ready;

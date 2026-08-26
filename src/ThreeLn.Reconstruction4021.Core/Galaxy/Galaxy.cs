@@ -70,4 +70,21 @@ public sealed class Galaxy(int size)
 
     public bool IsMineScoutedBy(Empire empire, Coordinate coordinate) =>
         _mineScoutedBy.TryGetValue(coordinate, out var scouts) && scouts.Contains(empire);
+
+    /// <summary>
+    /// GetObject's real occupancy model (PRIMINTR.PAS: <c>Sector[x]^[y].Obj</c>) — one non-fleet object
+    /// slot per sector (a planet, starbase, stargate, or construction site; never more than one, since
+    /// placement always checks this first), owner-blind. Fleets are tracked separately (Pascal's own
+    /// per-sector <c>Flts: FleetSet</c>, this port's <see cref="Fleets"/> list) and never occupy this
+    /// slot. Phase 6a's first real reader (stargate/fortress movement, starbase obstacle avoidance) —
+    /// see that phase's notes in docs/ROADMAP.md for why a combined index wasn't needed until now.
+    /// </summary>
+    public ISectorObject? GetObjectAt(Coordinate location)
+    {
+        ISectorObject? found = Planets.FirstOrDefault(p => p.Location == location);
+        found ??= Starbases.FirstOrDefault(s => s.Location == location);
+        found ??= Stargates.FirstOrDefault(g => g.Location == location);
+        found ??= ConstructionSites.FirstOrDefault(c => c.Location == location);
+        return found;
+    }
 }
