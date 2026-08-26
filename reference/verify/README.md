@@ -32,9 +32,14 @@ still the right call for a genuinely isolated, parameter-only procedure (see "Re
   `src/ThreeLn.Reconstruction4021.Tests/PascalGroundTruth/`) does the same copy/patch/compile/run steps
   directly, so `GoldenFileTests` can call it like any other harness.
 - `patched/` — disposable build output, gitignored, never a source of truth. If you need to iterate on
-  a patch: run `build.ps1`, edit the file directly under `patched/`, verify it compiles/runs, then
-  regenerate that file's `.patch` from the diff against the pristine original and overwrite it in
-  `patches/`. Never hand-edit a `.patch` file.
+  a patch: run `build.ps1`, edit the file directly under `patched/`, verify it compiles/runs, then run
+  `./regenerate-patch.ps1 -File FILE.PAS` to regenerate that file's `.patch` and overwrite it in
+  `patches/` (see "Restoring a removed procedure" below for the full workflow). Never hand-edit a
+  `.patch` file.
+- `regenerate-patch.ps1` — regenerates one `patches/<File>.patch` from a hand-edited `patched/<File>`,
+  self-verifying that the result applies cleanly to pristine source and reproduces `patched/<File>`
+  byte-for-byte before writing it. Pass `-OutDir` to write somewhere other than `patches/` to try a
+  regeneration without touching the committed patches.
 
 To add a new domain: give `runworld.pas` a new `case <domain>` branch (document its field shape in the
 file's own header comment, matching the convention every existing domain already follows), add a
@@ -100,10 +105,13 @@ building it. Grouped by the roadmap phase that introduced it; field shapes and o
   against a real Pascal run first.
 - **`construction`** — `UpdateConstruction` (nested `UseUpRawMaterial`) plus
   `ConstructStarbase`/`ConstructStargate`. Same "deleted from the patched build, needs a full
-  `UPDATE.PAS.patch` regeneration" situation as `empire`; also relocated five small `Intrface`-only
-  helpers (`NextStarbaseSlot`, `CreateStarbase`(Pascal), `NextStargateSlot`, `CreateStargate`(Pascal),
-  `GetOptimumIndus`) verbatim. Hit the same `Sector[x]^[y]` access-violation gotcha `starbase` already
-  found (`PutMine`/`CreateStarbase`/`CreateStargate` all touch it; needs `Galaxy.InitializeSector`).
+  `UPDATE.PAS.patch` regeneration" situation as `empire`. `ConstructStarbase`/`ConstructStargate` call
+  five small `Intrface`-only helpers (`NextStarbaseSlot`, `CreateStarbase`(Pascal), `NextStargateSlot`,
+  `CreateStargate`(Pascal), `GetOptimumIndus`) — originally relocated verbatim into this file, later
+  folded into their real home in `patches/INTRFACE.PAS.patch` once that unit was trimmed and linked
+  (Phase 6, 6a follow-up — see "Trimming a unit down to size" below). Hit the same `Sector[x]^[y]`
+  access-violation gotcha `starbase` already found (`PutMine`/`CreateStarbase`/`CreateStargate` all
+  touch it; needs `Galaxy.InitializeSector`).
 
 ### Phase 2 — galaxy / new-game setup
 
@@ -113,11 +121,13 @@ building it. Grouped by the roadmap phase that introduced it; field shapes and o
   `CreatePlayerEmpire`/`CreateNPEmpire`, this domain reproduces their 3-line starting-tech-set formula
   inline and calls `CreateEmpire` directly with the result. Fully deterministic, no RNG. 13 cases
   exhaustively cross-check every row of `TechDev` plus both directions of the extra-tech intersect-clamp.
-- **`trillumreserves` / `randomplanet` / `nebula`** — relocated `CreatePlanet`
-  (`INTRFACE.PAS`) plus `RandomTrillumReserves`/`RndShips`/`RndCargo`/`RndDefns`/`SetUpWorld`/
-  `CreateRndPlanet`/`NebulaeBand`/`NebulaePatches` (`NEWGAME.PAS`) verbatim into the patched `UPDATE.PAS`
-  — all self-contained `Universe^`/`Misc`/`DataCnst`/`PrimIntr` logic, reachable with zero new unit
-  imports. `GetRandomXY`/`CreateRandomWorlds` are deliberately **not** covered here: under
+- **`trillumreserves` / `randomplanet` / `nebula`** — `CreateRndPlanet` calls `CreatePlanet`, which
+  lives in the real (trimmed) `Intrface` unit (see "Trimming a unit down to size" below) — originally
+  relocated verbatim into this file alongside `RandomTrillumReserves`/`RndShips`/`RndCargo`/`RndDefns`/
+  `SetUpWorld`/`CreateRndPlanet`/`NebulaeBand`/`NebulaePatches` (`NEWGAME.PAS`, still relocated here:
+  `NEWGAME.PAS` itself was never trimmed/linked, so these eight stay verbatim copies) — all
+  self-contained `Universe^`/`Misc`/`DataCnst`/`PrimIntr` logic, reachable with zero new unit imports.
+  `GetRandomXY`/`CreateRandomWorlds` are deliberately **not** covered here: under
   `ForcedRandomValue`, every `Rnd` call in one invocation returns the same fixed offset, so a coordinate
   blocked on the first roll is blocked on every retry too — there's no way to construct a case that
   reaches "blocked, then a later retry succeeds" on either side of the comparison. Those two procedures'
@@ -208,17 +218,22 @@ needed it), don't hand-splice a new hunk into the existing patch — regenerate 
    restore the procedure (forward declaration in `INTERFACE`, body in `IMPLEMENTATION`).
 2. Compile it directly (`fpc -Mtp -CfSSE2 runworld.pas` from inside `patched/`) and confirm it compiles
    and the new domain's manual test case runs.
-3. Diff the pristine source against the hand-edited file with `git diff --no-index` — on Windows, drive
-   this through a tool that reads raw bytes (e.g. PowerShell's `System.Diagnostics.Process` +
-   `MemoryStream`), not a Bash pipeline: some Git-Bash/MSYS mounts silently translate CRLF↔LF on
-   read/write through `sed`/`diff`, producing a patch that looks clean but won't `git apply` against the
-   real (CRLF) Pascal source.
-4. Strip the diff's extended-format header (`diff --git ...` / `index ...` lines, and the `---`/`+++`
-   lines' full paths) down to the plain `--- a/FILE.PAS` / `+++ b/FILE.PAS` form every other patch in
-   `patches/` already uses — `git apply` needs this even though `git diff --no-index` doesn't produce it
-   by default.
-5. Overwrite the `.patch` file, then run `build.ps1` fresh (deletes `patched/`, reapplies every patch,
-   recompiles) and confirm it reproduces the hand-edited file byte-identically and still compiles/runs.
+3. Run `./regenerate-patch.ps1 -File FILE.PAS` to regenerate `patches/FILE.PAS.patch` from the
+   hand-edited `patched/FILE.PAS`. This used to be a hand-driven `git diff --no-index` with two gotchas
+   that repeatedly had to be re-fixed after the fact: `git diff --no-index` always prepends its own
+   `a/`/`b/` prefix on top of whatever path you give it (producing headers like `a/a/FILE.PAS` unless
+   worked around), and driving the diff through the wrong tool can silently rewrite CRLF↔LF (some
+   Bash/MSYS pipes do this; a plain PowerShell `>`/`Out-File` redirect defaults to UTF-16LE) — either
+   one produces a patch that looks fine but won't `git apply` against the real (CRLF) Pascal source, or
+   applies but reproduces the wrong bytes. `regenerate-patch.ps1` stages both files under literal
+   `a/FILE.PAS`/`b/FILE.PAS` with `--no-prefix`, reads git's stdout as raw bytes via
+   `System.Diagnostics.Process`, and — before writing anything to `patches/` — applies its own output to
+   a scratch copy of pristine source and byte-compares the result against `patched/FILE.PAS`, refusing to
+   write a patch that doesn't round-trip. Pass `-OutDir` to write somewhere other than `patches/` (a
+   scratch directory) to try a regeneration without touching the committed patches.
+4. Run `build.ps1` fresh (deletes `patched/`, reapplies every patch, recompiles) and confirm the whole
+   patch set still applies together and still compiles/runs — `regenerate-patch.ps1`'s own self-check
+   only proves the one file round-trips in isolation, not that it composes with every other patch.
 
 Done for `empire`/`construction` (`UPDATE.PAS.patch`) and `lamattack` (`ATTACK.PAS.patch`) so far.
 Relocating a small, self-contained procedure/formula out of a unit with a much larger `USES` clause than
@@ -259,6 +274,20 @@ compiler complains about next (an unreachable dependency's own missing sub-depen
   ever declared is gone from this harness's copy. `GetObject`/`GetStatus`/`GetBaseType`/`GetGateType`/
   `Known` (which those three still call) already live in the already-linked `PrimIntr`, so nothing else
   needed pulling in.
+
+  Nine more procedures joined these three later, same commit's own follow-up: `GetIndustrialDistribution`/
+  `CreatePlanet`/`NextStarbaseSlot`/`CreateStarbase`/`NextStargateSlot`/`CreateStargate`/`GetOptimumIndus`/
+  `ProbeScout`/`UpdateProbes` had all been relocated verbatim into `patches/UPDATE.PAS.patch` back when
+  `INTRFACE.PAS` wasn't linked at all (see `construction`/`trillumreserves`/`randomplanet`/`nebula` above)
+  — once `INTRFACE.PAS` was trimmed and linked anyway for `FLEET.PAS`'s sake, keeping a second verbatim
+  copy of code that really lives there was pure duplicate-copy drift risk with no upside, so they moved
+  back. All twelve are kept in their **original relative pristine order** (both `INTERFACE` declarations
+  and `IMPLEMENTATION` bodies) rather than clustered wherever's convenient — a first pass appended the
+  nine at the end of the file, and the regenerated patch showed them as full delete/re-add pairs relative
+  to pristine even though the bodies were byte-identical, because moving code to a different position in
+  the file is a real edit as far as a diff is concerned. Preserving pristine order instead means the
+  regenerated `patches/INTRFACE.PAS.patch` is a set of pure deletions against pristine source — nothing
+  reads as removed-then-re-added, which also makes the patch itself smaller and easier to review.
 
 `FleetMovementHandler.GetNewPos`/`IsPassingThroughGate`/`IsAtFortress` are `public static` on the C# side
 specifically so `fleetmove`'s own `FleetMoveTests` can call them in isolation this same way — check
@@ -335,11 +364,14 @@ be small and mechanical, not a case of "reconstruct a DOS UI stack":
   on `MaxAvail` (TP's real-mode heap-free check, meaningless under virtual memory) — replaced with
   `IF True THEN`. Several fixed-length-string comparisons needed `{$V-}` (fpc's default `$V+` is stricter
   than TP about exact string-length matching).
-- **One relocated (not rewritten) procedure.** `GetIndustrialDistribution` is pure economy math (only
-  calls `PrimIntr` getters and `Misc`/`DataCnst` tables) but lives in `INTRFACE.PAS`, which would drag in
-  `Fleet`/`Orders`/`NPE` for one function. Moved verbatim into `UPDATE.PAS` — a real patch spanning two
-  files (delete from one, add to the other), documented as such in the patch comments rather than
-  silently dropping the provenance.
+- **One relocated (not rewritten) procedure, later moved home.** `GetIndustrialDistribution` is pure
+  economy math (only calls `PrimIntr` getters and `Misc`/`DataCnst` tables) but lives in `INTRFACE.PAS`,
+  which at the time would have dragged in `Fleet`/`Orders`/`NPE` for one function — moved verbatim into
+  `UPDATE.PAS` instead, a real patch spanning two files (delete from one, add to the other), documented
+  as such in the patch comments rather than silently dropping the provenance. Once `INTRFACE.PAS` was
+  trimmed and linked anyway (Phase 6, 6a — see "Trimming a unit down to size"), this relocation (and
+  eight others like it: `CreatePlanet`/`NextStarbaseSlot`/`CreateStarbase`/`NextStargateSlot`/
+  `CreateStargate`/`GetOptimumIndus`/`ProbeScout`/`UpdateProbes`) moved back to its real home.
 - **A test-only RNG override**, added to `INT.PAS`: `ForcedRandomValue`, when `>=0`, makes every
   `Rnd(Min,Max)` call return `Min+ForcedRandomValue` — deliberately matching the existing C# harnesses'
   `FixedRandom`/`RngFixedValue` convention exactly, so results are comparable to existing golden files.
@@ -413,7 +445,10 @@ game systems as those slices grow, not just the one procedure under test:
   roadmap commits before `production.golden`'s migration retired its last domain. Nothing currently uses
   it, but reach for it again if a future case fits that description better than a hand-assembled
   `Universe^` would.
-- Don't expand this into fleet-movement/NPE-AI territory by default just because combat is now covered.
-  `Intrface`'s `Fleet`/`Orders`/`NPE` dependency has been dodged repeatedly by relocating one function at
-  a time, not by pulling in a whole subsystem's dependency web — treat each new area as its own
-  exploration, not an assumed extension of what combat's domains already proved.
+- Don't expand the *linked* surface by default just because Phase 6 pulled in `Fleet`/`Intrface`.
+  `Intrface`'s own `Fleet`/`Orders`/`NPE` dependency was dodged for years by relocating one function at a
+  time; Phase 6, 6a decided (deliberately, not by default) that `Fleet` was worth linking in full because
+  later NPE AI commits genuinely need it, and trimmed `Intrface` down to size for the same reason —
+  `Orders`/`NPE`/`EIO`/`Mess` are still not linked, and still shouldn't be pulled in just because two of
+  their neighbors now are. Treat each new area as its own exploration, weighed against what later commits
+  actually need, not an assumed extension of whatever's already linked.

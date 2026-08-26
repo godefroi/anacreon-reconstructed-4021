@@ -1271,8 +1271,8 @@ procedure RunTrillumReservesCase(const arg: String);
 procedure RunRandomPlanetCase(const arg: String);
    { Calls the now-exported CreateRndPlanet directly (Phase 2 commit 2d) at a fixed (5,5) -- location
      never varies in this domain, CreateRndPlanet's own formula doesn't read it. Requires
-     InitializeSector first: CreatePlanet (relocated alongside CreateRndPlanet) writes through
-     Sector[x]^[y].Obj, same requirement as RunStarbaseCase/RunConstructionCase. Doesn't set
+     InitializeSector first: CreatePlanet (Intrface's real home, called by CreateRndPlanet) writes
+     through Sector[x]^[y].Obj, same requirement as RunStarbaseCase/RunConstructionCase. Doesn't set
      TrillumReserve -- matching real Pascal, CreateRndPlanet's own call sites always do that
      separately (see RunTrillumReservesCase / GalaxySetup.CreateRndPlanet's own doc comment). }
    var

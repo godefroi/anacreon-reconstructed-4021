@@ -1,6 +1,6 @@
 --- a/UPDATE.PAS
 +++ b/UPDATE.PAS
-@@ -11,32 +11,151 @@ UNIT Update;
+@@ -11,11 +11,13 @@ UNIT Update;
  
  INTERFACE
  
@@ -17,13 +17,18 @@
       Types,
       Galaxy,
       DataStrc,                                  { Universe data structure. }
-      DataCnst,
+@@ -23,20 +25,138 @@ USES Strg,
       News,
       Misc,                                      { Miscellaneous routines. }
--     Primintr,                                  { Primitive procedures. }
+      Primintr,                                  { Primitive procedures. }
 -     Intrface,                                  { Interface routines. }
 -     Mess;
-+     Primintr;                                  { Primitive procedures. }
++     Intrface;                                  { GetIndustrialDistribution/CreatePlanet/
++                                                   NextStarbaseSlot/CreateStarbase/
++                                                   NextStargateSlot/CreateStargate/
++                                                   GetOptimumIndus/ProbeScout/UpdateProbes --
++                                                   real home, no longer relocated copies (see
++                                                   Intrface's own header comment). }
  
 -PROCEDURE UpdateUniverse;
 +PROCEDURE UpdateWorld(World: IDNumber);
@@ -35,11 +40,11 @@
 +
 +{ PATCH (fpc): UpdateConstruction promoted here from IMPLEMENTATION (Commit 5b),
 +  same reason as UpdateWorld/UpdateEmpire above. Its own ConstructStarbase/
-+  ConstructStargate helpers, and the five Intrface-only procedures they need
-+  (NextStarbaseSlot/CreateStarbase/NextStargateSlot/CreateStargate/
-+  GetOptimumIndus), are all restored/relocated below too -- see the
-+  IMPLEMENTATION-section comment near GetIndustrialDistribution's own
-+  relocation note for why relocating rather than importing Intrface. }
++  ConstructStargate helpers call NextStarbaseSlot/CreateStarbase/
++  NextStargateSlot/CreateStargate/GetOptimumIndus, which now come from the real
++  (trimmed) Intrface unit -- see this file's own USES clause and Intrface's
++  header comment; these five used to be relocated copies here too, folded back
++  into their real home once Intrface was linked (Phase 6, 6a follow-up). }
 +PROCEDURE UpdateConstruction(i: Byte);
 +
 +{ PATCH (fpc): test-only observability hook, mirroring the ForcedRandomValue
@@ -53,10 +58,10 @@
 +FUNCTION GetNewTotalRevIndex(Emp: Empire): Integer;
 +
 +{ PATCH (fpc): CreateRndPlanet/RandomTrillumReserves/NebulaeBand/NebulaePatches (Phase 2 commit 2d)
-+  relocated verbatim from NEWGAME.PAS, same reasoning as UpdateConstruction's own Intrface-only
-+  helpers above -- see the IMPLEMENTATION-section comment near CreatePlanet's relocation for the
-+  full dependency list. GetRandomXY/CreateRandomWorlds were deliberately NOT relocated at the time --
-+  see the PATCH note further below (2e) for why that's since been superseded. }
++  relocated verbatim from NEWGAME.PAS -- see the IMPLEMENTATION-section comment near
++  RandomTrillumReserves's own body for the full dependency list. GetRandomXY/CreateRandomWorlds were
++  deliberately NOT relocated at the time -- see the PATCH note further below (2e) for why that's
++  since been superseded. }
 +PROCEDURE CreateRndPlanet(ID: IDNumber; Coord: XYCoord; Class: WorldClass; T: TechLevel);
 +FUNCTION RandomTrillumReserves(Cls: WorldClass; RegionReserves: Word): Word;
 +PROCEDURE NebulaeBand;
@@ -122,16 +127,11 @@
 +PROCEDURE CreateSRMs(VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
 +PROCEDURE CreateRandomWorlds(VAR SF: TEXT; VAR FirstWorld: Word; VAR ClassTable: ClassArray; VAR TechTable: TechArray; TriRes: Word; VAR Zone: ZoneArray);
 +
-+{ PATCH (fpc): ProbeScout/UpdateProbes (Phase 3), relocated verbatim from INTRFACE.PAS -- same
-+  reasoning as GetOptimumIndus/the LoadScenario helpers above: Intrface's own IMPLEMENTATION USES
-+  pulls in Fleet, Orders, and NPE (confirmed directly, not assumed -- trying to import Intrface here
-+  reaches those three units, exactly the combat/NPE-AI blast radius this codebase has deliberately
-+  stayed out of every earlier phase), so only these two procedures move, not the whole unit.
-+  GetObject/GetStatus/GetCargo/Scouted/Known/ScoutObject are all PrimIntr, already USES'd here;
-+  ISqrt/Rnd are Int, already USES'd; GetNebula is Galaxy, already USES'd; AddNews is News, already
-+  USES'd -- nothing else needs relocating alongside them. }
-+PROCEDURE ProbeScout(Emp: Empire; XY: XYCoord);
-+PROCEDURE UpdateProbes(Emp: Empire);
++{ PATCH (fpc): ProbeScout/UpdateProbes (Phase 3) now come from the real Intrface unit (this
++  file's USES clause) -- originally relocated verbatim here because pulling in Intrface at the
++  time meant pulling in Fleet/Orders/NPE too (Intrface's own IMPLEMENTATION USES). Once Fleet's
++  own movement-fidelity work (Phase 6, 6a) trimmed Intrface down to size and linked it anyway, the
++  relocated copy here was redundant -- moved back to its real home. }
  
  IMPLEMENTATION
  
@@ -161,265 +161,21 @@
                             Headline: NewsTypes; P1,P2,P3: Integer;
                             VAR OtherReports: ResourceSet);
     VAR
-@@ -55,6 +174,449 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
+@@ -55,6 +175,205 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
        END;
     END;  { ReportPlanetLack }
  
-+{ PATCH (fpc): GetIndustrialDistribution relocated verbatim from
-+  INTRFACE.PAS (its real home) -- pure economy math (only calls PrimIntr
-+  getters and Misc/DataCnst tables already in this unit's USES), but pulling
-+  in the real Intrface unit for it would drag in Fleet/Orders/NPE (fleet
-+  movement, order processing, AI) via Intrface's own IMPLEMENTATION USES,
-+  wildly out of scope for one helper function. Not a rename or behavior
-+  change, just a relocation -- the eventual real patch should express this as
-+  a delete in INTRFACE.PAS's diff and an add here, not silently drop the
-+  provenance. }
-+PROCEDURE GetIndustrialDistribution(Obj: IDNumber;
-+                                    VAR IndDist: IndusDistArray);
-+   CONST
-+      Gamma: ARRAY [IndusTypes,IndusTypes] OF Real =
-+            {         Bio   Che   Min      SYG      SYJ      SYS      SYT   Sup   Tri }
-+{ Bio }     (  (        0,    0,    0,       0,       0,       0,       0,    0,    0 ),
-+{ Che }        (  1.12857,    0,    0, 0.19143, 0.50000, 0.36714, 0.25286,    0,    0 ),
-+{ Min }        (  0.10000,    0,    0, 0.30514, 0.27286, 0.53714, 0.83571,    0,    0 ),
-+{ SYG }        (        0,    0,    0,       0,       0,       0,       0,    0,    0 ),
-+{ SYJ }        (        0,    0,    0,       0,       0,       0,       0,    0,    0 ),
-+{ SYS }        (        0,    0,    0,       0,       0,       0,       0,    0,    0 ),
-+{ SYT }        (        0,    0,    0,       0,       0,       0,       0,    0,    0 ),
-+{ Sup }        (        0,    0,    0,       0,       0,       0,       0,    0,    0 ),
-+{ Tri }        (  0.10000,    0,    0, 0.07627, 0.20400, 0.16667, 0.08000,    0,    0 )  );
-+
-+   VAR
-+      X: IndusRArray;
-+      Alpha: Real;         { Alpha = T2(tech)(Eff+250)/K6 }
-+      Beta: IndusRArray;   { Beta = (TIP)(ClsAdj)(AmbAdj)/100 }
-+      A,B,I: Real;
-+      TIP: Real;           { TIP = Total Industrial Production }
-+
-+      MainInd,IndI: IndusTypes;
-+      Special: SetOfSpecialConditions;
-+
-+      Tech: TechLevel;
-+      Eff: Index;
-+      Typ: WorldTypes;
-+      Cls: WorldClass;
-+      Pop: Population;
-+      AmbAdd: Boolean;
-+      Temp: Real;
-+
-+   { MAIN PROCEDURE: GetIndustrialDistribution }
-+   BEGIN
-+   Tech:=GetTech(Obj);
-+   Cls:=GetClass(Obj);
-+   Pop:=GetPopulation(Obj);
-+   Typ:=GetType(Obj);
-+   Eff:=GetEfficiency(Obj);
-+   GetSpecial(Obj,Special);
-+   AmbAdd:=(AmbAddict IN Special);
-+
-+   { initialize arrays }
-+   FillChar(IndDist,SizeOf(IndDist),0);
-+
-+   Alpha:=(TechAdj2[Tech]/100)*(Eff+250)/K6;
-+   TIP:=TotalProd(Pop,Tech);
-+   IF AmbAdd THEN
-+      TIP:=TIP*AmbrosiaAdj;
-+   IF TIP>999 THEN
-+      TIP:=999;
-+
-+   { Calculate Beta array:   Beta[IndI] = TIP * ClassIndAdj[Cls,IndI]/10000 }
-+   Temp:=TIP/10000;
-+   FOR IndI:=BioInd TO TriInd DO
-+      BEGIN
-+      Beta[IndI]:=Temp*ClassIndAdj[Cls,IndI];
-+      IF Beta[IndI]=0 THEN
-+         Beta[IndI]:=1;
-+      END;
-+
-+   { calculate sup industry }
-+   I:=( Sqrt( (SafetyAdj*ISSP[GetISSP(Obj,SupInd)]*(SuppliesPerBillion/100)*Pop) /
-+              ((ThgAdj[SupInd,sup]/100)*Alpha) ) - K4) / Beta[SupInd];
-+   IF (I>95) OR (I<0) OR (Typ=AgrTyp) THEN
-+      I:=95;
-+   IndDist[SupInd]:=I;
-+
-+   IF Typ IN [AgrTyp,CheTyp,MinTyp,RawTyp,RawSTyp,RsrTyp..TriTyp] THEN
-+      { ASSERT: all values of PI = 0 }
-+      BEGIN
-+      I:=100-IndDist[SupInd];
-+      IndDist[CheInd]:=I*(TypeData[Typ,CheInd]/100);
-+      IndDist[MinInd]:=I*(TypeData[Typ,MinInd]/100);
-+      IndDist[TriInd]:=I*(TypeData[Typ,TriInd]/100);
-+      END
-+   ELSE
-+      { ASSERT: at least one value of PI is >0 }
-+      BEGIN
-+      { get main PI }
-+      MainInd:=PrincipalIndustry[Typ];
-+
-+      { calculate temporaries }
-+      A:=-K4*(1/Beta[CheInd]+1/Beta[MinInd]+1/Beta[TriInd]);
-+      B:=(Sqrt(SafetyAdj*ISSP[GetISSP(Obj,CheInd)]*Gamma[CheInd,MainInd])/Beta[CheInd] +
-+          Sqrt(SafetyAdj*ISSP[GetISSP(Obj,MinInd)]*Gamma[MinInd,MainInd])/Beta[MinInd] +
-+          Sqrt(SafetyAdj*ISSP[GetISSP(Obj,TriInd)]*Gamma[TriInd,MainInd])/Beta[TriInd] );
-+
-+      { calculate I(MainInd) }
-+      I:=(100-(IndDist[SupInd]+A+(K4*B)))/(1+(Beta[MainInd]*B));
-+      IF I>TypeData[Typ,MainInd] THEN
-+         I:=TypeData[Typ,MainInd];
-+
-+      IndDist[MainInd]:=I;
-+
-+      { calculate RI industries }
-+      I:=( (IndDist[MainInd]*Beta[MainInd]+K4) *
-+           Sqrt(SafetyAdj*ISSP[GetISSP(Obj,CheInd)]*Gamma[CheInd,MainInd]) - K4 )/Beta[CheInd];
-+      IF I<0 THEN
-+         I:=1;
-+      IndDist[CheInd]:=I;
-+
-+      I:=( (IndDist[MainInd]*Beta[MainInd]+K4) *
-+           Sqrt(SafetyAdj*ISSP[GetISSP(Obj,MinInd)]*Gamma[MinInd,MainInd]) - K4 )/Beta[MinInd];
-+      IF I<0 THEN
-+         I:=1;
-+      IndDist[MinInd]:=I;
-+
-+      I:=( (IndDist[MainInd]*Beta[MainInd]+K4) *
-+           Sqrt(SafetyAdj*ISSP[GetISSP(Obj,TriInd)]*Gamma[TriInd,MainInd]) - K4 )/Beta[TriInd];
-+      IF I<0 THEN
-+         I:=1;
-+      IndDist[TriInd]:=I;
-+      END;
-+   END;  { GetIndustrialDistribution }
-+
-+{ PATCH (fpc): NextStarbaseSlot/CreateStarbase/NextStargateSlot/CreateStargate/
-+  GetOptimumIndus relocated verbatim from INTRFACE.PAS (their real home), same
-+  reasoning and same treatment as GetIndustrialDistribution above -- each is
-+  pure Universe^/DataStrc/Misc/DataCnst logic (confirmed by reading every
-+  body: no calls into Fleet/Orders/NPE, the units Intrface's own
-+  IMPLEMENTATION USES pulls in), but importing the real Intrface unit for
-+  them would drag those three in for five small helpers. Not a rename or
-+  behavior change, just a relocation. }
-+FUNCTION NextStarbaseSlot: Word;
-+   VAR
-+      Slot: Word;
-+
-+   BEGIN
-+   Slot:=MaxNoOfStarbases;
-+   WHILE (Slot>0) AND (Slot IN SetOfActiveStarbases) DO
-+      Dec(Slot);
-+   NextStarbaseSlot:=Slot;
-+   END;  { NextStarbaseSlot }
-+
-+PROCEDURE CreateStarbase(ID: IDNumber; NewEmp: Empire; NewXY: XYCoord; NewTyp: StarbaseTypes);
-+   BEGIN
-+   WITH Universe^ DO
-+      BEGIN
-+      WITH Sector[NewXY.x]^[NewXY.y] DO
-+         Obj:=ID;
-+
-+      WITH Starbase[ID.Index] DO
-+         BEGIN
-+         XY:=NewXY;
-+         STyp:=NewTyp;
-+         Dest:=XY;
-+         Status:=FReady;
-+         Emp:=NewEmp;
-+         ScoutedBy:=[NewEmp];
-+         KnownBy:=[NewEmp];
-+         RevIndex:=0;
-+
-+         FillChar(Ships,SizeOf(Ships),0);
-+         FillChar(Cargo,SizeOf(Cargo),0);
-+         FillChar(Indus,SizeOf(Indus),0);
-+         FillChar(Defns,SizeOf(Defns),0);
-+         END;
-+      END;  { with scope }
-+
-+   SetOfActiveStarbases:=SetOfActiveStarbases+[ID.Index];
-+   SetOfStarbasesOf[NewEmp]:=SetOfStarbasesOf[NewEmp]+[ID.Index];
-+   END;  { CreateStarbase }
-+
-+FUNCTION NextStargateSlot: Word;
-+   VAR
-+      Slot: Word;
-+
-+   BEGIN
-+   Slot:=MaxNoOfStargates;
-+   WHILE (Slot>0) AND (Slot IN SetOfActiveGates) DO
-+      Dec(Slot);
-+   NextStargateSlot:=Slot;
-+   END;  { NextStargateSlot }
-+
-+PROCEDURE CreateStargate(ID: IDNumber; NewEmp: Empire; GateType: StargateTypes; Pos: XYCoord);
-+   BEGIN
-+   SetOfActiveGates:=SetOfActiveGates+[ID.Index];
-+   WITH Universe^ DO
-+      BEGIN
-+      WITH Stargate[ID.Index] DO
-+         BEGIN
-+         XY:=Pos;
-+         Emp:=NewEmp;
-+         ScoutedBy:=[NewEmp];
-+         KnownBy:=[NewEmp];
-+         GTyp:=GateType;
-+         Dest:=Limbo;
-+         END;
-+
-+      Sector[Pos.x]^[Pos.y].Obj:=ID;
-+      END;  { with scope }
-+   END;  { CreateStargate }
-+
-+PROCEDURE GetOptimumIndus(Obj: IDNumber; VAR Indus: IndusArray);
-+   VAR
-+      TIP: IndusIndex;
-+      IndusDist: IndusDistArray;
-+      IndI: IndusTypes;
-+      Pop: Population;
-+      Class: WorldClass;
-+      Tech: TechLevel;
-+      Special: SetOfSpecialConditions;
-+
-+   BEGIN
-+   GetIndustrialDistribution(Obj,IndusDist);
-+   Pop:=GetPopulation(Obj);
-+   Class:=GetClass(Obj);
-+   Tech:=GetTech(Obj);
-+   GetSpecial(Obj,Special);
-+
-+   TIP:=TotalProd(Pop,Tech);
-+   IF AmbAddict IN Special THEN
-+      TIP:=Round(TIP*AmbrosiaAdj);
-+
-+   FOR IndI:=BioInd TO TriInd DO
-+      Indus[IndI]:=Round(TIP*(IndusDist[IndI]/100)*(ClassIndAdj[Class,IndI]/100));
-+   END;  { GetOptimumIndus }
-+
-+{ PATCH (fpc): CreatePlanet relocated verbatim from INTRFACE.PAS (same reasoning as
-+  GetIndustrialDistribution/GetOptimumIndus above), plus RandomTrillumReserves/RndShips/RndCargo/
-+  RndDefns/SetUpWorld/CreateRndPlanet/NebulaeBand/NebulaePatches relocated verbatim from NEWGAME.PAS
-+  (Phase 2 commit 2d) -- pulling in all of NEWGAME.PAS for these would drag in Crt/Dos/DOS2/EIO/WND/
-+  Menu/DFA/LoadSave/NPE/NPETypes for a handful of self-contained formulas, same "relocate the small
-+  formula, not the whole unit" precedent as everything above. GetRandomXY/CreateRandomWorlds are
-+  deliberately NOT relocated here: under this harness's ForcedRandomValue convention every Rnd call
-+  within one invocation returns the same fixed offset, so a blocked coordinate's retry always re-rolls
-+  the identical (still-blocked) coordinate -- there is no way to construct a golden-file case
-+  exercising "blocked, then a later retry succeeds" on either side of the comparison, on principle,
-+  not as an oversight. See reference/verify/README.md's "Tenth domain" note. }
-+PROCEDURE CreatePlanet(ID: IDNumber; NewXY: XYCoord);
-+   BEGIN
-+   WITH Universe^ DO
-+      BEGIN
-+      WITH Sector[NewXY.x]^[NewXY.y] DO
-+         Obj:=ID;
-+
-+      WITH Planet[ID.Index] DO
-+         BEGIN
-+         XY:=NewXY;
-+         ImpExp:=DefaultISSP;
-+         END;
-+      END;  { with scope }
-+   END;  { CreatePlanet }
-+
++{ PATCH (fpc): RandomTrillumReserves/RndShips/RndCargo/RndDefns/SetUpWorld/CreateRndPlanet/
++  NebulaeBand/NebulaePatches relocated verbatim from NEWGAME.PAS (Phase 2 commit 2d) -- pulling in
++  all of NEWGAME.PAS for these would drag in Crt/Dos/DOS2/EIO/WND/Menu/DFA/LoadSave/NPE/NPETypes for
++  a handful of self-contained formulas, same "relocate the small formula, not the whole unit"
++  precedent GetIndustrialDistribution/CreatePlanet/etc. used before they moved to their real home in
++  Intrface (see this file's USES clause). GetRandomXY/CreateRandomWorlds are deliberately NOT
++  relocated here: under this harness's ForcedRandomValue convention every Rnd call within one
++  invocation returns the same fixed offset, so a blocked coordinate's retry always re-rolls the
++  identical (still-blocked) coordinate -- there is no way to construct a golden-file case exercising
++  "blocked, then a later retry succeeds" on either side of the comparison, on principle, not as an
++  oversight. See reference/verify/README.md's "Tenth domain" note. }
 +FUNCTION RandomTrillumReserves(Cls: WorldClass; RegionReserves: Word): Word;
 +   VAR
 +      Temp: Word;
@@ -611,7 +367,7 @@
  PROCEDURE ConstructStarbase(Emp: Empire; STyp: StarbaseTypes; XY: XYCoord; VAR ID: IDNumber);
     VAR
        EmpTech: TechLevel;
-@@ -99,9 +661,8 @@ PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR I
+@@ -99,9 +418,8 @@ PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR I
        CreateStargate(ID,Emp,GTyp,XY);
     END;  { ConstructStargate }
  
@@ -622,7 +378,7 @@
     VAR
        ConstrFleets: FleetSet;
        EnoughRawMaterial,Error: Boolean;
-@@ -234,10 +795,10 @@ PROCEDURE UpdateEmpire(Emp: Empire);
+@@ -234,10 +552,10 @@ PROCEDURE UpdateEmpire(Emp: Empire);
        PROCEDURE GetChanceForNewTech(Emp: Empire; EmpTech: TechLevel;
                                      VAR TotalChance: Index; VAR LabID: IDNumber);
        { GetChanceForNewTech:
@@ -637,7 +393,7 @@
           which the technology was discovered. }
  
           LABEL
-@@ -1430,61 +1991,830 @@ PROCEDURE UpdateWorld(World: IDNumber);
+@@ -1430,61 +1748,758 @@ PROCEDURE UpdateWorld(World: IDNumber);
           END;  { with scope }
     END;  { UpdateWorld }
  
@@ -1364,6 +1120,8 @@
 -      begin
 -      WriteString('Construction #'+Int2Str(i)+'     ',2,1,7);
 -      IF i IN SetOfActiveConstructionSites THEN
+-         BEGIN
+-         UpdateConstruction(i);
 +   FirstWorld:=FirstWorld+NoOfWorlds;
 +   END;  { CreateRandomWorlds }
 +
@@ -1396,19 +1154,29 @@
 +   CASE Typ OF
 +      1: BEGIN
 +         NebulaeBand;
-+         END;
+          END;
+-      END;
 +      2: BEGIN
 +         NebulaePatches(Rnd(Min,Max));
 +         END;
 +      END;  { case }
 +   END;  { CreateRandomNebula }
-+
+ 
+-   ClrScr;
+-   WriteString('Updating Empires...',2,1,7);
+-   FOR Emp:=Empire1 TO Empire8 do
+-      IF EmpireActive(Emp) THEN
+-         UpdateEmpire(Emp);
 +PROCEDURE CreateSRMs{VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray};
 +   VAR
 +      XY,UpperLeft,LowerRight: XYCoord;
 +      E,x,y: Word;
 +      ObjID: IDNumber;
-+
+ 
+-   DeleteReadMessages;
+-
+-   CloseWindow;
+-   END;  { UpdateUniverse }
 +   BEGIN
 +   E:=NextInteger(SF);
 +   GetNextXY(SF,XYPoint,Zone,False,UpperLeft);
@@ -1423,88 +1191,5 @@
 +               PutMine(XY,Empire(E));
 +            END;
 +   END;  { CreateSRMs }
-+
-+PROCEDURE ProbeScout(Emp: Empire; XY: XYCoord);
-+{ ProbeScout:
-+   Emp scouts the area around Loc. }
-+
-+   VAR
-+      Dir: Directions;
-+      x,y: Integer;
-+      TempLoc: XYCoord;
-+      Obj: IDNumber;
-+      Loc: Location;
-+      OtherEmp: Empire;
-+      NamePtr: NameRecordPtr;
-+      NameToAdd: String16;
-+      Cargo: CargoArray;
-+      ChanceToDestroy: Integer;
-+
-+   { ProbeScout: MAIN PROCEDURE }
-+   BEGIN
-+   IF NOT SameXY(XY,Limbo) THEN
-+      FOR Dir:=NoDir TO NW DO
-          BEGIN
--         UpdateConstruction(i);
--         END;
--      END;
-+         x:=XY.x+DirX[Dir];
-+         y:=XY.y+DirY[Dir];
-+         IF InGalaxy(x,y) THEN
-+            BEGIN
-+            TempLoc.x:=x;
-+            TempLoc.y:=y;
-+            GetObject(TempLoc,Obj);
-+            OtherEmp:=GetStatus(Obj);
- 
--   ClrScr;
--   WriteString('Updating Empires...',2,1,7);
--   FOR Emp:=Empire1 TO Empire8 do
--      IF EmpireActive(Emp) THEN
--         UpdateEmpire(Emp);
-+            IF (NOT Scouted(Emp,Obj)) AND (Obj.ObjTyp<>Void) THEN
-+               BEGIN
-+               Loc.ID:=Obj;  Loc.XY:=Limbo;
-+               GetCargo(Obj,Cargo);
-+               ChanceToDestroy:=ISqrt(Cargo[men]);
-+               IF (OtherEmp<>Indep)
-+                  AND (Rnd(1,100)<ChanceToDestroy) THEN
-+                  { ASSERT: Probe is destroyed }
-+                  BEGIN
-+                  AddNews(Emp,PDest,Loc,0,0,0);
-+                  AddNews(OtherEmp,PCap,Loc,Ord(Emp),0,0);
-+                  Exit;
-+                  END;
- 
--   DeleteReadMessages;
-+               { send news to empire }
-+               IF (NOT Known(Emp,Obj)) AND (OtherEmp<>Emp) THEN
-+                  AddNews(Emp,POk,Loc,0,0,0);
- 
--   CloseWindow;
--   END;  { UpdateUniverse }
-+               ScoutObject(Emp,Obj);
-+               END;
-+
-+            IF GetNebula(TempLoc)=DarkNebula THEN
-+               Exit;
-+            END;
-+         END;  { loop }
-+   END;  { ProbeScout }
-+
-+PROCEDURE UpdateProbes(Emp: Empire);
-+   VAR
-+      i: Word;
-+
-+   BEGIN
-+   FOR i:=1 TO NoOfProbesPerEmpire DO
-+      WITH Universe^ DO
-+         WITH EmpireData[Emp].Probe[i] DO
-+            IF (Status=PInTrans) THEN
-+               BEGIN
-+               ProbeScout(Emp,Dest);
-+               Status:=PReady;
-+               END;
-+   END;  { UpdateProbes }
  
  END.
