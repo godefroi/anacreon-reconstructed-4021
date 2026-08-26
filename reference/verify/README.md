@@ -285,9 +285,16 @@ compiler complains about next (an unreachable dependency's own missing sub-depen
   and `IMPLEMENTATION` bodies) rather than clustered wherever's convenient — a first pass appended the
   nine at the end of the file, and the regenerated patch showed them as full delete/re-add pairs relative
   to pristine even though the bodies were byte-identical, because moving code to a different position in
-  the file is a real edit as far as a diff is concerned. Preserving pristine order instead means the
-  regenerated `patches/INTRFACE.PAS.patch` is a set of pure deletions against pristine source — nothing
-  reads as removed-then-re-added, which also makes the patch itself smaller and easier to review.
+  the file is a real edit as far as a diff is concerned. Preserving pristine order fixes that specific
+  problem (the file itself is genuinely edited in place, not rewritten-with-a-move), but it does **not**
+  make the regenerated `patches/INTRFACE.PAS.patch` a set of pure deletions — checked directly, not
+  assumed: 10 of the 12 kept procedures still render as delete/add pairs rather than context, because
+  this file has a lot of short, generic, repeated Pascal lines (`BEGIN`/`END;`/`WITH Universe^ DO`)
+  scattered across its 1660 lines, which confuses LCS-based diffing on small kept "islands" regardless of
+  diff tool or algorithm (confirmed identical across all four `git diff --diff-algorithm` options and
+  plain GNU `diff -u`, so this isn't a git quirk). The correctness that matters is verified a different
+  way — `regenerate-patch.ps1` applies its own output to a clean pristine copy and byte-compares the
+  result against `patched/INTRFACE.PAS` before writing anything — not by how the diff happens to render.
 
 `FleetMovementHandler.GetNewPos`/`IsPassingThroughGate`/`IsAtFortress` are `public static` on the C# side
 specifically so `fleetmove`'s own `FleetMoveTests` can call them in isolation this same way — check
