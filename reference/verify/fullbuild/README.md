@@ -41,11 +41,14 @@ from this directory):
   `BATTLE`, `RESOURCE` -- untouched, zero patches. `STRG` needed one (see below).
 - **Tier 1** (the screen/keyboard primitive layer): `SYSTEM2`, `EIO`, `WND` -- see "What got patched
   and why" below for what each needed.
-- **Tier 2** (menu system): `MENU` -- zero patches needed. Pure logic built entirely on tier1's
-  display primitives (`WriteString`, `ScrollUp`, `ScrollDown`, `ActivateWindow`, `OpenWindow`,
-  `CloseWindow`), no assembly or direct memory access.
-- **Tier 3** (DOS/file-path/config helpers): `DOS2` -- needed a real-mode-pointer patch and a new
-  `Printer` shim, see "What got patched and why" below.
+- **Tier 2** (application/dialog layer, built on tier1): `MENU` (zero patches -- pure logic built
+  entirely on tier1's display primitives: `WriteString`, `ScrollUp`, `ScrollDown`,
+  `ActivateWindow`, `OpenWindow`, `CloseWindow`) and `DOS2` (needed a real-mode-pointer patch and a
+  new `Printer` shim, see "What got patched and why" below; also `USES Menu`, so it comes second).
+- **Tier 3** (core game data model, built on tier2): `GALAXY` (zero patches; `INTERFACE USES
+  Types` only, `IMPLEMENTATION USES Dos2` for `ReadVariable`/`WriteVariable`), `CDETYPES`, and
+  `NPETYPES` (both zero patches -- pure `TYPE`/`CONST`/`VAR` declaration units with empty
+  `IMPLEMENTATION` sections, both `USES Galaxy`).
 
 Verified working end to end from a clean checkout: `build.ps1` deletes and repopulates `scratch/`
 from pristine + `patches/*.patch` + `shims/*.PAS` every run, exactly like `reference/verify/build.ps1`
@@ -56,9 +59,12 @@ does for `patched/`.
 - `build.ps1` -- rebuilds `scratch/` from pristine source, this lane's own `patches/*.patch`, and
   `shims/*.PAS`, then compiles each tier's units standalone (`fpc -Mtp -CfSSE2 <unit>.PAS` per file,
   same flags as `reference/verify/build.ps1` -- see that file's README for why `-CfSSE2` matters).
-  The `$tier0`/`$tier1`/`$tier2`/`$tier3` arrays at the top are the actual source of truth for what's
-  in scope; add a unit to the right tier's array (and copy any `.INC` it needs, see `COLORS.INC`'s
-  handling) rather than hand-editing `scratch/`.
+  The `$tier0`/`$tier1`/`$tier2`/`$tier3` arrays at the top are the actual source of truth for
+  what's in scope. Each tier is a logical dependency layer, not a single file -- add a unit to
+  whichever tier's array matches its actual dependency depth (a new unit doesn't automatically get
+  its own tier; only introduce a new tier when a unit genuinely needs something later than tier3
+  provides), and copy any `.INC` it needs (see `COLORS.INC`'s handling), rather than hand-editing
+  `scratch/`.
 - `patches/*.PAS.patch` -- unified diffs against pristine `reference/DOSAnacreonSource131/`, same
   format and same generation tool as `reference/verify/patches/`. **Always regenerate these via
   `reference/verify/regenerate-patch.ps1`, never hand-write a diff** -- see "Tooling" below for why
@@ -216,14 +222,13 @@ facts worth keeping, beyond what's already encoded in `build.ps1`'s tier arrays:
 
 ## Suggested next steps
 
-Pick whichever unblocks what you actually need next, in roughly ascending cost:
-- **`Galaxy`** (`INTERFACE USES Types`, `IMPLEMENTATION USES Dos2`) unblocks `CdeTypes`/`NPETypes`,
-  both otherwise-clean tier-0 units. `Dos2` is now built, so this should be cheap.
-- Window/comm units that depend on `Menu` or `Dos2` (`MapWind`, `FltWind`, `StaWind`, `Display`,
-  `SWindows`, ...) should now be unblocked.
+Window/comm units that depend on `Menu`, `Dos2`, or `Galaxy` (`MapWind`, `FltWind`, `StaWind`,
+`Display`, `SWindows`, ...) should now be unblocked -- pick whichever's actually needed next.
 
-Whatever's picked: add it to `build.ps1`'s tier arrays, run `.\build.ps1`, patch whatever fpc actually
-complains about (following the "halt loudly on real interactivity, no-op on pure display" split
-established above), regenerate the patch via `regenerate-patch.ps1`, and update this README's
-"Status" section -- it should always reflect what's actually in `patches/`+`shims/`+`build.ps1`, not
-what's aspirational.
+Whatever's picked: try compiling it standalone against what's already in `scratch/` first (fpc's
+own error says exactly what's missing). If it lands at the same dependency depth as an existing
+tier, add it to that tier's array; only start a new tier if it genuinely needs something later
+than tier3 provides. Run `.\build.ps1`, patch whatever fpc actually complains about (following the
+"halt loudly on real interactivity, no-op on pure display" split established above), regenerate
+the patch via `regenerate-patch.ps1`, and update this README's "Status" section -- it should
+always reflect what's actually in `patches/`+`shims/`+`build.ps1`, not what's aspirational.

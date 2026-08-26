@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
 Proof of concept for the "build almost everything" harness strategy: compiles pristine
-reference/DOSAnacreonSource131 units standalone under fpc, one dependency tier at a time,
-patching only what fpc actually refuses to compile and eliminating the UI entirely rather
-than reproducing it (see chat history -- no console-description layer, real interactive
-calls halt loudly instead).
+reference/DOSAnacreonSource131 units standalone under fpc, one logical dependency layer at a
+time (not one file at a time -- units at the same dependency depth share a tier), patching only
+what fpc actually refuses to compile and eliminating the UI entirely rather than reproducing it
+(see chat history -- no console-description layer, real interactive calls halt loudly instead).
 
 Unlike reference/verify/build.ps1 (which builds one driver against a deliberately minimal,
 hand-trimmed unit subset), this lane's goal is the opposite: build as much of the pristine
@@ -37,13 +37,17 @@ $tier0 = @('INT.PAS', 'TYPES.PAS', 'REAL1.PAS', 'QSORT.PAS', 'WNDTYPES.PAS', 'BA
 # them once here rather than per-domain like reference/verify/patches does today.
 $tier1 = @('SYSTEM2.PAS', 'EIO.PAS', 'WND.PAS')
 
-# Tier 2: menu system, built on tier1's display primitives
-$tier2 = @('MENU.PAS')
+# Tier 2: the application/dialog layer built on tier1's display primitives. MENU.PAS (zero
+# patches) and DOS2.PAS (needed a landmine patch, see "What got patched and why" in this lane's
+# README, for a real-mode PSP/environment-block walk in HomeDirectory) both sit at the same
+# dependency depth -- DOS2 additionally USES Menu, so it must come second within this tier.
+$tier2 = @('MENU.PAS', 'DOS2.PAS')
 
-# Tier 3: DOS/file-path/config helper library. Needed a landmine patch of its own -- see
-# "What got patched and why" in this lane's README -- for a real-mode PSP/environment-block walk
-# in HomeDirectory, same class of segment:offset landmine as EIO.PAS's original screen aliasing.
-$tier3 = @('DOS2.PAS')
+# Tier 3: the core game data model, built on tier2. GALAXY.PAS (INTERFACE USES Types,
+# IMPLEMENTATION USES Dos2 for WriteVariable/ReadVariable) must come first; CDETYPES.PAS and
+# NPETYPES.PAS are pure TYPE/CONST/VAR declaration units (empty IMPLEMENTATION) that both USES
+# Galaxy. None of the three have asm/memory/interrupt landmines of their own.
+$tier3 = @('GALAXY.PAS', 'CDETYPES.PAS', 'NPETYPES.PAS')
 
 # CRT.PAS is not pristine source at all -- see shims/CRT.PAS's own header comment for why this
 # lane fakes the whole unit instead of pointing fpc at its real (but differently-behaved) Crt.
@@ -52,9 +56,13 @@ $tier3 = @('DOS2.PAS')
 # shims/PRINTER.PAS's own header comment.
 $shims = @('CRT.PAS', 'PRINTER.PAS')
 
+# Flattened once so adding a unit to an existing tier's array above doesn't also require editing
+# a copy/compile/count expression down here.
+$allUnits = $tier0 + $tier1 + $tier2 + $tier3
+
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out | Out-Null
-foreach ($f in $tier0 + $tier1 + $tier2 + $tier3) { Copy-Item (Join-Path $src $f) $out }
+foreach ($f in $allUnits) { Copy-Item (Join-Path $src $f) $out }
 foreach ($f in $shims) { Copy-Item (Join-Path $PSScriptRoot "shims\$f") $out }
 Copy-Item (Join-Path $src 'COLORS.INC') $out
 
@@ -64,7 +72,7 @@ try {
     foreach ($p in $patches) {
         git apply -p1 --verbose $p.FullName
     }
-    foreach ($f in $tier0 + $tier1 + $tier2 + $tier3) {
+    foreach ($f in $allUnits) {
         Write-Host "--- $f ---"
         fpc -Mtp -CfSSE2 $f
     }
@@ -72,4 +80,4 @@ try {
     Pop-Location
 }
 
-Write-Host "Build OK: $($tier0.Count + $tier1.Count + $tier2.Count + $tier3.Count) units compiled standalone."
+Write-Host "Build OK: $($allUnits.Count) units compiled standalone."
