@@ -17,6 +17,10 @@ reference/**/*.ppu
 # Never a source of truth, never committed.
 reference/verify/patched/
 
+# reference/verify/fullbuild/scratch/ is fullbuild/build.ps1's own disposable output, same
+# deal as reference/verify/patched/ above but for the "build almost everything" PoC lane.
+reference/verify/fullbuild/scratch/
+
 # reference/verify/dos_131_callgraph.json is build-callgraph.ps1's disposable output --
 # derived entirely from already-committed reference/DOSAnacreonSource131/*.PAS, ~1MB,
 # regenerate on demand rather than commit.

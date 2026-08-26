@@ -27,26 +27,53 @@ Directory to write <File>.patch into. Defaults to reference/verify/patches/, the
 committed patch set. Pass a scratch directory to try a regeneration without touching the
 committed patches -- e.g. to sanity-check a large rewrite before trusting it.
 
+.PARAMETER PristineDir
+Directory holding the untouched original source. Defaults to reference/DOSAnacreonSource131,
+the one true pristine copy -- override only for a different build lane's own hand-edited
+copy (e.g. reference/verify/fullbuild/scratch) that still diffs against the same pristine.
+
+.PARAMETER PatchedDir
+Directory holding the hand-edited target state. Defaults to reference/verify/patched/ (this
+lane's own disposable build output) -- override to point at another lane's scratch dir, e.g.
+reference/verify/fullbuild/scratch, so that lane can reuse this script's byte-plumbing instead
+of duplicating it.
+
 .EXAMPLE
 ./regenerate-patch.ps1 -File INTRFACE.PAS
 
 .EXAMPLE
 ./regenerate-patch.ps1 -File INTRFACE.PAS -OutDir $env:TEMP\patch-scratch
+
+.EXAMPLE
+./regenerate-patch.ps1 -File STRG.PAS -PatchedDir fullbuild\scratch -OutDir fullbuild\patches
 #>
 
 param(
     [Parameter(Mandatory)]
     [string]$File,
 
-    [string]$OutDir
+    [string]$OutDir = (Join-Path $PSScriptRoot 'patches'),
+    [string]$PristineDir = (Join-Path $PSScriptRoot '..\DOSAnacreonSource131'),
+    [string]$PatchedDir = (Join-Path $PSScriptRoot 'patched')
 )
 
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
-$pristine = Join-Path $PSScriptRoot "..\DOSAnacreonSource131\$File"
-$patched  = Join-Path $PSScriptRoot "patched\$File"
-if (-not $OutDir) { $OutDir = Join-Path $PSScriptRoot 'patches' }
+# A relative -OutDir/-PristineDir/-PatchedDir resolves against PowerShell's own $PWD, but the
+# .NET file APIs below (ReadAllBytes, File.WriteAllBytes) resolve relative paths against the
+# process's Environment.CurrentDirectory instead, which Set-Location does not keep in sync --
+# a bare relative path here silently resolves against the wrong directory. Convert to absolute
+# via PowerShell's own path provider (not Resolve-Path, which requires the path to already exist).
+function Resolve-PSPath([string]$Path) {
+    $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+}
+$OutDir = Resolve-PSPath $OutDir
+$PristineDir = Resolve-PSPath $PristineDir
+$PatchedDir = Resolve-PSPath $PatchedDir
+
+$pristine = Join-Path $PristineDir $File
+$patched  = Join-Path $PatchedDir $File
 
 if (-not (Test-Path $pristine)) { throw "No pristine source: $pristine" }
 if (-not (Test-Path $patched))  { throw "No patched\$File -- run build.ps1, then hand-edit patched\$File, before regenerating its patch." }

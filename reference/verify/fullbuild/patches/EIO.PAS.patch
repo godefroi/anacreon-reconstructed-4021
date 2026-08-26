@@ -1,0 +1,195 @@
+--- a/EIO.PAS
++++ b/EIO.PAS
+@@ -109,9 +109,7 @@ PROCEDURE ScrollUp;
+ PROCEDURE SetCursor(NewCursor: CursorTypes);
+ PROCEDURE ToggleColorBW;
+ PROCEDURE TurnScreenOff;
+-   INLINE($BA/$DA/$03/$EC/$A8/$08/$74/$FB/$B0/$21/$B2/$D8/$EE);
+ PROCEDURE TurnScreenOn;
+-   INLINE($BA/$DA/$03/$EC/$A8/$08/$74/$FB/$B0/$29/$B2/$D8/$EE);
+ PROCEDURE Wait(Seconds: Word; VAR Key: Char);
+ PROCEDURE WriteString(St: LineStr; Col,Row,Attr: Word);
+ PROCEDURE WriteBlanks(Len,x,y,Col: Word);
+@@ -132,15 +130,18 @@ CONST
+         'A','S','D','F','G','H','J','K','L',' ',' ',' ',' ',' ',
+         'Z','X','C','V','B','N','M' );
+ 
+-(* ASSEMBLY LANGUAGE Routines ----------------------------------------------- *)
+-{$L FASTSCR}
++(* No UI: real FASTSCR.ASM screen-writing primitives replaced with no-ops.
++   Nothing here reads real video memory; VirtualScreen is a plain heap
++   buffer instead of an alias to it (see the unit init block, below). *)
+ 
+-PROCEDURE ScrollDown; EXTERNAL;
+-PROCEDURE ScrollLeft; EXTERNAL;
+-PROCEDURE ScrollRight; EXTERNAL;
+-PROCEDURE ScrollUp; EXTERNAL;
+-PROCEDURE WriteBlanks(Len,x,y,Col: Word); EXTERNAL;
+-PROCEDURE WriteString(St: LineStr; Col,Row,Attr: Word); EXTERNAL;
++PROCEDURE ScrollDown; BEGIN END;
++PROCEDURE ScrollLeft; BEGIN END;
++PROCEDURE ScrollRight; BEGIN END;
++PROCEDURE ScrollUp; BEGIN END;
++PROCEDURE WriteBlanks(Len,x,y,Col: Word); BEGIN END;
++PROCEDURE WriteString(St: LineStr; Col,Row,Attr: Word); BEGIN END;
++PROCEDURE TurnScreenOff; BEGIN END;
++PROCEDURE TurnScreenOn; BEGIN END;
+ 
+ (* -------------------------------------------------------------------------- *)
+ 
+@@ -187,8 +188,11 @@ PROCEDURE RestoreScreen(VAR ScrBuf: ScrArray);
+    END;  { RestoreScreen }
+ 
+ PROCEDURE SaveArea(PosX,PosY,Width,Height: Word; VAR S: SaveAreaRecord);
++{ Segm:Offs + Ptr() reconstructed a moving pointer from a fixed segment:offset
++  pair -- a real-mode-only technique. Area is a plain heap pointer under fpc,
++  so temp can just be incremented directly; same byte-for-byte copy either way. }
+    VAR
+-      i,Segm,Offs,TotalSpace: Word;
++      i,TotalSpace: Word;
+       temp: ^Byte;
+ 
+    BEGIN
+@@ -200,30 +204,28 @@ PROCEDURE SaveArea(PosX,PosY,Width,Height: Word; VAR S: SaveAreaRecord);
+       H:=Height;
+       TotalSpace:=Width*Height*2;
+       GetMem(Area,TotalSpace);
+-      Segm:=Seg(Area^);
+-      Offs:=Ofs(Area^);
++      temp:=Area;
+       END;
+ 
+    Width:=Width*2;
+    FOR i:=0 TO Height-1 DO
+       BEGIN
+-      temp:=Ptr(Segm,Offs);
+       Move(VirtualScreen^[PosY][PosX],temp^,Width);
+-      Inc(Offs,Width);
++      Inc(temp,Width);
+       Inc(PosY);
+       END;
+    END;  { SaveArea }
+ 
+ PROCEDURE RestoreArea(VAR S: SaveAreaRecord);
++{ Same Segm:Offs/Ptr() -> plain pointer fix as SaveArea, above. }
+    VAR
+-      Segm,Offs,TotalSpace,i,PosY,Width: Word;
++      TotalSpace,i,PosY,Width: Word;
+       temp: ^Byte;
+ 
+    BEGIN
+    WITH S DO
+       BEGIN
+-      Segm:=Seg(Area^);
+-      Offs:=Ofs(Area^);
++      temp:=Area;
+       Width:=W*2;
+       PosY:=Y;
+ 
+@@ -232,9 +234,8 @@ PROCEDURE RestoreArea(VAR S: SaveAreaRecord);
+          TurnScreenOff;
+          FOR i:=0 TO H-1 DO
+             BEGIN
+-            temp:=Ptr(Segm,Offs);
+             Move(temp^,VirtualScreen^[PosY][X],Width);
+-            Inc(Offs,Width);
++            Inc(temp,Width);
+             Inc(PosY);
+             END;
+          TurnScreenOn;
+@@ -243,9 +244,8 @@ PROCEDURE RestoreArea(VAR S: SaveAreaRecord);
+          BEGIN
+          FOR i:=0 TO H-1 DO
+             BEGIN
+-            temp:=Ptr(Segm,Offs);
+             Move(temp^,VirtualScreen^[PosY][X],Width);
+-            Inc(Offs,Width);
++            Inc(temp,Width);
+             Inc(PosY);
+             END;
+          END;
+@@ -283,12 +283,13 @@ PROCEDURE GetChoice(LegalSet: CharSet; CaseDist: Boolean; VAR Ch: Char);
+    uppercase.)
+ ------------------------------------------------------------------------------ }
+ 
++{ No UI: real keypresses never arrive under Crt's no-op ReadKey/KeyPressed
++  stubs, so the real REPEAT/UNTIL loop below would spin forever. Halting
++  loudly beats hanging silently -- a build that reaches this is exercising
++  genuinely interactive UI, which this harness doesn't support. }
+    BEGIN
+-   REPEAT
+-      GetInkey(Ch);
+-      IF NOT CaseDist THEN
+-         Ch:=UpCase(Ch);
+-   UNTIL Ch IN LegalSet;
++   WriteLn('GetChoice: interactive keyboard input not supported in this headless build.');
++   Halt(1);
+    END;  { GetChoice }
+ 
+ PROCEDURE WriteHelpLine(HelpLine: LineStr);
+@@ -434,33 +435,17 @@ PROCEDURE PressAnyKey(x,y: Word; Message: LineStr);
+    This procedure will write the given message at the given co-ordinates and
+    wait until a key is pressed. }
+ 
+-   VAR
+-      Ch: Char;
+-
++{ No UI: same "halt loudly instead of spinning forever" call as GetChoice,
++  above -- Keypressed never becomes True under the Crt stub. }
+    BEGIN
+-   EmptyKeyBuffer;
+-   WriteString(Message,x,y,TextAttr);
+-	GotoXY(x+Length(Message),y);
+-   REPEAT UNTIL Keypressed;
+-   Ch:=ReadKey;
++   WriteLn('PressAnyKey: interactive keyboard input not supported in this headless build.');
++   Halt(1);
+    END;  { PressAnyKey }
+ 
+ PROCEDURE SetCursor(NewCursor: CursorTypes);
+-   VAR
+-      R: Registers;
+-
++{ No UI: real BIOS int $10 cursor-shape call dropped -- meaningless (and
++  unsafe to attempt) outside real/v86-mode DOS. }
+    BEGIN
+-   WITH R DO
+-      BEGIN
+-      IF LastMode<>Mono THEN
+-         CX:=ColorCursorParameters[NewCursor]
+-      ELSE
+-         CX:=MonoCursorParameters[NewCursor];
+-
+-      AX:=$0100;
+-      END;  { with scope }
+-
+-   Intr($10,R);
+    END;  { SetCursor }
+ 
+ PROCEDURE InputPassword(VAR Word: String8; VAR ESCHit: Boolean);
+@@ -496,7 +481,7 @@ PROCEDURE InputPassword(VAR Word: String8; VAR ESCHit: Boolean);
+          IF Length(Word)<8 THEN
+             BEGIN
+             Word:=Word+Inp;
+-            Write('Þ');
++            Write('ï¿½');
+             END;
+          END;
+    UNTIL Exit;
+@@ -554,9 +539,13 @@ CASE Lo(LastMode) OF
+       END;
+ END;  { case }
+ 
+-{ Initialize virtual screen variables. }
+-RealScreen:=Ptr(ScrSeg,0);
+-VirtualScreen:=RealScreen;
++{ No UI: VirtualScreen/RealScreen used to alias the real $B800:0 video
++  segment directly (TP text-mode VGA has no separate framebuffer to
++  double-buffer against). That address means nothing outside real/v86-mode
++  DOS, so VirtualScreen is now a plain heap buffer instead; RealScreen keeps
++  pointing at the same buffer since nothing writes it separately any more. }
++New(VirtualScreen);
++RealScreen:=VirtualScreen;
+ 
+ CheckBreak:=False;
+ END.
