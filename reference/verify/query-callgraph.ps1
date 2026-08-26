@@ -13,6 +13,14 @@ GetFleetComposition -- exactly the Phase 6 NPE procedures this tool exists to he
 scope. This script greps every *.PAS file for the declaration itself and warns when
 more than one file declares the name, so a collision is never silently trusted.
 
+Separate, NOT checked by this script: the index has no {$IFDEF}/{$IFNDEF} awareness
+(confirmed 85 conditional-compilation directives across 53 of ~90 source files). A
+call site inside an excluded region still counts toward refCount, so a nonzero count
+here is evidence of a real call site in the text, not proof it's compiled into any
+particular build -- read the {$IFDEF} context by hand before concluding something is
+(or isn't) actually live, same as PASCAL_ARCHITECTURE_NOTES.md's HolocaustCommand
+finding already required.
+
 .EXAMPLE
 ./query-callgraph.ps1 GetBestTarget
 #>

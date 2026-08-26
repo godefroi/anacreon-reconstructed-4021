@@ -62,6 +62,15 @@ still the right call for a genuinely isolated, parameter-only procedure (see "Re
   when there's more than one, so a collision is never silently trusted. For a name it flags, read each
   file's own declaration/call sites directly instead of the index's blended one.
 
+  **Second known limitation, also confirmed real**: the scan has no `{$IFDEF}`/`{$IFNDEF}` awareness —
+  confirmed 85 conditional-compilation directives across 53 of the source's ~90 files. A call site
+  inside an excluded region (e.g. `{$IFNDEF Demo}...{$ENDIF}`) still counts toward `refCount`, so a
+  nonzero count is evidence of a real call site in the text, not proof it's compiled into any
+  particular build. This is exactly the subtlety that made the `HolocaustCommand` dead-code finding
+  non-obvious in the first place (see this file's own `HolocaustWorld`/`HolocaustEffectiveness` note
+  below, and `PASCAL_ARCHITECTURE_NOTES.md`'s fuller writeup) — this tool narrows *where* to look, it
+  doesn't replace reading the `{$IFDEF}` context by hand before concluding something is (or isn't) live.
+
 To add a new domain: give `runworld.pas` a new `case <domain>` branch (document its field shape in the
 file's own header comment, matching the convention every existing domain already follows), add a
 `GoldenFile.Regenerate(...)` call in `GoldenFileTests.cs`, and if the target procedure isn't reachable
