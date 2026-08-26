@@ -40,6 +40,27 @@ still the right call for a genuinely isolated, parameter-only procedure (see "Re
   self-verifying that the result applies cleanly to pristine source and reproduces `patched/<File>`
   byte-for-byte before writing it. Pass `-OutDir` to write somewhere other than `patches/` to try a
   regeneration without touching the committed patches.
+- `build-callgraph.ps1` / `dos_131_callgraph.json` / `query-callgraph.ps1` — a call-graph index over
+  all of `reference/DOSAnacreonSource131/*.PAS`, built for deciding what a unit actually needs before
+  trimming/patching it (the "trim a unit down to size" workflow below used to mean grepping call sites
+  by hand). `build-callgraph.ps1` runs `ctags` (needs Universal Ctags on `PATH`) to find every
+  procedure/function definition, then scans every source line itself for call sites (ctags/`global`
+  don't extract Pascal references, only definitions), and writes one JSON index,
+  `dos_131_callgraph.json` (gitignored, regenerate on demand — it's ~1MB and derived entirely from
+  already-committed source, not itself a source of truth). Format: `{ SymbolName: { file, line, kind,
+  signature, refCount, references: [{file, line, context}, ...] } }`.
+
+  **Known limitation, confirmed real, not theoretical**: the index keys definitions by name only,
+  case-insensitively, with no per-unit scoping — Pascal allows the same procedure/function name in
+  unrelated units (confirmed: `GetBestTarget` is two different procedures, `ATTNPE.PAS` and
+  `NPEINTR.PAS`; also `UpdateFleets`/`ReviewNews`/`GetTarget`/`GetFleetComposition`, each redefined per
+  NPE personality file — exactly the Phase 6 procedures this tool is meant to help scope). For a
+  colliding name, the index keeps only one arbitrary definition (whichever ctags line was processed
+  last) and blends every same-named symbol's call sites into one `references` list — silently wrong if
+  trusted as-is. Use `query-callgraph.ps1 <Name>` rather than reading the JSON directly: it looks up
+  the same index but also greps the source tree itself for every file declaring that name and warns
+  when there's more than one, so a collision is never silently trusted. For a name it flags, read each
+  file's own declaration/call sites directly instead of the index's blended one.
 
 To add a new domain: give `runworld.pas` a new `case <domain>` branch (document its field shape in the
 file's own header comment, matching the convention every existing domain already follows), add a

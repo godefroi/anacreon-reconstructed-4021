@@ -17,6 +17,11 @@ reference/**/*.ppu
 # Never a source of truth, never committed.
 reference/verify/patched/
 
+# reference/verify/dos_131_callgraph.json is build-callgraph.ps1's disposable output --
+# derived entirely from already-committed reference/DOSAnacreonSource131/*.PAS, ~1MB,
+# regenerate on demand rather than commit.
+reference/verify/dos_131_callgraph.json
+
 # dotenv files
 .env
 
