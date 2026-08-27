@@ -1,25 +1,26 @@
 <#
 .SYNOPSIS
-Proof of concept for the "build almost everything" harness strategy: compiles pristine
-reference/DOSAnacreonSource131 units standalone under fpc, one logical dependency layer at a
-time (not one file at a time -- units at the same dependency depth share a tier), patching only
-what fpc actually refuses to compile and eliminating the UI entirely rather than reproducing it
-(see chat history -- no console-description layer, real interactive calls halt loudly instead).
+Standalone-compile smoke test: compiles pristine reference/DOSAnacreonSource131 units under fpc,
+one logical dependency layer at a time (not one file at a time -- units at the same dependency
+depth share a tier), against this directory's own patches/*.patch and shims/*.PAS -- the same
+patch set build.ps1/runworld.pas/PatchHarness.cs build against. Confirms every unit in
+uses-map.json still compiles on its own, tier by tier, independent of whatever subset a given
+runworld.pas domain actually links.
 
-Unlike reference/verify/build.ps1 (which builds one driver against a deliberately minimal,
-hand-trimmed unit subset), this lane's goal is the opposite: build as much of the pristine
-tree as will compile. See reference/verify/README.md's sibling note (once this lane graduates
-past PoC) for the tradeoff.
+Originally a separate "build almost everything" PoC lane (patch only what fpc refuses to
+compile, eliminate the UI entirely rather than reproducing it -- real interactive calls halt
+loudly instead of hanging or faking an answer); folded into this directory's single patch set
+once that strategy replaced the old hand-trimmed-per-domain one. See reference/verify/README.md.
 
-scratch/ is the disposable build output (gitignored, like ../patched/): pristine source for
-these tiers plus patches/*.patch and shims/*.PAS applied/copied fresh every run. Never a
-source of truth.
+scratch/ is the disposable build output (gitignored, like ./patched/): pristine source for these
+tiers plus patches/*.patch and shims/*.PAS applied/copied fresh every run. Never a source of
+truth.
 #>
 
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
-$src = Join-Path $PSScriptRoot '..\..\DOSAnacreonSource131'
+$src = Join-Path $PSScriptRoot '..\DOSAnacreonSource131'
 $out = Join-Path $PSScriptRoot 'scratch'
 
 [string[]]$units = @(

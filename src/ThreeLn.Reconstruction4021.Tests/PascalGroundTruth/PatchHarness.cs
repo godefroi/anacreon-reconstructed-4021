@@ -49,6 +49,16 @@ internal static class PatchHarness
                     File.Copy(source, Path.Combine(outDir, Path.GetFileName(source)));
                 }
 
+                // shims/*.PAS don't exist in pristine source at all (CRT/Printer stand-ins, see
+                // reference/verify/README.md) -- not covered by the pristine-copy loop above.
+                var shimsDir = Path.Combine(verifyDir, "shims");
+                foreach (var shim in Directory.EnumerateFiles(shimsDir, "*.PAS")) {
+                    File.Copy(shim, Path.Combine(outDir, Path.GetFileName(shim)), overwrite: true);
+                }
+                foreach (var inc in new[] { "COLORS.INC", "BITPIC.INC" }) {
+                    File.Copy(Path.Combine(pristineDir, inc), Path.Combine(outDir, inc), overwrite: true);
+                }
+
                 var patchesDir = Path.Combine(verifyDir, "patches");
                 foreach (var patch in Directory.EnumerateFiles(patchesDir, "*.patch").OrderBy(p => p, StringComparer.Ordinal)) {
                     PascalHarness.RunProcess(PascalHarness.GitPath, ["apply", "-p1", patch], outDir);

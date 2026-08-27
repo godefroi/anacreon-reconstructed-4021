@@ -12,7 +12,7 @@
  {$IFDEF Overlay}
  {$F+}
  {$ENDIF}
-@@ -1170,7 +1175,10 @@
+@@ -1170,7 +1175,10 @@ PROCEDURE GetNewName(Player: Empire; VAR NewSlot: NameRecordPtr);
  ------------------------------------------------------------------------------ }
  
     BEGIN

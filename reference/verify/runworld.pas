@@ -162,7 +162,7 @@ PROGRAM RunWorld;
   relaxation, not a behavior change. }
 {$V-}
 
-USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, AttNPE, Fleet, Intrface, DFA, Strg;
+USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, AttNPE, Fleet, Intrface, DFA, Strg, NewGame;
 
 function ParseLongInt(const s: String): LongInt;
    var
@@ -523,6 +523,15 @@ procedure RunNpeAttackCase(const arg: String);
    FillChar(Universe^,SizeOf(Universe^),0);
    NoOfPlanets:=3;
 
+   { PATCH-note: found via a real Runtime error 216 once ATTACK.PAS's real DestroyFleet (not the
+     old lane's no-op stand-in) started running for real -- DestroyFleet's own
+     Sector[FltPos.x]^[FltPos.y].Flts write needs Sector allocated at the attacker/target fleets'
+     (5,5) position, which nothing in this procedure ever allocated (this domain never exercised
+     any Sector-touching code path before). 50 covers every position this domain places anything
+     at, including Planet[2]/Planet3 at up to (50,50) -- same InitializeSector pattern every other
+     Sector-touching domain in this file already uses. }
+   InitializeSector(50);
+
    Universe^.Planet[1].Cls:=ClsM;
    Universe^.Planet[1].Typ:=CapTyp;
    Universe^.Planet[1].Tech:=JmpTchLvl;
@@ -601,7 +610,12 @@ procedure RunNpeAttackCase(const arg: String);
 
    ForcedRandomValue:=parts[8];
 
-   NPEAttack(FltID,TargetID,AttackIntentionTypes(parts[6]),0,Result,Killed,Casualties);
+   { PATCH-note: NPEAttack's real signature has no Killed/Casualties VAR out-params (NPEINTR.PAS
+     calls it for real now that the fuller tree links the whole SCC) -- ATTNPE.PAS.patch adds
+     GetLastKilled/GetLastCasualties test-only getters instead, see that patch's own comment. }
+   NPEAttack(FltID,TargetID,AttackIntentionTypes(parts[6]),0,Result);
+   Killed:=GetLastKilled;
+   Casualties:=GetLastCasualties;
 
    Write('result=',Ord(Result),
          ';cas_fgt=',Casualties[fgt],';cas_hkr=',Casualties[hkr],';cas_jtn=',Casualties[jtn],';cas_nnj=',Casualties[nnj],
@@ -630,8 +644,15 @@ procedure RunNpeAttackCase(const arg: String);
    else
       WriteLn(';newcap_idx=0');
 
-   Dispose(Universe^.Fleet[1]);
-   if parts[7]<>0 then
+   { PATCH-note: found via a real Runtime error 204 (heap corruption from a double-dispose) on the
+     case immediately after this one -- ATTACK.PAS's real DestroyFleet (not the old lane's no-op
+     stand-in) may already have Disposed Fleet[1] and/or Fleet[2] during combat resolution above
+     (e.g. a destroyed, not just surrendered, attacker or target), so this cleanup can't
+     unconditionally Dispose either one anymore -- same SetOfActiveFleets liveness check
+     DestroyFleet itself uses before touching a fleet. }
+   if 1 in SetOfActiveFleets then
+      Dispose(Universe^.Fleet[1]);
+   if (parts[7]<>0) and (2 in SetOfActiveFleets) then
       Dispose(Universe^.Fleet[2]);
    Dispose(Universe);
    end;
@@ -659,6 +680,10 @@ procedure RunLamAttackCase(const arg: String);
 
    New(Universe);
    FillChar(Universe^,SizeOf(Universe^),0);
+   { PATCH-note: same real-DestroyFleet-needs-Sector-allocated gap as RunNpeAttackCase's own
+     InitializeSector fix -- LAMAttack's DestroyFleet path (real, not ATTACK.PAS.patch's old
+     stand-in, now that that patch is gone) touches Sector[FltPos.x]^[FltPos.y] too. }
+   InitializeSector(20);
    Universe^.EmpireData[Empire1].InUse:=True;
    Universe^.EmpireData[Empire2].InUse:=True;
    NoOfPlanets:=0;
@@ -700,7 +725,9 @@ procedure RunLamAttackCase(const arg: String);
            ';defnsdest_lam=',DefnsDest[LAM],';defnsdest_def=',DefnsDest[def],
            ';defnsdest_gdm=',DefnsDest[GDM],';defnsdest_ion=',DefnsDest[ion]);
 
-   if TargetIsFleet then
+   { PATCH-note: same double-dispose fix as RunNpeAttackCase's own cleanup -- real DestroyFleet may
+     already have Disposed Fleet[1] during LAMAttack's own resolution. }
+   if TargetIsFleet and (1 in SetOfActiveFleets) then
       Dispose(Universe^.Fleet[1]);
    Dispose(Universe);
    end;
@@ -1401,6 +1428,15 @@ procedure RunRngCase(const arg: String);
    WriteLn('values=',Values);
    end;
 
+{$IFDEF ScenarioLaneEnabled}
+{ PATCH-note: scoped out of this retarget pass -- RunScenarioCase needs direct access to roughly
+  15 of NEWGAME.PAS's internal command-handler procedures (CreatePlayerEmpire/CreateWorld/
+  DefineZone/LoadTechArray/etc), and promoting them one at a time does not converge (each reveals
+  the next it calls). Calling the real LoadScenario instead is not the fix either: it genuinely
+  calls PressAnyKey/a "how many players" prompt, both WriteLn;Halt(1) under the fuller EIO/WND
+  patches now, so it would crash the harness rather than produce output. Left here, guarded out
+  by default, as its own follow-up -- not deleted, not silently dropped. Define
+  ScenarioLaneEnabled to work on it. }
 procedure RunScenarioCase(const arg: String);
    { Reimplements NEWGAME.PAS:1650-1812's (LoadScenario) own header-parse + command-dispatch loop
      fresh -- it's saturated with real, load-bearing DOS UI (OpenWindow bracketing the whole
@@ -1683,6 +1719,8 @@ procedure RunScenarioCase(const arg: String);
    Dispose(Universe);
    end;
 
+{$ENDIF}
+
 procedure RunFleetLogisticsCase(const arg: String);
    { FuelCapacity/FuelConsumption/FleetCargoSpace/BalanceFleet (MISC.PAS:168-222, INTRFACE.PAS:431-465
      as trimmed into this harness's own INTRFACE.PAS -- see that file's header comment), called
@@ -1898,7 +1936,14 @@ procedure RunCaseMode;
       else if domain='rng' then
          RunRngCase(ParamStr(i))
       else if domain='scenario' then
+         {$IFDEF ScenarioLaneEnabled}
          RunScenarioCase(ParamStr(i))
+         {$ELSE}
+         BEGIN
+         WriteLn('scenario domain scoped out of this build -- see RunScenarioCase''s own PATCH-note');
+         Halt(1);
+         END
+         {$ENDIF}
       else if domain='probescout' then
          RunProbeScoutCase(ParamStr(i))
       else if domain='fleetlogistics' then

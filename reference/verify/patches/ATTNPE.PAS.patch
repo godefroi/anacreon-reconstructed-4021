@@ -1,89 +1,62 @@
 --- a/ATTNPE.PAS
 +++ b/ATTNPE.PAS
-@@ -13,14 +13,13 @@ UNIT AttNPE;
- INTERFACE
- 
- USES Int,
--     CRT,
-      Types,
-      DataCnst,
-      PrimIntr,
-      Attack;
- 
+@@ -22,6 +22,15 @@ USES Int,
  PROCEDURE NPEAttack(FltID,Target: IDNumber; Intent: AttackIntentionTypes; RetrIndex: Index;
--                    VAR Result: AttackResultTypes);
-+                    VAR Result: AttackResultTypes; VAR Killed,Casualties: AttackArray);
+                     VAR Result: AttackResultTypes);
  
++{ PATCH (fpc): test-only observability hooks, same convention as INT.PAS's ForcedRandomValue /
++  UPDATE.PAS's GetNewTotalRevIndex -- NPEAttack's real signature is untouched (NPEINTR.PAS calls
++  it for real at 4 sites now that the full SCC is linked, unlike the old trimmed lane where
++  NPEINTR.PAS was never compiled at all), so a signature-widening patch here would break those
++  real callers. NPEAttack copies its local Killed/Casualties into these globals right before
++  returning instead; read-only observability, no behavior change. }
++FUNCTION GetLastKilled: AttackArray;
++FUNCTION GetLastCasualties: AttackArray;
++
  IMPLEMENTATION
  
-@@ -383,45 +382,47 @@ PROCEDURE WorldEngage(NoOfGroups: Byte;
+ {$IFDEF Debug}
+@@ -383,6 +392,19 @@ PROCEDURE WorldEngage(NoOfGroups: Byte;
     {$ENDIF}
     END;  { WorldEngage }
  
-+{ PATCH (Phase 5 commit 5f): signature still carries the VAR Killed,Casualties
-+  extension 5e added (real Pascal keeps both as local VARs) -- purely a
-+  test-observability affordance, harmless since RestoreCombatant only reads
-+  Casualties/Killed, never writes them, so their values are identical whether
-+  they're locals or VAR params. DefEmp dropped: assigned in real Pascal
-+  (GetStatus(Target)) but never read anywhere in this body, confirmed by reading
-+  -- ResolveAttack recomputes its own EnemyEmp internally instead. The outer
-+  Target.ObjTyp IN [Pln,Base,Flt] / [Con,Gate] dispatch is gone too: this
-+  harness's own callers only ever pass Pln or Flt targets (Base is untested
-+  either way, matching 5d/5e's own scope), and the Con/Gate branch needs
-+  DestroyConstructionOrGate, still 5g's scope. Restore the full dispatch verbatim
-+  from reference/DOSAnacreonSource131/ATTNPE.PAS when 5g lands it. }
++VAR
++   LastKilled,LastCasualties: AttackArray;
++
++FUNCTION GetLastKilled: AttackArray;
++   BEGIN
++   GetLastKilled:=LastKilled;
++   END;  { GetLastKilled }
++
++FUNCTION GetLastCasualties: AttackArray;
++   BEGIN
++   GetLastCasualties:=LastCasualties;
++   END;  { GetLastCasualties }
++
  PROCEDURE NPEAttack(FltID,Target: IDNumber; Intent: AttackIntentionTypes; RetrIndex: Index;
--                    VAR Result: AttackResultTypes);
-+                    VAR Result: AttackResultTypes; VAR Killed,Casualties: AttackArray);
+                     VAR Result: AttackResultTypes);
     VAR
-       CombatData: CombatDataRecord;
--      Killed,Casualties: AttackArray;
-       NoOfGroups: Byte;
-       Gp: GroupArray;
-       En: EnemyArray;
-       Capture,HKSurprise: Boolean;
--      AttEmp,DefEmp: Empire;
-+      AttEmp: Empire;
+@@ -396,6 +418,13 @@ PROCEDURE NPEAttack(FltID,Target: IDNumber; Intent: AttackIntentionTypes; RetrIn
        Booty: PlanetSet;
  
     BEGIN
++   { PATCH (fpc): reset the test-observability globals every call, before either branch runs --
++     the Con/Gate branch below never computes Killed/Casualties at all, and this harness's own
++     driver runs multiple cases per process invocation, so without this a Con/Gate-target case
++     would read either uninitialized stack garbage or a stale value left by a previous call. }
++   FillChar(LastKilled,SizeOf(LastKilled),0);
++   FillChar(LastCasualties,SizeOf(LastCasualties),0);
++
     HKSurprise:=ForcesUnknown(FltID,Target);
     AttEmp:=GetStatus(FltID);
--   DefEmp:=GetStatus(Target);
+    DefEmp:=GetStatus(Target);
+@@ -416,6 +445,9 @@ PROCEDURE NPEAttack(FltID,Target: IDNumber; Intent: AttackIntentionTypes; RetrIn
  
--   IF Target.ObjTyp IN [Pln,Base,Flt] THEN
--      BEGIN
--      CalculateCombatData(AttEmp,FltID,Target,CombatData);
--      DefaultDistribution(FltID,NoOfGroups,Gp);
--      GetEnemy(Target,En);
-+   CalculateCombatData(AttEmp,FltID,Target,CombatData);
-+   DefaultDistribution(FltID,NoOfGroups,Gp);
-+   GetEnemy(Target,En);
- 
--      IF Target.ObjTyp=Flt THEN
--         FleetEngage(NoOfGroups,Gp,En,CombatData,RetrIndex,Intent,Casualties,Killed,Result)
--      ELSE
--         WorldEngage(NoOfGroups,Gp,En,CombatData,RetrIndex,Intent,Casualties,Killed,Result);
-+   IF Target.ObjTyp=Flt THEN
-+      FleetEngage(NoOfGroups,Gp,En,CombatData,RetrIndex,Intent,Casualties,Killed,Result)
-+   ELSE
-+      WorldEngage(NoOfGroups,Gp,En,CombatData,RetrIndex,Intent,Casualties,Killed,Result);
- 
--      RestoreCombatant(FltID,Casualties);
--      RestoreCombatant(Target,Killed);
-+   RestoreCombatant(FltID,Casualties);
-+   RestoreCombatant(Target,Killed);
- 
--      IF Intent=DestTrnAIT THEN Capture:=False ELSE Capture:=True;
--      ResolveAttack(Result,FltID,Target,HKSurprise,Capture,Casualties,Killed,Booty);
--      END
--   ELSE IF Target.ObjTyp IN [Con,Gate] THEN
--      BEGIN
--      DestroyConstructionOrGate(AttEmp,HKSurprise,Target);
--      Result:=DefConqueredART;
--      END;
-+   IF Intent=DestTrnAIT THEN Capture:=False ELSE Capture:=True;
-+   ResolveAttack(Result,FltID,Target,HKSurprise,Capture,Casualties,Killed,Booty);
-    END;  { NPEAttack }
- 
- END.
+       IF Intent=DestTrnAIT THEN Capture:=False ELSE Capture:=True;
+       ResolveAttack(Result,FltID,Target,HKSurprise,Capture,Casualties,Killed,Booty);
++
++      LastKilled:=Killed;
++      LastCasualties:=Casualties;
+       END
+    ELSE IF Target.ObjTyp IN [Con,Gate] THEN
+       BEGIN

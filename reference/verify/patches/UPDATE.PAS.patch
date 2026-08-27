@@ -1,1087 +1,1457 @@
 --- a/UPDATE.PAS
 +++ b/UPDATE.PAS
-@@ -11,11 +11,13 @@ UNIT Update;
- 
- INTERFACE
- 
-+{ PATCH (fpc): UpdateUniverse (the whole-galaxy tick loop, screen
-+  progress window) deleted -- Crt/EIO/WND/Mess were only needed by it; none of
-+  it is reachable from UpdateWorld/UpdateEmpire/UpdateConstruction.
-+  UpdateWorld itself is promoted here from IMPLEMENTATION so this harness can
-+  call it directly -- same procedure, only its visibility changed. }
- USES Strg,
+@@ -1,1490 +1,1509 @@
+-(* UPDATE.PAS ------------------------------------------------------------------
+-
+------------------------------------------------------------------------------ *)
+-
+-UNIT Update;
+-
+-{$IFDEF Overlay}
+-{$F+}
+-{$O+}
+-{$ENDIF}
+-
+-INTERFACE
+-
+-USES Strg,
 -     Crt,                                       { Standard CRT library. }
-      Int,                                       { Integer routines. }
+-     Int,                                       { Integer routines. }
 -     EIO,                                       { Extended IO Library. }
 -     WND,
-      Types,
-      Galaxy,
-      DataStrc,                                  { Universe data structure. }
-@@ -23,20 +25,138 @@ USES Strg,
-      News,
-      Misc,                                      { Miscellaneous routines. }
-      Primintr,                                  { Primitive procedures. }
+-     Types,
+-     Galaxy,
+-     DataStrc,                                  { Universe data structure. }
+-     DataCnst,
+-     News,
+-     Misc,                                      { Miscellaneous routines. }
+-     Primintr,                                  { Primitive procedures. }
 -     Intrface,                                  { Interface routines. }
 -     Mess;
-+     Intrface;                                  { GetIndustrialDistribution/CreatePlanet/
-+                                                   NextStarbaseSlot/CreateStarbase/
-+                                                   NextStargateSlot/CreateStargate/
-+                                                   GetOptimumIndus/ProbeScout/UpdateProbes --
-+                                                   real home, no longer relocated copies (see
-+                                                   Intrface's own header comment). }
- 
+-
 -PROCEDURE UpdateUniverse;
-+PROCEDURE UpdateWorld(World: IDNumber);
-+
-+{ PATCH (fpc): UpdateEmpire promoted here from IMPLEMENTATION (Commit 5a) so this
-+  harness can call it directly, same as UpdateWorld above -- same procedure,
-+  only its visibility changed. }
-+PROCEDURE UpdateEmpire(Emp: Empire);
-+
-+{ PATCH (fpc): UpdateConstruction promoted here from IMPLEMENTATION (Commit 5b),
-+  same reason as UpdateWorld/UpdateEmpire above. Its own ConstructStarbase/
-+  ConstructStargate helpers call NextStarbaseSlot/CreateStarbase/
-+  NextStargateSlot/CreateStargate/GetOptimumIndus, which now come from the real
-+  (trimmed) Intrface unit -- see this file's own USES clause and Intrface's
-+  header comment; these five used to be relocated copies here too, folded back
-+  into their real home once Intrface was linked (Phase 6, 6a follow-up). }
-+PROCEDURE UpdateConstruction(i: Byte);
-+
-+{ PATCH (fpc): test-only observability hook, mirroring the ForcedRandomValue
-+  pattern in INT.PAS -- NewTotalRevIndex is written only by Rebellion and
-+  normally committed to an empire's real TotalRevIndex by UpdateEmpire
-+  (UPDATE.PAS:512, deleted above as unreachable from UpdateWorld -- it's a
-+  later commit). This harness calls UpdateWorld directly, never UpdateEmpire,
-+  so without this getter the accumulator would be unreadable from outside the
-+  unit (it's declared in IMPLEMENTATION, below). Read-only; behavior of
-+  UpdateWorld/Rebellion is unchanged. }
-+FUNCTION GetNewTotalRevIndex(Emp: Empire): Integer;
-+
-+{ PATCH (fpc): CreateRndPlanet/RandomTrillumReserves/NebulaeBand/NebulaePatches (Phase 2 commit 2d)
-+  relocated verbatim from NEWGAME.PAS -- see the IMPLEMENTATION-section comment near
-+  RandomTrillumReserves's own body for the full dependency list. GetRandomXY/CreateRandomWorlds were
-+  deliberately NOT relocated at the time -- see the PATCH note further below (2e) for why that's
-+  since been superseded. }
-+PROCEDURE CreateRndPlanet(ID: IDNumber; Coord: XYCoord; Class: WorldClass; T: TechLevel);
-+FUNCTION RandomTrillumReserves(Cls: WorldClass; RegionReserves: Word): Word;
-+PROCEDURE NebulaeBand;
-+PROCEDURE NebulaePatches(NoOfPatches: Word);
-+
-+{ PATCH (fpc): LoadScenario's own parsing helpers and SF-token-parsing command handlers (Phase 2
-+  commit 2e), relocated verbatim from NEWGAME.PAS -- with two documented exceptions: CreateNPEmpire
-+  drops its InitializeNPE call (NPE AI state is Phase 3 scope -- NPE.PAS's own IMPLEMENTATION USES
-+  pulls in Crt/EIO/Wnd/PrimIntr/NPE01-04, a real blast radius this phase deliberately doesn't cross,
-+  matching EmpireFactory's own already-established scope boundary), and CreateRandomWorlds drops its
-+  one GotoXY(1,WhereY) progress-cursor call (cosmetic; same "drop a single incidental UI call,
-+  document it" precedent already used for SetUpWorld's own dropped Scout/SetSpecial calls).
-+  GetRandomXY here is NEWGAME.PAS's own retry-on-collision version, not GalaxySetup.GetRandomXY's C#
-+  port -- previously deliberately not relocated (2d's own note above) because the ForcedRandomValue
-+  convention can't express a retry loop, but PascalRandom (a real, empirically-verified RNG port —
-+  see rng.golden/PascalRandom) now can drive one meaningfully.
-+
-+  LoadScenario's own header-parse + command-dispatch loop is NOT relocated here -- it's saturated
-+  with real, load-bearing DOS UI (OpenWindow bracketing the whole procedure, ScenarioIntroduction
-+  deciding NoOfPlayers via a menu, ClrScr/PressAnyKey/CloseWindow) that can't be dropped without
-+  changing what the loop actually does, unlike the two single-call exceptions above. runworld.pas's
-+  own RunScenarioCase reimplements that one loop fresh instead, calling these relocated primitives in
-+  the same order/shape real LoadScenario does. }
-+TYPE
-+   ClassArray = ARRAY [1..100] OF WorldClass;
-+   TechArray = ARRAY [1..100] OF TechLevel;
-+   ZoneRecord = RECORD
-+      x1,y1,x2,y2: Byte;
-+      END;
-+   ZoneArray = ARRAY [1..20] OF ZoneRecord;
-+   XYPointRecord = RECORD
-+      Name: String8;
-+      XY: XYCoord;
-+      END;
-+   XYPointArray = ARRAY [1..25] OF XYPointRecord;
-+   EmpireNameArray = ARRAY [Empire] OF String32;
-+   SexArray = ARRAY [Empire] OF Boolean;
-+
-+VAR
-+   ScenarioError: Boolean;
-+   DebugScena: Boolean;
-+   ScenaVersion: Word;
-+
-+PROCEDURE ScenaError(Line: LineStr);
-+FUNCTION NextInteger(VAR SF: Text): Integer;
-+PROCEDURE GetRandomXY(VAR XY: XYCoord; x1,y1,x2,y2: Integer; CheckWorld: Boolean);
-+PROCEDURE GetRandomRange(Line: String16; VAR Low,High: Integer);
-+PROCEDURE GetNextXY(VAR SF: Text; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray; CheckWorlds: Boolean; VAR RetXY: XYCoord);
-+PROCEDURE LoadClassArray(VAR SF: TEXT; VAR CA: ClassArray);
-+PROCEDURE LoadTechArray(VAR SF: TEXT; VAR TA: TechArray);
-+PROCEDURE DefineXYPoint(VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
-+PROCEDURE DefineZone(VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
-+PROCEDURE ReadModifierList(VAR SF: TEXT; VAR Modifiers: SetOfEmpireModifiers);
-+PROCEDURE SetTrillumReserves(VAR SF: TEXT; VAR TriRes: Word);
-+PROCEDURE GetRandomEmpireName(VAR EmpireName: EmpireNameArray; VAR NewName: String32);
-+PROCEDURE CreatePlayerEmpire(VAR SF: TEXT; NoOfPlayers: Empire; VAR EmpireName,Password: EmpireNameArray; VAR Sex: SexArray);
-+PROCEDURE CreateNPEmpire(VAR SF: TEXT; VAR EmpireName: EmpireNameArray);
-+PROCEDURE CreateWorld(VAR SF: TEXT; VAR FirstWorld: Word; VAR NoOfPlayers: Empire; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
-+PROCEDURE CreateBase(VAR SF: TEXT; VAR FirstBase: Word; VAR NoOfPlayers: Empire; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
-+PROCEDURE CreateGate(VAR SF: TEXT; NoOfPlayers: Empire; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
-+PROCEDURE CreateNebula(VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
-+PROCEDURE CreateRandomNebula(VAR SF: TEXT);
-+PROCEDURE CreateSRMs(VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray);
-+PROCEDURE CreateRandomWorlds(VAR SF: TEXT; VAR FirstWorld: Word; VAR ClassTable: ClassArray; VAR TechTable: TechArray; TriRes: Word; VAR Zone: ZoneArray);
-+
-+{ PATCH (fpc): ProbeScout/UpdateProbes (Phase 3) now come from the real Intrface unit (this
-+  file's USES clause) -- originally relocated verbatim here because pulling in Intrface at the
-+  time meant pulling in Fleet/Orders/NPE too (Intrface's own IMPLEMENTATION USES). Once Fleet's
-+  own movement-fidelity work (Phase 6, 6a) trimmed Intrface down to size and linked it anyway, the
-+  relocated copy here was redundant -- moved back to its real home. }
- 
- IMPLEMENTATION
- 
- USES
+-
+-IMPLEMENTATION
+-
+-USES
 -   Environ;
-+   Environ,
-+   DFA;
- 
- VAR
-    NewTotalRevIndex: ARRAY [Empire] of Integer;
- 
+-
+-VAR
+-   NewTotalRevIndex: ARRAY [Empire] of Integer;
+-
 -PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber; 
-+FUNCTION GetNewTotalRevIndex(Emp: Empire): Integer;
-+   BEGIN
-+   GetNewTotalRevIndex:=NewTotalRevIndex[Emp];
-+   END;  { GetNewTotalRevIndex }
-+
-+{ PATCH (fpc): UpdateEmpire (+ nested NewTechLevel/GetChanceForNewTech/
-+  GetNewTech) and UpdateConstruction (+ ConstructStarbase/ConstructStargate)
-+  are RESTORED below, unchanged from source, and exported above (Commits
-+  5a/5b) -- this harness calls each directly, the same way it calls
-+  UpdateWorld. ReportPlanetLack IS reachable (SupplyLink/SurplusLink/
-+  ProduceRawMaterial all call it) -- kept, restored below after an earlier
-+  pass wrongly deleted it as unreachable. }
-+
-+PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
-                            Headline: NewsTypes; P1,P2,P3: Integer;
-                            VAR OtherReports: ResourceSet);
-    VAR
-@@ -55,6 +175,205 @@ PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber;
-       END;
-    END;  { ReportPlanetLack }
- 
-+{ PATCH (fpc): RandomTrillumReserves/RndShips/RndCargo/RndDefns/SetUpWorld/CreateRndPlanet/
-+  NebulaeBand/NebulaePatches relocated verbatim from NEWGAME.PAS (Phase 2 commit 2d) -- pulling in
-+  all of NEWGAME.PAS for these would drag in Crt/Dos/DOS2/EIO/WND/Menu/DFA/LoadSave/NPE/NPETypes for
-+  a handful of self-contained formulas, same "relocate the small formula, not the whole unit"
-+  precedent GetIndustrialDistribution/CreatePlanet/etc. used before they moved to their real home in
-+  Intrface (see this file's USES clause). GetRandomXY/CreateRandomWorlds are deliberately NOT
-+  relocated here: under this harness's ForcedRandomValue convention every Rnd call within one
-+  invocation returns the same fixed offset, so a blocked coordinate's retry always re-rolls the
-+  identical (still-blocked) coordinate -- there is no way to construct a golden-file case exercising
-+  "blocked, then a later retry succeeds" on either side of the comparison, on principle, not as an
-+  oversight. See reference/verify/README.md's "Tenth domain" note. }
-+FUNCTION RandomTrillumReserves(Cls: WorldClass; RegionReserves: Word): Word;
-+   VAR
-+      Temp: Word;
-+
-+   BEGIN
-+   Temp:=GreaterInt(Integer(RegionReserves)+Rnd(-25,25),0);
-+   RandomTrillumReserves:=Round((Temp)*(TriResByClass[Cls]/100)+Rnd(1,100));
-+   END;  { RandomTrillumReserves }
-+
-+PROCEDURE RndShips(Nfgt,Nhkr,Njmp,Njtn,Npen,Nstr,Ntrn: Integer;
-+                   Tech: TechLevel; PerCentVar: Byte;
-+                   CheckTech: Boolean;
-+                   VAR Ships: ShipArray);
-+   VAR
-+      ShpI: ShipTypes;
-+
-+   BEGIN
-+   Ships[fgt]:=ThgLmt(RndVar(Nfgt,PerCentVar));
-+   Ships[hkr]:=ThgLmt(RndVar(Nhkr,PerCentVar));
-+   Ships[jmp]:=ThgLmt(RndVar(Njmp,PerCentVar));
-+   Ships[jtn]:=ThgLmt(RndVar(Njtn,PerCentVar));
-+   Ships[pen]:=ThgLmt(RndVar(Npen,PerCentVar));
-+   Ships[ssp]:=ThgLmt(RndVar(Nstr,PerCentVar));
-+   Ships[trn]:=ThgLmt(RndVar(Ntrn,PerCentVar));
-+
-+   IF CheckTech THEN
-+      FOR ShpI:=fgt TO trn DO
-+         IF NOT (ShpI IN TechDev[Tech]) THEN
-+            Ships[ShpI]:=0;
-+   END;  { RndShips }
-+
-+PROCEDURE RndCargo(Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri: Integer;
-+                   Tech: TechLevel; PerCentVar: Byte;
-+                   CheckTech: Boolean;
-+                   VAR Cargo: CargoArray);
-+   VAR
-+      CarI: CargoTypes;
-+
-+   BEGIN
-+   Cargo[men]:=ThgLmt(RndVar(Nmen,PerCentVar));
-+   Cargo[nnj]:=ThgLmt(RndVar(Nnnj,PerCentVar));
-+   Cargo[amb]:=ThgLmt(RndVar(Namb,PerCentVar));
-+   Cargo[che]:=ThgLmt(RndVar(Nche,PerCentVar));
-+   Cargo[met]:=ThgLmt(RndVar(Nmet,PerCentVar));
-+   Cargo[sup]:=ThgLmt(RndVar(Nsup,PerCentVar));
-+   Cargo[tri]:=ThgLmt(RndVar(Ntri,PerCentVar));
-+
-+   IF CheckTech THEN
-+      FOR CarI:=men TO tri DO
-+         IF NOT (CarI IN TechDev[Tech]) THEN
-+            Cargo[CarI]:=0;
-+   END;  { RndCargo }
-+
-+PROCEDURE RndDefns(NLAM,Ndef,NGDM,Nion: Integer;
-+                   Tech: TechLevel; PerCentVar: Byte;
-+                   CheckTech: Boolean;
-+                   VAR Defns: DefnsArray);
-+   VAR
-+      DefI: DefnsTypes;
-+
-+   BEGIN
-+   Defns[LAM]:=ThgLmt(RndVar(NLAM,PerCentVar));
-+   Defns[def]:=ThgLmt(RndVar(Ndef,PerCentVar));
-+   Defns[GDM]:=ThgLmt(RndVar(NGDM,PerCentVar));
-+   Defns[ion]:=ThgLmt(RndVar(Nion,PerCentVar));
-+
-+   IF CheckTech THEN
-+      FOR DefI:=LAM TO ion DO
-+         IF NOT (DefI IN TechDev[Tech]) THEN
-+            Defns[DefI]:=0;
-+   END;  { RndDefns }
-+
-+PROCEDURE SetUpWorld(WorldID: IDNumber;
-+                     Cls: WorldClass;
-+                     Tech: TechLevel;
-+                     Typ: WorldTypes;
-+                     Emp: Empire;
-+                     Pop: Population;
-+                     Eff: Index;
-+                     Special: SetOfSpecialConditions;
-+                     Nfgt,Nhkr,Njmp,Njtn,Npen,Nstr,Ntrn: Integer;
-+                     Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri: Integer;
-+                     NLAM,Ndef,NGDM,Nion: Integer;
-+                     CheckTech: Boolean);
-+   VAR
-+      Indus: IndusArray;
-+      Ships: ShipArray;
-+      Cargo: CargoArray;
-+      Defns: DefnsArray;
-+
-+   BEGIN
-+   SetClass(WorldID,Cls);
-+   SetTech(WorldID,Tech);
-+   SetType(WorldID,Typ);
-+   SetStatus(WorldID,Emp);
-+   SetPopulation(WorldID,Pop);
-+   SetEfficiency(WorldID,Eff);
-+   SetSpecial(WorldID,Special);
-+   { PATCH (fpc): Scout(Emp,XY) call dropped -- confirmed by reading its body (INTRFACE.PAS:91-137)
-+     that it consumes no RNG and only updates fog-of-war/news bookkeeping, so dropping it cannot
-+     perturb this harness's RNG stream or any Universe^ field this domain reads back. Matches
-+     GalaxySetup.ApplySetup's own documented omission on the C# side. }
-+   GetOptimumIndus(WorldID,Indus);
-+   PutIndus(WorldID,Indus);
-+   RndShips(Nfgt,Nhkr,Njmp,Njtn,Npen,Nstr,Ntrn,Tech,20,CheckTech,Ships);
-+   PutShips(WorldID,Ships);
-+   RndCargo(Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri,Tech,20,CheckTech,Cargo);
-+   PutCargo(WorldID,Cargo);
-+   RndDefns(NLAM,Ndef,NGDM,Nion,Tech,20,CheckTech,Defns);
-+   PutDefns(WorldID,Defns);
-+   END;  { SetUpWorld }
-+
-+PROCEDURE CreateRndPlanet(ID: IDNumber; Coord: XYCoord; Class: WorldClass; T: TechLevel);
-+   CONST
-+      RndMilTechAdj: ARRAY [TechLevel] OF Real =
-+         {   pt     p    pa     a    pw     w     j     b     s    pg     g }
-+         ( 0.01, 0.02, 0.04, 0.05, 0.10, 0.30, 0.35, 0.60, 0.75, 0.95, 1.00 );
-+
-+   VAR
-+      MI: Integer;
-+      Eff: Index;
-+      Pop: Population;
-+
-+   BEGIN
-+   CreatePlanet(ID,Coord);
-+
-+   Eff:=Rnd(40,60);
-+   Pop:=RndVar(Trunc((1+(Eff-50)/500)*BasePop[T]), 10);
-+   MI:=Rnd(1,33)+Rnd(1,34)+Rnd(1,33);
-+   MI:=Round(MI*RndMilTechAdj[T]);
-+
-+   SetUpWorld(ID,Class,T,IndTyp,Indep,Pop,Eff,[],
-+              80*MI, 7*MI, 10*MI, 6*MI, 4*MI, MI, 30*MI,
-+              40*MI, 0, 0, 30*MI, 50*MI, 25*MI, 10*MI,
-+              0, 30*MI, 50*MI, 40*MI,True);
-+   END;  { CreateRndPlanet }
-+
-+PROCEDURE NebulaeBand;
-+   VAR
-+      InitX,StartX,XDisp,x,y: Integer;
-+      Coord: XYCoord;
-+
-+   BEGIN
-+   InitX:=Rnd(1,SizeOfGalaxy);
-+
-+   IF InitX<=(SizeOfGalaxy DIV 4) THEN
-+      XDisp:=Rnd(0,3)
-+   ELSE IF InitX>=(SizeOfGalaxy*3 DIV 4) THEN
-+      XDisp:=Rnd(-3,0)
-+   ELSE
-+      XDisp:=Rnd(-3,3);
-+
-+   StartX:=InitX;
-+   FOR y:=1 TO SizeOfGalaxy DO
-+      BEGIN
-+      FOR x:=StartX-Rnd(1,5) TO StartX+Rnd(1,5) DO
-+         IF InGalaxy(x,y) THEN
-+            BEGIN
-+            Coord.x:=x;  Coord.y:=y;
-+            PutNebula(Coord,Nebula);
-+            END;
-+
-+      StartX:=StartX+XDisp;
-+      END;  { loop }
-+   END;  { NebulaeBand }
-+
-+PROCEDURE NebulaePatches(NoOfPatches: Word);
-+   VAR
-+      Patch: Byte;
-+      InitX,InitY,x,y: Integer;
-+      Coord: XYCoord;
-+
-+   BEGIN
-+   FOR Patch:=1 TO NoOfPatches DO
-+      BEGIN
-+      InitX:=Rnd(1,SizeOfGalaxy);
-+      InitY:=Rnd(1,SizeOfGalaxy);
-+      FOR y:=InitY-Rnd(1,3) TO InitY+Rnd(1,3) DO
-+         FOR x:=InitX-Rnd(1,4-Abs(y-InitY)) TO
-+                InitX+Rnd(1,4-Abs(y-InitY)) DO
-+            IF InGalaxy(x,y) THEN
-+               BEGIN
-+               Coord.x:=x;  Coord.y:=y;
-+               PutNebula(Coord,Nebula);
-+               END;  { loop }
-+      END;  { loop }
-+   END;  { NebulaePatches }
-+
- PROCEDURE ConstructStarbase(Emp: Empire; STyp: StarbaseTypes; XY: XYCoord; VAR ID: IDNumber);
-    VAR
-       EmpTech: TechLevel;
-@@ -99,9 +418,8 @@ PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR I
-       CreateStargate(ID,Emp,GTyp,XY);
-    END;  { ConstructStargate }
- 
+-                           Headline: NewsTypes; P1,P2,P3: Integer;
+-                           VAR OtherReports: ResourceSet);
+-   VAR
+-      Loc: Location;
+-
+-   BEGIN
+-   IF (NOT (ResourceTypes(P1) IN OtherReports))
+-   AND (Sta<>Indep) THEN
+-      BEGIN
+-      Loc.ID:=ID;
+-      Loc.XY:=Limbo;
+-
+-      AddNews(Sta,Headline,Loc,P1,P2,P3);
+-      OtherReports:=OtherReports+[ResourceTypes(P1)];
+-      ChangeRevIndex(ID,1);
+-      END;
+-   END;  { ReportPlanetLack }
+-
+-PROCEDURE ConstructStarbase(Emp: Empire; STyp: StarbaseTypes; XY: XYCoord; VAR ID: IDNumber);
+-   VAR
+-      EmpTech: TechLevel;
+-      EmpTechnology: TechnologySet;
+-      Indus: IndusArray;
+-
+-   BEGIN
+-   ID.ObjTyp:=Base;
+-   ID.Index:=NextStarbaseSlot;
+-   IF ID.Index>0 THEN
+-      BEGIN
+-      CreateStarbase(ID,Emp,XY,STyp);
+-      SetEfficiency(ID,Rnd(10,20));
+-      GetEmpireTechnology(Emp,EmpTech,EmpTechnology);
+-      SetTech(ID,EmpTech);
+-
+-      IF STyp=out THEN
+-         BEGIN
+-         SetPopulation(ID,1);
+-         SetType(ID,OutTyp);
+-         END
+-      ELSE IF STyp=cmp THEN
+-         BEGIN
+-         SetPopulation(ID,Rnd(400,700));
+-         SetType(ID,BseTyp);
+-         GetOptimumIndus(ID,Indus);
+-         PutIndus(ID,Indus);
+-         END
+-      ELSE
+-         BEGIN
+-         SetPopulation(ID,Rnd(10,20));
+-         SetType(ID,BseTyp);
+-         END;
+-      END;
+-   END;  { ConstructStarbase }
+-
+-PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR ID: IDNumber);
+-   BEGIN
+-   ID.ObjTyp:=Gate;
+-   ID.Index:=NextStargateSlot;
+-   IF ID.Index>0 THEN
+-      CreateStargate(ID,Emp,GTyp,XY);
+-   END;  { ConstructStargate }
+-
 -{ MAIN PROCEDURES }
- PROCEDURE UpdateConstruction(i: Byte);
+-PROCEDURE UpdateConstruction(i: Byte);
 -{ INTERFACE PROCEDURE: UpdateConstruction: }   
-+{ INTERFACE PROCEDURE: UpdateConstruction: }
-    VAR
-       ConstrFleets: FleetSet;
-       EnoughRawMaterial,Error: Boolean;
-@@ -234,10 +552,10 @@ PROCEDURE UpdateEmpire(Emp: Empire);
-       PROCEDURE GetChanceForNewTech(Emp: Empire; EmpTech: TechLevel;
-                                     VAR TotalChance: Index; VAR LabID: IDNumber);
-       { GetChanceForNewTech:
+-   VAR
+-      ConstrFleets: FleetSet;
+-      EnoughRawMaterial,Error: Boolean;
+-      ID: IDnumber;
+-      Loc: Location;
+-      ConName: String16;
+-      ConNamePtr: NameRecordPtr;
+-
+-   procedure UseUpRawMaterial(Typ: ConstrTypes;
+-                              Sta: Empire;
+-                              ConID: IDNumber;
+-                              ConstrFleets: FleetSet;
+-                              var EnoughRawMaterial: Boolean);
+-      label
+-         ExitLoop;
+-
+-      var
+-         i: Byte;
+-         ThgI: CargoTypes;
+-         ID: IDNumber;
+-         Cargo: array[1..MaxNoOfFleets] of CargoArray;
+-         CargoToUse,RawNeeded: Resources;
+-         Loc: Location;
+-
+-      begin
+-      EnoughRawMaterial:=True;
+-      FOR i:=1 TO MaxNoOfFleets DO
+-         IF i IN ConstrFleets THEN
+-            BEGIN
+-            ID.ObjTyp:=Flt;  ID.Index:=i;
+-            GetCargo(ID,Cargo[i]);
+-            END;
+-
+-      for ThgI:=amb TO tri do
+-         begin
+-         RawNeeded:=ConsCargoNeeded[Typ,ThgI];
+-         for i:=1 to MaxNoOfFleets do
+-            begin
+-            if i in ConstrFleets then
+-               begin
+-               CargoToUse:=LesserInt(RawNeeded,Cargo[i][ThgI]);
+-               Cargo[i][ThgI]:=Cargo[i][ThgI]-CargoToUse;
+-               RawNeeded:=RawNeeded-CargoToUse;
+-               end;
+-            end;
+-
+-         if RawNeeded>0 then
+-            begin
+-            EnoughRawMaterial:=False;
+-            Loc.ID:=ConID;  Loc.XY:=Limbo;
+-            AddNews(Sta,ConsLack,Loc,Integer(ThgI),0,0);
+-            goto ExitLoop;
+-            end;
+-         end;
+-
+-      { if loop finishes, then enough material.  Update fleet cargo. }
+-      for i:=1 to MaxNoOfFleets do
+-         if i in ConstrFleets then
+-            begin
+-            ID.ObjTyp:=Flt;  ID.Index:=i;
+-            PutCargo(ID,Cargo[i]);
+-            end;
+-
+-      { if loop ends here, then not enough material to build }
+-      ExitLoop:
+-      end;  { UseUpRawMaterial }
+-
+-   { UpdateConstruction: MAIN PROCEDURE }
+-   BEGIN
+-   WITH Universe^.Constr[i] DO
+-      BEGIN
+-      GetFleets(XY,ConstrFleets);
+-      ConstrFleets:=ConstrFleets * SetOfFleetsOf[Emp];
+-      ID.ObjTyp:=Con;  ID.Index:=i;
+-      UseUpRawMaterial(CTyp,Emp,ID,ConstrFleets,EnoughRawMaterial);
+-      IF EnoughRawMaterial THEN
+-         BEGIN
+-         TimeToCompletion:=TimeToCompletion-1;
+-         IF TimeToCompletion=0 THEN
+-            BEGIN
+-            SetOfActiveConstructionSites:=SetOfActiveConstructionSites-[i];
+-            SetOfConstructionSitesOf[Emp]:=SetOfConstructionSitesOf[Emp]-[i];
+-
+-            Loc.XY:=Limbo;  Loc.ID:=ID;
+-            Location2Index(Emp,Loc,ConNamePtr);
+-            IF ConNamePtr<>Nil THEN
+-               BEGIN
+-               GetDefinedName(Emp,ConNamePtr,ConName,Loc);
+-               DeleteName(Emp,ConName);
+-               END
+-            ELSE
+-               ConName:='';
+-
+-            Sector[XY.x]^[XY.y].Obj:=EmptyQuadrant;
+-
+-            Loc.XY:=Limbo;
+-            CASE CTyp OF
+-               SRM: PutMine(XY,Emp);
+-               cmm..out: BEGIN
+-                  ConstructStarbase(Emp,CTyp,XY,Loc.ID);
+-                  IF ConName<>'' THEN
+-                     AddName(Emp,Loc,ConName,Error);
+-                  END;
+-               gte..dis: BEGIN
+-                  ConstructStargate(Emp,CTyp,XY,Loc.ID);
+-                  IF ConName<>'' THEN
+-                     AddName(Emp,Loc,ConName,Error);
+-                  END;
+-               END;  { case }
+-
+-            Loc.ID:=EmptyQuadrant;  Loc.XY:=XY;
+-            AddNews(Emp,ConsDone,Loc,Integer(CTyp),0,0);
+-            END;
+-         END;
+-      END;  { with scope }
+-   END;  { UpdateConstruction }
+-
+-PROCEDURE UpdateEmpire(Emp: Empire);
+-
+-   PROCEDURE NewTechLevel(Emp: Empire);
+-      VAR
+-         Tech: TechLevel;
+-         TechSet: TechnologySet;
+-         NewTech: TechnologyTypes;
+-         Chance: Index;
+-         LabID,ID: IDNumber;
+-         i: Word;
+-         Loc: Location;
+-
+-      PROCEDURE GetChanceForNewTech(Emp: Empire; EmpTech: TechLevel;
+-                                    VAR TotalChance: Index; VAR LabID: IDNumber);
+-      { GetChanceForNewTech:
 -         This procedure returns the per cent chance that the capital will 
 -         gain a new technology (or increase in level) this year.  University, 
 -         ruins, etc. are taken into account.  Out of all the places that 
 -         research is possible, it chooses a random place to be the lab at 
-+         This procedure returns the per cent chance that the capital will
-+         gain a new technology (or increase in level) this year.  University,
-+         ruins, etc. are taken into account.  Out of all the places that
-+         research is possible, it chooses a random place to be the lab at
-          which the technology was discovered. }
- 
-          LABEL
-@@ -1430,61 +1748,758 @@ PROCEDURE UpdateWorld(World: IDNumber);
-          END;  { with scope }
-    END;  { UpdateWorld }
- 
+-         which the technology was discovered. }
+-
+-         LABEL
+-            ExitLoop;
+-
+-         TYPE
+-            LabRecord = RECORD
+-               WorldID: IDNumber;
+-               Chance: Index;
+-            END;  { LabRecord }
+-
+-         VAR
+-            Lab: ARRAY [1..20] OF LabRecord;
+-            Roll,i,NoOfLabs: Integer;
+-            Typ: WorldTypes;
+-            Cls: WorldClass;
+-            Tch: TechLevel;
+-            Eff: Index;
+-            ID: IDNumber;
+-
+-         BEGIN
+-         { get labs }
+-         NoOfLabs:=0;
+-
+-         ID.ObjTyp:=Pln;
+-         FOR i:=1 TO NoOfPlanets DO
+-            IF i IN SetOfPlanetsOf[Emp] THEN
+-               IF NoOfLabs<20 THEN
+-                  BEGIN
+-                  ID.Index:=i;
+-                  Typ:=GetType(ID);
+-                  Cls:=GetClass(ID);
+-                  Eff:=GetEfficiency(ID);
+-                  Tch:=GetTech(ID);
+-                  IF Typ=CapTyp THEN
+-                     BEGIN
+-                     NoOfLabs:=NoOfLabs+1;
+-                     Lab[NoOfLabs].WorldID:=ID;
+-                     Lab[NoOfLabs].Chance:=Trunc(TechIncCap*Eff/100);
+-                     END
+-                  ELSE IF (Typ=RsrTyp) AND (Tch=EmpTech) THEN
+-                     BEGIN
+-                     NoOfLabs:=NoOfLabs+1;
+-                     Lab[NoOfLabs].WorldID:=ID;
+-                     IF Cls=RnsCls THEN
+-                        BEGIN
+-                        Lab[NoOfLabs].Chance:=Trunc(TechIncUnvRns*Eff/100);
+-                        END
+-                     ELSE
+-                        BEGIN
+-                        Lab[NoOfLabs].Chance:=Trunc(TechIncUnv*Eff/100);
+-                        END;
+-                     END
+-                  ELSE IF (Tch>EmpTech) THEN
+-                     BEGIN
+-                     Inc(NoOfLabs);
+-                     Lab[NoOfLabs].WorldID:=ID;
+-                     Lab[NoOfLabs].Chance:=Trunc(TechIncUnv*Eff/100);
+-                     END
+-                  ELSE IF Cls=RnsCls THEN
+-                     BEGIN
+-                     NoOfLabs:=NoOfLabs+1;
+-                     Lab[NoOfLabs].WorldID:=ID;
+-                     Lab[NoOfLabs].Chance:=Trunc(TechIncRns*Eff/100);
+-                     END;
+-                  END;  { loop and if }
+-
+-         ID.ObjTyp:=Base;
+-         FOR i:=1 TO MaxNoOfStarbases DO
+-            IF i IN SetOfStarbasesOf[Emp] THEN
+-               IF NoOfLabs<20 THEN
+-                  BEGIN
+-                  ID.Index:=i;
+-                  Typ:=GetType(ID);
+-                  Eff:=GetEfficiency(ID);
+-                  Tch:=GetTech(ID);
+-                  IF Typ=CapTyp THEN
+-                     BEGIN
+-                     NoOfLabs:=NoOfLabs+1;
+-                     Lab[NoOfLabs].WorldID:=ID;
+-                     Lab[NoOfLabs].Chance:=Trunc(TechIncCap*Eff/100);
+-                     END
+-                  ELSE IF (Typ=RsrTyp) AND (Tch=EmpTech) THEN
+-                     BEGIN
+-                     NoOfLabs:=NoOfLabs+1;
+-                     Lab[NoOfLabs].WorldID:=ID;
+-                     Lab[NoOfLabs].Chance:=Trunc(TechIncUnv*Eff/100);
+-                     END;
+-                  END;  { loop and if }
+-
+-         { get total chance }
+-         TotalChance:=0;
+-         FOR i:=1 TO NoOfLabs DO
+-            WITH Lab[i] DO
+-               TotalChance:=TotalChance+Chance;
+-
+-         { get lab }
+-         Roll:=Rnd(1,TotalChance);
+-         FOR i:=1 TO NoOfLabs DO
+-            WITH Lab[i] DO
+-               IF Roll<=Chance THEN
+-                  BEGIN
+-                  LabID:=WorldID;
+-                  GOTO ExitLoop;
+-                  END
+-               ELSE
+-                  BEGIN
+-                  Roll:=Roll-Chance;
+-                  END;
+-
+-         { loop should never exit here, but nothing bad happens if it does. }
+-         GetCapital(Emp,LabID);
+-
+-         ExitLoop:
+-
+-         END;  { GetChanceForNewTech }
+-
+-      PROCEDURE GetNewTech(TechSet,PossibleTechSet: TechnologySet;
+-                           VAR NewTech: TechnologyTypes);
+-      { GetNewTech:
+-         This procedure returns a technology that is in PossibleTechSet but
+-         not in TechSet.  Returns the answer in NewTech. }
+-
+-         VAR
+-            Tech: ARRAY [1..30] OF TechnologyTypes;
+-            TechNumber: Integer;
+-            TchI: TechnologyTypes;
+-
+-         BEGIN
+-         PossibleTechSet:=PossibleTechSet-TechSet;
+-
+-         TechNumber:=0;
+-         FOR TchI:=LAM TO dis DO
+-            IF TchI IN PossibleTechSet THEN
+-               BEGIN
+-               TechNumber:=TechNumber+1;
+-               Tech[TechNumber]:=TchI;
+-               END;
+-
+-         NewTech:=Tech[Rnd(1,TechNumber)];
+-         END;  { GetNewTech }
+-
+-      { NewTechLevel: MAIN PROCEDURE }
+-      BEGIN
+-      GetEmpireTechnology(Emp,Tech,TechSet);
+-      IF TechSet<>TechDev[GteTchLvl] THEN
+-         BEGIN
+-         IF TechSet<>TechDev[Tech] THEN
+-            { new technology }
+-            BEGIN
+-            GetChanceForNewTech(Emp,Tech,Chance,LabID);
+-            IF Rnd(1,100)<=Chance THEN
+-               BEGIN
+-               GetNewTech(TechSet,TechDev[Tech],NewTech);
+-               TechSet:=TechSet+[NewTech];
+-               SetEmpireTechnology(Emp,Tech,TechSet);
+-
+-               Loc.ID:=LabID;  Loc.XY:=Limbo;
+-               AddNews(Emp,NCapTech,Loc,Ord(NewTech),0,0);
+-               END;  { if }
+-            END
+-         ELSE
+-            { new tech level }
+-            BEGIN
+-            GetChanceForNewTech(Emp,Tech,Chance,LabID);
+-            IF Rnd(1,100)<=Chance THEN
+-               BEGIN
+-               Tech:=Succ(Tech);
+-               SetEmpireTechnology(Emp,Tech,TechSet);
+-               SetTech(LabID,Tech);
+-
+-               { Make all other university worlds go up also. }
+-               ID.ObjTyp:=Pln;
+-               FOR i:=1 TO NoOfPlanets DO
+-                  IF i IN SetOfPlanetsOf[Emp] THEN
+-                     BEGIN
+-                     ID.Index:=i;
+-                     IF (GetType(ID) IN [RsrTyp,CapTyp])
+-                        AND (GetTech(ID)=Pred(Tech)) THEN
+-                        SetTech(ID,Tech);
+-                     END;
+-
+-               Loc.ID:=LabID;  Loc.XY:=Limbo;
+-               AddNews(Emp,NCapLvl,Loc,Ord(Tech),0,0);
+-               END;  { if }
+-            END;  { if }
+-         END;  { if }
+-      END;  { NewTechLevel }
+-
+-   { UpdateEmpire: MAIN PROCEDURE }
+-   BEGIN
+-   SetTotalRevIndex(Emp,NewTotalRevIndex[Emp]);
+-   NewTechLevel(Emp)
+-   END;  { UpdateEmpire }
+-
+-PROCEDURE GetTotalCargo(WorldID: IDNumber; VAR Cargo: TotalCargoArray);
+-   VAR
+-      CarI: CargoTypes;
+-      Cr: CargoArray;
+-
+-   BEGIN
+-   GetCargo(WorldID,Cr);
+-   FOR CarI:=men TO tri DO
+-      Cargo[CarI]:=Cr[CarI];
+-   END;  { GetTotalCargo }
+-
+-PROCEDURE PutTotalCargo(WorldID: IDNumber; VAR Cargo: TotalCargoArray);
+-   VAR
+-      CarI: CargoTypes;
+-      Cr: CargoArray;
+-
+-   BEGIN
+-   FOR CarI:=men TO tri DO
+-      Cr[CarI]:=ThgLmt(Cargo[CarI]);
+-   PutCargo(WorldID,Cr);
+-   END;  { PutTotalCargo }
+-
+-PROCEDURE HostileLife(WorldID: IDNumber);
+-{ HostileLife: -----------------------------------------------------------------
+-   This procedure will implement the special characteristics of hostile life
+-   worlds.  It should only be called for worlds of class hostile life.
+------------------------------------------------------------------------------- }
+-   VAR
+-      Eff: Index;
+-      Pop: Population;
+-      Cargo: CargoArray;
+-      ChanceOfAttack: Word;
+-      MenAdj: Real;
+-      RevI: Index;
+-      Loc: Location;
+-      Aliens,PopKilled,MenKilled,NnjKilled: Word;
+-      Emp: Empire;
+-
+-   BEGIN
+-   Eff:=GetEfficiency(WorldID);
+-   Pop:=GetPopulation(WorldID);
+-   GetCargo(WorldID,Cargo);
+-   MenAdj:=(Eff+50)*((Cargo[men]+5*Cargo[nnj])/100);
+-   ChanceOfAttack:=GreaterInt(0,25-Round((MenAdj-2000)/100));
+-   Emp:=GetStatus(WorldID);
+-   Loc.ID:=WorldID;
+-   Loc.XY:=Limbo;
+-
+-   { Aliens attack }
+-   IF Rnd(1,100)<=ChanceOfAttack THEN
+-      BEGIN
+-      IF Rnd(1,100)<=25 THEN
+-         { ASSERT: Population killed. }
+-         BEGIN
+-         PopKilled:=LesserInt(Pop,Rnd(10,50));
+-         Pop:=Pop-PopKilled;
+-         ChangeRevIndex(WorldID,Rnd(5,15));
+-         SetPopulation(WorldID,Pop);
+-         AddNews(Emp,HLPopKill,Loc,PopKilled,0,0);
+-         END
+-      ELSE
+-         { ASSERT: Troops killed. }
+-         BEGIN
+-         MenKilled:=LesserInt(Cargo[men],Rnd(200,300));
+-         NnjKilled:=LesserInt(Cargo[nnj],Rnd(20,50));
+-         Dec(Cargo[men],MenKilled);
+-         Dec(Cargo[nnj],NnjKilled);
+-         PutCargo(WorldID,Cargo);
+-         AddNews(Emp,HLMenKill,Loc,MenKilled,NnjKilled,0);
+-         END;
+-      END
+-   ELSE IF (Emp<>Indep) AND (Rnd(1,100)<=20) THEN
+-      { ASSERT: Aliens join world }
+-      BEGIN
+-      Aliens:=Rnd(50,150);
+-      Cargo[nnj]:=Cargo[nnj]+Aliens;
+-      PutCargo(WorldID,Cargo);
+-      AddNews(Emp,HLJoin,Loc,Aliens,0,0);
+-      END;
+-   END;  { HostileLife }
+-
+-PROCEDURE SupplyLink(BaseID: IDNumber; VAR TempCargo: TotalCargoArray);
+-{ SupplyLink: ------------------------------------------------------------------
+-   This procedure will take raw materials and supplies from any worlds that are
+-   nearby.
+------------------------------------------------------------------------------- }
+-   VAR
+-      BaseXY,XY: XYCoord;
+-      x,y: Integer;
+-      Dir: Directions;
+-      RawMineID: IDNumber;
+-      Cargo,CargoTrans,BaseCargo: CargoArray;
+-      RawI: CargoTypes;
+-      Emp: Empire;
+-
+-   BEGIN
+-   GetCoord(BaseID,BaseXY);
+-   Emp:=GetStatus(BaseID);
+-   FOR Dir:=No TO NW DO
+-      BEGIN
+-      x:=BaseXY.x+DirX[Dir];  y:=BaseXY.y+DirY[Dir];
+-      IF InGalaxy(x,y) THEN
+-         BEGIN
+-         XY.x:=x;  XY.y:=Y;
+-         GetObject(XY,RawMineID);
+-         IF (RawMineID.ObjTyp=Pln) AND (GetStatus(RawMineID)=Emp)
+-            AND (GetType(RawMineID) IN [AgrTyp,CheTyp,MinTyp,RawTyp,TriTyp]) THEN
+-            BEGIN
+-            GetCargo(RawMineID,Cargo);
+-            FOR RawI:=che TO tri DO
+-               BEGIN
+-               IF Cargo[RawI]>250 THEN
+-                  CargoTrans[RawI]:=Cargo[RawI]-Rnd(200,250)
+-               ELSE
+-                  CargoTrans[RawI]:=0;
+-
+-               Cargo[RawI]:=Cargo[RawI]-CargoTrans[RawI];
+-               TempCargo[RawI]:=TempCargo[RawI]+CargoTrans[RawI];
+-               END;
+-
+-            PutCargo(RawMineID,Cargo);
+-            END;
+-         END;
+-      END;  { loop }
+-   END;  { SupplyLink }
+-
+-PROCEDURE SurplusLink(BaseID: IDNumber; VAR TempCargo: TotalCargoArray);
+-{ SupplyLink: ------------------------------------------------------------------
+-   This procedure will return raw materials and supplies from a base to
+-   any raw material worlds nearby.
+------------------------------------------------------------------------------- }
+-   VAR
+-      BaseXY,XY: XYCoord;
+-      x,y: Integer;
+-      Dir: Directions;
+-      RawMineID: IDNumber;
+-      CargoTrans: Word;
+-      Cargo: CargoArray;
+-      RawI: CargoTypes;
+-      Emp: Empire;
+-
+-   BEGIN
+-   GetCoord(BaseID,BaseXY);
+-   Emp:=GetStatus(BaseID);
+-   FOR Dir:=No TO NW DO
+-      BEGIN
+-      x:=BaseXY.x+DirX[Dir];  y:=BaseXY.y+DirY[Dir];
+-      IF InGalaxy(x,y) THEN
+-         BEGIN
+-         XY.x:=x;  XY.y:=Y;
+-         GetObject(XY,RawMineID);
+-         IF (RawMineID.ObjTyp=Pln) AND (GetStatus(RawMineID)=Emp)
+-            AND (GetType(RawMineID) IN [AgrTyp,CheTyp,MinTyp,RawTyp,TriTyp]) THEN
+-            BEGIN
+-            GetCargo(RawMineID,Cargo);
+-            FOR RawI:=che TO tri DO
+-               IF TempCargo[RawI]>MaxResources THEN
+-                  BEGIN
+-                  CargoTrans:=LesserInt(MaxResources-Cargo[RawI],TempCargo[RawI]-MaxResources);
+-
+-                  Cargo[RawI]:=Cargo[RawI]+CargoTrans;
+-                  TempCargo[RawI]:=TempCargo[RawI]-CargoTrans;
+-                  END;
+-
+-            PutCargo(RawMineID,Cargo);
+-            END;
+-         END;
+-      END;  { loop }
+-   END;  { SurplusLink }
+-
+-PROCEDURE UpdateMilitary(WorldID: IDNumber;
+-                         Typ: WorldTypes;
+-                         Pop: Population;
+-                         VAR MPop: Resources);
+-   VAR
+-      OptimumMilitary: Resources;
+-
+-   BEGIN
+-   OptimumMilitary:=ThgLmt(RndVar(Round((Pop/150)*OptMilitary[Typ]),10));
+-   IF OptimumMilitary>MPop THEN
+-      MPop:=ThgLmt(MPop+(Pop/10)*(OptMilitary[Typ]/100));
+-   END;  { UpdateMilitary }
+-
+-PROCEDURE Rebellion(WorldID: IDNumber;
+-                    RevIndex: Index;
+-                    Military: Resources);
+-
+-   VAR
+-      MenLost,Lost: Word;
+-      Rebels: Resources;
+-      ChanceToEndRebel: Real;
+-      Cargo: CargoArray;
+-      Loc: Location;
+-      Emp: Empire;
+-      Pop: Population;
+-      Eff: Index;
+-
+-   { Rebellion: MAIN PROCEDURE }
+-   BEGIN
+-   Pop:=GetPopulation(WorldID);
+-   Eff:=GetEfficiency(WorldID);
+-   Emp:=GetStatus(WorldID);
+-   GetCargo(WorldID,Cargo);
+-   Loc.ID:=WorldID;  Loc.XY:=Limbo;
+-
+-   Rebels:=GreaterInt(1,ThgLmt(Sqrt(Pop)*65));
+-   MenLost:=Rebels DIV 5;
+-   ChanceToEndRebel:=(Military/Sqrt(Rebels))*1.414213;
+-
+-   { Military men lost }
+-   Lost:=LesserInt(Cargo[men],MenLost);
+-   Dec(Cargo[men],Lost);
+-   Dec(MenLost,Lost);
+-   Lost:=LesserInt(Cargo[nnj],MenLost DIV 5);
+-   Dec(Cargo[nnj],Lost);
+-
+-   IF Rnd(1,100)<ChanceToEndRebel THEN
+-      { ASSERT: Empire puts down rebellion }
+-      BEGIN
+-      ChangeRevIndex(WorldID,Rnd(-15,5));
+-      AddNews(Emp,URebel,Loc,MenLost,0,0);
+-      NewTotalRevIndex[Emp]:=NewTotalRevIndex[Emp]-Rnd(1,5);
+-      END
+-   ELSE
+-      { ASSERT: World rebels }
+-      BEGIN
+-      SetStatus(WorldID,Indep);
+-      SetType(WorldID,IndTyp);
+-      InitializeISSP(WorldID);
+-      ChangeRevIndex(WorldID,-Rnd(40,50));
+-      AddGlobalNews([Emp],WorldID,GLBRev,Loc,Ord(Emp),0,0);
+-      AddNews(Emp,Rebel,Loc,0,0,0);
+-
+-      Cargo[men]:=ThgLmt(Rebels);
+-
+-      NewTotalRevIndex[Emp]:=NewTotalRevIndex[Emp]+Rnd(5,10);
+-      END;
+-
+-   PutCargo(WorldID,Cargo);
+-   Pop:=ThgLmt(Pop-Military/1000);
+-   SetPopulation(WorldID,Pop);
+-   Eff:=GreaterInt(0,Eff-Rnd(5,15));
+-   SetEfficiency(WorldID,Eff);
+-   END;  { Rebellion }
+-
+-PROCEDURE UpdateRevolution(WorldID: IDNumber);
+-   VAR
+-      Emp: Empire;
+-      Pop: Population;
+-      Typ: WorldTypes;
+-      Cargo: CargoArray;
+-      Loc: Location;
+-      EmpRevAdj,Factor: Integer;
+-      RevIndex: Index;
+-      Military,OptimumMilitary: Resources;
+-
+-   { UpdateRevolution: MAIN PROCEDURE }
+-   BEGIN
+-   Emp:=GetStatus(WorldID);
+-   Pop:=GetPopulation(WorldID);
+-   Typ:=GetType(WorldID);
+-
+-   { Decrease revolution index }
+-   EmpRevAdj:=RndVar(TotalRevIndex(Emp),50);
+-   IF Typ=CapTyp THEN
+-      ChangeRevIndex(WorldID,-Rnd(20,30))
+-   ELSE
+-      ChangeRevIndex(WorldID,EmpRevAdj+Rnd(-5,2));
+-
+-   IF Emp<>Indep THEN
+-      { ASSERT: World is not independent, chance of rebellion exists. }
+-      BEGIN
+-      RevIndex:=GetRevIndex(WorldID);
+-      GetCargo(WorldID,Cargo);
+-      Loc.ID:=WorldID;  Loc.XY:=Limbo;
+-
+-      { Military presence affects revolution }
+-      OptimumMilitary:=ThgLmt(RndVar(Round((Pop/150)*OptMilitary[Typ]),10));
+-      Military:=ThgLmt(Cargo[men]+5.0*Cargo[nnj]);
+-      IF Military>OptimumMilitary THEN
+-         { ASSERT: Too many troops }
+-         BEGIN
+-         IF RevIndex>30 THEN
+-            { ASSERT: Troops calm rebellion }
+-            BEGIN
+-            Factor:=Rnd(1,(Military-OptimumMilitary) DIV 100);
+-            ChangeRevIndex(WorldID,-Factor);
+-            IF Factor>5 THEN
+-               AddNews(Emp,RevControl,Loc,0,0,0);
+-            END
+-         ELSE IF (Typ<>CapTyp) AND (Typ<>BseTyp) THEN
+-            { ASSERT: Too many troops cause resentment }
+-            BEGIN
+-            IF Rnd(1,5)=1 THEN
+-               BEGIN
+-               ChangeRevIndex(WorldID,Rnd(5,15));
+-               AddNews(Emp,MilitRev,Loc,0,0,0);
+-               END;
+-            END;
+-         END;
+-
+-      RevIndex:=GetRevIndex(WorldID);
+-
+-      IF RevIndex>75 THEN
+-         BEGIN
+-         IF (Rnd(1,100)<RevIndex) AND (Typ<>CapTyp) THEN
+-            Rebellion(WorldID,RevIndex,Military)
+-         ELSE
+-            AddNews(Emp,RebelW4,Loc,0,0,0);
+-         END
+-      ELSE IF RevIndex>70 THEN
+-         AddNews(Emp,RebelW4,Loc,0,0,0)
+-      ELSE IF RevIndex>66 THEN
+-         AddNews(Emp,RebelW3,Loc,0,0,0)
+-      ELSE IF RevIndex>43 THEN
+-         AddNews(Emp,RebelW2,Loc,0,0,0)
+-      ELSE IF RevIndex>30 THEN
+-         AddNews(Emp,RebelW1,Loc,0,0,0);
+-      END;
+-   END;  { UpdateRevolution }
+-
+-PROCEDURE ProduceTrillum(WorldID: IDNumber; VAR TriProd: Resources; TriAvail: LongInt);
+-{ ProduceTrillum: --------------------------------------------------------------
+-   Decrements the trillum reserves on the world by the amount indicated by
+-   TriProd. If trillum reserves are low, the procedure will decrease the
+-   amount produced and send out warnings.
+------------------------------------------------------------------------------- }
+-   VAR
+-      TriReserves: Word;
+-      Loc: Location;
+-      Emp: Empire;
+-
+-   BEGIN
+-   TriReserves:=TrillumReserves(WorldID);
+-   Loc.ID:=WorldID;  Loc.XY:=Limbo;
+-   Emp:=GetStatus(WorldID);
+-
+-   TriAvail:=LesserInt(TriAvail,MaxResources);
+-   TriProd:=LesserInt(TriProd,MaxResources-TriAvail);
+-
+-   IF TriReserves=0 THEN
+-      BEGIN
+-      TriProd:=0;
+-      AddNews(Emp,NoTriRes,Loc,0,0,0);
+-      ChangeRevIndex(WorldID,Rnd(10,20));
+-      END
+-   ELSE IF (TriReserves*LongInt(20))<TriProd THEN
+-      BEGIN
+-      AddNews(Emp,TriResWarn1,Loc,0,0,0);
+-      ChangeRevIndex(WorldID,Rnd(5,10));
+-      END
+-   ELSE IF ((TriReserves*LongInt(10))<TriProd) AND (Rnd(1,2)=1) THEN
+-      BEGIN
+-      AddNews(Emp,TriResWarn2,Loc,0,0,0);
+-      ChangeRevIndex(WorldID,Rnd(3,5));
+-      END;
+-
+-   TriReserves:=GreaterInt(0,Integer(TriReserves)-Round(TriProd/100));
+-   PutTrillumReserves(WorldID,TriReserves);
+-   END;  { ProduceTrillum }
+-
+-PROCEDURE ProduceRawMaterial(ObjID: IDNumber;
+-                             Indus: IndusArray;
+-                             Technology: TechnologySet;
+-                             IP: Real;
+-                             VAR TempCargo: TotalCargoArray);
+-{ ProduceRawMaterial:
+-   Given the industrial array of a world, this procedure will produce
+-   chem, metals, etc.  TempCargo is updated. }
+-
+-   var
+-      Prod: Resources;
+-      IndI: IndusTypes;
+-      ThgI: ResourceTypes;
+-      ProdAdj: Real;
+-
+-   { ProduceRawMaterial: MAIN PROCEDURE }
+-   BEGIN
+-   FOR IndI:=CheInd TO TriInd DO
+-      IF Indus[IndI]>0 THEN
+-         BEGIN
+-         ProdAdj:=IP*Sqr(Indus[IndI]+K4);
+-         FOR ThgI:=che TO tri DO
+-            IF (ThgAdj[IndI,ThgI]<>0) AND (ThgI IN Technology) THEN
+-               BEGIN
+-               { Prod = no of things produced }
+-               Prod:=GreaterInt(1,ThgLmt(ProdAdj*ThgAdj[IndI,ThgI]));
+-
+-               IF ThgI=tri THEN
+-                  ProduceTrillum(ObjID,Prod,TempCargo[tri]);
+-
+-               { add new production }
+-               Inc(TempCargo[ThgI],Prod);
+-               END;  { if and loop }
+-         END;  { loop }
+-   END;  { ProduceRawMaterial }
+-
+-PROCEDURE UpdateWorld(World: IDNumber);
+-{ INTERFACE PROCEDURE: UpdateWorld }
+-
+-   VAR
+-      IndDist: IndusDistArray;
+-      OtherReports: ResourceSet;
+-      ETech: TechLevel;
+-      Technology: TechnologySet;
+-      IP: Real;
+-      TempCargo: TotalCargoArray;
+-
+-   PROCEDURE Production(ID: IDNumber;
+-                        Typ: WorldTypes;
+-                        Indus: IndusArray;
+-                        Technology: TechnologySet;
+-                        IP: Real;
+-                        VAR Ships: ShipArray;
+-                        VAR Cargo: TotalCargoArray;
+-                        VAR OtherReports: ResourceSet);
+-   { Production:
+-      Given the industrial array of a world, this procedure will produce ships,
+-      metals, etc.  Ships and Cargo are updated.  Raw materials are used up. }
+-
+-      VAR
+-         Prod: Resources;
+-         IndI: IndusTypes;
+-         ThgI: ResourceTypes;
+-         RawI: CargoTypes;
+-         RawNeeded: ARRAY [CargoTypes] OF Integer;
+-         InfiniteSource,UsedUp: Resources;
+-         ProdAdj: Real;
+-
+-      { Production: MAIN PROCEDURE }
+-      BEGIN
+-      FOR IndI:=BioInd TO SYTInd DO
+-         IF Indus[IndI]>0 THEN
+-            BEGIN
+-            ProdAdj:=IP*Sqr(Indus[IndI]+K4);
+-            FOR ThgI:=fgt TO amb DO
+-               IF (ThgAdj[IndI,ThgI]<>0) AND (ThgI in Technology) then
+-                  begin
+-                  { Prod = no of things produced }
+-                  Prod:=ThgLmt(ProdAdj*ThgAdj[IndI,ThgI]);
+-
+-                  { Only ninja type worlds make ninjas }
+-                  IF (ThgI=nnj) AND (Typ<>NnjTyp) THEN
+-                     Prod:=0
+-                  { Only ambrosia type worlds make ambrosia }
+-                  ELSE IF (ThgI=amb) AND (Typ<>AmbTyp) THEN
+-                     Prod:=0
+-                  { Only ambrosia and paradise class worlds make ambrosia }
+-                  ELSE IF (ThgI=amb) AND (NOT (GetClass(ID) IN [AmbCls,ParCls])) THEN
+-                     Prod:=0
+-                  ELSE IF Prod<=0 THEN
+-                     Prod:=1;
+-
+-                  { do not produce if already at MaxResources }
+-                  IF ThgI IN [fgt..trn] THEN
+-                     Prod:=LesserInt(Prod,MaxResources-Ships[ThgI])
+-                  ELSE
+-                     Prod:=LesserInt(Prod,MaxResources-LesserInt(Cargo[ThgI],MaxResources));
+-
+-                  { adjust Prod if not enough raw material }
+-                  FOR RawI:=amb TO tri DO
+-                     IF RawM[ThgI][RawI]>0 THEN
+-                        BEGIN
+-                        RawNeeded[RawI]:=ThgLmt(Prod*(RawM[ThgI][RawI]/100));
+-                        IF RawNeeded[RawI]>Cargo[RawI] THEN
+-                           BEGIN
+-                           Prod:=ThgLmt((Cargo[RawI]/RawM[ThgI][RawI])*100);
+-                           RawNeeded[RawI]:=ThgLmt(Prod*(RawM[ThgI][RawI]/100));
+-                           IF ID.ObjTyp<>Base THEN
+-                              ReportPlanetLack(GetStatus(ID),ID,Lack,Integer(RawI),0,0,OtherReports);
+-                           END;
+-                        END
+-                     ELSE
+-                        RawNeeded[RawI]:=0;
+-
+-                  { subtract raw material }
+-                  FOR RawI:=che TO tri DO
+-                     BEGIN
+-                     RawNeeded[RawI]:=LesserInt(Cargo[RawI],RawNeeded[RawI]);
+-                     Dec(Cargo[RawI],RawNeeded[RawI]);
+-                     END;
+-
+-                  { add new production }
+-                  IF ThgI IN [fgt..trn] THEN
+-                     Ships[ThgI]:=LesserInt(MaxResources,Ships[ThgI]+Prod)
+-                  ELSE
+-                     Inc(Cargo[ThgI],Prod);
+-                  END;  { if and loop }
+-            END;  { loop }
+-      END;  { Production }
+-
+-   procedure UpdateIndustry(ID: IDNumber;
+-                            Cls: WorldClass;
+-                            Tech: TechLevel;
+-                            Eff: Index;
+-                            Pop: Population;
+-                            AmbAddict: Boolean;
+-                            VAR IndDist: IndusDistArray;
+-                            VAR Indus: IndusArray;
+-                            VAR Cargo: TotalCargoArray;
+-                            VAR OtherReports: ResourceSet);
+-   { UpdateIndustry: }
+-
+-      var
+-         TIP: Integer;
+-         OptimumLevel: IndusIndex;
+-         RawNeeded: Resources;
+-         IndI: IndusTypes;
+-         ConsRate: Integer;
+-         Temp: Real;
+-
+-      BEGIN
+-      TIP:=TotalProd(Pop,Tech);
+-      IF AmbAddict THEN
+-         TIP:=Round(TIP*AmbrosiaAdj);
+-      IF TIP>999 THEN
+-         TIP:=999;
+-
+-      Temp:=TIP/10000;
+-      FOR IndI:=BioInd TO TriInd DO
+-         BEGIN
+-         OptimumLevel:=Round(Temp*IndDist[IndI]*ClassIndAdj[Cls,IndI]);
+-         IF (IndDist[IndI]>0) AND (OptimumLevel=0) THEN
+-            OptimumLevel:=1;
+-         IF Indus[IndI]<OptimumLevel THEN
+-            BEGIN
+-            ConsRate:=Round(OptimumLevel*(Eff/500));
+-            IF ConsRate<1 THEN
+-               ConsRate:=1;
+-            ConsRate:=LesserInt(ConsRate,OptimumLevel-Indus[IndI]);
+-            RawNeeded:=ThgLmt((ConsRate/100)*NewIndRawN[IndI]);
+-            IF RawNeeded>Cargo[Met] THEN
+-               BEGIN
+-               ConsRate:=Trunc(100*(Cargo[met]/NewIndRawN[IndI]));
+-               RawNeeded:=Cargo[met];
+-               ReportPlanetLack(GetStatus(ID),ID,IndLack,Integer(met),0,0,OtherReports);
+-               END;
+-            END
+-         ELSE IF Indus[IndI]>OptimumLevel THEN
+-            BEGIN
+-            ConsRate:=-Round(Eff/2);
+-            IF ConsRate>-1 THEN
+-               ConsRate:=-1;
+-            IF Indus[IndI]+ConsRate<OptimumLevel then
+-               ConsRate:=OptimumLevel-Indus[IndI];
+-            RawNeeded:=0;
+-            END
+-         ELSE
+-            BEGIN
+-            ConsRate:=0;
+-            RawNeeded:=0;
+-            END;
+-
+-         IF Indus[IndI]+ConsRate>999 THEN
+-            BEGIN
+-            ConsRate:=999-Indus[IndI];
+-            RawNeeded:=ThgLmt((ConsRate/100)*NewIndRawN[IndI]);
+-            END
+-         ELSE IF Indus[IndI]+ConsRate<0 THEN
+-            BEGIN
+-            ConsRate:=-Indus[IndI];
+-            RawNeeded:=0;
+-            END;
+-
+-         Indus[IndI]:=Indus[IndI]+ConsRate;
+-
+-         RawNeeded:=LesserInt(Cargo[met],RawNeeded);
+-         Dec(Cargo[met],RawNeeded);
+-         END;  { loop }
+-      END;  { UpdateIndustry }
+-
+-   PROCEDURE UpdateEfficiency(Emp: Empire; VAR Eff: Index);
+-      VAR
+-         Inc: Index;
+-
+-      BEGIN
+-      IF Emp=Indep THEN
+-         BEGIN
+-         Inc:=Rnd(0,1);
+-         END
+-      ELSE
+-         BEGIN
+-         CASE Eff OF
+-             0..25 : Inc:=Rnd(5,12);
+-            26..50 : Inc:=Rnd(3,8);
+-            51..75 : Inc:=Rnd(2,5);
+-            76..90 : Inc:=Rnd(0,3);
+-            91..99 : Inc:=Rnd(0,1);
+-         ELSE
+-            Inc:=0;
+-         END;  { case }
+-         END;
+-
+-      Eff:=LesserInt(100,Eff+Inc);
+-      END;  { UpdateEfficiency }
+-
+-   PROCEDURE UpdateTechLevel(ID: IDNumber; Emp: Empire;
+-                             VAR Tech: TechLevel);
+-      VAR
+-         Loc: Location;
+-         CapitalTech: TechLevel;
+-         CapitalID: IDNumber;
+-
+-      BEGIN
+-      IF Tech<>GteTchLvl THEN
+-         BEGIN
+-         IF Emp=Indep THEN
+-            BEGIN
+-            IF Rnd(1,50)=1 THEN
+-               Tech:=Succ(Tech);
+-            END
+-         ELSE
+-            BEGIN
+-            GetCapital(Emp,CapitalID);
+-            CapitalTech:=GetTech(CapitalID);
+-
+-            IF CapitalTech>Tech THEN
+-               BEGIN
+-               IF Rnd(1,100)<=TechLvlInc THEN
+-                  BEGIN
+-                  Tech:=Succ(Tech);
+-                  Loc.ID:=ID;  Loc.XY:=Limbo;
+-                  AddNews(Emp,NTech,Loc,Integer(Tech),0,0);
+-                  END;
+-               END
+-            ELSE IF CapitalTech<Tech THEN
+-               BEGIN
+-               IF Rnd(1,15)=1 THEN
+-                  BEGIN
+-                  Tech:=Pred(Tech);
+-                  Loc.ID:=ID;  Loc.XY:=Limbo;
+-                  AddNews(Emp,RTech,Loc,Integer(Tech),0,0);
+-                  END;
+-               END;
+-            END;
+-         END;
+-      END;  { UpdateTechLevel }
+-
+-   PROCEDURE UpdatePopulation(Class: WorldClass;
+-                              Tech: TechLevel;  var Pop: Population);
+-      CONST
+-         MaxPop: ARRAY [WorldClass] OF Integer =
+-         ( 4830,  { AmbCls }
+-           4100,  { ArdCls }
+-           3100,  { ArtCls }
+-           2340,  { BarCls }
+-           4610,  { ClsJ   }
+-           4600,  { ClsK   }
+-           4220,  { ClsL   }
+-           4800,  { ClsM   }
+-           3580,  { DrtCls }
+-           4500,  { EthCls }
+-           4710,  { FstCls }
+-           2010,  { GsGCls }
+-           4010,  { HLfCls }
+-           1920,  { IceCls }
+-           4720,  { JngCls }
+-           3520,  { OcnCls }
+-           5000,  { ParCls }
+-           2100,  { PsnCls }
+-           4590,  { RnsCls }
+-           4500,  { UndCls }
+-           3950   { VlcCls } );
+-
+-      VAR
+-         Increase: Real;
+-
+-      BEGIN
+-      IF Pop>MaxPop[Class] THEN
+-         Increase:=Rnd(-10,10)
+-      ELSE IF Pop<75 THEN
+-         Increase:=Rnd(2,5)
+-      ELSE IF Pop>BasePop[Tech] THEN
+-         { linear growth }
+-         Increase:=BasePop[Tech]/100
+-      ELSE
+-         { exponential growth }
+-         Increase:=128.0*Pop/(MaxPop[Class]);
+-
+-      Pop:=Pop+Round(Increase);
+-      END;  { UpdatePopulation }
+-
+-   PROCEDURE UseUpFood(WorldID: IDNumber; var Pop: Population;
+-                       var Food: Resources);
+-
+-      { This array adjusts for tech level when increasing revolution index.  
+-        Low tech level planets will be used to starving and will not revolt 
+-        as quickly as high level planets.  The constant is in units of 
+-        index points per 100 million people starved. }
+-      CONST
+-         TechAdj: ARRAY [TechLevel] OF Integer =
+-         {  pt   p  pa   a  pw   w   j   b   s  pg   g }
+-         ( 100,100, 30, 20, 15, 13, 12, 13, 14, 14, 15 );
+-
+-      VAR
+-         Loc: Location;
+-         FoodNeeded,Lack: Resources;
+-         RevInc,Starve: Integer;
+-         Tech: TechLevel;
+-
+-      BEGIN
+-      FoodNeeded:=ThgLmt((Pop/100)*SuppliesPerBillion);
+-      IF FoodNeeded>Food THEN
+-         BEGIN
+-         Lack:=FoodNeeded-Food;
+-         Food:=0;
+-         Starve:=Lack DIV 6;
+-         IF Starve>(Pop DIV 10) THEN
+-            Starve:=Pop DIV 10;
+-
+-         Pop:=Pop-Starve;
+-
+-         IF Starve>0 THEN
+-            BEGIN
+-            Tech:=GetTech(WorldID);
+-            Loc.ID:=WorldID;  Loc.XY:=Limbo;
+-            AddNews(GetStatus(WorldID),Starv,Loc,Starve,0,0);
+-            RevInc:=LesserInt(Trunc(TechAdj[Tech]*(Starve/10)),45);
+-            ChangeRevIndex(WorldID,RevInc);
+-            END;
+-         END
+-      ELSE
+-         BEGIN
+-         Food:=Food-FoodNeeded;
+-         END;
+-      END;  { UseUpFood }
+-
+-   PROCEDURE UseUpAmbrosia(WorldID: IDNumber;
+-                           Emp: Empire;
+-                           VAR Special: SetOfSpecialConditions;
+-                           VAR Pop: Population;
+-                           VAR Eff: Index;
+-                           VAR Tech: TechLevel;
+-                           VAR Indus: IndusArray;
+-                           VAR Ambrosia: Resources);
+-
+-      VAR
+-         AmbNeeded,Lack: Resources;
+-         Die: Population;
+-         Loc: Location;
+-         EffChange,IndDest: Integer;
+-         IndI: IndusTypes;
+-
+-      BEGIN
+-      AmbNeeded:=ThgLmt((Pop/100)*DrugsPerBillion);
+-      Loc.ID:=WorldID;  Loc.XY:=Limbo;
+-
+-      IF AmbAddict IN Special THEN
+-         BEGIN
+-         IF AmbNeeded<=Ambrosia THEN
+-            BEGIN
+-            Ambrosia:=Ambrosia-AmbNeeded;
+-            END
+-         ELSE
+-            { ASSERT: not enough ambrosia }
+-            BEGIN
+-            Lack:=AmbNeeded-Ambrosia;
+-            Ambrosia:=0;
+-
+-            { PEOPLE DIE }
+-            Die:=ThgLmt(AddictDeathCoeff*Lack);
+-            IF Die>(Pop div 7) THEN
+-               Die:=Pop div 7;
+-
+-            Pop:=Pop-Die;
+-
+-            IF Die>0 THEN
+-               BEGIN
+-               AddNews(Emp,AddictDie,Loc,Die,0,0);
+-               END;
+-
+-            { EFFICIENCY DECREASES }
+-            EffChange:=Trunc(AddictEffCoeff*Die);
+-            EffChange:=LesserInt(EffChange,Eff);
+-            Eff:=Eff-EffChange;
+-
+-            { REV INDEX INCREASES }
+-            ChangeRevIndex(WorldID,Trunc(AddictRevICoeff*Die));
+-
+-            { RANDOM EFFECTS }
+-            CASE Rnd(1,10) OF
+-               1..4: BEGIN END;
+-               5..7: BEGIN
+-                     Die:=ThgLmt((Rnd(50,120)/100)*Die);
+-                     IF Die>0 THEN
+-                        BEGIN
+-                        Pop:=Pop-Die;
+-                        AddNews(Emp,RiotsDie,Loc,Die,0,0);
+-                        END;
+-                     END;
+-               8..9: BEGIN
+-                     FOR IndI:=BioInd TO TriInd DO
+-                        BEGIN
+-                        IndDest:=Trunc(Indus[IndI]*Rnd(0,20)/100);
+-                        Indus[IndI]:=Indus[IndI]-IndDest;
+-                        IF IndDest>0 THEN
+-                           AddNews(Emp,IndDs,Loc,IndDest,Integer(IndI),0);
+-                        END;
+-                     END;
+-                 10: BEGIN
+-                     IF Tech>PreTchLvl THEN
+-                        Tech:=Pred(Tech);
+-
+-                     AddNews(Emp,RTech,Loc,Integer(Tech),0,0);
+-                     END;
+-            END;  { case }
+-
+-            { UN-ADDICT }
+-            IF Rnd(1,100)<=ChanceToAddict THEN
+-               BEGIN
+-               Special:=Special-[AmbAddict];
+-               AddNews(Emp,UAddict,Loc,0,0,0);
+-               END;  { if }
+-            END;  { if }
+-         END
+-      ELSE
+-         { ASSERT: world not addicted. }
+-         BEGIN
+-         IF Ambrosia>0 THEN
+-            BEGIN
+-            IF AmbNeeded<=Ambrosia THEN
+-               BEGIN
+-               IF Rnd(1,100)<ChanceToAddict THEN
+-                  BEGIN
+-                  Special:=Special+[AmbAddict];
+-                  AddNews(Emp,WAddict,Loc,0,0,0);
+-                  END;
+-               END;
+-
+-            AmbNeeded:=AmbNeeded DIV 2;
+-            IF AmbNeeded<=Ambrosia THEN
+-               BEGIN
+-               Ambrosia:=Ambrosia-AmbNeeded;
+-               END
+-            ELSE
+-               BEGIN
+-               Ambrosia:=0;
+-               END;
+-            END;
+-         END;  { if }
+-      END;  { UseUpAmbrosia }
+-
+-   PROCEDURE UpdateDefenses(WorldID: IDNumber;
+-                            Pop: Population;
+-                            Tech: TechLevel;
+-                            Typ: WorldTypes;
+-                            Eff: Index;
+-                            Technology: TechnologySet;
+-                            VAR Defns: DefnsArray;
+-                            VAR Cargo: CargoArray;
+-                            VAR OtherReports: ResourceSet);
+-      VAR
+-         DefI: DefnsTypes;
+-         MPop: Word;
+-         UsedUp,InfiniteSource,OptimumDef: Resources;
+-         Build,MaxBuild,RawNeeded: Resources;
+-         Car: CargoTypes;
+-         Optimum,BuildRate: Real;
+-         BTyp: StarbaseTypes;
+-
+-      BEGIN
+-      MPop:=TroopStrength(WorldID);
+-      BuildRate:=(MPop/2000)*(1+((Eff-50)/100));
+-      Optimum:=(MPop/100);
+-
+-      IF WorldID.ObjTyp=Pln THEN
+-         BuildRate:=BuildRate*(Pop/2000)
+-      ELSE IF WorldID.ObjTyp=Base THEN
+-         BEGIN
+-         BTyp:=GetBaseType(WorldID);
+-         IF BTyp=out THEN
+-            Optimum:=Optimum/4
+-         ELSE IF (BTyp=cmm) OR (BTyp=frt) THEN
+-            BEGIN
+-            Optimum:=Optimum*4;
+-            BuildRate:=BuildRate*4;
+-            END;
+-         END;
+-
+-      FOR DefI:=LAM TO ion DO
+-         IF DefI IN Technology THEN
+-            BEGIN
+-            OptimumDef:=ThgLmt(Optimum*DefAdj[DefI]);
+-            IF (WorldID.ObjTyp=Base) AND (BTyp=out) AND (DefI=def) THEN
+-               OptimumDef:=0;
+-
+-            IF (DefI=LAM) AND (NOT (Typ IN [BseTyp,CapTyp])) THEN
+-               OptimumDef:=0;
+-
+-            IF Defns[DefI]<OptimumDef THEN
+-               BEGIN
+-               MaxBuild:=GreaterInt(ThgLmt(BuildRate*DefBuildRate[DefI]),1);
+-               Build:=LesserInt(OptimumDef-Defns[DefI] , MaxBuild);
+-
+-               FOR Car:=che TO tri DO
+-                  BEGIN
+-                  RawNeeded:=ThgLmt((RawM[DefI][Car]/100)*Build);
+-                  IF RawNeeded>Cargo[Car] THEN
+-                     BEGIN
+-                     Build:=ThgLmt((Cargo[Car]/RawM[DefI][Car])*100);
+-                     ReportPlanetLack(GetStatus(WorldID),WorldID,DefLack,Integer(Car),0,0,OtherReports);
+-                     END;
+-                  END;
+-
+-               FOR Car:=che TO tri DO
+-                  BEGIN
+-                  UsedUp:=0;
+-                  RawNeeded:=ThgLmt(Build*(RawM[DefI][Car]/100));
+-                  MoveThings(RawNeeded,Cargo[Car],UsedUp);
+-                  END;
+-
+-               InfiniteSource:=MaxResources;
+-               MoveThings(Build,InfiniteSource,Defns[DefI]);
+-               END;
+-            END;  { loop }
+-      end;  { UpdateDefenses }
+-
+-   { UpdateWorld: MAIN PROCEDURE }
+-   BEGIN
+-   IF World.ObjTyp=Pln THEN
+-      WITH Universe^.Planet[World.Index] DO
+-         BEGIN
+-         OtherReports:=[];
+-         IF Emp=Indep THEN
+-            BEGIN
+-            IF Tech>PreTchLvl THEN
+-               Technology:=TechDev[Pred(Tech)]
+-            ELSE
+-               Technology:=TechDev[Tech];
+-            END
+-         ELSE BEGIN
+-            GetEmpireTechnology(Emp,ETech,Technology);
+-            Technology:=Technology * TechDev[Tech];
+-            END;
+-
+-         { Calculate Industrial Production }
+-         IP:=(TechAdj2[Tech]/100)*((Eff+250)/100)/K6;
+-
+-         GetTotalCargo(World,TempCargo);
+-         ProduceRawMaterial(World,Indus,Technology,IP,TempCargo);
+-         GetIndustrialDistribution(World,IndDist);
+-         UpdateIndustry(World,Cls,Tech,Eff,Pop,(AmbAddict IN Special),IndDist,Indus,TempCargo,OtherReports);
+-         Production(World,Typ,Indus,Technology,IP,Ships,TempCargo,OtherReports);
+-         PutTotalCargo(World,TempCargo);
+-
+-         UpdateEfficiency(Emp,Eff);
+-         UpdateTechLevel(World,Emp,Tech);
+-         UpdatePopulation(Cls,Tech,Pop);
+-         UseUpFood(World,Pop,Cargo[sup]);
+-         UseUpAmbrosia(World,Emp,Special,Pop,Eff,Tech,Indus,Cargo[amb]);
+-         UpdateMilitary(World,Typ,Pop,Cargo[men]);
+-         UpdateDefenses(World,Pop,Tech,Typ,Eff,Technology,Defns,Cargo,OtherReports);
+-         UpdateRevolution(World);
+-         IF Cls=HLfCls THEN
+-            HostileLife(World);
+-         END  { with scope }
+-   ELSE IF World.ObjTyp=Base THEN
+-      WITH Universe^.Starbase[World.Index] DO
+-         BEGIN
+-         OtherReports:=[];
+-         IF Emp=Indep THEN
+-            Technology:=TechDev[Pred(Tech)]
+-         ELSE BEGIN
+-            GetEmpireTechnology(Emp,ETech,Technology);
+-            Technology:=Technology * TechDev[Tech];
+-            END;
+-
+-         IF STyp=cmp THEN
+-            BEGIN
+-            IP:=(TechAdj2[Tech]/100)*((Eff+250)/100)/K6;
+-
+-            GetTotalCargo(World,TempCargo);
+-            SupplyLink(World,TempCargo);
+-            ProduceRawMaterial(World,Indus,Technology,IP,TempCargo);
+-            GetIndustrialDistribution(World,IndDist);
+-            UpdateIndustry(World,ArtCls,Tech,Eff,Pop,(AmbAddict IN Special),IndDist,Indus,TempCargo,OtherReports);
+-            Production(World,Typ,Indus,Technology,IP,Ships,TempCargo,OtherReports);
+-            SurplusLink(World,TempCargo);
+-            PutTotalCargo(World,TempCargo);
+-            END;
+-
+-         UpdateEfficiency(Emp,Eff);
+-         UpdateTechLevel(World,Emp,Tech);
+-
+-         IF STyp=cmp THEN
+-            BEGIN
+-            UpdatePopulation(ArtCls,Tech,Pop);
+-            UseUpFood(World,Pop,Cargo[sup]);
+-            UseUpAmbrosia(World,Emp,Special,Pop,Eff,Tech,Indus,Cargo[amb]);
+-            UpdateMilitary(World,Typ,Pop,Cargo[men]);
+-            UpdateRevolution(World);
+-            END;
+-
+-         UpdateDefenses(World,Pop,Tech,Typ,Eff,Technology,Defns,Cargo,OtherReports);
+-         END;  { with scope }
+-   END;  { UpdateWorld }
+-
 -PROCEDURE UpdateUniverse;
-+{ PATCH (fpc): UpdateUniverse deleted -- whole-galaxy tick loop plus
-+  screen progress window (ClrScr/OpenWindow/WriteString/CloseWindow, the only
-+  Crt/EIO/WND usage in this unit); this harness calls UpdateWorld directly
-+  per-planet instead. Note for later: it does confirm Year:=Year+1 is real
-+  global state (Environ's Year), matching Game.Year in the C# port. }
-+
-+{ PATCH (fpc): LoadScenario's parsing helpers and SF-token-parsing command handlers (Phase 2 commit
-+  2e), relocated verbatim from NEWGAME.PAS -- see the INTERFACE-section comment above these
-+  forward-declarations for the full list of what's relocated and the two documented exceptions
-+  (CreateNPEmpire's dropped InitializeNPE call, CreateRandomWorlds' dropped GotoXY call).
-+
-+  The var-string-checking directive right below relaxes a compile-time-only check: AllUpCase(VAR
-+  Strg: MaxStr) (STRG.PAS, MaxStr=STRING[255]) is called here with LineStr/String8
-+  (STRING[80]/STRING[8]) variables -- fpc's default strict mode requires a VAR parameter's declared
-+  type to match exactly, which none of this relocated code was ever compiled against before (nothing
-+  already in this harness called AllUpCase). Not a behavior change: a short-string VAR parameter is
-+  passed by reference over the same length-prefixed byte buffer regardless of its declared max
-+  length, and AllUpCase only uppercases existing bytes in place, never grows the string, so aliasing
-+  a smaller actual buffer through the larger formal type is memory-safe. }
-+{$V-}
-+
-+PROCEDURE ScenaError{Line: LineStr};
-+   BEGIN
-+   WriteLn(Line);
-+   ScenarioError:=True;
-+   END;  { ScenaError }
-+
-+FUNCTION NextInteger{VAR SF: Text): Integer};
-    VAR
+-   VAR
 -      UpdateWindow: WindowHandle;
 -      i: Byte;
-+      Token: LineStr;
-+      Temp,Error: Integer;
-+      BadToken: Boolean;
-+
-+   BEGIN
-+   Token:=DFA1NextToken(SF,BadToken);
-+   IF BadToken THEN
-+      ScenaError('ERROR: Bad token "'+Token+'"')
-+   ELSE
-+      BEGIN
-+      Val(Token,Temp,Error);
-+      IF Error=0 THEN
-+         NextInteger:=Temp
-+      ELSE
-+         ScenaError('ERROR: Illegal number format "'+Token+'"');
-+      END;
-+   END;  { NextInteger }
-+
-+PROCEDURE GetRandomXY{VAR XY: XYCoord; x1,y1,x2,y2: Integer; CheckWorld: Boolean};
-+   VAR
-+      ObjectThere: IDNumber;
-+      Count: Word;
-+
-+   BEGIN
-+   Count:=0;
-+   REPEAT
-+      XY.x:=Rnd(x1,x2);
-+      XY.y:=Rnd(y1,y2);
-+      GetObject(XY,ObjectThere);
-+      Inc(Count);
-+   UNTIL (NOT CheckWorld) OR (Count>100)
-+         OR ((ObjectThere.ObjTyp=Void)
-+         AND (EnemyMine(XY)=Indep)
-+         AND (GetNebula(XY)<>DenseNebula));
-+
-+   IF Count>100 THEN
-+      BEGIN
-+      XY:=Limbo;
-+      ScenaError('ERROR: No room for random world in zone.');
-+      END;
-+   END;  { GetRandomXY }
-+
-+PROCEDURE GetRandomRange{Line: String16; VAR Low,High: Integer};
-+   VAR
-+      Error,DashPos: Word;
-+
-+   BEGIN
-+   Low:=0;
-+   High:=0;
-+   DashPos:=Pos('..',Line);
-+   IF DashPos=0 THEN
-+      BEGIN
-+      Val(Line,Low,Error);
-+      IF Error<>0 THEN
-+         Low:=0
-+      ELSE
-+         High:=Low;
-+      END
-+   ELSE
-+      BEGIN
-+      Val(Copy(Line,1,DashPos-1),Low,Error);
-+      IF Error=0 THEN
-+         BEGIN
-+         Val(Copy(Line,DashPos+2,10),High,Error);
-+         IF Error<>0 THEN
-+            BEGIN
-+            Low:=0;
-+            High:=0;
-+            Exit;
-+            END;
-+         END
-+      ELSE
-+         Low:=0;
-+      END;
-+   END;  { GetRandomRange }
-+
-+PROCEDURE GetNextXY{VAR SF: Text; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray;
-+                    CheckWorlds: Boolean; VAR RetXY: XYCoord};
-+   VAR
-+      Token: LineStr;
-+      i,CommaPos,ColonPos,Error,Z: Word;
-+      TempX1,TempY1,TempX2,TempY2: Integer;
-+      ObjectThere: IDNumber;
-+      Header: String8;
-+      BadToken: Boolean;
-+
-+   PROCEDURE GetXY(Line: LineStr; VAR x,y: Integer);
-+      VAR
-+         Error: Word;
-+         CommaPos: Word;
-+
-+      BEGIN
-+      IF Line='' THEN
-+         BEGIN
-+         x:=0;
-+         y:=0;
-+         END
-+      ELSE
-+         BEGIN
-+         CommaPos:=Pos(',',Line);
-+         Val(Copy(Line,1,CommaPos-1),x,Error);
-+         IF Error<>0 THEN
-+            BEGIN
-+            x:=0;
-+            y:=0;
-+            ScenaError('ERROR: Illegal coordinate "'+Line+'"');
-+            END
-+         ELSE
-+            BEGIN
-+            Val(Copy(Line,CommaPos+1,5),y,Error);
-+            IF Error<>0 THEN
-+               BEGIN
-+               x:=0;
-+               y:=0;
-+               ScenaError('ERROR: Illegal coordinate "'+Line+'"');
-+               END;
-+            END;
-+         END;
-+      END;  { GetXY }
-+
-+   BEGIN
-+   Token:=DFA1NextToken(SF,BadToken);
-+   IF BadToken THEN
-+      ScenaError('ERROR: Bad token "'+Token+'"')
-+   ELSE
-+      BEGIN
-+      CommaPos:=Pos(',',Token);
-+      ColonPos:=Pos(':',Token);
-+      Header:=Copy(Token,1,2);
-+      Header[1]:=UpCase(Header[1]);
-+      IF Header='Z:' THEN
-+         BEGIN
-+         Val(Copy(Token,3,5),Z,Error);
-+         IF Error<>0 THEN
-+            BEGIN
-+            RetXY:=Limbo;
-+            ScenaError('ERROR: Illegal zone coordinate "'+Token+'"');
-+            END
-+         ELSE
-+            BEGIN
-+            WITH Zone[Z] DO
-+               GetRandomXY(RetXY,x1,y1,x2,y2,CheckWorlds);
-+            END;
-+         END
-+      ELSE IF Header='R:' THEN
-+         BEGIN
-+         GetRandomRange(Copy(Token,3,CommaPos-3),TempX1,TempX2);
-+         GetRandomRange(Copy(Token,CommaPos+1,10),TempY1,TempY2);
-+         IF InGalaxy(TempX1,TempY1) AND InGalaxy(TempX2,TempY2) THEN
-+            GetRandomXY(RetXY,TempX1,TempY1,TempX2,TempY2,CheckWorlds)
-+         ELSE
-+            BEGIN
-+            RetXY:=Limbo;
-+            ScenaError('ERROR: Illegal random coordinates "'+Token+'"');
-+            END
-+         END
-+      ELSE IF ColonPos<>0 THEN
-+         BEGIN
-+         GetRandomRange(Copy(Token,ColonPos+1,(CommaPos-ColonPos)-1),TempX1,TempX2);
-+         GetRandomRange(Copy(Token,CommaPos+1,10),TempY1,TempY2);
-+         Token:=Copy(Token,1,ColonPos-1);
-+         AllUpCase(Token);
-+         i:=25;
-+         WHILE (i>0) AND (Token<>XYPoint[i].Name) DO
-+            Dec(i);
-+
-+         IF i<>0 THEN
-+            BEGIN
-+            TempX1:=XYPoint[i].XY.x+TempX1;
-+            TempX2:=XYPoint[i].XY.x+TempX2;
-+            TempY1:=XYPoint[i].XY.y+TempY1;
-+            TempY2:=XYPoint[i].XY.y+TempY2;
-+            IF InGalaxy(TempX1,TempY1) AND InGalaxy(TempX2,TempY2) THEN
-+               GetRandomXY(RetXY,TempX1,TempY1,TempX2,TempY2,CheckWorlds)
-+            ELSE
-+               BEGIN
-+               RetXY:=Limbo;
-+               ScenaError('ERROR: Relative coordinates outside of galaxy.');
-+               END
-+            END
-+         ELSE
-+            BEGIN
-+            RetXY:=Limbo;
-+            ScenaError('ERROR: XYPoint not found "'+Token+'"');
-+            END;
-+         END
-+      ELSE IF CommaPos<>0 THEN
-+         BEGIN
-+         GetXY(Token,TempX1,TempY1);
-+         IF InGalaxy(TempX1,TempY1) THEN
-+            BEGIN
-+            RetXY.x:=TempX1;
-+            RetXY.y:=TempY1;
-+            END
-+         ELSE
-+            BEGIN
-+            RetXY:=Limbo;
-+            ScenaError('ERROR: Absolute coordinates outside of galaxy.');
-+            END;
-+         END
-+      ELSE
-+         BEGIN
-+         ScenaError('ERROR: Illegal coordinate "'+Token+'"');
-+         END;
-+      END;
-+   END;  { GetNextXY }
-+
-+PROCEDURE LoadClassArray{VAR SF: TEXT; VAR CA: ClassArray};
-+   VAR
-+      ClsI: WorldClass;
-+      i,Index,Prob: Word;
-+
-+   BEGIN
-+	IF DebugScena THEN
-+		WriteLn('DEBUG: ClassTable');
-+
-+   Index:=1;
-+   FOR ClsI:=AmbCls TO VlcCls DO
-+      BEGIN
-+      Prob:=NextInteger(SF);
-+      FOR i:=Index TO Index+Prob-1 DO
-+         CA[i]:=ClsI;
-+      Index:=Index+Prob;
-+      END;
-+
-+   IF Index<>101 THEN
-+      ScenaError('ERROR: Class table probabilities do not add up to 100.');
-+   END;  { LoadClassArray }
-+
-+PROCEDURE LoadTechArray{VAR SF: TEXT; VAR TA: TechArray};
-+   VAR
-+      TchI: TechLevel;
-+      i,Index,Prob: Word;
-+
-+   BEGIN
-+	IF DebugScena THEN
-+		WriteLn('DEBUG: TechTable');
-+
-+   Index:=1;
-+   FOR TchI:=PreTchLvl TO GteTchLvl DO
-+      BEGIN
-+      Prob:=NextInteger(SF);
-+      FOR i:=Index TO Index+Prob-1 DO
-+         TA[i]:=TchI;
-+      Index:=Index+Prob;
-+      END;
-+
-+   IF Index<>101 THEN
-+      ScenaError('ERROR: Tech table probabilities do not add up to 100.');
-+   END;  { LoadTechArray }
-+
-+PROCEDURE DefineXYPoint{VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray};
-+   VAR
-+      NewXYPoint: String8;
-+      NewXY: XYCoord;
-+      i: Word;
-+      BadToken: Boolean;
-+      Token: LineStr;
-+
-+   BEGIN
-+   i:=25;
-+   WHILE (i>0) AND (XYPoint[i].Name<>'') DO
-+      Dec(i);
-+
-+   Token:=DFA1NextToken(SF,BadToken);
-+   IF BadToken THEN
-+      ScenaError('ERROR: Bad token "'+Token+'"')
-+   ELSE
-+      BEGIN
-+      NewXYPoint:=Token;
-+      GetNextXY(SF,XYPoint,Zone,False,NewXY);
-+
-+      IF i=0 THEN
-+         ScenaError('ERROR: Too many XYPoints defined.')
-+      ELSE
-+         BEGIN
-+         AllUpCase(NewXYPoint);
-+         XYPoint[i].Name:=NewXYPoint;
-+         XYPoint[i].XY:=NewXY;
-+
-+			IF DebugScena THEN
-+				WriteLn('DEBUG: DefineXY (',XYPoint[i].XY.x,',',XYPoint[i].XY.y,')');
-+
-+         END;
-+      END;
-+   END;  { DefineXYPoint }
-+
-+PROCEDURE DefineZone{VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray};
-+   VAR
-+      ZNumber: Word;
-+      XY1,XY2: XYCoord;
-+
-+   BEGIN
-+   ZNumber:=NextInteger(SF);
-+   GetNextXY(SF,XYPoint,Zone,False,XY1);
-+   GetNextXY(SF,XYPoint,Zone,False,XY2);
-+   WITH Zone[ZNumber] DO
-+      BEGIN
-+      x1:=XY1.x;
-+      y1:=XY1.y;
-+      x2:=XY2.x;
-+      y2:=XY2.y;
-+
-+		IF DebugScena THEN
-+			WriteLn('DEBUG: DefineZone ',ZNumber,'  (',x1,',',y1,' ',x2,',',y2,')');
-+      END;
-+   END;  { DefineZone }
-+
-+PROCEDURE SetTrillumReserves{VAR SF: TEXT; VAR TriRes: Word};
-+   BEGIN
-+   TriRes:=NextInteger(SF);
-+   IF (TriRes<0) OR (TriRes>100) THEN
-+      ScenaError('ERROR: Illegal trillum reserve setting.');
-+   END;  { SetTrillumReserves }
-+
-+CONST
-+   NoOfRndNames = 59;
-+   RndEmpireName: ARRAY [1..NoOfRndNames] OF String16 =
-+      ( 'Aaraavon','Antramis','Azores',
-+        'Bok','Brekandi','Byzantium',
-+        'Cal''Dulmas','Cerberon','Chulron',
-+        'Dol Parem','Doramis','Drii',
-+        'Earon','Entares','Esperance',
-+        'Fahron','First Sun','Freberon',
-+        'Geldtried','Gen-Tarem','Ghaza',
-+        'Haar','Hasarem','Highguard','Horace',
-+        'Iileron','Illissia',
-+        'Jamin','Jasper','Jool Den',
-+        'Kandii','Kendrezani',
-+        'Lazarus','Lililth',
-+        'Moorline','Mu','Mutara',
-+        'Ny','N''zares',
-+        'Occem','Ovaris',
-+        'Palanhoth','Pell','Pharo',
-+        'Quezelquan',
-+        'Rho Kandii','Rosseri',
-+        'Sarlok','Sol-Terra',
-+        'Terminus','Terra','Trantor',
-+        'Ultarion',
-+        'Vex','Vlandis',
-+        'Whorl',
-+        'Xi',
-+        'Yew','Yolandis' );
-+
-+PROCEDURE GetRandomEmpireName{VAR EmpireName: EmpireNameArray; VAR NewName: String32};
-+   VAR
-+      Emp: Empire;
-+      Ok: Boolean;
-+
-+   BEGIN
-+   REPEAT
-+      Ok:=True;
-+
-+      NewName:=RndEmpireName[Rnd(1,NoOfRndNames)];
-+      FOR Emp:=Empire1 TO Empire8 DO
-+         IF EmpireName[Emp]=NewName THEN
-+            Ok:=False;
-+
-+   UNTIL Ok;
-+   END;  { GetRandomEmpireName }
-+
-+PROCEDURE ReadModifierList{VAR SF: TEXT; VAR Modifiers: SetOfEmpireModifiers};
-+   VAR
-+      i,NoOfModifiers: Word;
-+      Abort: Boolean;
-+      ModToken: String16;
-+
-+   BEGIN
-+   Modifiers:=[];
-+   IF ScenaVersion>=12 THEN
-+      BEGIN
-+      NoOfModifiers:=NextInteger(SF);
-+      FOR i:=1 TO NoOfModifiers DO
-+         BEGIN
-+         ModToken:=DFA1NextToken(SF,Abort);
-+         AllUpCase(ModToken);
-+         IF ModToken='CENTRAL' THEN
-+            Modifiers:=Modifiers+[CentralEMD];
-+         END;
-+      END;
-+   END;  { ReadModifierList }
-+
-+PROCEDURE CreatePlayerEmpire{VAR SF: TEXT; NoOfPlayers: Empire;
-+                             VAR EmpireName,Password: EmpireNameArray;
-+                             VAR Sex: SexArray};
-+   VAR
-+      i,Pl,Tl,NoOfTechs,RevFactor: Integer;
-+      Emp: Empire;
-+      Tech: TechLevel;
-+      KnownTechs: TechnologySet;
-+      Modifiers: SetOfEmpireModifiers;
-+
-+   BEGIN
-+   Pl:=NextInteger(SF);
-+   RevFactor:=NextInteger(SF);
-+   Tl:=NextInteger(SF);
-+   Tech:=TechLevel(Tl);
-+   KnownTechs:=TechDev[Pred(Tech)];
-+   NoOfTechs:=NextInteger(SF);
-+   FOR i:=1 TO NoOfTechs DO
-+      KnownTechs:=KnownTechs+[TechnologyTypes(NextInteger(SF))];
-+   KnownTechs:=KnownTechs * TechDev[Tech];
-+
-+   ReadModifierList(SF,Modifiers);
-+
-+   Emp:=Empire(Pl);
-+   IF Emp<=NoOfPlayers THEN
-+      BEGIN
-+      CreateEmpire(Emp,True,Sex[Emp],EmpireName[Emp],Password[Emp],
-+                   EmptyQuadrant,Tech,KnownTechs,RevFactor,Modifiers,Year);
-+      END;
-+   END;  { CreatePlayerEmpire }
-+
-+PROCEDURE CreateNPEmpire{VAR SF: TEXT; VAR EmpireName: EmpireNameArray};
-+   VAR
-+      i,E,Tl,NoOfTechs,RevFactor: Integer;
-+      Emp: Empire;
-+      Tech: TechLevel;
-+      Name: String32;
-+      BadToken: Boolean;
-+      KnownTechs: TechnologySet;
-+      Modifiers: SetOfEmpireModifiers;
-+
-+   BEGIN
-+   E:=NextInteger(SF);
-+   NextInteger(SF); { PATCH (fpc): NPEmpireTypes ordinal (ET) -- consumed to stay token-position-correct,
-+                      not stored: it only ever fed the dropped InitializeNPE call below, and NPEmpireTypes
-+                      itself lives in NPETypes.PAS, a unit this relocation deliberately doesn't import
-+                      (see this block's own INTERFACE-section PATCH comment). }
-+   Name:=DFA1NextToken(SF,BadToken);
-+   RevFactor:=NextInteger(SF);
-+   Tl:=NextInteger(SF);
-+   Tech:=TechLevel(Tl);
-+   NoOfTechs:=NextInteger(SF);
-+   KnownTechs:=TechDev[Pred(Tech)];
-+   FOR i:=1 TO NoOfTechs DO
-+      KnownTechs:=KnownTechs+[TechnologyTypes(NextInteger(SF))];
-+   KnownTechs:=KnownTechs * TechDev[Tech];
-+
-+   ReadModifierList(SF,Modifiers);
-+
-+   Emp:=Empire(E);
-+
-+   IF NOT EmpireActive(Emp) THEN
-+      BEGIN
-+      IF Name='RndName' THEN
-+         GetRandomEmpireName(EmpireName,Name);
-+
-+      CreateEmpire(Emp,False,Boolean(Rnd(0,1)),Name,'',
-+                   EmptyQuadrant,Tech,KnownTechs,RevFactor,Modifiers,Year);
-+      { PATCH (fpc): InitializeNPE(Emp,ETyp) dropped -- see this relocation
-+        block's own INTERFACE-section PATCH comment for why. }
-+      END;
-+   END;  { CreateNPEmpire }
-+
-+PROCEDURE CreateWorld{VAR SF: TEXT;
-+                      VAR FirstWorld: Word;
-+                      VAR NoOfPlayers: Empire;
-+                      VAR XYPoint: XYPointArray;
-+                      VAR Zone: ZoneArray};
-+   VAR
-+      n,C,Tl,T,E,Pp,Ef: Integer;
-+      ObjID: IDNumber;
-+      XY: XYCoord;
-+      NLAM,Ndef,NGDM,Nion,Nfgt,Nhkr,Njmp,Njtn,Npen,Nssp,Ntrn,
-+      Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri: Integer;
-+      Emp: Empire;
-+      Typ: WorldTypes;
-+      Reserves,TriRes: Word;
-+
-+   BEGIN
-+   n:=NextInteger(SF);
-+
-+	IF DebugScena THEN
-+		WriteLn('DEBUG: CreateWorld ',n);
-+
-+   GetNextXY(SF,XYPoint,Zone,True,XY);
-+   C:=NextInteger(SF);
-+   Tl:=NextInteger(SF);
-+   T:=NextInteger(SF);
-+   E:=NextInteger(SF);
-+   Pp:=NextInteger(SF);
-+   Ef:=NextInteger(SF);
-+   IF ScenaVersion>=12 THEN
-+      TriRes:=NextInteger(SF)
-+   ELSE
-+      TriRes:=100;
-+   NLAM:=NextInteger(SF);
-+   Ndef:=NextInteger(SF);
-+   NGDM:=NextInteger(SF);
-+   Nion:=NextInteger(SF);
-+   Nfgt:=NextInteger(SF);
-+   Nhkr:=NextInteger(SF);
-+   Njmp:=NextInteger(SF);
-+   Njtn:=NextInteger(SF);
-+   Npen:=NextInteger(SF);
-+   Nssp:=NextInteger(SF);
-+   Ntrn:=NextInteger(SF);
-+   Nmen:=NextInteger(SF);
-+   Nnnj:=NextInteger(SF);
-+   Namb:=NextInteger(SF);
-+   Nche:=NextInteger(SF);
-+   Nmet:=NextInteger(SF);
-+   Nsup:=NextInteger(SF);
-+   Ntri:=NextInteger(SF);
-+
-+   ObjID.ObjTyp:=Pln;
-+   ObjID.Index:=FirstWorld;
-+   Inc(FirstWorld);
-+   Emp:=Empire(E);
-+   Typ:=WorldTypes(T);
-+   IF (Emp<>Indep) AND (NOT EmpireActive(Emp)) THEN
-+      BEGIN
-+      Emp:=Indep;
-+      Typ:=IndTyp;
-+      END;
-+
-+   CreatePlanet(ObjID,XY);
-+   SetUpWorld(ObjID,WorldClass(C),TechLevel(Tl),Typ,Emp,RndVar(Pp,15),Ef,[],
-+              Nfgt,Nhkr,Njmp,Njtn,Npen,Nssp,Ntrn,
-+              Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri,
-+              NLAM,Ndef,NGDM,Nion,False);
-+   Reserves:=RandomTrillumReserves(WorldClass(C),TriRes);
-+   PutTrillumReserves(ObjID,Reserves);
-+
-+   IF Typ=CapTyp THEN
-+      SetCapital(Emp,ObjID);
-+   END; { CreateWorld }
-+
-+PROCEDURE CreateBase{VAR SF: TEXT;
-+                     VAR FirstBase: Word;
-+                     VAR NoOfPlayers: Empire;
-+                     VAR XYPoint: XYPointArray;
-+                     VAR Zone: ZoneArray};
-+   VAR
-+      n,C,Tl,T,E,Pp,Ef,STyp: Integer;
-+      ObjID: IDNumber;
-+      XY: XYCoord;
-+      NLAM,Ndef,NGDM,Nion,Nfgt,Nhkr,Njmp,Njtn,Npen,Nssp,Ntrn,
-+      Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri: Integer;
-+      Emp: Empire;
-+      Typ: WorldTypes;
-+		BaseTyp: StarbaseTypes;
-+
-+   BEGIN
-+   n:=NextInteger(SF);
-+
-+	IF DebugScena THEN
-+		WriteLn('DEBUG: CreateStarbase ',n);
-+
-+   GetNextXY(SF,XYPoint,Zone,True,XY);
-+   STyp:=NextInteger(SF);
-+   Tl:=NextInteger(SF);
-+   T:=NextInteger(SF);
-+   E:=NextInteger(SF);
-+   Pp:=NextInteger(SF);
-+   Ef:=NextInteger(SF);
-+   NLAM:=NextInteger(SF);
-+   Ndef:=NextInteger(SF);
-+   NGDM:=NextInteger(SF);
-+   Nion:=NextInteger(SF);
-+   Nfgt:=NextInteger(SF);
-+   Nhkr:=NextInteger(SF);
-+   Njmp:=NextInteger(SF);
-+   Njtn:=NextInteger(SF);
-+   Npen:=NextInteger(SF);
-+   Nssp:=NextInteger(SF);
-+   Ntrn:=NextInteger(SF);
-+   Nmen:=NextInteger(SF);
-+   Nnnj:=NextInteger(SF);
-+   Namb:=NextInteger(SF);
-+   Nche:=NextInteger(SF);
-+   Nmet:=NextInteger(SF);
-+   Nsup:=NextInteger(SF);
-+   Ntri:=NextInteger(SF);
-+
-+   ObjID.ObjTyp:=Base;
-+   ObjID.Index:=FirstBase;
-+   Emp:=Empire(E);
-+	BaseTyp:=StarbaseTypes(STyp);
-+
-+	IF BaseTyp=out THEN
-+		Typ:=OutTyp
-+	ELSE IF BaseTyp IN [cmm,frt] THEN
-+		Typ:=BseTyp
-+	ELSE
-+		Typ:=WorldTypes(T);
-+
-+   IF (Emp=Indep) OR EmpireActive(Emp) THEN
-+      BEGIN
-+      Inc(FirstBase);
-+      CreateStarbase(ObjID,Emp,XY,BaseTyp);
-+      SetUpWorld(ObjID,ArtCls,TechLevel(Tl),Typ,Emp,RndVar(Pp,15),Ef,[],
-+                 Nfgt,Nhkr,Njmp,Njtn,Npen,Nssp,Ntrn,
-+                 Nmen,Nnnj,Namb,Nche,Nmet,Nsup,Ntri,
-+                 NLAM,Ndef,NGDM,Nion,False);
-+
-+      IF Typ=CapTyp THEN
-+         SetCapital(Emp,ObjID);
-+      END;
-+   END; { CreateBase }
-+
-+PROCEDURE CreateGate{VAR SF: TEXT;
-+                     NoOfPlayers: Empire;
-+                     VAR XYPoint: XYPointArray;
-+                     VAR Zone: ZoneArray};
-+   VAR
-+      XY: XYCoord;
-+      GTyp: StargateTypes;
-       Emp: Empire;
-       ID: IDNumber;
- 
+-      Emp: Empire;
+-      ID: IDNumber;
+-
 -   { UpdateUniverse: MAIN PROCEDURE }
-    BEGIN
+-   BEGIN
 -   TextAttr:=7;
 -   ClrScr;
 -   OpenWindow(20,7,40,7,ThinBRD,'',7,C.SYSWBorder,UpdateWindow);
 -   FillChar(NewTotalRevIndex,SizeOf(NewTotalRevIndex),0);
-+   GetNextXY(SF,XYPoint,Zone,True,XY);
-+   GTyp:=StargateTypes(NextInteger(SF));
-+   Emp:=Empire(NextInteger(SF));
-+   ID.ObjTyp:=Gate;
-+   ID.Index:=NextStargateSlot;
-+   IF ID.Index>0 THEN
-+      CreateStargate(ID,Emp,GTyp,XY)
-+   ELSE
-+      ScenaError('ERROR: Too many stargates created.');
-+   END;  { CreateGate }
- 
+-
 -   Year:=Year+1;
-+PROCEDURE CreateRandomWorlds{VAR SF: TEXT;
-+                             VAR FirstWorld: Word;
-+                             VAR ClassTable: ClassArray;
-+                             VAR TechTable: TechArray;
-+                             TriRes: Word;
-+                             VAR Zone: ZoneArray};
-+   VAR
-+      Safety,i,NoOfWorlds: Word;
-+      ObjID: IDNumber;
-+      Coord: XYCoord;
-+      Class: WorldClass;
-+      Tech: TechLevel;
-+      Reserves,ZNumber: Word;
- 
+-
 -   { update planets }
 -   FOR i:=1 TO NoOfPlanets DO
-+   BEGIN
-+   NoOfWorlds:=NextInteger(SF);
-+   ZNumber:=NextInteger(SF);
-+
-+   ObjID.ObjTyp:=Pln;
-+   FOR i:=FirstWorld TO (FirstWorld+NoOfWorlds-1) DO
-       BEGIN
+-      BEGIN
 -      WriteString('World #'+Int2Str(i)+'     ',2,1,7);
 -      ID.ObjTyp:=Pln;  ID.Index:=i;
 -      UpdateWorld(ID);
@@ -1092,28 +1462,12 @@
 -      BEGIN
 -      WriteString('Starbase #'+Int2Str(i)+'   ',2,1,7);
 -      IF i IN SetOfActiveStarbases THEN
-+      ObjID.Index:=i;
-+      WITH Zone[ZNumber] DO
-+         GetRandomXY(Coord,x1,y1,x2,y2,True);
-+      Safety:=0;
-+      REPEAT
-+         Class:=ClassTable[Rnd(1,100)];
-+         Tech:=TechTable[Rnd(1,100)];
-+         Inc(Safety);
-+      UNTIL (Safety>100) OR (Tech>=MinTechForClass[Class]);
-+      IF Safety>100 THEN
-          BEGIN
+-         BEGIN
 -         ID.ObjTyp:=Base;  ID.Index:=i;
 -         UpdateWorld(ID);
-+         ScenaError('ERROR: Incompatible class and tech tables.');
-          END;
-+      CreateRndPlanet(ObjID,Coord,Class,Tech);
-+      Reserves:=RandomTrillumReserves(Class,TriRes);
-+      PutTrillumReserves(ObjID,Reserves);
-+      { PATCH (fpc): GotoXY(1,WhereY) dropped -- see this relocation block's
-+        own INTERFACE-section PATCH comment for why. }
-       END;
- 
+-         END;
+-      END;
+-
 -   { update construction }
 -   ClrScr;
 -   FOR i:=1 TO MaxNoOfConstrSites DO
@@ -1122,74 +1476,1527 @@
 -      IF i IN SetOfActiveConstructionSites THEN
 -         BEGIN
 -         UpdateConstruction(i);
-+   FirstWorld:=FirstWorld+NoOfWorlds;
-+   END;  { CreateRandomWorlds }
-+
-+PROCEDURE CreateNebula{VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray};
-+   VAR
-+      XY,UpperLeft,LowerRight: XYCoord;
-+      NTyp,x,y: Word;
-+
-+   BEGIN
-+   NTyp:=NextInteger(SF);
-+   GetNextXY(SF,XYPoint,Zone,False,UpperLeft);
-+   GetNextXY(SF,XYPoint,Zone,False,LowerRight);
-+   FOR x:=UpperLeft.x TO LowerRight.x DO
-+      FOR y:=UpperLeft.y TO LowerRight.y DO
-+         IF InGalaxy(x,y) THEN
-+            BEGIN
-+            XY.x:=x;  XY.y:=y;
-+            PutNebula(XY,NebulaTypes(NTyp));
-+            END;
-+   END;  { CreateNebula }
-+
-+PROCEDURE CreateRandomNebula{VAR SF: TEXT};
-+   VAR
-+      Typ,Min,Max: Word;
-+
-+   BEGIN
-+   Typ:=NextInteger(SF);
-+   Min:=NextInteger(SF);
-+   Max:=NextInteger(SF);
-+   CASE Typ OF
-+      1: BEGIN
-+         NebulaeBand;
-          END;
+-         END;
 -      END;
-+      2: BEGIN
-+         NebulaePatches(Rnd(Min,Max));
-+         END;
-+      END;  { case }
-+   END;  { CreateRandomNebula }
- 
+-
 -   ClrScr;
 -   WriteString('Updating Empires...',2,1,7);
 -   FOR Emp:=Empire1 TO Empire8 do
 -      IF EmpireActive(Emp) THEN
 -         UpdateEmpire(Emp);
-+PROCEDURE CreateSRMs{VAR SF: TEXT; VAR XYPoint: XYPointArray; VAR Zone: ZoneArray};
-+   VAR
-+      XY,UpperLeft,LowerRight: XYCoord;
-+      E,x,y: Word;
-+      ObjID: IDNumber;
- 
+-
 -   DeleteReadMessages;
 -
 -   CloseWindow;
 -   END;  { UpdateUniverse }
+-
+-END.
++(* UPDATE.PAS ------------------------------------------------------------------
++
++----------------------------------------------------------------------------- *)
++
++UNIT Update;
++
++{$IFDEF Overlay}
++{$F+}
++{$O+}
++{$ENDIF}
++
++INTERFACE
++
++USES Strg,
++     Crt,                                       { Standard CRT library. }
++     Int,                                       { Integer routines. }
++     EIO,                                       { Extended IO Library. }
++     WND,
++     Types,
++     Galaxy,
++     DataStrc,                                  { Universe data structure. }
++     DataCnst,
++     News,
++     Misc,                                      { Miscellaneous routines. }
++     Primintr,                                  { Primitive procedures. }
++     Intrface,                                  { Interface routines. }
++     Mess;
++
++PROCEDURE UpdateUniverse;
++
++{ PATCH (fpc): UpdateWorld/UpdateEmpire/UpdateConstruction promoted here from IMPLEMENTATION --
++  visibility only, same procedures, unchanged bodies -- so the ground-truth harness can call each
++  directly instead of only through UpdateUniverse's whole-galaxy tick loop. }
++PROCEDURE UpdateWorld(World: IDNumber);
++PROCEDURE UpdateEmpire(Emp: Empire);
++PROCEDURE UpdateConstruction(i: Byte);
++
++{ PATCH (fpc): test-only observability hook, mirroring INT.PAS's ForcedRandomValue pattern --
++  NewTotalRevIndex (below, IMPLEMENTATION-only) is written by Rebellion and normally committed to
++  an empire's real TotalRevIndex only by UpdateEmpire; the harness calls UpdateWorld directly for
++  most domains, so without this getter the accumulator would be unreadable from outside the unit.
++  Read-only; behavior of UpdateWorld/Rebellion is unchanged. }
++FUNCTION GetNewTotalRevIndex(Emp: Empire): Integer;
++
++IMPLEMENTATION
++
++USES
++   Environ;
++
++VAR
++   NewTotalRevIndex: ARRAY [Empire] of Integer;
++
++FUNCTION GetNewTotalRevIndex(Emp: Empire): Integer;
 +   BEGIN
-+   E:=NextInteger(SF);
-+   GetNextXY(SF,XYPoint,Zone,False,UpperLeft);
-+   GetNextXY(SF,XYPoint,Zone,False,LowerRight);
-+   FOR x:=UpperLeft.x TO LowerRight.x DO
-+      FOR y:=UpperLeft.y TO LowerRight.y DO
-+         IF InGalaxy(x,y) THEN
++   GetNewTotalRevIndex:=NewTotalRevIndex[Emp];
++   END;  { GetNewTotalRevIndex }
++
++PROCEDURE ReportPlanetLack(Sta: Empire; ID: IDNumber; 
++                           Headline: NewsTypes; P1,P2,P3: Integer;
++                           VAR OtherReports: ResourceSet);
++   VAR
++      Loc: Location;
++
++   BEGIN
++   IF (NOT (ResourceTypes(P1) IN OtherReports))
++   AND (Sta<>Indep) THEN
++      BEGIN
++      Loc.ID:=ID;
++      Loc.XY:=Limbo;
++
++      AddNews(Sta,Headline,Loc,P1,P2,P3);
++      OtherReports:=OtherReports+[ResourceTypes(P1)];
++      ChangeRevIndex(ID,1);
++      END;
++   END;  { ReportPlanetLack }
++
++PROCEDURE ConstructStarbase(Emp: Empire; STyp: StarbaseTypes; XY: XYCoord; VAR ID: IDNumber);
++   VAR
++      EmpTech: TechLevel;
++      EmpTechnology: TechnologySet;
++      Indus: IndusArray;
++
++   BEGIN
++   ID.ObjTyp:=Base;
++   ID.Index:=NextStarbaseSlot;
++   IF ID.Index>0 THEN
++      BEGIN
++      CreateStarbase(ID,Emp,XY,STyp);
++      SetEfficiency(ID,Rnd(10,20));
++      GetEmpireTechnology(Emp,EmpTech,EmpTechnology);
++      SetTech(ID,EmpTech);
++
++      IF STyp=out THEN
++         BEGIN
++         SetPopulation(ID,1);
++         SetType(ID,OutTyp);
++         END
++      ELSE IF STyp=cmp THEN
++         BEGIN
++         SetPopulation(ID,Rnd(400,700));
++         SetType(ID,BseTyp);
++         GetOptimumIndus(ID,Indus);
++         PutIndus(ID,Indus);
++         END
++      ELSE
++         BEGIN
++         SetPopulation(ID,Rnd(10,20));
++         SetType(ID,BseTyp);
++         END;
++      END;
++   END;  { ConstructStarbase }
++
++PROCEDURE ConstructStargate(Emp: Empire; GTyp: StargateTypes; XY: XYCoord; VAR ID: IDNumber);
++   BEGIN
++   ID.ObjTyp:=Gate;
++   ID.Index:=NextStargateSlot;
++   IF ID.Index>0 THEN
++      CreateStargate(ID,Emp,GTyp,XY);
++   END;  { ConstructStargate }
++
++{ MAIN PROCEDURES }
++PROCEDURE UpdateConstruction(i: Byte);
++{ INTERFACE PROCEDURE: UpdateConstruction: }   
++   VAR
++      ConstrFleets: FleetSet;
++      EnoughRawMaterial,Error: Boolean;
++      ID: IDnumber;
++      Loc: Location;
++      ConName: String16;
++      ConNamePtr: NameRecordPtr;
++
++   procedure UseUpRawMaterial(Typ: ConstrTypes;
++                              Sta: Empire;
++                              ConID: IDNumber;
++                              ConstrFleets: FleetSet;
++                              var EnoughRawMaterial: Boolean);
++      label
++         ExitLoop;
++
++      var
++         i: Byte;
++         ThgI: CargoTypes;
++         ID: IDNumber;
++         Cargo: array[1..MaxNoOfFleets] of CargoArray;
++         CargoToUse,RawNeeded: Resources;
++         Loc: Location;
++
++      begin
++      EnoughRawMaterial:=True;
++      FOR i:=1 TO MaxNoOfFleets DO
++         IF i IN ConstrFleets THEN
 +            BEGIN
-+            XY.x:=x;  XY.y:=y;
-+            GetObject(XY,ObjID);
-+            IF ObjID.ObjTyp=Void THEN
-+               PutMine(XY,Empire(E));
++            ID.ObjTyp:=Flt;  ID.Index:=i;
++            GetCargo(ID,Cargo[i]);
 +            END;
-+   END;  { CreateSRMs }
- 
- END.
++
++      for ThgI:=amb TO tri do
++         begin
++         RawNeeded:=ConsCargoNeeded[Typ,ThgI];
++         for i:=1 to MaxNoOfFleets do
++            begin
++            if i in ConstrFleets then
++               begin
++               CargoToUse:=LesserInt(RawNeeded,Cargo[i][ThgI]);
++               Cargo[i][ThgI]:=Cargo[i][ThgI]-CargoToUse;
++               RawNeeded:=RawNeeded-CargoToUse;
++               end;
++            end;
++
++         if RawNeeded>0 then
++            begin
++            EnoughRawMaterial:=False;
++            Loc.ID:=ConID;  Loc.XY:=Limbo;
++            AddNews(Sta,ConsLack,Loc,Integer(ThgI),0,0);
++            goto ExitLoop;
++            end;
++         end;
++
++      { if loop finishes, then enough material.  Update fleet cargo. }
++      for i:=1 to MaxNoOfFleets do
++         if i in ConstrFleets then
++            begin
++            ID.ObjTyp:=Flt;  ID.Index:=i;
++            PutCargo(ID,Cargo[i]);
++            end;
++
++      { if loop ends here, then not enough material to build }
++      ExitLoop:
++      end;  { UseUpRawMaterial }
++
++   { UpdateConstruction: MAIN PROCEDURE }
++   BEGIN
++   WITH Universe^.Constr[i] DO
++      BEGIN
++      GetFleets(XY,ConstrFleets);
++      ConstrFleets:=ConstrFleets * SetOfFleetsOf[Emp];
++      ID.ObjTyp:=Con;  ID.Index:=i;
++      UseUpRawMaterial(CTyp,Emp,ID,ConstrFleets,EnoughRawMaterial);
++      IF EnoughRawMaterial THEN
++         BEGIN
++         TimeToCompletion:=TimeToCompletion-1;
++         IF TimeToCompletion=0 THEN
++            BEGIN
++            SetOfActiveConstructionSites:=SetOfActiveConstructionSites-[i];
++            SetOfConstructionSitesOf[Emp]:=SetOfConstructionSitesOf[Emp]-[i];
++
++            Loc.XY:=Limbo;  Loc.ID:=ID;
++            Location2Index(Emp,Loc,ConNamePtr);
++            IF ConNamePtr<>Nil THEN
++               BEGIN
++               GetDefinedName(Emp,ConNamePtr,ConName,Loc);
++               DeleteName(Emp,ConName);
++               END
++            ELSE
++               ConName:='';
++
++            Sector[XY.x]^[XY.y].Obj:=EmptyQuadrant;
++
++            Loc.XY:=Limbo;
++            CASE CTyp OF
++               SRM: PutMine(XY,Emp);
++               cmm..out: BEGIN
++                  ConstructStarbase(Emp,CTyp,XY,Loc.ID);
++                  IF ConName<>'' THEN
++                     AddName(Emp,Loc,ConName,Error);
++                  END;
++               gte..dis: BEGIN
++                  ConstructStargate(Emp,CTyp,XY,Loc.ID);
++                  IF ConName<>'' THEN
++                     AddName(Emp,Loc,ConName,Error);
++                  END;
++               END;  { case }
++
++            Loc.ID:=EmptyQuadrant;  Loc.XY:=XY;
++            AddNews(Emp,ConsDone,Loc,Integer(CTyp),0,0);
++            END;
++         END;
++      END;  { with scope }
++   END;  { UpdateConstruction }
++
++PROCEDURE UpdateEmpire(Emp: Empire);
++
++   PROCEDURE NewTechLevel(Emp: Empire);
++      VAR
++         Tech: TechLevel;
++         TechSet: TechnologySet;
++         NewTech: TechnologyTypes;
++         Chance: Index;
++         LabID,ID: IDNumber;
++         i: Word;
++         Loc: Location;
++
++      PROCEDURE GetChanceForNewTech(Emp: Empire; EmpTech: TechLevel;
++                                    VAR TotalChance: Index; VAR LabID: IDNumber);
++      { GetChanceForNewTech:
++         This procedure returns the per cent chance that the capital will 
++         gain a new technology (or increase in level) this year.  University, 
++         ruins, etc. are taken into account.  Out of all the places that 
++         research is possible, it chooses a random place to be the lab at 
++         which the technology was discovered. }
++
++         LABEL
++            ExitLoop;
++
++         TYPE
++            LabRecord = RECORD
++               WorldID: IDNumber;
++               Chance: Index;
++            END;  { LabRecord }
++
++         VAR
++            Lab: ARRAY [1..20] OF LabRecord;
++            Roll,i,NoOfLabs: Integer;
++            Typ: WorldTypes;
++            Cls: WorldClass;
++            Tch: TechLevel;
++            Eff: Index;
++            ID: IDNumber;
++
++         BEGIN
++         { get labs }
++         NoOfLabs:=0;
++
++         ID.ObjTyp:=Pln;
++         FOR i:=1 TO NoOfPlanets DO
++            IF i IN SetOfPlanetsOf[Emp] THEN
++               IF NoOfLabs<20 THEN
++                  BEGIN
++                  ID.Index:=i;
++                  Typ:=GetType(ID);
++                  Cls:=GetClass(ID);
++                  Eff:=GetEfficiency(ID);
++                  Tch:=GetTech(ID);
++                  IF Typ=CapTyp THEN
++                     BEGIN
++                     NoOfLabs:=NoOfLabs+1;
++                     Lab[NoOfLabs].WorldID:=ID;
++                     Lab[NoOfLabs].Chance:=Trunc(TechIncCap*Eff/100);
++                     END
++                  ELSE IF (Typ=RsrTyp) AND (Tch=EmpTech) THEN
++                     BEGIN
++                     NoOfLabs:=NoOfLabs+1;
++                     Lab[NoOfLabs].WorldID:=ID;
++                     IF Cls=RnsCls THEN
++                        BEGIN
++                        Lab[NoOfLabs].Chance:=Trunc(TechIncUnvRns*Eff/100);
++                        END
++                     ELSE
++                        BEGIN
++                        Lab[NoOfLabs].Chance:=Trunc(TechIncUnv*Eff/100);
++                        END;
++                     END
++                  ELSE IF (Tch>EmpTech) THEN
++                     BEGIN
++                     Inc(NoOfLabs);
++                     Lab[NoOfLabs].WorldID:=ID;
++                     Lab[NoOfLabs].Chance:=Trunc(TechIncUnv*Eff/100);
++                     END
++                  ELSE IF Cls=RnsCls THEN
++                     BEGIN
++                     NoOfLabs:=NoOfLabs+1;
++                     Lab[NoOfLabs].WorldID:=ID;
++                     Lab[NoOfLabs].Chance:=Trunc(TechIncRns*Eff/100);
++                     END;
++                  END;  { loop and if }
++
++         ID.ObjTyp:=Base;
++         FOR i:=1 TO MaxNoOfStarbases DO
++            IF i IN SetOfStarbasesOf[Emp] THEN
++               IF NoOfLabs<20 THEN
++                  BEGIN
++                  ID.Index:=i;
++                  Typ:=GetType(ID);
++                  Eff:=GetEfficiency(ID);
++                  Tch:=GetTech(ID);
++                  IF Typ=CapTyp THEN
++                     BEGIN
++                     NoOfLabs:=NoOfLabs+1;
++                     Lab[NoOfLabs].WorldID:=ID;
++                     Lab[NoOfLabs].Chance:=Trunc(TechIncCap*Eff/100);
++                     END
++                  ELSE IF (Typ=RsrTyp) AND (Tch=EmpTech) THEN
++                     BEGIN
++                     NoOfLabs:=NoOfLabs+1;
++                     Lab[NoOfLabs].WorldID:=ID;
++                     Lab[NoOfLabs].Chance:=Trunc(TechIncUnv*Eff/100);
++                     END;
++                  END;  { loop and if }
++
++         { get total chance }
++         TotalChance:=0;
++         FOR i:=1 TO NoOfLabs DO
++            WITH Lab[i] DO
++               TotalChance:=TotalChance+Chance;
++
++         { get lab }
++         Roll:=Rnd(1,TotalChance);
++         FOR i:=1 TO NoOfLabs DO
++            WITH Lab[i] DO
++               IF Roll<=Chance THEN
++                  BEGIN
++                  LabID:=WorldID;
++                  GOTO ExitLoop;
++                  END
++               ELSE
++                  BEGIN
++                  Roll:=Roll-Chance;
++                  END;
++
++         { loop should never exit here, but nothing bad happens if it does. }
++         GetCapital(Emp,LabID);
++
++         ExitLoop:
++
++         END;  { GetChanceForNewTech }
++
++      PROCEDURE GetNewTech(TechSet,PossibleTechSet: TechnologySet;
++                           VAR NewTech: TechnologyTypes);
++      { GetNewTech:
++         This procedure returns a technology that is in PossibleTechSet but
++         not in TechSet.  Returns the answer in NewTech. }
++
++         VAR
++            Tech: ARRAY [1..30] OF TechnologyTypes;
++            TechNumber: Integer;
++            TchI: TechnologyTypes;
++
++         BEGIN
++         PossibleTechSet:=PossibleTechSet-TechSet;
++
++         TechNumber:=0;
++         FOR TchI:=LAM TO dis DO
++            IF TchI IN PossibleTechSet THEN
++               BEGIN
++               TechNumber:=TechNumber+1;
++               Tech[TechNumber]:=TchI;
++               END;
++
++         NewTech:=Tech[Rnd(1,TechNumber)];
++         END;  { GetNewTech }
++
++      { NewTechLevel: MAIN PROCEDURE }
++      BEGIN
++      GetEmpireTechnology(Emp,Tech,TechSet);
++      IF TechSet<>TechDev[GteTchLvl] THEN
++         BEGIN
++         IF TechSet<>TechDev[Tech] THEN
++            { new technology }
++            BEGIN
++            GetChanceForNewTech(Emp,Tech,Chance,LabID);
++            IF Rnd(1,100)<=Chance THEN
++               BEGIN
++               GetNewTech(TechSet,TechDev[Tech],NewTech);
++               TechSet:=TechSet+[NewTech];
++               SetEmpireTechnology(Emp,Tech,TechSet);
++
++               Loc.ID:=LabID;  Loc.XY:=Limbo;
++               AddNews(Emp,NCapTech,Loc,Ord(NewTech),0,0);
++               END;  { if }
++            END
++         ELSE
++            { new tech level }
++            BEGIN
++            GetChanceForNewTech(Emp,Tech,Chance,LabID);
++            IF Rnd(1,100)<=Chance THEN
++               BEGIN
++               Tech:=Succ(Tech);
++               SetEmpireTechnology(Emp,Tech,TechSet);
++               SetTech(LabID,Tech);
++
++               { Make all other university worlds go up also. }
++               ID.ObjTyp:=Pln;
++               FOR i:=1 TO NoOfPlanets DO
++                  IF i IN SetOfPlanetsOf[Emp] THEN
++                     BEGIN
++                     ID.Index:=i;
++                     IF (GetType(ID) IN [RsrTyp,CapTyp])
++                        AND (GetTech(ID)=Pred(Tech)) THEN
++                        SetTech(ID,Tech);
++                     END;
++
++               Loc.ID:=LabID;  Loc.XY:=Limbo;
++               AddNews(Emp,NCapLvl,Loc,Ord(Tech),0,0);
++               END;  { if }
++            END;  { if }
++         END;  { if }
++      END;  { NewTechLevel }
++
++   { UpdateEmpire: MAIN PROCEDURE }
++   BEGIN
++   SetTotalRevIndex(Emp,NewTotalRevIndex[Emp]);
++   NewTechLevel(Emp)
++   END;  { UpdateEmpire }
++
++PROCEDURE GetTotalCargo(WorldID: IDNumber; VAR Cargo: TotalCargoArray);
++   VAR
++      CarI: CargoTypes;
++      Cr: CargoArray;
++
++   BEGIN
++   GetCargo(WorldID,Cr);
++   FOR CarI:=men TO tri DO
++      Cargo[CarI]:=Cr[CarI];
++   END;  { GetTotalCargo }
++
++PROCEDURE PutTotalCargo(WorldID: IDNumber; VAR Cargo: TotalCargoArray);
++   VAR
++      CarI: CargoTypes;
++      Cr: CargoArray;
++
++   BEGIN
++   FOR CarI:=men TO tri DO
++      Cr[CarI]:=ThgLmt(Cargo[CarI]);
++   PutCargo(WorldID,Cr);
++   END;  { PutTotalCargo }
++
++PROCEDURE HostileLife(WorldID: IDNumber);
++{ HostileLife: -----------------------------------------------------------------
++   This procedure will implement the special characteristics of hostile life
++   worlds.  It should only be called for worlds of class hostile life.
++------------------------------------------------------------------------------ }
++   VAR
++      Eff: Index;
++      Pop: Population;
++      Cargo: CargoArray;
++      ChanceOfAttack: Word;
++      MenAdj: Real;
++      RevI: Index;
++      Loc: Location;
++      Aliens,PopKilled,MenKilled,NnjKilled: Word;
++      Emp: Empire;
++
++   BEGIN
++   Eff:=GetEfficiency(WorldID);
++   Pop:=GetPopulation(WorldID);
++   GetCargo(WorldID,Cargo);
++   MenAdj:=(Eff+50)*((Cargo[men]+5*Cargo[nnj])/100);
++   ChanceOfAttack:=GreaterInt(0,25-Round((MenAdj-2000)/100));
++   Emp:=GetStatus(WorldID);
++   Loc.ID:=WorldID;
++   Loc.XY:=Limbo;
++
++   { Aliens attack }
++   IF Rnd(1,100)<=ChanceOfAttack THEN
++      BEGIN
++      IF Rnd(1,100)<=25 THEN
++         { ASSERT: Population killed. }
++         BEGIN
++         PopKilled:=LesserInt(Pop,Rnd(10,50));
++         Pop:=Pop-PopKilled;
++         ChangeRevIndex(WorldID,Rnd(5,15));
++         SetPopulation(WorldID,Pop);
++         AddNews(Emp,HLPopKill,Loc,PopKilled,0,0);
++         END
++      ELSE
++         { ASSERT: Troops killed. }
++         BEGIN
++         MenKilled:=LesserInt(Cargo[men],Rnd(200,300));
++         NnjKilled:=LesserInt(Cargo[nnj],Rnd(20,50));
++         Dec(Cargo[men],MenKilled);
++         Dec(Cargo[nnj],NnjKilled);
++         PutCargo(WorldID,Cargo);
++         AddNews(Emp,HLMenKill,Loc,MenKilled,NnjKilled,0);
++         END;
++      END
++   ELSE IF (Emp<>Indep) AND (Rnd(1,100)<=20) THEN
++      { ASSERT: Aliens join world }
++      BEGIN
++      Aliens:=Rnd(50,150);
++      Cargo[nnj]:=Cargo[nnj]+Aliens;
++      PutCargo(WorldID,Cargo);
++      AddNews(Emp,HLJoin,Loc,Aliens,0,0);
++      END;
++   END;  { HostileLife }
++
++PROCEDURE SupplyLink(BaseID: IDNumber; VAR TempCargo: TotalCargoArray);
++{ SupplyLink: ------------------------------------------------------------------
++   This procedure will take raw materials and supplies from any worlds that are
++   nearby.
++------------------------------------------------------------------------------ }
++   VAR
++      BaseXY,XY: XYCoord;
++      x,y: Integer;
++      Dir: Directions;
++      RawMineID: IDNumber;
++      Cargo,CargoTrans,BaseCargo: CargoArray;
++      RawI: CargoTypes;
++      Emp: Empire;
++
++   BEGIN
++   GetCoord(BaseID,BaseXY);
++   Emp:=GetStatus(BaseID);
++   FOR Dir:=No TO NW DO
++      BEGIN
++      x:=BaseXY.x+DirX[Dir];  y:=BaseXY.y+DirY[Dir];
++      IF InGalaxy(x,y) THEN
++         BEGIN
++         XY.x:=x;  XY.y:=Y;
++         GetObject(XY,RawMineID);
++         IF (RawMineID.ObjTyp=Pln) AND (GetStatus(RawMineID)=Emp)
++            AND (GetType(RawMineID) IN [AgrTyp,CheTyp,MinTyp,RawTyp,TriTyp]) THEN
++            BEGIN
++            GetCargo(RawMineID,Cargo);
++            FOR RawI:=che TO tri DO
++               BEGIN
++               IF Cargo[RawI]>250 THEN
++                  CargoTrans[RawI]:=Cargo[RawI]-Rnd(200,250)
++               ELSE
++                  CargoTrans[RawI]:=0;
++
++               Cargo[RawI]:=Cargo[RawI]-CargoTrans[RawI];
++               TempCargo[RawI]:=TempCargo[RawI]+CargoTrans[RawI];
++               END;
++
++            PutCargo(RawMineID,Cargo);
++            END;
++         END;
++      END;  { loop }
++   END;  { SupplyLink }
++
++PROCEDURE SurplusLink(BaseID: IDNumber; VAR TempCargo: TotalCargoArray);
++{ SupplyLink: ------------------------------------------------------------------
++   This procedure will return raw materials and supplies from a base to
++   any raw material worlds nearby.
++------------------------------------------------------------------------------ }
++   VAR
++      BaseXY,XY: XYCoord;
++      x,y: Integer;
++      Dir: Directions;
++      RawMineID: IDNumber;
++      CargoTrans: Word;
++      Cargo: CargoArray;
++      RawI: CargoTypes;
++      Emp: Empire;
++
++   BEGIN
++   GetCoord(BaseID,BaseXY);
++   Emp:=GetStatus(BaseID);
++   FOR Dir:=No TO NW DO
++      BEGIN
++      x:=BaseXY.x+DirX[Dir];  y:=BaseXY.y+DirY[Dir];
++      IF InGalaxy(x,y) THEN
++         BEGIN
++         XY.x:=x;  XY.y:=Y;
++         GetObject(XY,RawMineID);
++         IF (RawMineID.ObjTyp=Pln) AND (GetStatus(RawMineID)=Emp)
++            AND (GetType(RawMineID) IN [AgrTyp,CheTyp,MinTyp,RawTyp,TriTyp]) THEN
++            BEGIN
++            GetCargo(RawMineID,Cargo);
++            FOR RawI:=che TO tri DO
++               IF TempCargo[RawI]>MaxResources THEN
++                  BEGIN
++                  CargoTrans:=LesserInt(MaxResources-Cargo[RawI],TempCargo[RawI]-MaxResources);
++
++                  Cargo[RawI]:=Cargo[RawI]+CargoTrans;
++                  TempCargo[RawI]:=TempCargo[RawI]-CargoTrans;
++                  END;
++
++            PutCargo(RawMineID,Cargo);
++            END;
++         END;
++      END;  { loop }
++   END;  { SurplusLink }
++
++PROCEDURE UpdateMilitary(WorldID: IDNumber;
++                         Typ: WorldTypes;
++                         Pop: Population;
++                         VAR MPop: Resources);
++   VAR
++      OptimumMilitary: Resources;
++
++   BEGIN
++   OptimumMilitary:=ThgLmt(RndVar(Round((Pop/150)*OptMilitary[Typ]),10));
++   IF OptimumMilitary>MPop THEN
++      MPop:=ThgLmt(MPop+(Pop/10)*(OptMilitary[Typ]/100));
++   END;  { UpdateMilitary }
++
++PROCEDURE Rebellion(WorldID: IDNumber;
++                    RevIndex: Index;
++                    Military: Resources);
++
++   VAR
++      MenLost,Lost: Word;
++      Rebels: Resources;
++      ChanceToEndRebel: Real;
++      Cargo: CargoArray;
++      Loc: Location;
++      Emp: Empire;
++      Pop: Population;
++      Eff: Index;
++
++   { Rebellion: MAIN PROCEDURE }
++   BEGIN
++   Pop:=GetPopulation(WorldID);
++   Eff:=GetEfficiency(WorldID);
++   Emp:=GetStatus(WorldID);
++   GetCargo(WorldID,Cargo);
++   Loc.ID:=WorldID;  Loc.XY:=Limbo;
++
++   Rebels:=GreaterInt(1,ThgLmt(Sqrt(Pop)*65));
++   MenLost:=Rebels DIV 5;
++   ChanceToEndRebel:=(Military/Sqrt(Rebels))*1.414213;
++
++   { Military men lost }
++   Lost:=LesserInt(Cargo[men],MenLost);
++   Dec(Cargo[men],Lost);
++   Dec(MenLost,Lost);
++   Lost:=LesserInt(Cargo[nnj],MenLost DIV 5);
++   Dec(Cargo[nnj],Lost);
++
++   IF Rnd(1,100)<ChanceToEndRebel THEN
++      { ASSERT: Empire puts down rebellion }
++      BEGIN
++      ChangeRevIndex(WorldID,Rnd(-15,5));
++      AddNews(Emp,URebel,Loc,MenLost,0,0);
++      NewTotalRevIndex[Emp]:=NewTotalRevIndex[Emp]-Rnd(1,5);
++      END
++   ELSE
++      { ASSERT: World rebels }
++      BEGIN
++      SetStatus(WorldID,Indep);
++      SetType(WorldID,IndTyp);
++      InitializeISSP(WorldID);
++      ChangeRevIndex(WorldID,-Rnd(40,50));
++      AddGlobalNews([Emp],WorldID,GLBRev,Loc,Ord(Emp),0,0);
++      AddNews(Emp,Rebel,Loc,0,0,0);
++
++      Cargo[men]:=ThgLmt(Rebels);
++
++      NewTotalRevIndex[Emp]:=NewTotalRevIndex[Emp]+Rnd(5,10);
++      END;
++
++   PutCargo(WorldID,Cargo);
++   Pop:=ThgLmt(Pop-Military/1000);
++   SetPopulation(WorldID,Pop);
++   Eff:=GreaterInt(0,Eff-Rnd(5,15));
++   SetEfficiency(WorldID,Eff);
++   END;  { Rebellion }
++
++PROCEDURE UpdateRevolution(WorldID: IDNumber);
++   VAR
++      Emp: Empire;
++      Pop: Population;
++      Typ: WorldTypes;
++      Cargo: CargoArray;
++      Loc: Location;
++      EmpRevAdj,Factor: Integer;
++      RevIndex: Index;
++      Military,OptimumMilitary: Resources;
++
++   { UpdateRevolution: MAIN PROCEDURE }
++   BEGIN
++   Emp:=GetStatus(WorldID);
++   Pop:=GetPopulation(WorldID);
++   Typ:=GetType(WorldID);
++
++   { Decrease revolution index }
++   EmpRevAdj:=RndVar(TotalRevIndex(Emp),50);
++   IF Typ=CapTyp THEN
++      ChangeRevIndex(WorldID,-Rnd(20,30))
++   ELSE
++      ChangeRevIndex(WorldID,EmpRevAdj+Rnd(-5,2));
++
++   IF Emp<>Indep THEN
++      { ASSERT: World is not independent, chance of rebellion exists. }
++      BEGIN
++      RevIndex:=GetRevIndex(WorldID);
++      GetCargo(WorldID,Cargo);
++      Loc.ID:=WorldID;  Loc.XY:=Limbo;
++
++      { Military presence affects revolution }
++      OptimumMilitary:=ThgLmt(RndVar(Round((Pop/150)*OptMilitary[Typ]),10));
++      Military:=ThgLmt(Cargo[men]+5.0*Cargo[nnj]);
++      IF Military>OptimumMilitary THEN
++         { ASSERT: Too many troops }
++         BEGIN
++         IF RevIndex>30 THEN
++            { ASSERT: Troops calm rebellion }
++            BEGIN
++            Factor:=Rnd(1,(Military-OptimumMilitary) DIV 100);
++            ChangeRevIndex(WorldID,-Factor);
++            IF Factor>5 THEN
++               AddNews(Emp,RevControl,Loc,0,0,0);
++            END
++         ELSE IF (Typ<>CapTyp) AND (Typ<>BseTyp) THEN
++            { ASSERT: Too many troops cause resentment }
++            BEGIN
++            IF Rnd(1,5)=1 THEN
++               BEGIN
++               ChangeRevIndex(WorldID,Rnd(5,15));
++               AddNews(Emp,MilitRev,Loc,0,0,0);
++               END;
++            END;
++         END;
++
++      RevIndex:=GetRevIndex(WorldID);
++
++      IF RevIndex>75 THEN
++         BEGIN
++         IF (Rnd(1,100)<RevIndex) AND (Typ<>CapTyp) THEN
++            Rebellion(WorldID,RevIndex,Military)
++         ELSE
++            AddNews(Emp,RebelW4,Loc,0,0,0);
++         END
++      ELSE IF RevIndex>70 THEN
++         AddNews(Emp,RebelW4,Loc,0,0,0)
++      ELSE IF RevIndex>66 THEN
++         AddNews(Emp,RebelW3,Loc,0,0,0)
++      ELSE IF RevIndex>43 THEN
++         AddNews(Emp,RebelW2,Loc,0,0,0)
++      ELSE IF RevIndex>30 THEN
++         AddNews(Emp,RebelW1,Loc,0,0,0);
++      END;
++   END;  { UpdateRevolution }
++
++PROCEDURE ProduceTrillum(WorldID: IDNumber; VAR TriProd: Resources; TriAvail: LongInt);
++{ ProduceTrillum: --------------------------------------------------------------
++   Decrements the trillum reserves on the world by the amount indicated by
++   TriProd. If trillum reserves are low, the procedure will decrease the
++   amount produced and send out warnings.
++------------------------------------------------------------------------------ }
++   VAR
++      TriReserves: Word;
++      Loc: Location;
++      Emp: Empire;
++
++   BEGIN
++   TriReserves:=TrillumReserves(WorldID);
++   Loc.ID:=WorldID;  Loc.XY:=Limbo;
++   Emp:=GetStatus(WorldID);
++
++   TriAvail:=LesserInt(TriAvail,MaxResources);
++   TriProd:=LesserInt(TriProd,MaxResources-TriAvail);
++
++   IF TriReserves=0 THEN
++      BEGIN
++      TriProd:=0;
++      AddNews(Emp,NoTriRes,Loc,0,0,0);
++      ChangeRevIndex(WorldID,Rnd(10,20));
++      END
++   ELSE IF (TriReserves*LongInt(20))<TriProd THEN
++      BEGIN
++      AddNews(Emp,TriResWarn1,Loc,0,0,0);
++      ChangeRevIndex(WorldID,Rnd(5,10));
++      END
++   ELSE IF ((TriReserves*LongInt(10))<TriProd) AND (Rnd(1,2)=1) THEN
++      BEGIN
++      AddNews(Emp,TriResWarn2,Loc,0,0,0);
++      ChangeRevIndex(WorldID,Rnd(3,5));
++      END;
++
++   TriReserves:=GreaterInt(0,Integer(TriReserves)-Round(TriProd/100));
++   PutTrillumReserves(WorldID,TriReserves);
++   END;  { ProduceTrillum }
++
++PROCEDURE ProduceRawMaterial(ObjID: IDNumber;
++                             Indus: IndusArray;
++                             Technology: TechnologySet;
++                             IP: Real;
++                             VAR TempCargo: TotalCargoArray);
++{ ProduceRawMaterial:
++   Given the industrial array of a world, this procedure will produce
++   chem, metals, etc.  TempCargo is updated. }
++
++   var
++      Prod: Resources;
++      IndI: IndusTypes;
++      ThgI: ResourceTypes;
++      ProdAdj: Real;
++
++   { ProduceRawMaterial: MAIN PROCEDURE }
++   BEGIN
++   FOR IndI:=CheInd TO TriInd DO
++      IF Indus[IndI]>0 THEN
++         BEGIN
++         ProdAdj:=IP*Sqr(Indus[IndI]+K4);
++         FOR ThgI:=che TO tri DO
++            IF (ThgAdj[IndI,ThgI]<>0) AND (ThgI IN Technology) THEN
++               BEGIN
++               { Prod = no of things produced }
++               Prod:=GreaterInt(1,ThgLmt(ProdAdj*ThgAdj[IndI,ThgI]));
++
++               IF ThgI=tri THEN
++                  ProduceTrillum(ObjID,Prod,TempCargo[tri]);
++
++               { add new production }
++               Inc(TempCargo[ThgI],Prod);
++               END;  { if and loop }
++         END;  { loop }
++   END;  { ProduceRawMaterial }
++
++PROCEDURE UpdateWorld(World: IDNumber);
++{ INTERFACE PROCEDURE: UpdateWorld }
++
++   VAR
++      IndDist: IndusDistArray;
++      OtherReports: ResourceSet;
++      ETech: TechLevel;
++      Technology: TechnologySet;
++      IP: Real;
++      TempCargo: TotalCargoArray;
++
++   PROCEDURE Production(ID: IDNumber;
++                        Typ: WorldTypes;
++                        Indus: IndusArray;
++                        Technology: TechnologySet;
++                        IP: Real;
++                        VAR Ships: ShipArray;
++                        VAR Cargo: TotalCargoArray;
++                        VAR OtherReports: ResourceSet);
++   { Production:
++      Given the industrial array of a world, this procedure will produce ships,
++      metals, etc.  Ships and Cargo are updated.  Raw materials are used up. }
++
++      VAR
++         Prod: Resources;
++         IndI: IndusTypes;
++         ThgI: ResourceTypes;
++         RawI: CargoTypes;
++         RawNeeded: ARRAY [CargoTypes] OF Integer;
++         InfiniteSource,UsedUp: Resources;
++         ProdAdj: Real;
++
++      { Production: MAIN PROCEDURE }
++      BEGIN
++      FOR IndI:=BioInd TO SYTInd DO
++         IF Indus[IndI]>0 THEN
++            BEGIN
++            ProdAdj:=IP*Sqr(Indus[IndI]+K4);
++            FOR ThgI:=fgt TO amb DO
++               IF (ThgAdj[IndI,ThgI]<>0) AND (ThgI in Technology) then
++                  begin
++                  { Prod = no of things produced }
++                  Prod:=ThgLmt(ProdAdj*ThgAdj[IndI,ThgI]);
++
++                  { Only ninja type worlds make ninjas }
++                  IF (ThgI=nnj) AND (Typ<>NnjTyp) THEN
++                     Prod:=0
++                  { Only ambrosia type worlds make ambrosia }
++                  ELSE IF (ThgI=amb) AND (Typ<>AmbTyp) THEN
++                     Prod:=0
++                  { Only ambrosia and paradise class worlds make ambrosia }
++                  ELSE IF (ThgI=amb) AND (NOT (GetClass(ID) IN [AmbCls,ParCls])) THEN
++                     Prod:=0
++                  ELSE IF Prod<=0 THEN
++                     Prod:=1;
++
++                  { do not produce if already at MaxResources }
++                  IF ThgI IN [fgt..trn] THEN
++                     Prod:=LesserInt(Prod,MaxResources-Ships[ThgI])
++                  ELSE
++                     Prod:=LesserInt(Prod,MaxResources-LesserInt(Cargo[ThgI],MaxResources));
++
++                  { adjust Prod if not enough raw material }
++                  FOR RawI:=amb TO tri DO
++                     IF RawM[ThgI][RawI]>0 THEN
++                        BEGIN
++                        RawNeeded[RawI]:=ThgLmt(Prod*(RawM[ThgI][RawI]/100));
++                        IF RawNeeded[RawI]>Cargo[RawI] THEN
++                           BEGIN
++                           Prod:=ThgLmt((Cargo[RawI]/RawM[ThgI][RawI])*100);
++                           RawNeeded[RawI]:=ThgLmt(Prod*(RawM[ThgI][RawI]/100));
++                           IF ID.ObjTyp<>Base THEN
++                              ReportPlanetLack(GetStatus(ID),ID,Lack,Integer(RawI),0,0,OtherReports);
++                           END;
++                        END
++                     ELSE
++                        RawNeeded[RawI]:=0;
++
++                  { subtract raw material }
++                  FOR RawI:=che TO tri DO
++                     BEGIN
++                     RawNeeded[RawI]:=LesserInt(Cargo[RawI],RawNeeded[RawI]);
++                     Dec(Cargo[RawI],RawNeeded[RawI]);
++                     END;
++
++                  { add new production }
++                  IF ThgI IN [fgt..trn] THEN
++                     Ships[ThgI]:=LesserInt(MaxResources,Ships[ThgI]+Prod)
++                  ELSE
++                     Inc(Cargo[ThgI],Prod);
++                  END;  { if and loop }
++            END;  { loop }
++      END;  { Production }
++
++   procedure UpdateIndustry(ID: IDNumber;
++                            Cls: WorldClass;
++                            Tech: TechLevel;
++                            Eff: Index;
++                            Pop: Population;
++                            AmbAddict: Boolean;
++                            VAR IndDist: IndusDistArray;
++                            VAR Indus: IndusArray;
++                            VAR Cargo: TotalCargoArray;
++                            VAR OtherReports: ResourceSet);
++   { UpdateIndustry: }
++
++      var
++         TIP: Integer;
++         OptimumLevel: IndusIndex;
++         RawNeeded: Resources;
++         IndI: IndusTypes;
++         ConsRate: Integer;
++         Temp: Real;
++
++      BEGIN
++      TIP:=TotalProd(Pop,Tech);
++      IF AmbAddict THEN
++         TIP:=Round(TIP*AmbrosiaAdj);
++      IF TIP>999 THEN
++         TIP:=999;
++
++      Temp:=TIP/10000;
++      FOR IndI:=BioInd TO TriInd DO
++         BEGIN
++         OptimumLevel:=Round(Temp*IndDist[IndI]*ClassIndAdj[Cls,IndI]);
++         IF (IndDist[IndI]>0) AND (OptimumLevel=0) THEN
++            OptimumLevel:=1;
++         IF Indus[IndI]<OptimumLevel THEN
++            BEGIN
++            ConsRate:=Round(OptimumLevel*(Eff/500));
++            IF ConsRate<1 THEN
++               ConsRate:=1;
++            ConsRate:=LesserInt(ConsRate,OptimumLevel-Indus[IndI]);
++            RawNeeded:=ThgLmt((ConsRate/100)*NewIndRawN[IndI]);
++            IF RawNeeded>Cargo[Met] THEN
++               BEGIN
++               ConsRate:=Trunc(100*(Cargo[met]/NewIndRawN[IndI]));
++               RawNeeded:=Cargo[met];
++               ReportPlanetLack(GetStatus(ID),ID,IndLack,Integer(met),0,0,OtherReports);
++               END;
++            END
++         ELSE IF Indus[IndI]>OptimumLevel THEN
++            BEGIN
++            ConsRate:=-Round(Eff/2);
++            IF ConsRate>-1 THEN
++               ConsRate:=-1;
++            IF Indus[IndI]+ConsRate<OptimumLevel then
++               ConsRate:=OptimumLevel-Indus[IndI];
++            RawNeeded:=0;
++            END
++         ELSE
++            BEGIN
++            ConsRate:=0;
++            RawNeeded:=0;
++            END;
++
++         IF Indus[IndI]+ConsRate>999 THEN
++            BEGIN
++            ConsRate:=999-Indus[IndI];
++            RawNeeded:=ThgLmt((ConsRate/100)*NewIndRawN[IndI]);
++            END
++         ELSE IF Indus[IndI]+ConsRate<0 THEN
++            BEGIN
++            ConsRate:=-Indus[IndI];
++            RawNeeded:=0;
++            END;
++
++         Indus[IndI]:=Indus[IndI]+ConsRate;
++
++         RawNeeded:=LesserInt(Cargo[met],RawNeeded);
++         Dec(Cargo[met],RawNeeded);
++         END;  { loop }
++      END;  { UpdateIndustry }
++
++   PROCEDURE UpdateEfficiency(Emp: Empire; VAR Eff: Index);
++      VAR
++         Inc: Index;
++
++      BEGIN
++      IF Emp=Indep THEN
++         BEGIN
++         Inc:=Rnd(0,1);
++         END
++      ELSE
++         BEGIN
++         CASE Eff OF
++             0..25 : Inc:=Rnd(5,12);
++            26..50 : Inc:=Rnd(3,8);
++            51..75 : Inc:=Rnd(2,5);
++            76..90 : Inc:=Rnd(0,3);
++            91..99 : Inc:=Rnd(0,1);
++         ELSE
++            Inc:=0;
++         END;  { case }
++         END;
++
++      Eff:=LesserInt(100,Eff+Inc);
++      END;  { UpdateEfficiency }
++
++   PROCEDURE UpdateTechLevel(ID: IDNumber; Emp: Empire;
++                             VAR Tech: TechLevel);
++      VAR
++         Loc: Location;
++         CapitalTech: TechLevel;
++         CapitalID: IDNumber;
++
++      BEGIN
++      IF Tech<>GteTchLvl THEN
++         BEGIN
++         IF Emp=Indep THEN
++            BEGIN
++            IF Rnd(1,50)=1 THEN
++               Tech:=Succ(Tech);
++            END
++         ELSE
++            BEGIN
++            GetCapital(Emp,CapitalID);
++            CapitalTech:=GetTech(CapitalID);
++
++            IF CapitalTech>Tech THEN
++               BEGIN
++               IF Rnd(1,100)<=TechLvlInc THEN
++                  BEGIN
++                  Tech:=Succ(Tech);
++                  Loc.ID:=ID;  Loc.XY:=Limbo;
++                  AddNews(Emp,NTech,Loc,Integer(Tech),0,0);
++                  END;
++               END
++            ELSE IF CapitalTech<Tech THEN
++               BEGIN
++               IF Rnd(1,15)=1 THEN
++                  BEGIN
++                  Tech:=Pred(Tech);
++                  Loc.ID:=ID;  Loc.XY:=Limbo;
++                  AddNews(Emp,RTech,Loc,Integer(Tech),0,0);
++                  END;
++               END;
++            END;
++         END;
++      END;  { UpdateTechLevel }
++
++   PROCEDURE UpdatePopulation(Class: WorldClass;
++                              Tech: TechLevel;  var Pop: Population);
++      CONST
++         MaxPop: ARRAY [WorldClass] OF Integer =
++         ( 4830,  { AmbCls }
++           4100,  { ArdCls }
++           3100,  { ArtCls }
++           2340,  { BarCls }
++           4610,  { ClsJ   }
++           4600,  { ClsK   }
++           4220,  { ClsL   }
++           4800,  { ClsM   }
++           3580,  { DrtCls }
++           4500,  { EthCls }
++           4710,  { FstCls }
++           2010,  { GsGCls }
++           4010,  { HLfCls }
++           1920,  { IceCls }
++           4720,  { JngCls }
++           3520,  { OcnCls }
++           5000,  { ParCls }
++           2100,  { PsnCls }
++           4590,  { RnsCls }
++           4500,  { UndCls }
++           3950   { VlcCls } );
++
++      VAR
++         Increase: Real;
++
++      BEGIN
++      IF Pop>MaxPop[Class] THEN
++         Increase:=Rnd(-10,10)
++      ELSE IF Pop<75 THEN
++         Increase:=Rnd(2,5)
++      ELSE IF Pop>BasePop[Tech] THEN
++         { linear growth }
++         Increase:=BasePop[Tech]/100
++      ELSE
++         { exponential growth }
++         Increase:=128.0*Pop/(MaxPop[Class]);
++
++      Pop:=Pop+Round(Increase);
++      END;  { UpdatePopulation }
++
++   PROCEDURE UseUpFood(WorldID: IDNumber; var Pop: Population;
++                       var Food: Resources);
++
++      { This array adjusts for tech level when increasing revolution index.  
++        Low tech level planets will be used to starving and will not revolt 
++        as quickly as high level planets.  The constant is in units of 
++        index points per 100 million people starved. }
++      CONST
++         TechAdj: ARRAY [TechLevel] OF Integer =
++         {  pt   p  pa   a  pw   w   j   b   s  pg   g }
++         ( 100,100, 30, 20, 15, 13, 12, 13, 14, 14, 15 );
++
++      VAR
++         Loc: Location;
++         FoodNeeded,Lack: Resources;
++         RevInc,Starve: Integer;
++         Tech: TechLevel;
++
++      BEGIN
++      FoodNeeded:=ThgLmt((Pop/100)*SuppliesPerBillion);
++      IF FoodNeeded>Food THEN
++         BEGIN
++         Lack:=FoodNeeded-Food;
++         Food:=0;
++         Starve:=Lack DIV 6;
++         IF Starve>(Pop DIV 10) THEN
++            Starve:=Pop DIV 10;
++
++         Pop:=Pop-Starve;
++
++         IF Starve>0 THEN
++            BEGIN
++            Tech:=GetTech(WorldID);
++            Loc.ID:=WorldID;  Loc.XY:=Limbo;
++            AddNews(GetStatus(WorldID),Starv,Loc,Starve,0,0);
++            RevInc:=LesserInt(Trunc(TechAdj[Tech]*(Starve/10)),45);
++            ChangeRevIndex(WorldID,RevInc);
++            END;
++         END
++      ELSE
++         BEGIN
++         Food:=Food-FoodNeeded;
++         END;
++      END;  { UseUpFood }
++
++   PROCEDURE UseUpAmbrosia(WorldID: IDNumber;
++                           Emp: Empire;
++                           VAR Special: SetOfSpecialConditions;
++                           VAR Pop: Population;
++                           VAR Eff: Index;
++                           VAR Tech: TechLevel;
++                           VAR Indus: IndusArray;
++                           VAR Ambrosia: Resources);
++
++      VAR
++         AmbNeeded,Lack: Resources;
++         Die: Population;
++         Loc: Location;
++         EffChange,IndDest: Integer;
++         IndI: IndusTypes;
++
++      BEGIN
++      AmbNeeded:=ThgLmt((Pop/100)*DrugsPerBillion);
++      Loc.ID:=WorldID;  Loc.XY:=Limbo;
++
++      IF AmbAddict IN Special THEN
++         BEGIN
++         IF AmbNeeded<=Ambrosia THEN
++            BEGIN
++            Ambrosia:=Ambrosia-AmbNeeded;
++            END
++         ELSE
++            { ASSERT: not enough ambrosia }
++            BEGIN
++            Lack:=AmbNeeded-Ambrosia;
++            Ambrosia:=0;
++
++            { PEOPLE DIE }
++            Die:=ThgLmt(AddictDeathCoeff*Lack);
++            IF Die>(Pop div 7) THEN
++               Die:=Pop div 7;
++
++            Pop:=Pop-Die;
++
++            IF Die>0 THEN
++               BEGIN
++               AddNews(Emp,AddictDie,Loc,Die,0,0);
++               END;
++
++            { EFFICIENCY DECREASES }
++            EffChange:=Trunc(AddictEffCoeff*Die);
++            EffChange:=LesserInt(EffChange,Eff);
++            Eff:=Eff-EffChange;
++
++            { REV INDEX INCREASES }
++            ChangeRevIndex(WorldID,Trunc(AddictRevICoeff*Die));
++
++            { RANDOM EFFECTS }
++            CASE Rnd(1,10) OF
++               1..4: BEGIN END;
++               5..7: BEGIN
++                     Die:=ThgLmt((Rnd(50,120)/100)*Die);
++                     IF Die>0 THEN
++                        BEGIN
++                        Pop:=Pop-Die;
++                        AddNews(Emp,RiotsDie,Loc,Die,0,0);
++                        END;
++                     END;
++               8..9: BEGIN
++                     FOR IndI:=BioInd TO TriInd DO
++                        BEGIN
++                        IndDest:=Trunc(Indus[IndI]*Rnd(0,20)/100);
++                        Indus[IndI]:=Indus[IndI]-IndDest;
++                        IF IndDest>0 THEN
++                           AddNews(Emp,IndDs,Loc,IndDest,Integer(IndI),0);
++                        END;
++                     END;
++                 10: BEGIN
++                     IF Tech>PreTchLvl THEN
++                        Tech:=Pred(Tech);
++
++                     AddNews(Emp,RTech,Loc,Integer(Tech),0,0);
++                     END;
++            END;  { case }
++
++            { UN-ADDICT }
++            IF Rnd(1,100)<=ChanceToAddict THEN
++               BEGIN
++               Special:=Special-[AmbAddict];
++               AddNews(Emp,UAddict,Loc,0,0,0);
++               END;  { if }
++            END;  { if }
++         END
++      ELSE
++         { ASSERT: world not addicted. }
++         BEGIN
++         IF Ambrosia>0 THEN
++            BEGIN
++            IF AmbNeeded<=Ambrosia THEN
++               BEGIN
++               IF Rnd(1,100)<ChanceToAddict THEN
++                  BEGIN
++                  Special:=Special+[AmbAddict];
++                  AddNews(Emp,WAddict,Loc,0,0,0);
++                  END;
++               END;
++
++            AmbNeeded:=AmbNeeded DIV 2;
++            IF AmbNeeded<=Ambrosia THEN
++               BEGIN
++               Ambrosia:=Ambrosia-AmbNeeded;
++               END
++            ELSE
++               BEGIN
++               Ambrosia:=0;
++               END;
++            END;
++         END;  { if }
++      END;  { UseUpAmbrosia }
++
++   PROCEDURE UpdateDefenses(WorldID: IDNumber;
++                            Pop: Population;
++                            Tech: TechLevel;
++                            Typ: WorldTypes;
++                            Eff: Index;
++                            Technology: TechnologySet;
++                            VAR Defns: DefnsArray;
++                            VAR Cargo: CargoArray;
++                            VAR OtherReports: ResourceSet);
++      VAR
++         DefI: DefnsTypes;
++         MPop: Word;
++         UsedUp,InfiniteSource,OptimumDef: Resources;
++         Build,MaxBuild,RawNeeded: Resources;
++         Car: CargoTypes;
++         Optimum,BuildRate: Real;
++         BTyp: StarbaseTypes;
++
++      BEGIN
++      MPop:=TroopStrength(WorldID);
++      BuildRate:=(MPop/2000)*(1+((Eff-50)/100));
++      Optimum:=(MPop/100);
++
++      IF WorldID.ObjTyp=Pln THEN
++         BuildRate:=BuildRate*(Pop/2000)
++      ELSE IF WorldID.ObjTyp=Base THEN
++         BEGIN
++         BTyp:=GetBaseType(WorldID);
++         IF BTyp=out THEN
++            Optimum:=Optimum/4
++         ELSE IF (BTyp=cmm) OR (BTyp=frt) THEN
++            BEGIN
++            Optimum:=Optimum*4;
++            BuildRate:=BuildRate*4;
++            END;
++         END;
++
++      FOR DefI:=LAM TO ion DO
++         IF DefI IN Technology THEN
++            BEGIN
++            OptimumDef:=ThgLmt(Optimum*DefAdj[DefI]);
++            IF (WorldID.ObjTyp=Base) AND (BTyp=out) AND (DefI=def) THEN
++               OptimumDef:=0;
++
++            IF (DefI=LAM) AND (NOT (Typ IN [BseTyp,CapTyp])) THEN
++               OptimumDef:=0;
++
++            IF Defns[DefI]<OptimumDef THEN
++               BEGIN
++               MaxBuild:=GreaterInt(ThgLmt(BuildRate*DefBuildRate[DefI]),1);
++               Build:=LesserInt(OptimumDef-Defns[DefI] , MaxBuild);
++
++               FOR Car:=che TO tri DO
++                  BEGIN
++                  RawNeeded:=ThgLmt((RawM[DefI][Car]/100)*Build);
++                  IF RawNeeded>Cargo[Car] THEN
++                     BEGIN
++                     Build:=ThgLmt((Cargo[Car]/RawM[DefI][Car])*100);
++                     ReportPlanetLack(GetStatus(WorldID),WorldID,DefLack,Integer(Car),0,0,OtherReports);
++                     END;
++                  END;
++
++               FOR Car:=che TO tri DO
++                  BEGIN
++                  UsedUp:=0;
++                  RawNeeded:=ThgLmt(Build*(RawM[DefI][Car]/100));
++                  MoveThings(RawNeeded,Cargo[Car],UsedUp);
++                  END;
++
++               InfiniteSource:=MaxResources;
++               MoveThings(Build,InfiniteSource,Defns[DefI]);
++               END;
++            END;  { loop }
++      end;  { UpdateDefenses }
++
++   { UpdateWorld: MAIN PROCEDURE }
++   BEGIN
++   IF World.ObjTyp=Pln THEN
++      WITH Universe^.Planet[World.Index] DO
++         BEGIN
++         OtherReports:=[];
++         IF Emp=Indep THEN
++            BEGIN
++            IF Tech>PreTchLvl THEN
++               Technology:=TechDev[Pred(Tech)]
++            ELSE
++               Technology:=TechDev[Tech];
++            END
++         ELSE BEGIN
++            GetEmpireTechnology(Emp,ETech,Technology);
++            Technology:=Technology * TechDev[Tech];
++            END;
++
++         { Calculate Industrial Production }
++         IP:=(TechAdj2[Tech]/100)*((Eff+250)/100)/K6;
++
++         GetTotalCargo(World,TempCargo);
++         ProduceRawMaterial(World,Indus,Technology,IP,TempCargo);
++         GetIndustrialDistribution(World,IndDist);
++         UpdateIndustry(World,Cls,Tech,Eff,Pop,(AmbAddict IN Special),IndDist,Indus,TempCargo,OtherReports);
++         Production(World,Typ,Indus,Technology,IP,Ships,TempCargo,OtherReports);
++         PutTotalCargo(World,TempCargo);
++
++         UpdateEfficiency(Emp,Eff);
++         UpdateTechLevel(World,Emp,Tech);
++         UpdatePopulation(Cls,Tech,Pop);
++         UseUpFood(World,Pop,Cargo[sup]);
++         UseUpAmbrosia(World,Emp,Special,Pop,Eff,Tech,Indus,Cargo[amb]);
++         UpdateMilitary(World,Typ,Pop,Cargo[men]);
++         UpdateDefenses(World,Pop,Tech,Typ,Eff,Technology,Defns,Cargo,OtherReports);
++         UpdateRevolution(World);
++         IF Cls=HLfCls THEN
++            HostileLife(World);
++         END  { with scope }
++   ELSE IF World.ObjTyp=Base THEN
++      WITH Universe^.Starbase[World.Index] DO
++         BEGIN
++         OtherReports:=[];
++         IF Emp=Indep THEN
++            Technology:=TechDev[Pred(Tech)]
++         ELSE BEGIN
++            GetEmpireTechnology(Emp,ETech,Technology);
++            Technology:=Technology * TechDev[Tech];
++            END;
++
++         IF STyp=cmp THEN
++            BEGIN
++            IP:=(TechAdj2[Tech]/100)*((Eff+250)/100)/K6;
++
++            GetTotalCargo(World,TempCargo);
++            SupplyLink(World,TempCargo);
++            ProduceRawMaterial(World,Indus,Technology,IP,TempCargo);
++            GetIndustrialDistribution(World,IndDist);
++            UpdateIndustry(World,ArtCls,Tech,Eff,Pop,(AmbAddict IN Special),IndDist,Indus,TempCargo,OtherReports);
++            Production(World,Typ,Indus,Technology,IP,Ships,TempCargo,OtherReports);
++            SurplusLink(World,TempCargo);
++            PutTotalCargo(World,TempCargo);
++            END;
++
++         UpdateEfficiency(Emp,Eff);
++         UpdateTechLevel(World,Emp,Tech);
++
++         IF STyp=cmp THEN
++            BEGIN
++            UpdatePopulation(ArtCls,Tech,Pop);
++            UseUpFood(World,Pop,Cargo[sup]);
++            UseUpAmbrosia(World,Emp,Special,Pop,Eff,Tech,Indus,Cargo[amb]);
++            UpdateMilitary(World,Typ,Pop,Cargo[men]);
++            UpdateRevolution(World);
++            END;
++
++         UpdateDefenses(World,Pop,Tech,Typ,Eff,Technology,Defns,Cargo,OtherReports);
++         END;  { with scope }
++   END;  { UpdateWorld }
++
++PROCEDURE UpdateUniverse;
++   VAR
++      UpdateWindow: WindowHandle;
++      i: Byte;
++      Emp: Empire;
++      ID: IDNumber;
++
++   { UpdateUniverse: MAIN PROCEDURE }
++   BEGIN
++   TextAttr:=7;
++   ClrScr;
++   OpenWindow(20,7,40,7,ThinBRD,'',7,C.SYSWBorder,UpdateWindow);
++   FillChar(NewTotalRevIndex,SizeOf(NewTotalRevIndex),0);
++
++   Year:=Year+1;
++
++   { update planets }
++   FOR i:=1 TO NoOfPlanets DO
++      BEGIN
++      WriteString('World #'+Int2Str(i)+'     ',2,1,7);
++      ID.ObjTyp:=Pln;  ID.Index:=i;
++      UpdateWorld(ID);
++      END;
++
++   ClrScr;
++   FOR i:=1 TO MaxNoOfStarbases DO
++      BEGIN
++      WriteString('Starbase #'+Int2Str(i)+'   ',2,1,7);
++      IF i IN SetOfActiveStarbases THEN
++         BEGIN
++         ID.ObjTyp:=Base;  ID.Index:=i;
++         UpdateWorld(ID);
++         END;
++      END;
++
++   { update construction }
++   ClrScr;
++   FOR i:=1 TO MaxNoOfConstrSites DO
++      begin
++      WriteString('Construction #'+Int2Str(i)+'     ',2,1,7);
++      IF i IN SetOfActiveConstructionSites THEN
++         BEGIN
++         UpdateConstruction(i);
++         END;
++      END;
++
++   ClrScr;
++   WriteString('Updating Empires...',2,1,7);
++   FOR Emp:=Empire1 TO Empire8 do
++      IF EmpireActive(Emp) THEN
++         UpdateEmpire(Emp);
++
++   DeleteReadMessages;
++
++   CloseWindow;
++   END;  { UpdateUniverse }
++
++END.

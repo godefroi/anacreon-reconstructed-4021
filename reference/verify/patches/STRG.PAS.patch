@@ -1,11 +1,12 @@
 --- a/STRG.PAS
 +++ b/STRG.PAS
-@@ -95,21 +95,13 @@
+@@ -94,22 +94,12 @@ FUNCTION Noun(Line: LineStr): LineStr;
+ PROCEDURE AllUpCase{VAR Strg: MaxStr};
  { AllUpCase:
     This procedure converts all the characters in 'Strg' to upper-case. }
- 
 +   VAR
-+      i: Integer;
++      i: Byte;
+ 
     BEGIN
 -   Inline
 -      ($C4/$BE/Strg/             {      LES     DI,Strg[BP]             }
@@ -21,8 +22,6 @@
 -       $26/$80/$2D/$20/          {      SUB     ES:BYTE PTR [DI],20H    }
 -       $EB/$E9);                 {      JMP     SHORT L1                }
 -                                 { L2:                                  }
-+   { PATCH (fpc): Inline($C4/$BE/...) was raw 8086 machine code doing the same
-+     byte-for-byte upper-casing loop; fpc has no inline-asm-by-opcode support. }
 +   FOR i:=1 TO Length(Strg) DO
 +      Strg[i]:=UpCase(Strg[i]);
     END;  { AllUpCase }

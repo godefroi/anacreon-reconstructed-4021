@@ -1,0 +1,191 @@
+--- a/NEWGAME.PAS
++++ b/NEWGAME.PAS
+@@ -4,6 +4,11 @@
+ 
+ UNIT NewGame;
+ 
++{ PATCH (fpc): the V- flag below relaxes fpc's strict fixed-string-length type
++  matching (Turbo Pascal treated e.g. String16/String32 as interchangeable by
++  content; fpc's default V+ requires an exact declared-length match). }
++{$V-}
++
+ {$IFDEF Overlay}
+ {$O+}
+ {$F+}
+@@ -42,6 +47,42 @@ PROCEDURE InputEmpireName(NewEmp: Empire; x,y: Byte;
+                           VAR IsAnEmpress: Boolean);
+ PROCEDURE StartNewGame(VAR Exit: Boolean);
+ 
++{ PATCH (fpc): RandomTrillumReserves/CreateRndPlanet/NebulaeBand/NebulaePatches promoted from
++  IMPLEMENTATION -- visibility only, same procedures, unchanged bodies, so the ground-truth
++  harness's trillumreserves/randomplanet/nebula domains can call each directly. Self-contained
++  (Universe^/Misc/DataCnst/PrimIntr only), unlike LoadScenario below. }
++FUNCTION RandomTrillumReserves(Cls: WorldClass; RegionReserves: Word): Word;
++PROCEDURE CreateRndPlanet(ID: IDNumber; Coord: XYCoord; Class: WorldClass; T: TechLevel);
++PROCEDURE NebulaeBand;
++PROCEDURE NebulaePatches(NoOfPatches: Word);
++
++{ PATCH (fpc): test-only override, same -1-means-real convention as INT.PAS's ForcedRandomValue.
++  When >=0, ScenarioIntroduction skips GetNoOfPlayers/NoChoice's real prompt and uses this value
++  directly (also skips PressAnyKey's pagination pauses and LoadScenario's own trailing
++  ScenarioError PressAnyKey), and InputEmpireName skips its own name/gender/password prompts,
++  computing deterministic values from NewEmp instead (see InputEmpireName's own PATCH note --
++  NewEmp is already the natural per-player index, no queue needed). Also skips LoadScenario's own
++  "IF Seed=0 THEN Randomize ELSE RandSeed:=Seed" reseed from the *file's* own Seed field -- test
++  mode leaves RandSeed exactly as the caller (this harness) already set it from its own Seed input,
++  matching the pre-existing scenario.golden convention (real DOS gameplay reseeds from the file;
++  golden-file determinism needs the caller's seed to be the one that actually takes effect). }
++VAR
++   TestNumPlayers: Integer;
++
++{ PATCH (fpc): test-only observability -- see LoadScenario's own "Player:=Empire1" PATCH note for
++  why these exist. 1 means "no planets/starbases created", matching FirstWorld/FirstBase's own
++  starting value. }
++VAR
++   LastFirstWorld,LastFirstBase: Word;
++
++{ PATCH (fpc): LoadScenario promoted from IMPLEMENTATION -- visibility only, so this harness can
++  call the real procedure directly instead of runworld.pas's own ~500-line reimplementation of its
++  header-parse/command-dispatch loop. Everything LoadScenario itself calls (ScenaError/NextInteger/
++  CreatePlayerEmpire/CreateWorld/DefineZone/etc) stays IMPLEMENTATION-private -- no cascading
++  promotion needed, since those are all same-unit calls from LoadScenario's own body, not calls
++  from outside the unit. }
++PROCEDURE LoadScenario(Filename: LineStr; VAR Abort: Boolean);
++
+ IMPLEMENTATION
+ 
+ (*
+@@ -1500,13 +1541,18 @@ PROCEDURE ScenarioIntroduction(VAR SF: TEXT;
+       ReadPage(EndText);
+       FOR i:=1 TO LineNo-1 DO
+          WriteString(Line[i],1,i,C.SYSDispWind);
+-      IF NOT EndText THEN
++      { PATCH (fpc): PressAnyKey skipped in test mode -- see TestNumPlayers' own declaration
++        comment. Still reads every page via ReadPage above so the file cursor lands in the same
++        place; only the display pause itself is skipped. }
++      IF (NOT EndText) AND (TestNumPlayers<0) THEN
+          PressAnyKey(40,22,'Press any key to continue...');
+    UNTIL EndText;
+    Inc(LineNo);
+ 
+    { Get number of players }
+-	IF MinPlay<MaxPlay THEN
++   IF TestNumPlayers>=0 THEN
++      NoOfPlayers:=Empire((TestNumPlayers-1)+Ord(Empire1))
++	ELSE IF MinPlay<MaxPlay THEN
+ 		NoOfPlayers:=GetNoOfPlayers
+ 	ELSE
+ 		NoOfPlayers:=NoChoice;
+@@ -1568,6 +1614,19 @@ PROCEDURE InputEmpireName(NewEmp: Empire; x,y: Byte;
+ 
+    { InputEmpireName: MAIN PROCEDURE }
+    BEGIN
++   { PATCH (fpc): test-only deterministic identity -- see TestNumPlayers' own declaration comment.
++     NewEmp is already the natural per-player index (this procedure's own parameter), so the
++     canned name/password/gender are a pure function of it -- no queue/array-with-pointers needed,
++     unlike a genuinely un-indexed prompt sequence would require. }
++   IF TestNumPlayers>=0 THEN
++      BEGIN
++      Str(Ord(NewEmp)-Ord(Empire1)+1,temp);
++      Name:='test_player_'+temp;
++      Password:='test_pass_'+temp;
++      IsAnEmpress:=Odd(Ord(NewEmp)-Ord(Empire1));
++      Exit;
++      END;
++
+    Str(Ord(NewEmp)-Ord(Empire1)+1,Prompt);
+    Prompt:='Name of player empire #'+Prompt+' : ';
+    Name:='';
+@@ -1722,9 +1781,15 @@ PROCEDURE LoadScenario(Filename: LineStr; VAR Abort: Boolean);
+          END;
+ 
+       ClrScr;
+-      Writeln;
+-      WriteLn('Please wait while the universe is created...');
+-      WriteLn;
++      { PATCH (fpc): these three WriteLns go to real stdout (not a WriteString-to-window call,
++        already a no-op) -- this harness's own output parser expects exactly one output line per
++        case, so skip them in test mode; see TestNumPlayers' own declaration comment. }
++      IF TestNumPlayers<0 THEN
++         BEGIN
++         Writeln;
++         WriteLn('Please wait while the universe is created...');
++         WriteLn;
++         END;
+       Zone[1].x1:=1;
+       Zone[1].y1:=1;
+       Zone[1].x2:=SoG;
+@@ -1732,10 +1797,14 @@ PROCEDURE LoadScenario(Filename: LineStr; VAR Abort: Boolean);
+ 
+       TriRes:=100;
+ 
+-      IF Seed=0 THEN
+-         Randomize
+-      ELSE
+-         RandSeed:=Seed;
++      { PATCH (fpc): reseed skipped in test mode -- see TestNumPlayers' own declaration comment.
++        RandSeed stays whatever the caller (this harness) already set it to from its own Seed
++        input; real gameplay reseeds from the file's own Seed field here instead. }
++      IF TestNumPlayers<0 THEN
++         IF Seed=0 THEN
++            Randomize
++         ELSE
++            RandSeed:=Seed;
+ 
+       REPEAT
+          Line:=DFA1NextToken(ScenaFile,BadToken);
+@@ -1783,7 +1852,15 @@ PROCEDURE LoadScenario(Filename: LineStr; VAR Abort: Boolean);
+             ELSE IF Line='DEFINEXY' THEN
+                DefineXYPoint(ScenaFile,XYPoint,Zone)
+             ELSE IF Line='REPORT' THEN
+-               WriteLn(DFA1NextToken(ScenaFile,BadToken))
++               { PATCH (fpc): a scenario file's own Report "message" command writes straight to
++                 stdout by design (confirmed real: ARRONAX.SCN's "Report ""Starting""" is what
++                 surfaced this) -- this harness's output parser expects exactly one line per case,
++                 so still consume the token (keeps the file cursor in sync) but discard it in test
++                 mode instead of writing it; see TestNumPlayers' own declaration comment. }
++               IF TestNumPlayers>=0 THEN
++                  DFA1NextToken(ScenaFile,BadToken)
++               ELSE
++                  WriteLn(DFA1NextToken(ScenaFile,BadToken))
+             ELSE IF Line='TECHTABLE' THEN
+                LoadTechArray(ScenaFile,TechTable)
+             ELSE IF Line='SETTRILLUMRESERVES' THEN
+@@ -1793,6 +1870,16 @@ PROCEDURE LoadScenario(Filename: LineStr; VAR Abort: Boolean);
+             END;
+       UNTIL (Line='ENDSCENARIO') OR EoF(ScenaFile) OR ScenarioError;
+ 
++      { PATCH (fpc): test-only observability, same convention as ATTNPE.PAS's GetLastKilled/
++        GetLastCasualties -- FirstWorld/FirstBase are real local VAR-accumulated counters
++        (incremented in place by CreateWorld/CreateBase/CreateRandomWorlds as they allocate
++        slots), but nothing in real Pascal maintains a SetOfActivePlanets/SetOfActiveStarbases
++        equivalent during scenario creation (confirmed by grep: SetOfActivePlanets is written only
++        by LOADSAVE.PAS's LoadGame, never by anything in this unit) -- these two are the only way
++        to know how many planets/starbases a scenario actually created from outside this call. }
++      LastFirstWorld:=FirstWorld;
++      LastFirstBase:=FirstBase;
++
+       Player:=Empire1;
+       Abort:=False;
+       END
+@@ -1804,7 +1891,10 @@ PROCEDURE LoadScenario(Filename: LineStr; VAR Abort: Boolean);
+    IF ScenarioError THEN
+       BEGIN
+       WriteLn;
+-      PressAnyKey(1,22,'Press any key to continue...');
++      { PATCH (fpc): PressAnyKey skipped in test mode -- see TestNumPlayers' own declaration
++        comment. Abort still set True, so a real parse error is still reported to the caller. }
++      IF TestNumPlayers<0 THEN
++         PressAnyKey(1,22,'Press any key to continue...');
+       Abort:=True;
+       END;
+ 
+@@ -1960,4 +2050,8 @@ PROCEDURE StartNewGame(VAR Exit: Boolean);
+ 
+    END;  { StartNewGame }
+ 
++BEGIN
++TestNumPlayers:=-1;
++LastFirstWorld:=1;
++LastFirstBase:=1;
+ END.
