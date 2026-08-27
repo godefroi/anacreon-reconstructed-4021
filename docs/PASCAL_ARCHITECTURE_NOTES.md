@@ -675,23 +675,28 @@ capitals, none of it persona-driven. Dropped from the C# signature
 `NPEINTR.PAS:41-63`) only initializes `ShellDefDist` in its typed-constant literal, confirmed by
 directly counting parens in each literal, not inferred from the type declaration alone.
 
-**Confirmed under this project's own toolchain**: a probe compiled with this repo's `fpc -Mtp`
-(the same mode/compiler the ground-truth harness uses) shows the omitted trailing field of a
-partially-specified record constant reads as zero, not garbage — so under our build, every real
-call to `SetEmpireDefenses` resets that empire's starbase shell distribution to all zeros too,
-100% of the time, regardless of which of the four fleet distributions the `Rnd(1,100)` roll
-picked. **Not independently confirmed against real Turbo Pascal 7** — there's no compiled 1.31
-`.EXE` or TP7/DOSBox setup anywhere in this repo to cross-check against, so this is FPC's
-documented behavior (which `-Mtp` mode exists specifically to match TP7 on), not something
-verified against the original 1988 toolchain directly. If a real 1.31 binary or a working TP7
-environment ever turns up, replaying a `.SAV` through a `SetEmpireDefenses` call is a concrete way
-to close that gap — noted here as a real, currently-blocked validation lead, not chased down now.
-Either way this isn't a bug to fix in the port: if FPC and TP7 agree (the likely case — the
-shipped 1.31 source had to compile under *some* real TP7 to ship, which is itself evidence TP7
-accepted this same abbreviated syntax), it's genuine original-game behavior; if they somehow
-disagree, that's a documented FPC-vs-TP divergence in the same category as this project's other
-ones ($V+/-, banker's rounding), not something to silently "fix" either. Ported verbatim
-(`Core/Npe/NpeToolkit.cs`'s `SetEmpireDefenses`).
+**Confirmed two ways.** A probe compiled with this repo's `fpc -Mtp` (the same mode the
+ground-truth harness uses) shows the omitted trailing field of a partially-specified record
+constant reads as zero, not garbage. Then confirmed directly against the real thing: a raw byte
+scan of the user's actual TP-compiled `ANACREON.EXE` (1.31) for each constant's 35-byte
+`ShellDefDist` pattern (`Index = 0..100` is a 1-byte subrange, so each `DefenseRecord` constant is
+a 70-byte blob) finds exactly one match apiece, and in every case the 35 bytes immediately
+following are all zero:
+
+| Constant | Offset in `ANACREON.EXE` | 35 bytes after `ShellDefDist` |
+|---|---|---|
+| `InitDefenseRecord` | `0x30AE2` | all zero |
+| `Defense1` | `0x2FBB6` | all zero |
+| `Defense2` | `0x2FBFC` | all zero |
+| `Defense3` | `0x2FC42` | all zero |
+
+(`Defense1`/`Defense2`/`Defense3` sit contiguously 70 bytes apart in the binary, matching their
+declaration order in `NPEINTR.PAS` — a corroborating structural detail, not just a coincidence.)
+So every real call to `SetEmpireDefenses` — the only place any of these four constants is ever
+assigned to a live `DefenseSettings` — really did reset that empire's starbase shell distribution
+to all zeros in the shipped 1988 game, 100% of the time, regardless of which of the four fleet
+distributions the `Rnd(1,100)` roll picked. Real Turbo Pascal 7 behavior, not an FPC artifact.
+Not a bug to fix in the port — ported verbatim (`Core/Npe/NpeToolkit.cs`'s `SetEmpireDefenses`).
 
 ### `FleetDataRecord.BlockX`/`BlockY` are Pirate-only, not shared toolkit state
 

@@ -548,13 +548,13 @@ public static class NpeToolkit
     /// distributions. A real, easy-to-miss quirk, ported verbatim rather than "fixed": DATASTRC.PAS's
     /// DefenseRecord has two fields, ShellDefDist (fleets) and StarbaseDefDist (starbases), but every
     /// one of the four preset constants here (InitDefenseRecord, Defense1, Defense2, Defense3 —
-    /// DATACNST.PAS:373-379, NPEINTR.PAS:41-63) only initializes ShellDefDist; a probe compiled under
-    /// this project's own fpc -Mtp confirms the omitted trailing field reads as zero, not garbage
-    /// (not independently checked against real Turbo Pascal 7 — no compiled 1.31 .EXE or TP7 setup
-    /// exists in this repo; see docs/PASCAL_ARCHITECTURE_NOTES.md for the full caveat). So every call
-    /// resets the empire's *starbase* shell distribution to all zeros too, 100% of the time — not just
-    /// the fleet distribution the roll is nominally about. Verified directly against the typed-constant
-    /// literals, not inferred.
+    /// DATACNST.PAS:373-379, NPEINTR.PAS:41-63) only initializes ShellDefDist. Confirmed two ways,
+    /// not inferred: a probe under this project's own fpc -Mtp shows the omitted field reads as
+    /// zero, and a raw byte scan of the real TP-compiled 1.31 ANACREON.EXE finds all four constants'
+    /// 35-byte StarbaseDefDist span all-zero too (see docs/PASCAL_ARCHITECTURE_NOTES.md for the
+    /// offsets) — genuine Turbo Pascal 7 behavior in the shipped game, not an FPC artifact. So every
+    /// call resets the empire's *starbase* shell distribution to all zeros too, 100% of the time —
+    /// not just the fleet distribution the roll is nominally about.
     /// </summary>
     public static void SetEmpireDefenses(Empire emp, Random random)
     {
