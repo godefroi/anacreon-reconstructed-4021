@@ -20,6 +20,13 @@ New-Item -ItemType Directory -Path $out | Out-Null
 Copy-Item (Join-Path $src '*.PAS') $out
 Copy-Item (Join-Path $PSScriptRoot 'runworld.pas') $out
 
+# shims/*.PAS don't exist in pristine source at all (CRT/Printer stand-ins, see this directory's
+# own README) -- not covered by the pristine-copy above. COLORS.INC/BITPIC.INC are real pristine
+# files but only reached via {$I} mid-unit, not picked up by the *.PAS copy either.
+Copy-Item (Join-Path $PSScriptRoot 'shims\*.PAS') $out
+Copy-Item (Join-Path $src 'COLORS.INC') $out
+Copy-Item (Join-Path $src 'BITPIC.INC') $out
+
 $patches = Get-ChildItem (Join-Path $PSScriptRoot 'patches') -Filter '*.patch' | Sort-Object Name
 Push-Location $out
 try {
@@ -27,6 +34,9 @@ try {
         git apply -p1 --verbose $p.FullName
     }
     fpc -Mtp -CfSSE2 runworld.pas
+    if ($LASTEXITCODE -ne 0) {
+        throw "fpc exited $LASTEXITCODE"
+    }
 } finally {
     Pop-Location
 }
