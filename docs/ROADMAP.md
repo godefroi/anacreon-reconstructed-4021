@@ -157,7 +157,7 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   tests (`AnnualTickHandlerHostileLifeTests`) exploiting `FixedRandom(N)`'s `min+N` resolution to
   deterministically pick each of the three branches.
 
-## 6. NPE AI — in progress, 6a-6c landed
+## 6. NPE AI — in progress, 6a-6c landed, 6c-2 primitives landed
 
 Implement an `ITurnHandler` for computer empires. The roadmap's original one-line framing here
 ("start with one classic implementation") undersold this phase the way "8 known News sites"
@@ -250,12 +250,38 @@ original developers shipped incomplete, not a port gap.
   procedures, which need fleet-lifecycle primitives (`DeployFleet`/`ChangeCompositionOfFleet`/
   `EstimatedDateOfArrival`/`EstimatedRange`/`RefuelFleet`/`SetFleetDestination`) that don't exist
   anywhere in this port yet — see 6c-2.
-- **6c-2, `NPEINTR.PAS` toolkit — fleet-lifecycle half.** `DeployFleet`/`ChangeCompositionOfFleet`/
-  `EstimatedDateOfArrival`/`EstimatedRange`/`RefuelFleet`/`SetFleetDestination` (FLEET.PAS/
-  PRIMINTR.PAS) — genuinely new primitives, since every prior phase only ever moved or destroyed
-  fleets scenario loading or human setup already created, never made one from a world's own stock.
-  Then the five `Deploy*Fleet` procedures and all eight `Implement*MSN` mission executors that
-  depend on them.
+- 🚧 **6c-2, `NPEINTR.PAS` toolkit — fleet-lifecycle half.** Split into two landings: the six
+  fleet-lifecycle primitives first (independently verifiable), then the `Deploy*Fleet`/
+  `Implement*MSN` layer on top (unverifiable until the primitives are right) — same reasoning that
+  split 6c itself.
+  - ✅ **Primitives** (`Entities/FleetLifecycle.cs`) — `DeployFleet`/`ChangeCompositionOfFleet`/
+    `RefuelFleet`/`SetFleetDestination` (FLEET.PAS) and `EstimatedDateOfArrival`/`EstimatedRange`
+    (INTRFACE.PAS, both `Fleet` and `Starbase` arms ported). Genuinely new primitives — every prior
+    phase only ever moved or destroyed fleets scenario loading or human setup already created,
+    never made one from a world's own stock. `FltMovementRate` moved from
+    `Turns/FleetMovementHandler.cs` into `Entities/FleetLogistics.cs` (`MovementRate`) once
+    `EstimatedDateOfArrival` became a second real consumer of the same DATACNST.PAS table.
+    `CombatOutcome.AbortFleet` promoted `private`→`internal` (same precedent as `DestroyFleet`) so
+    `ChangeCompositionOfFleet`'s self-destruct branches can call it — no behavior change.
+    `Game.HasScouted`→`Scouted`, promoted `private`→`public` (roslyn-renamed), mirroring `Known`,
+    for 6c-2's second half's `DestroyAllFleetsInSector`. Two real quirks found and ported verbatim,
+    not fixed: `ChangeCompositionOfFleet`'s non-fleet-ground branch reads `GetTrillum(GroundID)`
+    *after* `PutCargo(GroundID,NewGCr)` already overwrote it (FLEET.PAS:356-365) — "how much trillum
+    is available to convert" is whatever the new ground composition says, not what was there before;
+    and `DeployFleet`'s `IF GetFleetFuel(FltID)=0 THEN SetFleetFuel(FltID,10)` is a genuine free
+    top-up when a small enough fuel deficit rounds down to "0 tons needed" even with zero trillum on
+    hand. `CombatOutcome.AbortFleet`'s pre-6a "no fuel-capacity system exists" excuse no longer holds
+    now that `FleetLogistics.Fuel`/`FuelCapacity` exist — a real, confirmed gap (leftover fuel
+    vanishes instead of becoming trillum), deliberately left for its own follow-up commit rather than
+    bundled here (see `PASCAL_ARCHITECTURE_NOTES.md`). Hardcoded-tested (`FleetLifecycleTests.cs`),
+    same rationale as 6c.
+  - **`Deploy*Fleet`/`Implement*MSN` layer** — not started. The five `Deploy*Fleet` procedures
+    (`DeployBattleFleet`/`DeployCargoFleet`/`DeployJumpAttack`/`DeployHKRaiders`/`DeploySlowAttack`;
+    `DeployHarassFleet` is the confirmed no-op stub, not ported) and all eight `Implement*MSN`
+    mission executors (`ImplementReturnMSN`/`SupplyMSN`/`RefuelMSN`/`ConquerMSN`/`RaidTrnMSN`/
+    `JumpAttackMSN`/`StackMSN`/`GuardMSN`) plus their shared helpers (`SetFleetReturn`/
+    `SetRaidingFleetNewTarget`/`DestroyAllFleetsInSector`), landing in `Core/Npe/NpeToolkit.cs`
+    alongside 6c's read-and-compute half.
 - **6d, Kingdom core loop.** `NPE00.PAS` (defense, expansion, exploration, logistics) plus
   `NPE02.PAS`'s per-turn driver and both persona-seed presets. No diplomacy yet.
 - **6e, Kingdom diplomacy.** `StateDepartment`/`StateDeptReport`/`WarCabinet` and `ReviewNews`'s

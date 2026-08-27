@@ -64,6 +64,23 @@ public static class FleetLogistics
         CargoType.Legion, CargoType.NinjaLegion, CargoType.Trillum, CargoType.Ambrosia,
     ];
 
+    /// <summary>
+    /// FltMovementRate (DATACNST.PAS) — sectors per year a fleet type steps. Moved here from
+    /// <see cref="Turns.FleetMovementHandler"/> (its original sole consumer, Phase 6a) once
+    /// Phase 6c-2's <c>EstimatedDateOfArrival</c> (Entities/FleetLifecycle.cs) became a second real
+    /// consumer — one transcribed table, not two copies of the same DATACNST.PAS data.
+    /// </summary>
+    private static readonly FrozenDictionary<FleetType, int> _movementRateByType = new Dictionary<FleetType, int>() {
+        [FleetType.Standard] = 1,
+        [FleetType.JumpFleet] = 10,
+        [FleetType.HunterKillerFleet] = 10,
+        [FleetType.Penetrator] = 2,
+        [FleetType.AdvancedWarpFleet] = 2,
+    }.ToFrozenDictionary();
+
+    public static int MovementRate(FleetType fleetType) =>
+        _movementRateByType.TryGetValue(fleetType, out var rate) ? rate : 1;
+
     /// <summary>FuelCapacity (MISC.PAS:168-183) — maximum fuel this ship distribution can hold.</summary>
     public static double FuelCapacity(ShipCounts ships)
     {

@@ -297,10 +297,15 @@ public static class CombatOutcome
     /// reading) via <see cref="GetShipsAndCargo"/> returning null for anything that isn't an
     /// <see cref="IEconomicWorld"/> or <see cref="Fleet"/>. Fuel-to-trillum conversion and
     /// FleetNameDestruction's naming-system call aren't ported — no fuel-capacity or naming system
-    /// exists anywhere in this port (see RestoreCombatant/ConquerWorld's own doc comments for the same
-    /// gaps).
+    /// existed anywhere in this port when this was written (see RestoreCombatant/ConquerWorld's own
+    /// doc comments for the same gaps). Phase 6a later added a real Fuel/FuelCapacity model
+    /// (Entities/FleetLogistics.cs) that this method still doesn't use — a real, known gap, deliberately
+    /// left for a dedicated follow-up commit rather than folded into Phase 6c-2 (see
+    /// docs/PASCAL_ARCHITECTURE_NOTES.md). Internal (not private): Npe/NpeToolkit.cs's
+    /// ImplementReturnMSN/ImplementRefuelMSN (Phase 6c-2) call this exact primitive rather than
+    /// duplicating it, same precedent as <see cref="DestroyFleet"/>.
     /// </summary>
-    private static void AbortFleet(Fleet source, object ground, bool report)
+    internal static void AbortFleet(Fleet source, object ground, bool report)
     {
         var (ships, cargo) = GetShipsAndCargo(ground);
         if (ships is null) {

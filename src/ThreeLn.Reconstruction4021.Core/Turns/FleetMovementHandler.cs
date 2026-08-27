@@ -1,4 +1,3 @@
-using System.Collections.Frozen;
 using ThreeLn.Reconstruction4021.Core.Combat;
 using ThreeLn.Reconstruction4021.Core.Entities;
 using ThreeLn.Reconstruction4021.Core.Galaxy;
@@ -27,14 +26,6 @@ namespace ThreeLn.Reconstruction4021.Core.Turns;
 public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
 {
     private static readonly ShipType[] _mineableShipTypes = [ShipType.HunterKiller, ShipType.Jumpship, ShipType.Jumptransport];
-
-    private static readonly FrozenDictionary<FleetType, int> _movementRateByType = new Dictionary<FleetType, int>() {
-        [FleetType.Standard] = 1,
-        [FleetType.JumpFleet] = 10,
-        [FleetType.HunterKillerFleet] = 10,
-        [FleetType.Penetrator] = 2,
-        [FleetType.AdvancedWarpFleet] = 2,
-    }.ToFrozenDictionary();
 
     /// <summary>Compass steps No,Ne,Ea,Se,So,Sw,We,Nw in clockwise order (DATACNST.PAS:561-564's DirX/DirY) — index arithmetic mod 8 replaces Pascal's Succ/Pred-with-wraparound on the Directions enum.</summary>
     private static readonly Coordinate[] _compassSteps = [
@@ -185,7 +176,7 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
             return;
         }
 
-        var rate = GetMovementRate(fleet.Type);
+        var rate = FleetLogistics.MovementRate(fleet.Type);
         if (!StepFleet(fleet, destination, rate, game, out var nextLocation))
             return; // fleet destroyed by a minefield — caller's snapshot list still holds the reference, but nothing left to update
 
@@ -405,9 +396,6 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
             fleet.Fuel = Math.Min(fleet.Fuel + trillumToConvert * FleetLogistics.FuelPerTon, FleetLogistics.FuelCapacity(fleet.Ships));
         }
     }
-
-    private static int GetMovementRate(FleetType fleetType) =>
-        _movementRateByType.TryGetValue(fleetType, out var rate) ? rate : 1;
 
     /// <summary>
     /// GetNewBasePos (SBASE.PAS:103-191) — obstacle-avoiding single-cell step toward the destination.

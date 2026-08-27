@@ -706,6 +706,20 @@ personality's own hunting-ground grid (`HuntingGroundArray`). `NPEINTR.PAS`'s sh
 reads or writes either field. Not ported as part of Phase 6c's Kingdom-only field audit
 (`Core/Npe/NpeTypes.cs`'s `KingdomFleetState`) — add when Pirate is picked up.
 
+### `CombatOutcome.AbortFleet` still doesn't convert leftover fuel to trillum — a real, known gap
+
+Phase 5g's `AbortFleet` (`FLEET.PAS:150-209`) doc comment excused skipping the fuel-to-trillum
+conversion (`IF GroundID.ObjTyp<>Flt THEN Cr2[Tri]:=ThgLmt(Cr2[Tri]+ThgLmt(FuelLeft/FuelPerTon)) ELSE
+SetFleetFuel(GroundID,GetFleetFuel(GroundID)+FuelLeft)`) because "no fuel-capacity... system exists
+anywhere in this port." Phase 6a added one (`Entities/FleetLogistics.cs`'s `Fuel`/`FuelCapacity`),
+so that excuse no longer holds — a fleet that dissolves via `AbortFleet` (every `ImplementReturnMSN`/
+`ImplementRefuelMSN` call, Phase 6c-2) silently loses whatever fuel it was carrying instead of it
+landing as trillum on the ground, or transferring directly if the ground is itself a fleet. Confirmed
+real and worth fixing, but deliberately **not** fixed as part of 6c-2: `AbortFleet` is
+Phase-5-shipped, Phase-5-tested code, and none of 6c-2's own tests observe a home world's trillum
+after a fleet returns, so bundling the fix would make a `CombatOutcome` regression look like a 6c-2
+bug. Tracked here for its own follow-up commit with a test that actually asserts the trillum arrives.
+
 ---
 
 ## Outstanding Research (as of this draft)
