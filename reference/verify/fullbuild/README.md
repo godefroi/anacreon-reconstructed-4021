@@ -31,8 +31,8 @@ most that's ever needed from the screen/keyboard layer is `WriteLn`-level visibi
 
 ## Status as of this writing
 
-**Nothing in this lane is committed to git yet** -- `git status` on `reference/verify/fullbuild/`
-will show it as untracked. Check current state before assuming anything below is stale.
+This lane lives on branch `fullbuild-poc`, not yet merged to `main`. Check `git log --oneline --
+reference/verify/fullbuild/` and `git status` before assuming anything below is current.
 
 All units in `build.ps1`'s tier arrays compile clean from pristine source via `.\build.ps1` (run
 from this directory):
@@ -80,6 +80,16 @@ from this directory):
   `UPDATE` -- zero patches. `UPDATE` is the per-turn game update loop, the same file
   `reference/verify/patches/UPDATE.PAS.patch` trims for the sibling lane's driver -- built here in
   full, same convergence as `INTRFACE` in tier9.
+- **Tier 12** (`MAPWIND`, `SWINDOWS`, `DISPLAY` -- a genuine 3-unit strongly connected component
+  that `uses-map.json`'s pairwise-only `cycles` list misses entirely; see "Dependency map" below
+  for how it was found). `SWINDOWS` and `DISPLAY` each needed the standard `{$V-}` fix. `MAPWIND`
+  needed `{$V-}` plus a real fpc-strictness fix: a set constructor with two pairs of duplicate
+  literal elements (`HorzChar`/`VertChar` both `#250`, `CrossChar1`/`CrossChar3` both `#196` --
+  defined identically at MAPWIND.PAS:38-42) that Turbo Pascal silently accepted but fpc rejects as
+  `duplicate set element`; fixed by dropping the duplicates, which yields the identical resulting
+  set (see "What got patched and why"). All three cycle members' *other* dependencies were already
+  built -- notably `SWINDOWS`'s own implementation-uses of `HlpWind`/`FltWind`/`NwsWind`/`NmsWind`/
+  `EmpWind`/`StaWind`, all six already in tier10.
 
 Verified working end to end from a clean checkout: `build.ps1` deletes and repopulates `scratch/`
 from pristine + `patches/*.patch` + `shims/*.PAS` every run, exactly like `reference/verify/build.ps1`
@@ -249,6 +259,16 @@ does for `patched/`.
   system) are both real convergence points with the sibling `reference/verify/` lane, which trims
   `UPDATE.PAS` down to a hand-picked subset for its own driver -- both build here in full with
   zero patches needed.
+- **`SWINDOWS.PAS`/`DISPLAY.PAS`** -- each needed only the routine `{$V-}` fix.
+- **`MAPWIND.PAS`** -- needed `{$V-}` plus one real landmine: `NameFits`'s `Map2^[y,x1] IN [...]`
+  set constructor lists `BlankChar,CrossChar1,CrossChar2,CrossChar3,HorzChar,VertChar,
+  NebulaChar[Nebula],NebulaChar[DarkNebula]`, but `HorzChar`/`VertChar` are both literally `#250`
+  and `CrossChar1`/`CrossChar3` are both literally `#196` (defined identically at MAPWIND.PAS:38-42
+  -- not a typo introduced here, pristine source really does define two names for the same
+  character twice). Turbo Pascal silently accepted the resulting duplicate set elements; fpc
+  rejects them (`Error: range check error in set constructor or duplicate set element`). Fixed by
+  dropping `CrossChar3` and `VertChar` from the literal -- the resulting set value is identical
+  either way, so this is a no-op for behavior, purely a compiler-strictness accommodation.
 
 ## Encoding incident: Read/Edit tool corrupted CP437 bytes in two patches (found and fixed)
 
@@ -352,10 +372,17 @@ mutual references, so it missed that `Intrface`'s `IMPLEMENTATION USES` reaches 
 3-hop cycle no pairwise check finds. A proper strongly-connected-component computation (Tarjan's
 algorithm over the full graph) turned up an **11-unit SCC**: `Attack`, `AttNPE`, `Fleet`,
 `Intrface`, `NPE`, `NPE00`-`NPE04`, `NPEIntr` -- all mutually reachable, all compiled together as
-tier9 with zero special handling, same result as the simpler pairwise cycles. If this map is ever
-used to reason about a *new* suspected cycle, don't trust a pairwise check alone -- multi-hop
-cycles through a chain of `IMPLEMENTATION USES` are real and this map's `cycles` field doesn't
-currently detect them (only the manual SCC pass done for `Intrface` did).
+tier9 with zero special handling, same result as the simpler pairwise cycles.
+
+**It undersold `MapWind`<->`SWindows` the same way.** The listed pair is real, but the actual SCC
+(confirmed by manually tracing each unit's full `USES` set, not by trusting `cycles`) is a 3-unit
+chain: `MapWind` implementation-uses `Display`, `Display` interface-uses `SWindows`, `SWindows`
+implementation-uses `MapWind` -- so `Display` is part of the cycle even though it has no *direct*
+mutual edge with either of the other two. Built as tier12 with zero special handling, same as
+tier6 and tier9. **Lesson holds a second time**: don't trust a pairwise `cycles` check alone for a
+new suspected cycle -- multi-hop chains through `IMPLEMENTATION USES` (or a mix of interface and
+implementation edges, as here) are real and this map's `cycles` field doesn't detect them; only a
+manual SCC pass does.
 
 If the pristine source ever changes, regenerate this file with a fresh extraction pass (and
 recheck for new parse artifacts by spot-reading a couple of files) rather than hand-editing entries
@@ -363,24 +390,24 @@ in place.
 
 ## Suggested next steps
 
-**Pristine `INTRFACE.PAS` and `UPDATE.PAS` now both compile in full (tiers 9 and 11)** -- 51 units
+**Pristine `INTRFACE.PAS` and `UPDATE.PAS` now both compile in full (tiers 9 and 11)** -- 54 units
 total, up from 18. Building `Intrface` was the core bet of this whole lane (see the note above
 about the sibling lane's 3-procedure stand-in); `Update.PAS` is the same kind of convergence with
-that lane's own driver target. Tiers 5-11 built with only the already-established patch classes
-(`{$V-}`, the `MaxAvail` heap-check fix) plus two one-off landmines (`ORDERS.PAS` `GetFleetCode`'s
-hard type-cast, `NPE00.PAS`'s out-of-subrange sentinel) -- see "What got patched and why".
+that lane's own driver target. Tiers 5-12 built with only the already-established patch classes
+(`{$V-}`, the `MaxAvail` heap-check fix) plus three one-off landmines (`ORDERS.PAS` `GetFleetCode`'s
+hard type-cast, `NPE00.PAS`'s out-of-subrange sentinel, `MAPWIND.PAS`'s duplicate set elements) --
+see "What got patched and why".
 
-Recomputing the closure against all of tier0-11 (51 units) turns up nothing new except
-already-excluded units (`Compile1`/`Test`/`Test1` are `PROGRAM`s not units; `DList`/`LSort`/`Sort`
-are dead code; `OVERINIT` is the real-mode overlay manager, out of scope per this lane's stated
-goal). **The next real layer is a 3-unit mutual cycle**: `MapWind`, `SWindows`, and `Display` all
-reference each other through `IMPLEMENTATION USES` (`MapWind`->`SWindows`, `SWindows`->`MapWind`,
-`MapWind`->`Display`, `Display`->`SWindows`) -- confirm via a proper SCC pass (not pairwise) before
-tiering, same lesson as the `Intrface` SCC above. Building it unblocks the remaining comm/window
-units (`AttComm`, `FltComm`, `ClsComm`, `MscComm`, `Constr`, `Design`, `Names`) and, after those,
-the higher-level game-flow units (`NewGame`, `Prolog`, `PlayTurn`, `Transact`, `ViewMap`,
-`Artifact`<->`Code`'s own cycle). `Anacreon` itself (the real DOS entry point) stays excluded per
-this lane's stated scope.
+Recomputing the closure against all of tier0-12 (54 units) turns up eight newly-ready units:
+`AttComm`, `ClsComm`, `Constr`, `Design`, `FltComm`, `MscComm`, `Names`, `ViewMap` -- everything
+else is either already built or already-excluded (`Compile1`/`Test`/`Test1` are `PROGRAM`s not
+units; `DList`/`LSort`/`Sort` are dead code; `OVERINIT` is the real-mode overlay manager, out of
+scope per this lane's stated goal). These eight have no interdependency among themselves (each
+one's full `USES` closure lands entirely in tier0-12), so they're a single flat tier if picked up
+next. After those: the higher-level game-flow units (`NewGame`, `Prolog`, `PlayTurn`, `Transact`,
+and `Artifact`<->`Code`'s own cycle, still unconfirmed -- run a manual SCC pass on it before
+tiering, don't trust `cycles` alone, same lesson as `MapWind`/`SWindows`/`Display` above).
+`Anacreon` itself (the real DOS entry point) stays excluded per this lane's stated scope.
 
 Whatever's picked: try compiling it standalone against what's already in `scratch/` first (fpc's
 own error says exactly what's missing). If it lands at the same dependency depth as an existing

@@ -97,6 +97,14 @@ $out = Join-Path $PSScriptRoot 'scratch'
     # file reference/verify/patches/UPDATE.PAS.patch trims for the sibling lane's driver, built
     # here in full. LOADSAVE.PAS is the save/load system.
     @('BOMBER.PAS', 'DFA.PAS', 'LOADSAVE.PAS', 'SBASE.PAS', 'SCENA.PAS', 'UPDATE.PAS')
+
+    # Tier 12: a genuine 3-unit strongly-connected component that uses-map.json's pairwise-only
+    # "cycles" list misses entirely (it only lists MapWind<->SWindows as mutual). The real cycle is
+    # a 3-hop chain: MapWind implementation-uses Display, Display interface-uses SWindows, SWindows
+    # implementation-uses MapWind -- confirmed by manually tracing each unit's full USES set rather
+    # than trusting "cycles" (same lesson as tier9's 11-unit SCC). SWindows's other implementation
+    # dependencies (HlpWind/FltWind/NwsWind/NmsWind/EmpWind/StaWind) are all already built in tier10.
+    @('MAPWIND.PAS', 'SWINDOWS.PAS', 'DISPLAY.PAS')
 )
 
 # CRT.PAS is not pristine source at all -- see shims/CRT.PAS's own header comment for why this

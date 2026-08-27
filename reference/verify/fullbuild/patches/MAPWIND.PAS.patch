@@ -1,0 +1,28 @@
+--- a/MAPWIND.PAS
++++ b/MAPWIND.PAS
+@@ -4,6 +4,12 @@
+ 
+ UNIT MapWind;
+ 
++{ PATCH (fpc): the V- flag below relaxes fpc's strict fixed-string-length type
++  matching (Turbo Pascal treated e.g. String16/String32 as interchangeable by
++  content; fpc's default V+ requires an exact declared-length match). }
++{$V-}
++
++
+ {$IFDEF Overlay}
+ {$F+}
+ {$ENDIF}
+@@ -1151,7 +1157,11 @@ PROCEDURE UMAddName(VAR Map: MapStructure; Name: String16; XY: XYCoord);
+          BEGIN
+          x1:=x;
+          i:=0;
+-         WHILE (i<Len) AND (Map2^[y,x1] IN [BlankChar,CrossChar1,CrossChar2,CrossChar3,HorzChar,VertChar,
++         WHILE (i<Len) AND (Map2^[y,x1] IN { PATCH (fpc): CrossChar3=CrossChar1 (both #196) and VertChar=HorzChar (both
++  #250) -- Turbo Pascal silently accepted the duplicate set elements below;
++  fpc rejects them. Removing the duplicates yields the identical resulting
++  set, so this is a no-op for behavior. }
++         [BlankChar,CrossChar1,CrossChar2,HorzChar,
+                NebulaChar[Nebula],NebulaChar[DarkNebula]]) DO
+             BEGIN
+             Inc(i);
