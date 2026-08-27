@@ -1,0 +1,31 @@
+--- a/ORDERS.PAS
++++ b/ORDERS.PAS
+@@ -4,6 +4,11 @@
+ 
+ UNIT Orders;
+ 
++{ PATCH (fpc): the V- flag below relaxes fpc's strict fixed-string-length type
++  matching (Turbo Pascal treated e.g. String16/String32 as interchangeable by
++  content; fpc's default V+ requires an exact declared-length match). }
++{$V-}
++
+ {$IFDEF Overlay}
+ {$F+}
+ {$ENDIF}
+@@ -323,7 +328,15 @@ PROCEDURE SetFleetNextStatement(FltID: IDNumber; Com: Word);
+ 
+ PROCEDURE GetFleetCode(FltID: IDNumber; VAR Code: OrderStructure);
+    BEGIN
+-   Code:=OrderStructure(Universe^.Fleet[FltID.Index]^.OrderData);
++   { PATCH (fpc): pristine code hard-cast OrderData (a 6-byte ARRAY[1..6] OF
++     Byte field) directly to OrderStructure (Word+MemoryArrayPtr, also 6 bytes
++     on this target) -- a raw byte-layout reinterpretation TP's looser
++     type-cast rules allowed but fpc's stricter type checker rejects
++     ("Illegal type conversion"). Move() does the same raw byte copy without
++     going through a type-cast; SetFleetCode already uses Move for the
++     reverse direction, so this mirrors an existing pattern in this same
++     file rather than introducing a new one. }
++   Move(Universe^.Fleet[FltID.Index]^.OrderData,Code,SizeOf(Code));
+    END;  { GetFleetCode }
+ 
+ PROCEDURE SetFleetCode(FltID: IDNumber; VAR Code: OrderStructure);

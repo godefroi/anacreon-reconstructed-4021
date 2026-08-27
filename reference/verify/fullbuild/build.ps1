@@ -57,6 +57,35 @@ $tier3 = @('GALAXY.PAS', 'CDETYPES.PAS', 'NPETYPES.PAS')
 # units or the deliberately-excluded dead DList/Sort/LSort trio.
 $tier4 = @('TMA.PAS', 'PULLDOWN.PAS')
 
+# Tier 5: shared data-model support utilities, built on tier0-4. A strict dependency chain
+# (TextStrc -> DataStrc -> DataCnst -> Misc), not a flat layer, but grouped into one tier since
+# none needs anything from the other tiers below -- found via uses-map.json's closure toward
+# building Intrface (see chat history), not one-at-a-time discovery.
+$tier5 = @('TEXTSTRC.PAS', 'DATASTRC.PAS', 'DATACNST.PAS', 'MISC.PAS')
+
+# Tier 6: environment/primitive-interrogation layer. Environ and PrimIntr have a genuine mutual
+# IMPLEMENTATION USES cycle (see uses-map.json's "cycles"), which fpc's unit model should handle
+# since neither's INTERFACE section needs the other -- confirmed empirically the first time this
+# tier actually built (see "What got patched and why" if a patch was needed for the cycle itself).
+$tier6 = @('PRIMINTR.PAS', 'ENVIRON.PAS')
+
+# Tier 7: order-queue and news-ticker data types, built on tier5-6. No interdependency between
+# the two -- same layer, not a chain.
+$tier7 = @('ORDERS.PAS', 'NEWS.PAS')
+
+# Tier 8: in-game mail/message system, built on tier7's News.
+$tier8 = @('MESS.PAS')
+
+# Tier 9: the core game-object interface plus its NPE AI layer -- an 11-unit strongly-connected
+# component (Attack/AttNPE/Fleet/Intrface/NPE/NPE00-04/NPEIntr all mutually reference each other,
+# entirely through IMPLEMENTATION/INTERFACE combinations that never form an INTERFACE-side cycle
+# -- see uses-map.json). This is the actual bet of this whole lane: pristine INTRFACE.PAS
+# (~1700 lines) built in full, not the 3-procedure stand-in reference/verify/patches/
+# INTRFACE.PAS.patch uses instead. Order within the array doesn't reflect a real sequence (they're
+# mutually dependent) -- fpc's own auto-recompile-of-missing-units behavior resolves the cycle
+# when the first member is compiled, per this lane's "let fpc's own error be the authority" rule.
+$tier9 = @('ATTACK.PAS', 'ATTNPE.PAS', 'FLEET.PAS', 'INTRFACE.PAS', 'NPE.PAS', 'NPE00.PAS', 'NPE01.PAS', 'NPE02.PAS', 'NPE03.PAS', 'NPE04.PAS', 'NPEINTR.PAS')
+
 # CRT.PAS is not pristine source at all -- see shims/CRT.PAS's own header comment for why this
 # lane fakes the whole unit instead of pointing fpc at its real (but differently-behaved) Crt.
 # PRINTER.PAS is the same idea: fpc does ship a real Printer unit, but it's not on the default
@@ -66,7 +95,7 @@ $shims = @('CRT.PAS', 'PRINTER.PAS')
 
 # Flattened once so adding a unit to an existing tier's array above doesn't also require editing
 # a copy/compile/count expression down here.
-$allUnits = $tier0 + $tier1 + $tier2 + $tier3 + $tier4
+$allUnits = $tier0 + $tier1 + $tier2 + $tier3 + $tier4 + $tier5 + $tier6 + $tier7 + $tier8 + $tier9
 
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out | Out-Null

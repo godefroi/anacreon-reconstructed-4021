@@ -1,0 +1,20 @@
+--- a/NPE00.PAS
++++ b/NPE00.PAS
+@@ -610,7 +610,16 @@ PROCEDURE GetClosestCargoWorld(Emp: Empire; WorldID: IDNumber; VAR Cr: CargoArra
+       ObjID,ClosestID: IDNumber;
+       ObjCr: CargoArray;
+       ObjXY,XY: XYCoord;
+-      ResI: ResourceTypes;
++      (* PATCH (fpc): widened from ResourceTypes (NoRes..tri) to the full base
++         enum TechnologyTypes. The loop below deliberately drives ResI one past
++         the end (Succ(tri)) as a "scanned everything" sentinel -- valid under
++         TP's default relaxed subrange checking (TPC.CFG sets /$R-) but fpc
++         flags Succ(tri) as a compile-time range violation against the
++         narrower ResourceTypes subrange regardless of the $R directive.
++         TechnologyTypes has real values past tri, so the same sentinel value
++         is in-range here; every array index use of ResI below still only
++         happens while ResI<=tri, a valid ResourceTypes value. *)
++      ResI: TechnologyTypes;
+ 
+    BEGIN
+    GetCoord(WorldID,XY);

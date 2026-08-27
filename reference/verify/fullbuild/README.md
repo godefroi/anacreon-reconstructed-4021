@@ -52,6 +52,25 @@ from this directory):
 - **Tier 4** (standalone dialog/utility units, full USES closure satisfied by tier0-3): `TMA`
   (zero patches -- splash-screen/about-box text) and `PULLDOWN` (needed a `{$V-}` patch, see "What
   got patched and why" below).
+- **Tier 5** (shared data-model support utilities, a strict dependency chain grouped as one
+  tier): `TEXTSTRC`, `DATASTRC`, `DATACNST` (all zero patches), `MISC` (zero patches).
+- **Tier 6** (environment/primitive-interrogation layer, a genuine mutual `IMPLEMENTATION USES`
+  cycle -- see `uses-map.json`): `PRIMINTR` (needed the same `{$V-}` plus a `MaxAvail` fix already
+  established in the sibling `reference/verify/patches/PRIMINTR.PAS.patch`) and `ENVIRON` (zero
+  patches). **The cycle compiled with zero special handling** -- fpc auto-recompiled the other
+  member the first time either was reached, confirming the "implementation-only cycles just work"
+  read in "Dependency map" below.
+- **Tier 7** (order-queue and news-ticker data types, no interdependency between the two):
+  `ORDERS` (needed the `{$V-}` fix plus one `Move`-based rewrite of a hard type-cast fpc rejects,
+  see "What got patched and why") and `NEWS` (needed the same `MaxAvail` fix as `PrimIntr`).
+- **Tier 8** (in-game mail/message system, built on tier7's `News`): `MESS` -- zero patches.
+- **Tier 9** (the core game-object interface plus its NPE AI layer -- an 11-unit strongly
+  connected component: `ATTACK`, `ATTNPE`, `FLEET`, `INTRFACE`, `NPE`, `NPE00`-`NPE04`, `NPEINTR`):
+  **pristine `INTRFACE.PAS` (~1700 lines) now compiles in full** -- the actual bet of this whole
+  lane, see "Suggested next steps" below for what that means relative to the sibling lane's
+  3-procedure stand-in. Needed: `{$V-}` on `INTRFACE` itself (18 string-length mismatches);
+  `{$V-}` was tried and found unnecessary on the other ten -- only `NPE00` needed a real fix (see
+  "What got patched and why"). The cycle itself needed zero special handling, same as tier6's.
 
 Verified working end to end from a clean checkout: `build.ps1` deletes and repopulates `scratch/`
 from pristine + `patches/*.patch` + `shims/*.PAS` every run, exactly like `reference/verify/build.ps1`
@@ -62,12 +81,13 @@ does for `patched/`.
 - `build.ps1` -- rebuilds `scratch/` from pristine source, this lane's own `patches/*.patch`, and
   `shims/*.PAS`, then compiles each tier's units standalone (`fpc -Mtp -CfSSE2 <unit>.PAS` per file,
   same flags as `reference/verify/build.ps1` -- see that file's README for why `-CfSSE2` matters).
-  The `$tier0`/`$tier1`/`$tier2`/`$tier3` arrays at the top are the actual source of truth for
-  what's in scope. Each tier is a logical dependency layer, not a single file -- add a unit to
-  whichever tier's array matches its actual dependency depth (a new unit doesn't automatically get
-  its own tier; only introduce a new tier when a unit genuinely needs something later than tier3
-  provides), and copy any `.INC` it needs (see `COLORS.INC`'s handling), rather than hand-editing
-  `scratch/`.
+  The `$tier0`-`$tier9` arrays at the top are the actual source of truth for what's in scope
+  (flattened once into `$allUnits` so adding a unit to an existing tier's array doesn't also
+  require editing a copy/compile/count expression). Each tier is a logical dependency layer, not a
+  single file -- add a unit to whichever tier's array matches its actual dependency depth (a new
+  unit doesn't automatically get its own tier; only introduce a new tier when a unit genuinely
+  needs something later than the last tier provides), and copy any `.INC` it needs (see
+  `COLORS.INC`'s handling), rather than hand-editing `scratch/`.
 - `patches/*.PAS.patch` -- unified diffs against pristine `reference/DOSAnacreonSource131/`, same
   format and same generation tool as `reference/verify/patches/`. **Always regenerate these via
   `reference/verify/regenerate-patch.ps1`, never hand-write a diff** -- see "Tooling" below for why
@@ -176,6 +196,42 @@ does for `patched/`.
   this never mattered under real Turbo Pascal; same fix and same rationale as
   `reference/verify/patches/PRIMINTR.PAS.patch`'s `{$V-}` (see that lane's README). Added `{$V-}`
   right after `UNIT PullDown;`.
+- **`PRIMINTR.PAS`** -- needed exactly the same two fixes already established in
+  `reference/verify/patches/PRIMINTR.PAS.patch`, copied over rather than re-derived: `{$V-}` for
+  seven string-length mismatches, and `GetNewName`'s `IF MaxAvail>SizeOf(NewSlot) THEN` -> `IF True
+  THEN` (`MaxAvail` is TP's real-mode heap-free check; fpc doesn't provide it at all under a
+  virtual-memory target, and the "not enough heap" branch it guarded is unreachable regardless).
+- **`NEWS.PAS`** -- same `MaxAvail` landmine, same fix, in `GetOpenSlot`'s `IF MaxAvail>20 THEN` ->
+  `IF True THEN`.
+- **`ORDERS.PAS`** -- needed `{$V-}` (three string-length mismatches in `AllUpCase` calls) plus one
+  real landmine: `GetFleetCode` hard-cast a `FleetRecord`'s `OrderData` field
+  (`ARRAY[1..6] OF Byte`) directly to `OrderStructure` (`Word`+`MemoryArrayPtr`, also 6 bytes on
+  this target) -- a raw byte-layout reinterpretation TP's looser type-cast rules allowed but fpc's
+  stricter type checker rejects (`Illegal type conversion`). Replaced with `Move(...,Code,
+  SizeOf(Code))`, mirroring `SetFleetCode`'s own existing `Move`-based pattern for the reverse
+  direction in the same file -- not a new technique, just applying the file's own established one
+  the other way.
+- **`NPE00.PAS`** -- one real landmine in `GetClosestCargoWorld`: a local `ResI` was declared
+  `ResourceTypes` (the subrange `NoRes..tri`, values 0-18 of the wider `TechnologyTypes` enum), but
+  the loop deliberately drives it to `Succ(tri)` (value 19, a real `TechnologyTypes` value one past
+  the subrange) as a "scanned every resource type without a match" sentinel -- valid under TP's
+  default relaxed subrange checking (`TPC.CFG` sets `/$V-`... `/$R-`) but fpc flags `Succ(tri)` as
+  a compile-time range violation regardless of the `$R` directive (confirmed empirically: adding
+  `{$R-}` to the unit did not suppress it -- this is a stricter, always-on compile-time constant
+  check, not a runtime one). Fixed by widening `ResI`'s declared type to `TechnologyTypes`, the
+  full base enum -- every actual array-index use of `ResI` still only happens while `ResI<=tri`, a
+  legitimate `ResourceTypes` value, so this doesn't change behavior, only what the compiler is
+  willing to let the sentinel value sit in.
+- **`INTRFACE.PAS`** -- needed only `{$V-}` (18 string-length mismatches). This is the actual bet
+  of the whole lane: pristine `INTRFACE.PAS` (~1700 lines) compiling in full, not the 3-procedure
+  stand-in `reference/verify/patches/INTRFACE.PAS.patch` uses instead (see "Suggested next steps").
+- **`ATTACK`/`ATTNPE`/`FLEET`/`NPE`/`NPE01`-`NPE04`/`NPEINTR`** -- all compiled unpatched. The
+  11-unit strongly-connected component these plus `Intrface`/`NPE00` form (see `uses-map.json`'s
+  `cycles`) needed zero special build handling: fpc's own unit loader auto-recompiled whichever
+  cycle member wasn't yet built the moment the first one needed it, exactly as predicted for a
+  cycle running entirely through `IMPLEMENTATION USES` (never through either side's `INTERFACE
+  USES`). This confirms the "Dependency map" section's read on all four originally-flagged cycles,
+  not just `Environ`<->`PrimIntr` (tier6, also confirmed working with zero handling).
 
 ## Encoding incident: Read/Edit tool corrupted CP437 bytes in two patches (found and fixed)
 
@@ -266,10 +322,23 @@ not a substitute for `build.ps1` actually succeeding.
 `IMPLEMENTATION USES` on both sides, never through either unit's `INTERFACE USES`. Turbo
 Pascal/fpc's unit model elaborates interface sections first, and an interface section only needs
 its own `INTERFACE USES` satisfied -- so an implementation-only cycle like these is expected to
-compile fine (the earlier claim in this file that `Artifact`<->`Code` would need "joint compilation
-or an interface split" was wrong, and has been removed). Not yet empirically confirmed by an actual
-`build.ps1` run reaching that tier -- when it does, this note should be updated with the result,
-per this lane's "let fpc's own error be the authority" rule.
+compile fine. **Confirmed empirically, twice**: `Environ`<->`PrimIntr` (tier6) and the much bigger
+`Fleet`<->`Intrface` case (tier9) both compiled with zero special handling -- fpc's own unit loader
+auto-recompiled whichever cycle member wasn't built yet the moment the first one needed it. The
+earlier claim in this file that `Artifact`<->`Code` would need "joint compilation or an interface
+split" was wrong and has been removed; that pair hasn't been reached by a tier yet but the same
+mechanism should apply.
+
+**The `cycles` list itself undersold `Fleet`<->`Intrface`**: it only checked direct pairwise
+mutual references, so it missed that `Intrface`'s `IMPLEMENTATION USES` reaches `NPE`, whose
+`IMPLEMENTATION USES` reaches `NPE01`, whose `INTERFACE USES` reaches back to `Intrface` -- a
+3-hop cycle no pairwise check finds. A proper strongly-connected-component computation (Tarjan's
+algorithm over the full graph) turned up an **11-unit SCC**: `Attack`, `AttNPE`, `Fleet`,
+`Intrface`, `NPE`, `NPE00`-`NPE04`, `NPEIntr` -- all mutually reachable, all compiled together as
+tier9 with zero special handling, same result as the simpler pairwise cycles. If this map is ever
+used to reason about a *new* suspected cycle, don't trust a pairwise check alone -- multi-hop
+cycles through a chain of `IMPLEMENTATION USES` are real and this map's `cycles` field doesn't
+currently detect them (only the manual SCC pass done for `Intrface` did).
 
 If the pristine source ever changes, regenerate this file with a fresh extraction pass (and
 recheck for new parse artifacts by spot-reading a couple of files) rather than hand-editing entries
@@ -277,18 +346,20 @@ in place.
 
 ## Suggested next steps
 
-`uses-map.json`'s closure says the next fully-satisfied units beyond tier4 are the game
-data/state layer: `DataStrc`, `DataCnst`, `Misc`, `PrimIntr`, `Environ`, and (the big one)
-`Intrface`. **`Intrface` is a genuine scope call, not a mechanical next step**: pristine
-`INTRFACE.PAS` is exactly the file `reference/verify/patches/INTRFACE.PAS.patch` exists to trim
-down to only what's needed -- building the whole thing here is the core bet of this entire lane.
-Check its actual size/closure cost against `uses-map.json` and raise it with the user before
-sinking time into it, rather than assuming "build everything" was meant literally without a
-checkpoint.
+**Pristine `INTRFACE.PAS` now compiles in full (tier9)** -- 38 units total, up from 18. That was
+the core bet of this whole lane (see the note above about the sibling lane's 3-procedure stand-in)
+and it's done: a 20-unit closure (`DataStrc`/`DataCnst`/`Misc`/`TextStrc`/`Environ`/`PrimIntr`/
+`Orders`/`News`/`Mess` plus the 11-unit `Intrface` SCC) built with only the already-established
+patch classes (`{$V-}`, the `MaxAvail` heap-check fix) plus two new one-off landmines (`ORDERS.PAS`
+`GetFleetCode`'s hard type-cast, `NPE00.PAS`'s out-of-subrange sentinel) -- see "What got patched
+and why" for both.
 
-Once through that layer, the window/comm units that depend on `Menu`, `Dos2`, `Galaxy`, or
-`Intrface` (`MapWind`, `FltWind`, `StaWind`, `Display`, `SWindows`, ...) become reachable --
-including the `MapWind`<->`SWindows` cycle noted above.
+Next: the window/comm units that depend on `Menu`, `Dos2`, `Galaxy`, or `Intrface` (`MapWind`,
+`FltWind`, `StaWind`, `Display`, `SWindows`, ...) should now be reachable -- including the
+`MapWind`<->`SWindows` cycle noted above. Recompute the closure from `uses-map.json` against the
+now-larger built set (all of tier0-9) rather than assuming the earlier "two-or-three layers higher"
+read still holds unchanged -- more of their dependencies are satisfied now than when that read was
+done.
 
 Whatever's picked: try compiling it standalone against what's already in `scratch/` first (fpc's
 own error says exactly what's missing). If it lands at the same dependency depth as an existing
