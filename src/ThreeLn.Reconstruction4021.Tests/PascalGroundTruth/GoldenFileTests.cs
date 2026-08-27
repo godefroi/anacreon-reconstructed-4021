@@ -119,11 +119,14 @@ public class GoldenFileTests
             c => $"{c.Seed},{c.Range},{c.Count}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "rng", .. args.Skip(1)]));
 
-        // TEMPORARY: scenario domain scoped out of the fullbuild-lane retarget verification pass --
-        // see runworld.pas's RunScenarioCase PATCH-note. Re-enable once that's resolved.
-        // GoldenFile.Regenerate("scenario", ScenarioCases.All,
-        //     c => $"{Path.Combine(PascalHarness.RepoRoot, "reference", "scenarios", "dos_131", c.FileName)},{c.Seed},{c.NumPlayers}",
-        //     args => PatchHarness.CompileAndRun("runworld", ["case", "scenario", .. args.Skip(1)]));
+        // Path is relative to PatchHarness's own working directory (reference/verify/patched/),
+        // not absolute: LoadScenario's real Filename parameter is Pascal's LineStr (STRING[80]),
+        // and this repo's absolute path already runs ~96 characters -- comfortably over that limit
+        // (silent truncation, not a compile error). ".."/".." from patched/ reaches reference/,
+        // matching consolidated_work/'s own sibling-directory depth this was verified against.
+        GoldenFile.Regenerate("scenario", ScenarioCases.All,
+            c => $"{Path.Combine("..", "..", "scenarios", "dos_131", c.FileName)},{c.Seed},{c.NumPlayers}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "scenario", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("probescout", ProbeScoutCases.All,
             c => $"{(c.DestOwnedByIndependent ? 8 : 1)},{c.DestLegions},{(c.DestAlreadyScouted ? 1 : 0)},{c.RngFixedValue}",

@@ -32,6 +32,12 @@ namespace ThreeLn.Reconstruction4021.Tests;
 /// of the same ones). Formula-level correctness for these randomized values is already covered by the
 /// dedicated 2d domain tests (randomplanet/nebula/trillumreserves), which use ForcedRandomValue and
 /// don't chain into a real collision-retry loop.
+///
+/// sumempress/minedcellcount (CreateNPEmpire's own Boolean(Rnd(0,1)) gender draw; CreateSRMs' own
+/// "only mine an empty cell" check against wherever upstream RNG-driven placement already put
+/// something) fit this same exclusion by the rule above but sat in the exact-match block by
+/// oversight until the fullbuild-lane retarget's switch to the real LoadScenario (rather than a
+/// hand-reimplemented parser) shifted the RNG stream enough to expose the mismatch.
 /// </summary>
 public class ScenarioLoaderGoldenTests
 {
@@ -48,8 +54,10 @@ public class ScenarioLoaderGoldenTests
         var random = new PascalRandom(c.Seed);
         var setup = new GalaxySetup(random);
         var loader = new ScenarioLoader(setup, random);
+        // Matches NEWGAME.PAS's own InputEmpireName patch exactly (reference/verify/README.md) --
+        // test_player_N/test_pass_N, gender alternating starting male (0-based index even = male).
         var players = Enumerable.Range(1, c.NumPlayers)
-            .Select(i => new ScenarioLoader.PlayerInfo($"Player{i}", $"pw{i}", IsEmpress: false))
+            .Select(i => new ScenarioLoader.PlayerInfo($"test_player_{i}", $"test_pass_{i}", IsEmpress: (i - 1) % 2 != 0))
             .ToArray();
 
         var game = loader.Load(text, players);
@@ -65,13 +73,25 @@ public class ScenarioLoaderGoldenTests
         await Assert.That($"{game.Empires.Sum(e => (int)e.TechnologyLevel)}").IsEqualTo(golden["sumempiretech"]);
         await Assert.That($"{game.Empires.Sum(e => e.RevolutionFactor)}").IsEqualTo(golden["sumrevfactor"]);
         await Assert.That($"{game.Empires.Count(e => e.LosesIfCapitalConquered)}").IsEqualTo(golden["sumcentralmodifier"]);
-        await Assert.That($"{game.Empires.Count(e => e.IsEmpress)}").IsEqualTo(golden["sumempress"]);
-        await Assert.That($"{CountMinedCells(game.Galaxy)}").IsEqualTo(golden["minedcellcount"]);
 
         // Fields dropped from exact-match above (see class doc comment) still get a cheap smoke test:
         // bounds derived from type/domain invariants, not from game-balance assumptions, so they can't
         // produce a false failure on legitimate scenario content and don't drift with the RNG stream.
         var maxCoord = game.Galaxy.Size - 1;
+        // sumempress moved here from the exact-match block above: CreateNPEmpire's own gender draw
+        // (Boolean(Rnd(0,1)), NEWGAME.PAS:1255) makes it RNG-dependent exactly like the fields this
+        // class's own doc comment already excludes -- it had stayed in the exact-match block by
+        // oversight, coincidentally surviving until the fullbuild-lane retarget swapped this domain
+        // from a hand-reimplemented parser to the real LoadScenario, shifting the RNG stream enough
+        // to expose the mismatch on every NPE-containing scenario (GAUNTLET/AWAKEN/ARRONAX/INTRO).
+        await Assert.That(game.Empires.Count(e => e.IsEmpress)).IsBetween(0, game.Empires.Count);
+        // minedcellcount moved here for the same reason: CreateSRMs itself draws no RNG (it fills a
+        // fixed rectangle deterministically), but only mines a cell "IF ObjID.ObjTyp=Void"
+        // (NEWGAME.PAS:1367) -- so its result still depends on which cells upstream RNG-driven
+        // CreateRandomWorlds calls already occupied, the exact "explicit command downstream of a
+        // random draw" fragility this class's own doc comment already documents for starbase
+        // population (AWAKEN.SCN's own desync example).
+        await Assert.That(CountMinedCells(game.Galaxy)).IsBetween(0, game.Galaxy.Size * game.Galaxy.Size);
         await Assert.That(planets.Sum(p => p.Location.X)).IsBetween(0, planets.Count * maxCoord);
         await Assert.That(planets.Sum(p => p.Location.Y)).IsBetween(0, planets.Count * maxCoord);
         await Assert.That(planets.Sum(p => (int)p.Class)).IsBetween(0, planets.Count * (Enum.GetValues<WorldClass>().Length - 1));

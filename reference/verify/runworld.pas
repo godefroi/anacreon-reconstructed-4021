@@ -1428,65 +1428,35 @@ procedure RunRngCase(const arg: String);
    WriteLn('values=',Values);
    end;
 
-{$IFDEF ScenarioLaneEnabled}
-{ PATCH-note: scoped out of this retarget pass -- RunScenarioCase needs direct access to roughly
-  15 of NEWGAME.PAS's internal command-handler procedures (CreatePlayerEmpire/CreateWorld/
-  DefineZone/LoadTechArray/etc), and promoting them one at a time does not converge (each reveals
-  the next it calls). Calling the real LoadScenario instead is not the fix either: it genuinely
-  calls PressAnyKey/a "how many players" prompt, both WriteLn;Halt(1) under the fuller EIO/WND
-  patches now, so it would crash the harness rather than produce output. Left here, guarded out
-  by default, as its own follow-up -- not deleted, not silently dropped. Define
-  ScenarioLaneEnabled to work on it. }
 procedure RunScenarioCase(const arg: String);
-   { Reimplements NEWGAME.PAS:1650-1812's (LoadScenario) own header-parse + command-dispatch loop
-     fresh -- it's saturated with real, load-bearing DOS UI (OpenWindow bracketing the whole
-     procedure, ScenarioIntroduction deciding NoOfPlayers via a menu, ClrScr/PressAnyKey/CloseWindow)
-     that can't be dropped without changing what the loop actually does, unlike the two single-call
-     UI drops in the relocated primitives below it -- see UPDATE.PAS's own PATCH comment at this
-     relocation. Calls those relocated primitives (ScenaError/NextInteger/GetRandomXY/GetRandomRange/
-     GetNextXY/LoadClassArray/LoadTechArray/DefineXYPoint/DefineZone/ReadModifierList/
-     SetTrillumReserves/GetRandomEmpireName/CreatePlayerEmpire/CreateNPEmpire/CreateWorld/CreateBase/
-     CreateGate/CreateNebula/CreateRandomNebula/CreateSRMs/CreateRandomWorlds) in the same order/shape
-     real LoadScenario does, tracking FirstWorld/FirstBase itself (nothing relocated maintains
-     SetOfActivePlanets, so this driver's own counters are the only record of which Planet/Starbase
-     slots are active -- matching CreateWorld/CreateBase/CreateRandomWorlds' own VAR FirstWorld/
-     FirstBase parameters exactly).
+   { Calls the real NEWGAME.PAS LoadScenario end to end (promoted to this unit's INTERFACE, see
+     NEWGAME.PAS's own PATCH note) instead of hand-reimplementing its header-parse/command-dispatch
+     loop -- LoadScenario's own two interactive UI touchpoints (InputEmpireName's name/gender/
+     password prompts, ScenarioIntroduction's player-count prompt and page-pause) are bypassed via
+     NEWGAME.PAS's TestNumPlayers test-only override (see its own declaration comment for the full
+     mechanism, including why RandSeed's file-driven reseed is also skipped in test mode).
 
-     Player identity is a fixed "PlayerN"/"pwN"/not-an-empress convention, not a CLI field -- a name
-     string can't round-trip through this domain's otherwise-all-integer sibling cases, and the C#
-     side's own ScenarioLoaderGoldenTests hard-codes the identical convention so both sides agree.
+     Player identity is deterministic ("test_player_N"/"test_pass_N", alternating gender), computed
+     directly from each InputEmpireName call's own NewEmp parameter -- see that patch's own comment
+     for why no queue/array-with-pointers is needed here.
 
-     Emits an aggregate checksum over the whole loaded Universe^ rather than a per-entity dump (see
-     this domain's own header-comment entry for why): Year, active Planet/Starbase counts and
-     Card(SetOfActiveGates), active empire count, and sums of every RNG-or-parsing-sensitive numeric
-     field across all active planets/starbases/empires plus a galaxy-wide painted-nebula-cell count
-     and mined-cell count -- a wrong coordinate, a dropped jitter, a missed empire, or a nebula/mine
-     placement bug perturbs at least one of these. }
+     Emits the same aggregate checksum shape the old reimplementation-based domain did (see this
+     procedure's own prior version in git history for the byte-for-byte field list this matches):
+     Year, active Planet/Starbase counts and Card(SetOfActiveGates), active empire count, and sums
+     of every RNG-or-parsing-sensitive numeric field across all active planets/starbases/empires
+     plus a galaxy-wide painted-nebula-cell count and mined-cell count -- sourced from the real
+     SetOfActivePlanets/SetOfActiveStarbases (LoadScenario's own real bookkeeping) instead of the
+     old reimplementation's manually-tracked FirstWorld/FirstBase counters, which no longer exist
+     now that the real procedure -- which already maintains these sets correctly -- is what runs. }
    var
       PathAndCounts: String;
-      Path: String;
+      Path: LineStr;
       Seed,NumPlayers: LongInt;
       CommaPos1,CommaPos2: Integer;
-
-      ScenaFile: Text;
-      Dummy,SoG,NoP,Diff,MinLen,MaxLen,FirstYear: LongInt;
-      VersLine,Title: AnsiString;
-      BadToken: Boolean;
-      Line: LineStr;
-
-      FirstWorld,FirstBase: Word;
-      EmpireName,Password: EmpireNameArray;
-      Sex: SexArray;
-      TriRes: Word;
-      ClassTable: ClassArray;
-      TechTable: TechArray;
-      Zone: ZoneArray;
-      XYPoint: XYPointArray;
+      Abort: Boolean;
 
       i,x,y: Integer;
       Emp: Empire;
-      NoOfPlayersEmp: Empire;
-      NumStr: String8;
       Cell: XYCoord;
 
       PlanetCount,StarbaseCount,StargateCount,EmpireCount: LongInt;
@@ -1500,9 +1470,9 @@ procedure RunScenarioCase(const arg: String);
       DefI: DefnsTypes;
 
    begin
-   { Path,Seed,NumPlayers -- Path may itself be an absolute Windows path (drive-letter colon, no
-     commas), so this is a manual split on the LAST two commas, not ParseFields (which assumes every
-     field is a LongInt). }
+   { Path,Seed,NumPlayers -- Path may itself contain no commas (a plain relative path), so this is
+     a manual split on the LAST two commas, not ParseFields (which assumes every field is a
+     LongInt). }
    PathAndCounts:=arg;
    CommaPos2:=Length(PathAndCounts);
    while (CommaPos2>0) and (PathAndCounts[CommaPos2]<>',') do
@@ -1517,155 +1487,48 @@ procedure RunScenarioCase(const arg: String);
 
    New(Universe);
    FillChar(Universe^,SizeOf(Universe^),0);
-   ScenarioError:=False;
-   DebugScena:=False;
    RandSeed:=Seed;
    ForcedRandomValue:=-1;
+   TestNumPlayers:=NumPlayers;
 
-   Assign(ScenaFile,Path);
-   Reset(ScenaFile);
+   LoadScenario(Path,Abort);
 
-   ReadLn(ScenaFile,VersLine);
-   Val(Copy(VersLine,10,2),ScenaVersion,Dummy);
-
-   Title:=DFA1NextToken(ScenaFile,BadToken);
-   NextInteger(ScenaFile);              { Seed field in the file itself -- discarded, see header comment. }
-   NextInteger(ScenaFile);              { MinPlay -- not enforced; NumPlayers is this call's own input. }
-   NextInteger(ScenaFile);              { MaxPlay -- same reason. }
-   SoG:=NextInteger(ScenaFile);
-   NoP:=NextInteger(ScenaFile);         { NoOfPlanets cap -- Planet[] is a fixed 200-slot array regardless. }
-   Diff:=NextInteger(ScenaFile);        { Difficulty -- never read anywhere in real NEWGAME.PAS either. }
-   MinLen:=NextInteger(ScenaFile);
-   MaxLen:=NextInteger(ScenaFile);
-   FirstYear:=NextInteger(ScenaFile);
-
-   InitializeSector(SoG);
-   Year:=FirstYear;
-
-   { NEWGAME.PAS:1388-1515 (ScenarioIntroduction), file-consumption only -- the display/PressAnyKey
-     pagination and GetNoOfPlayers/NoChoice prompt are dead UI (NumPlayers is this call's own input
-     instead); NEWPAGE markers only affect how the real UI paginates, not where the text block ends,
-     so scanning straight for ENDTEXT (ignoring NEWPAGE) lands the file cursor in the same place. }
-   repeat
-      Line:=DFA1NextToken(ScenaFile,BadToken);
-      AllUpCase(Line);
-   until (Line='BEGINTEXT') or BadToken or EoF(ScenaFile);
-   ReadLn(ScenaFile);
-   repeat
-      ReadLn(ScenaFile,Line);
-      AllUpCase(Line);
-   until (Pos('ENDTEXT',Line)<>0) or EoF(ScenaFile);
-
-   FirstWorld:=1;
-   FirstBase:=1;
-   { PATCH-note: matches NEWGAME.PAS:1710-1713's own FillChar block exactly -- Zone/XYPoint are local
-     VAR parameters here (unlike real LoadScenario's own locals, which the same reasoning still
-     applies to), so leftover stack content from this same process's PREVIOUS RunScenarioCase call
-     would otherwise leak into DefineXYPoint's own "find an empty Name slot" scan, corrupting a later
-     scenario's coordinate resolution -- confirmed empirically via a real cross-case corruption when
-     running multiple scenario cases back to back before this fix was added. }
-   FillChar(EmpireName,SizeOf(EmpireName),0);
-   FillChar(Password,SizeOf(Password),0);
-   FillChar(Sex,SizeOf(Sex),0);
-   FillChar(Zone,SizeOf(Zone),0);
-   FillChar(XYPoint,SizeOf(XYPoint),0);
-   for i:=0 to NumPlayers-1 do
-      begin
-      Str(i+1,NumStr);
-      EmpireName[Empire(i)]:='Player'+NumStr;
-      Password[Empire(i)]:='pw'+NumStr;
-      Sex[Empire(i)]:=False;
-      end;
-
-   Zone[1].x1:=1;  Zone[1].y1:=1;
-   Zone[1].x2:=SoG;  Zone[1].y2:=SoG;
-   TriRes:=100;
-   NoOfPlayersEmp:=Empire(NumPlayers-1);
-
-   repeat
-      Line:=DFA1NextToken(ScenaFile,BadToken);
-      if BadToken then
-         ScenaError('ERROR: Bad command token "'+Line+'"')
-      else
-         begin
-         AllUpCase(Line);
-         if Line='DEBUGSCENARIO' then
-            DebugScena:=True
-         else if Line='BEGINDESCRIPTION' then
-            begin
-            repeat
-               ReadLn(ScenaFile,Line);
-               AllUpCase(Line);
-            until (Pos('ENDDESCRIPTION',Line)<>0) or EoF(ScenaFile);
-            end
-         else if Line='CLASSTABLE' then
-            LoadClassArray(ScenaFile,ClassTable)
-         else if Line='CREATENEBULA' then
-            CreateNebula(ScenaFile,XYPoint,Zone)
-         else if Line='CREATERANDOMNEBULA' then
-            CreateRandomNebula(ScenaFile)
-         else if Line='CREATESRMS' then
-            CreateSRMs(ScenaFile,XYPoint,Zone)
-         else if Line='CREATEPLAYEREMPIRE' then
-            CreatePlayerEmpire(ScenaFile,Empire(NumPlayers-1),EmpireName,Password,Sex)
-         else if Line='CREATENPEMPIRE' then
-            CreateNPEmpire(ScenaFile,EmpireName)
-         else if Line='CREATERANDOMWORLDS' then
-            CreateRandomWorlds(ScenaFile,FirstWorld,ClassTable,TechTable,TriRes,Zone)
-         else if Line='CREATEWORLD' then
-            CreateWorld(ScenaFile,FirstWorld,NoOfPlayersEmp,XYPoint,Zone)
-         else if Line='CREATESTARBASE' then
-            CreateBase(ScenaFile,FirstBase,NoOfPlayersEmp,XYPoint,Zone)
-         else if Line='CREATESTARGATE' then
-            CreateGate(ScenaFile,Empire(NumPlayers-1),XYPoint,Zone)
-         else if Line='DEFINEZONE' then
-            DefineZone(ScenaFile,XYPoint,Zone)
-         else if Line='DEFINEXY' then
-            DefineXYPoint(ScenaFile,XYPoint,Zone)
-         else if Line='REPORT' then
-            DFA1NextToken(ScenaFile,BadToken)
-         else if Line='TECHTABLE' then
-            LoadTechArray(ScenaFile,TechTable)
-         else if Line='SETTRILLUMRESERVES' then
-            SetTrillumReserves(ScenaFile,TriRes)
-         else if Line<>'ENDSCENARIO' then
-            ScenaError('ERROR: Unknown command "'+Line+'"');
-         end;
-   until (Line='ENDSCENARIO') or EoF(ScenaFile) or ScenarioError;
-
-   Close(ScenaFile);
+   TestNumPlayers:=-1;
 
    { Aggregate checksum -- see this procedure's own doc comment for why. }
    PlanetCount:=0;  SumPlanetX:=0;  SumPlanetY:=0;  SumPop:=0;  SumEff:=0;  SumTri:=0;
    SumClass:=0;  SumTech:=0;  SumShips:=0;  SumCargo:=0;  SumDefns:=0;
-   for i:=1 to FirstWorld-1 do
+   { PATCH-note: LastFirstWorld-1, not SetOfActivePlanets membership -- real Pascal doesn't
+     maintain that set during scenario creation at all (only LOADSAVE.PAS's LoadGame writes it),
+     see LoadScenario's own PATCH note for LastFirstWorld/LastFirstBase. }
+   for i:=1 to LastFirstWorld-1 do
       with Universe^.Planet[i] do
-         begin
-         Inc(PlanetCount);
-         Inc(SumPlanetX,XY.x-1);
-         Inc(SumPlanetY,XY.y-1);
-         Inc(SumPop,Pop);
-         Inc(SumEff,Eff);
-         Inc(SumTri,TriReserve);
-         Inc(SumClass,Ord(Cls));
-         Inc(SumTech,Ord(Tech));
-         for ShpI:=fgt to trn do
-            Inc(SumShips,Ships[ShpI]);
-         for CarI:=men to tri do
-            Inc(SumCargo,Cargo[CarI]);
-         for DefI:=LAM to ion do
-            Inc(SumDefns,Defns[DefI]);
-         end;
+            begin
+            Inc(PlanetCount);
+            Inc(SumPlanetX,XY.x-1);
+            Inc(SumPlanetY,XY.y-1);
+            Inc(SumPop,Pop);
+            Inc(SumEff,Eff);
+            Inc(SumTri,TriReserve);
+            Inc(SumClass,Ord(Cls));
+            Inc(SumTech,Ord(Tech));
+            for ShpI:=fgt to trn do
+               Inc(SumShips,Ships[ShpI]);
+            for CarI:=men to tri do
+               Inc(SumCargo,Cargo[CarI]);
+            for DefI:=LAM to ion do
+               Inc(SumDefns,Defns[DefI]);
+            end;
 
    StarbaseCount:=0;  SumStarbasePop:=0;  SumStarbaseEff:=0;
-   for i:=1 to FirstBase-1 do
+   for i:=1 to LastFirstBase-1 do
       with Universe^.Starbase[i] do
-         begin
-         Inc(StarbaseCount);
-         Inc(SumStarbasePop,Pop);
-         Inc(SumStarbaseEff,Eff);
-         Inc(SumShips,Ships[fgt]);  { PATCH-note: only Ships[fgt] folded in here as a cheap starbase-touch signal -- full starbase ship/cargo/defns sums would need the same three loops as planets, not worth doubling for a checksum. }
-         end;
+            begin
+            Inc(StarbaseCount);
+            Inc(SumStarbasePop,Pop);
+            Inc(SumStarbaseEff,Eff);
+            Inc(SumShips,Ships[fgt]);  { PATCH-note: only Ships[fgt] folded in here as a cheap starbase-touch signal -- full starbase ship/cargo/defns sums would need the same three loops as planets, not worth doubling for a checksum. }
+            end;
 
    StargateCount:=0;
    for i:=1 to MaxNoOfStargates do
@@ -1687,8 +1550,8 @@ procedure RunScenarioCase(const arg: String);
             end;
 
    NebulaCellCount:=0;
-   for x:=1 to SoG do
-      for y:=1 to SoG do
+   for x:=1 to SizeOfGalaxy do
+      for y:=1 to SizeOfGalaxy do
          begin
          Cell.x:=x;  Cell.y:=y;
          if GetNebula(Cell)<>NoNeb then
@@ -1696,8 +1559,8 @@ procedure RunScenarioCase(const arg: String);
          end;
 
    MinedCellCount:=0;
-   for x:=1 to SoG do
-      for y:=1 to SoG do
+   for x:=1 to SizeOfGalaxy do
+      for y:=1 to SizeOfGalaxy do
          begin
          Cell.x:=x;  Cell.y:=y;
          if EnemyMine(Cell)<>Indep then
@@ -1719,7 +1582,6 @@ procedure RunScenarioCase(const arg: String);
    Dispose(Universe);
    end;
 
-{$ENDIF}
 
 procedure RunFleetLogisticsCase(const arg: String);
    { FuelCapacity/FuelConsumption/FleetCargoSpace/BalanceFleet (MISC.PAS:168-222, INTRFACE.PAS:431-465
@@ -1936,14 +1798,7 @@ procedure RunCaseMode;
       else if domain='rng' then
          RunRngCase(ParamStr(i))
       else if domain='scenario' then
-         {$IFDEF ScenarioLaneEnabled}
          RunScenarioCase(ParamStr(i))
-         {$ELSE}
-         BEGIN
-         WriteLn('scenario domain scoped out of this build -- see RunScenarioCase''s own PATCH-note');
-         Halt(1);
-         END
-         {$ENDIF}
       else if domain='probescout' then
          RunProbeScoutCase(ParamStr(i))
       else if domain='fleetlogistics' then
