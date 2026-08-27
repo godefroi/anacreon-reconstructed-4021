@@ -22,69 +22,82 @@ Set-Location $PSScriptRoot
 $src = Join-Path $PSScriptRoot '..\..\DOSAnacreonSource131'
 $out = Join-Path $PSScriptRoot 'scratch'
 
-# Tier 0: units with no local USES clause at all (verified by reading each file, not the
-# call-graph tool -- see chat history). DLIST.PAS/SORT.PAS/LSORT.PAS are deliberately excluded:
-# confirmed by grep that nothing else in the whole source tree references DList/Sort/LSort, and
-# DLIST.PAS itself is incomplete (AddListElement's parameter list is truncated mid-declaration,
-# references an undeclared ListStructure type) -- dead, unfinished code, not a compile target.
-$tier0 = @('INT.PAS', 'TYPES.PAS', 'REAL1.PAS', 'QSORT.PAS', 'WNDTYPES.PAS', 'BATTLE.PAS', 'RESOURCE.PAS', 'STRG.PAS')
+[string[]]$units = @(
+    # Tier 0: units with no local USES clause at all (verified by reading each file, not the
+    # call-graph tool -- see chat history). DLIST.PAS/SORT.PAS/LSORT.PAS are deliberately excluded:
+    # confirmed by grep that nothing else in the whole source tree references DList/Sort/LSort, and
+    # DLIST.PAS itself is incomplete (AddListElement's parameter list is truncated mid-declaration,
+    # references an undeclared ListStructure type) -- dead, unfinished code, not a compile target.
+    @('INT.PAS', 'TYPES.PAS', 'REAL1.PAS', 'QSORT.PAS', 'WNDTYPES.PAS', 'BATTLE.PAS', 'RESOURCE.PAS', 'STRG.PAS')
 
-# Tier 1: the screen/keyboard primitive layer. SYSTEM2.PAS needs the same inline-asm patch as
-# the sibling reference/verify/patches lane (copied here, not referenced there, so this lane
-# stays self-contained). EIO.PAS/WND.PAS are the real leverage point for eliminating the UI:
-# every screen write in the whole ~80-unit codebase funnels through these two units' handful
-# of primitives (WriteString/WriteBlanks/Scroll*, DrawBorder's Mem[] writes) -- patch/no-op
-# them once here rather than per-domain like reference/verify/patches does today.
-$tier1 = @('SYSTEM2.PAS', 'EIO.PAS', 'WND.PAS')
+    # Tier 1: the screen/keyboard primitive layer. SYSTEM2.PAS needs the same inline-asm patch as
+    # the sibling reference/verify/patches lane (copied here, not referenced there, so this lane
+    # stays self-contained). EIO.PAS/WND.PAS are the real leverage point for eliminating the UI:
+    # every screen write in the whole ~80-unit codebase funnels through these two units' handful
+    # of primitives (WriteString/WriteBlanks/Scroll*, DrawBorder's Mem[] writes) -- patch/no-op
+    # them once here rather than per-domain like reference/verify/patches does today.
+    @('SYSTEM2.PAS', 'EIO.PAS', 'WND.PAS')
 
-# Tier 2: the application/dialog layer built on tier1's display primitives. MENU.PAS (zero
-# patches) and DOS2.PAS (needed a landmine patch, see "What got patched and why" in this lane's
-# README, for a real-mode PSP/environment-block walk in HomeDirectory) both sit at the same
-# dependency depth -- DOS2 additionally USES Menu, so it must come second within this tier.
-$tier2 = @('MENU.PAS', 'DOS2.PAS')
+    # Tier 2: the application/dialog layer built on tier1's display primitives. MENU.PAS (zero
+    # patches) and DOS2.PAS (needed a landmine patch, see "What got patched and why" in this lane's
+    # README, for a real-mode PSP/environment-block walk in HomeDirectory) both sit at the same
+    # dependency depth -- DOS2 additionally USES Menu, so it must come second within this tier.
+    @('MENU.PAS', 'DOS2.PAS')
 
-# Tier 3: the core game data model, built on tier2. GALAXY.PAS (INTERFACE USES Types,
-# IMPLEMENTATION USES Dos2 for WriteVariable/ReadVariable) must come first; CDETYPES.PAS and
-# NPETYPES.PAS are pure TYPE/CONST/VAR declaration units (empty IMPLEMENTATION) that both USES
-# Galaxy. None of the three have asm/memory/interrupt landmines of their own.
-$tier3 = @('GALAXY.PAS', 'CDETYPES.PAS', 'NPETYPES.PAS')
+    # Tier 3: the core game data model, built on tier2. GALAXY.PAS (INTERFACE USES Types,
+    # IMPLEMENTATION USES Dos2 for WriteVariable/ReadVariable) must come first; CDETYPES.PAS and
+    # NPETYPES.PAS are pure TYPE/CONST/VAR declaration units (empty IMPLEMENTATION) that both USES
+    # Galaxy. None of the three have asm/memory/interrupt landmines of their own.
+    @('GALAXY.PAS', 'CDETYPES.PAS', 'NPETYPES.PAS')
 
-# Tier 4: standalone dialog/utility units whose full USES closure (interface + implementation)
-# is already satisfied by tier0-3 -- found via a whole-tree USES-clause extraction (see chat
-# history) rather than picking a candidate file and discovering its deps one compile at a time.
-# TMA.PAS (splash-screen/about-box text) and PULLDOWN.PAS (pull-down menu-bar library) are the
-# only two genuinely new units the scan surfaced; the rest of its "ready" list was already-built
-# units or the deliberately-excluded dead DList/Sort/LSort trio.
-$tier4 = @('TMA.PAS', 'PULLDOWN.PAS')
+    # Tier 4: standalone dialog/utility units whose full USES closure (interface + implementation)
+    # is already satisfied by tier0-3 -- found via a whole-tree USES-clause extraction (see chat
+    # history) rather than picking a candidate file and discovering its deps one compile at a time.
+    # TMA.PAS (splash-screen/about-box text) and PULLDOWN.PAS (pull-down menu-bar library) are the
+    # only two genuinely new units the scan surfaced; the rest of its "ready" list was already-built
+    # units or the deliberately-excluded dead DList/Sort/LSort trio.
+    @('TMA.PAS', 'PULLDOWN.PAS')
 
-# Tier 5: shared data-model support utilities, built on tier0-4. A strict dependency chain
-# (TextStrc -> DataStrc -> DataCnst -> Misc), not a flat layer, but grouped into one tier since
-# none needs anything from the other tiers below -- found via uses-map.json's closure toward
-# building Intrface (see chat history), not one-at-a-time discovery.
-$tier5 = @('TEXTSTRC.PAS', 'DATASTRC.PAS', 'DATACNST.PAS', 'MISC.PAS')
+    # Tier 5: shared data-model support utilities, built on tier0-4. A strict dependency chain
+    # (TextStrc -> DataStrc -> DataCnst -> Misc), not a flat layer, but grouped into one tier since
+    # none needs anything from the other tiers below -- found via uses-map.json's closure toward
+    # building Intrface (see chat history), not one-at-a-time discovery.
+    @('TEXTSTRC.PAS', 'DATASTRC.PAS', 'DATACNST.PAS', 'MISC.PAS')
 
-# Tier 6: environment/primitive-interrogation layer. Environ and PrimIntr have a genuine mutual
-# IMPLEMENTATION USES cycle (see uses-map.json's "cycles"), which fpc's unit model should handle
-# since neither's INTERFACE section needs the other -- confirmed empirically the first time this
-# tier actually built (see "What got patched and why" if a patch was needed for the cycle itself).
-$tier6 = @('PRIMINTR.PAS', 'ENVIRON.PAS')
+    # Tier 6: environment/primitive-interrogation layer. Environ and PrimIntr have a genuine mutual
+    # IMPLEMENTATION USES cycle (see uses-map.json's "cycles"), which fpc's unit model should handle
+    # since neither's INTERFACE section needs the other -- confirmed empirically the first time this
+    # tier actually built (see "What got patched and why" if a patch was needed for the cycle itself).
+    @('PRIMINTR.PAS', 'ENVIRON.PAS')
 
-# Tier 7: order-queue and news-ticker data types, built on tier5-6. No interdependency between
-# the two -- same layer, not a chain.
-$tier7 = @('ORDERS.PAS', 'NEWS.PAS')
+    # Tier 7: order-queue and news-ticker data types, built on tier5-6. No interdependency between
+    # the two -- same layer, not a chain.
+    @('ORDERS.PAS', 'NEWS.PAS')
 
-# Tier 8: in-game mail/message system, built on tier7's News.
-$tier8 = @('MESS.PAS')
+    # Tier 8: in-game mail/message system, built on tier7's News.
+    @('MESS.PAS')
 
-# Tier 9: the core game-object interface plus its NPE AI layer -- an 11-unit strongly-connected
-# component (Attack/AttNPE/Fleet/Intrface/NPE/NPE00-04/NPEIntr all mutually reference each other,
-# entirely through IMPLEMENTATION/INTERFACE combinations that never form an INTERFACE-side cycle
-# -- see uses-map.json). This is the actual bet of this whole lane: pristine INTRFACE.PAS
-# (~1700 lines) built in full, not the 3-procedure stand-in reference/verify/patches/
-# INTRFACE.PAS.patch uses instead. Order within the array doesn't reflect a real sequence (they're
-# mutually dependent) -- fpc's own auto-recompile-of-missing-units behavior resolves the cycle
-# when the first member is compiled, per this lane's "let fpc's own error be the authority" rule.
-$tier9 = @('ATTACK.PAS', 'ATTNPE.PAS', 'FLEET.PAS', 'INTRFACE.PAS', 'NPE.PAS', 'NPE00.PAS', 'NPE01.PAS', 'NPE02.PAS', 'NPE03.PAS', 'NPE04.PAS', 'NPEINTR.PAS')
+    # Tier 9: the core game-object interface plus its NPE AI layer -- an 11-unit strongly-connected
+    # component (Attack/AttNPE/Fleet/Intrface/NPE/NPE00-04/NPEIntr all mutually reference each other,
+    # entirely through IMPLEMENTATION/INTERFACE combinations that never form an INTERFACE-side cycle
+    # -- see uses-map.json). This is the actual bet of this whole lane: pristine INTRFACE.PAS
+    # (~1700 lines) built in full, not the 3-procedure stand-in reference/verify/patches/
+    # INTRFACE.PAS.patch uses instead. Order within the array doesn't reflect a real sequence (they're
+    # mutually dependent) -- fpc's own auto-recompile-of-missing-units behavior resolves the cycle
+    # when the first member is compiled, per this lane's "let fpc's own error be the authority" rule.
+    @('ATTACK.PAS', 'ATTNPE.PAS', 'FLEET.PAS', 'INTRFACE.PAS', 'NPE.PAS', 'NPE00.PAS', 'NPE01.PAS', 'NPE02.PAS', 'NPE03.PAS', 'NPE04.PAS', 'NPEINTR.PAS')
+
+    # Tier 10: window/dialog units, full USES closure satisfied by tier0-9 (found via
+    # uses-map.json's closure, not one-at-a-time discovery -- see chat history). No
+    # interdependency among these six -- a flat layer, not a chain.
+    @('EMPWIND.PAS', 'FLTWIND.PAS', 'HLPWIND.PAS', 'NMSWIND.PAS', 'NWSWIND.PAS', 'STAWIND.PAS', 'EDIT.PAS')
+
+    # Tier 11: core game-logic/data units, also satisfied by tier0-9, also a flat layer with no
+    # interdependency among themselves. UPDATE.PAS is the per-turn game update loop -- the same
+    # file reference/verify/patches/UPDATE.PAS.patch trims for the sibling lane's driver, built
+    # here in full. LOADSAVE.PAS is the save/load system.
+    @('BOMBER.PAS', 'DFA.PAS', 'LOADSAVE.PAS', 'SBASE.PAS', 'SCENA.PAS', 'UPDATE.PAS')
+)
 
 # CRT.PAS is not pristine source at all -- see shims/CRT.PAS's own header comment for why this
 # lane fakes the whole unit instead of pointing fpc at its real (but differently-behaved) Crt.
@@ -93,13 +106,9 @@ $tier9 = @('ATTACK.PAS', 'ATTNPE.PAS', 'FLEET.PAS', 'INTRFACE.PAS', 'NPE.PAS', '
 # shims/PRINTER.PAS's own header comment.
 $shims = @('CRT.PAS', 'PRINTER.PAS')
 
-# Flattened once so adding a unit to an existing tier's array above doesn't also require editing
-# a copy/compile/count expression down here.
-$allUnits = $tier0 + $tier1 + $tier2 + $tier3 + $tier4 + $tier5 + $tier6 + $tier7 + $tier8 + $tier9
-
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out | Out-Null
-foreach ($f in $allUnits) { Copy-Item (Join-Path $src $f) $out }
+foreach ($f in $units) { Copy-Item (Join-Path $src $f) $out }
 foreach ($f in $shims) { Copy-Item (Join-Path $PSScriptRoot "shims\$f") $out }
 Copy-Item (Join-Path $src 'COLORS.INC') $out
 
@@ -109,7 +118,7 @@ try {
     foreach ($p in $patches) {
         git apply -p1 --verbose $p.FullName
     }
-    foreach ($f in $allUnits) {
+    foreach ($f in $units) {
         Write-Host "--- $f ---"
         fpc -Mtp -CfSSE2 $f
     }
@@ -117,4 +126,4 @@ try {
     Pop-Location
 }
 
-Write-Host "Build OK: $($allUnits.Count) units compiled standalone."
+Write-Host "Build OK: $($units.Count) units compiled standalone."

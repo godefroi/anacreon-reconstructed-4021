@@ -1,0 +1,14 @@
+--- a/EDIT.PAS
++++ b/EDIT.PAS
+@@ -6,6 +6,11 @@
+ 
+ UNIT Edit;
+ 
++{ PATCH (fpc): the V- flag below relaxes fpc's strict fixed-string-length type
++  matching (Turbo Pascal treated e.g. String16/String32 as interchangeable by
++  content; fpc's default V+ requires an exact declared-length match). }
++{$V-}
++
+ INTERFACE
+ 
+ USES Strg,

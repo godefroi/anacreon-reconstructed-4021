@@ -71,6 +71,15 @@ from this directory):
   3-procedure stand-in. Needed: `{$V-}` on `INTRFACE` itself (18 string-length mismatches);
   `{$V-}` was tried and found unnecessary on the other ten -- only `NPE00` needed a real fix (see
   "What got patched and why"). The cycle itself needed zero special handling, same as tier6's.
+- **Tier 10** (window/dialog units, no interdependency among the seven): `EMPWIND`, `HLPWIND`,
+  `NWSWIND`, `STAWIND` (all zero patches), `NMSWIND` and `EDIT` (both needed the `{$V-}` fix).
+  `FLTWIND` -- zero patches; this is the window/comm unit originally guessed (wrongly) as the
+  natural "next tier" back before the closure computation -- see "Dependency map" below.
+- **Tier 11** (core game-logic/data units, also a flat layer with no interdependency among the
+  six): `BOMBER`, `DFA`, `LOADSAVE`, `SBASE` (all zero patches), `SCENA` (needed `{$V-}`), and
+  `UPDATE` -- zero patches. `UPDATE` is the per-turn game update loop, the same file
+  `reference/verify/patches/UPDATE.PAS.patch` trims for the sibling lane's driver -- built here in
+  full, same convergence as `INTRFACE` in tier9.
 
 Verified working end to end from a clean checkout: `build.ps1` deletes and repopulates `scratch/`
 from pristine + `patches/*.patch` + `shims/*.PAS` every run, exactly like `reference/verify/build.ps1`
@@ -81,11 +90,12 @@ does for `patched/`.
 - `build.ps1` -- rebuilds `scratch/` from pristine source, this lane's own `patches/*.patch`, and
   `shims/*.PAS`, then compiles each tier's units standalone (`fpc -Mtp -CfSSE2 <unit>.PAS` per file,
   same flags as `reference/verify/build.ps1` -- see that file's README for why `-CfSSE2` matters).
-  The `$tier0`-`$tier9` arrays at the top are the actual source of truth for what's in scope
-  (flattened once into `$allUnits` so adding a unit to an existing tier's array doesn't also
-  require editing a copy/compile/count expression). Each tier is a logical dependency layer, not a
-  single file -- add a unit to whichever tier's array matches its actual dependency depth (a new
-  unit doesn't automatically get its own tier; only introduce a new tier when a unit genuinely
+  `$units` -- one `[string[]]` literal built from nested per-tier `@(...)` arrays (PowerShell
+  auto-flattens them into a single list) -- is the actual source of truth for what's in scope, each
+  tier's array preceded by a comment explaining why those units share a tier. Each tier is a
+  logical dependency layer, not a single file -- add a unit to whichever tier's array matches its
+  actual dependency depth (a new unit doesn't automatically get its own tier; only introduce a new
+  tier block when a unit genuinely
   needs something later than the last tier provides), and copy any `.INC` it needs (see
   `COLORS.INC`'s handling), rather than hand-editing `scratch/`.
 - `patches/*.PAS.patch` -- unified diffs against pristine `reference/DOSAnacreonSource131/`, same
@@ -232,6 +242,13 @@ does for `patched/`.
   cycle running entirely through `IMPLEMENTATION USES` (never through either side's `INTERFACE
   USES`). This confirms the "Dependency map" section's read on all four originally-flagged cycles,
   not just `Environ`<->`PrimIntr` (tier6, also confirmed working with zero handling).
+- **`NMSWIND.PAS`/`EDIT.PAS`/`SCENA.PAS`** -- each needed only the by-now-routine `{$V-}` fix
+  (string-length mismatches). `EMPWIND`/`HLPWIND`/`NWSWIND`/`STAWIND`/`FLTWIND` compiled unpatched.
+- **`BOMBER.PAS`/`DFA.PAS`/`LOADSAVE.PAS`/`SBASE.PAS`/`UPDATE.PAS`** -- all compiled unpatched.
+  `UPDATE.PAS` (~1000+ lines, the per-turn game update loop) and `LOADSAVE.PAS` (the save/load
+  system) are both real convergence points with the sibling `reference/verify/` lane, which trims
+  `UPDATE.PAS` down to a hand-picked subset for its own driver -- both build here in full with
+  zero patches needed.
 
 ## Encoding incident: Read/Edit tool corrupted CP437 bytes in two patches (found and fixed)
 
@@ -346,20 +363,24 @@ in place.
 
 ## Suggested next steps
 
-**Pristine `INTRFACE.PAS` now compiles in full (tier9)** -- 38 units total, up from 18. That was
-the core bet of this whole lane (see the note above about the sibling lane's 3-procedure stand-in)
-and it's done: a 20-unit closure (`DataStrc`/`DataCnst`/`Misc`/`TextStrc`/`Environ`/`PrimIntr`/
-`Orders`/`News`/`Mess` plus the 11-unit `Intrface` SCC) built with only the already-established
-patch classes (`{$V-}`, the `MaxAvail` heap-check fix) plus two new one-off landmines (`ORDERS.PAS`
-`GetFleetCode`'s hard type-cast, `NPE00.PAS`'s out-of-subrange sentinel) -- see "What got patched
-and why" for both.
+**Pristine `INTRFACE.PAS` and `UPDATE.PAS` now both compile in full (tiers 9 and 11)** -- 51 units
+total, up from 18. Building `Intrface` was the core bet of this whole lane (see the note above
+about the sibling lane's 3-procedure stand-in); `Update.PAS` is the same kind of convergence with
+that lane's own driver target. Tiers 5-11 built with only the already-established patch classes
+(`{$V-}`, the `MaxAvail` heap-check fix) plus two one-off landmines (`ORDERS.PAS` `GetFleetCode`'s
+hard type-cast, `NPE00.PAS`'s out-of-subrange sentinel) -- see "What got patched and why".
 
-Next: the window/comm units that depend on `Menu`, `Dos2`, `Galaxy`, or `Intrface` (`MapWind`,
-`FltWind`, `StaWind`, `Display`, `SWindows`, ...) should now be reachable -- including the
-`MapWind`<->`SWindows` cycle noted above. Recompute the closure from `uses-map.json` against the
-now-larger built set (all of tier0-9) rather than assuming the earlier "two-or-three layers higher"
-read still holds unchanged -- more of their dependencies are satisfied now than when that read was
-done.
+Recomputing the closure against all of tier0-11 (51 units) turns up nothing new except
+already-excluded units (`Compile1`/`Test`/`Test1` are `PROGRAM`s not units; `DList`/`LSort`/`Sort`
+are dead code; `OVERINIT` is the real-mode overlay manager, out of scope per this lane's stated
+goal). **The next real layer is a 3-unit mutual cycle**: `MapWind`, `SWindows`, and `Display` all
+reference each other through `IMPLEMENTATION USES` (`MapWind`->`SWindows`, `SWindows`->`MapWind`,
+`MapWind`->`Display`, `Display`->`SWindows`) -- confirm via a proper SCC pass (not pairwise) before
+tiering, same lesson as the `Intrface` SCC above. Building it unblocks the remaining comm/window
+units (`AttComm`, `FltComm`, `ClsComm`, `MscComm`, `Constr`, `Design`, `Names`) and, after those,
+the higher-level game-flow units (`NewGame`, `Prolog`, `PlayTurn`, `Transact`, `ViewMap`,
+`Artifact`<->`Code`'s own cycle). `Anacreon` itself (the real DOS entry point) stays excluded per
+this lane's stated scope.
 
 Whatever's picked: try compiling it standalone against what's already in `scratch/` first (fpc's
 own error says exactly what's missing). If it lands at the same dependency depth as an existing
