@@ -113,6 +113,26 @@ $out = Join-Path $PSScriptRoot 'scratch'
     # even match LOADSAVE.PAS's current LoadGame(FilenameStr):Word signature -- stale dev tooling
     # predating a real signature change, not an fpc-strictness gap. Nothing else depends on it.
     @('ATTCOMM.PAS', 'CLSCOMM.PAS', 'CONSTR.PAS', 'DESIGN.PAS', 'FLTCOMM.PAS', 'MSCCOMM.PAS', 'NAMES.PAS')
+
+    # Tier 14: the main-menu/command-dispatch loop, full USES closure satisfied by tier0-13
+    # (found via uses-map.json's closure). Single unit, no interdependency to resolve.
+    @('PLAYTURN.PAS')
+
+    # Tier 15: the Artifact<->Code cycle (uses-map.json's last remaining unconfirmed cycle),
+    # same shape as the already-confirmed Environ<->PrimIntr and Fleet<->Intrface cycles -- a
+    # pure mutual IMPLEMENTATION USES with no INTERFACE-side cycle, every other dependency
+    # already satisfied by tier0-14. Resolves the same way: fpc auto-recompiles whichever
+    # member isn't built yet when the other needs it.
+    @('ARTIFACT.PAS', 'CODE.PAS')
+
+    # Tier 16: world-transaction and new-game-setup units, full USES closure satisfied by
+    # tier0-15 plus fpc's own standard Dos unit (NewGame's only non-pristine dependency --
+    # not part of this source tree, no shim needed, fpc ships a real one under -Mtp).
+    @('TRANSACT.PAS', 'NEWGAME.PAS')
+
+    # Tier 17: game-startup/title-screen unit, full USES closure satisfied by tier0-16
+    # (found via uses-map.json's closure). Single unit, no interdependency to resolve.
+    @('PROLOG.PAS')
 )
 
 # CRT.PAS is not pristine source at all -- see shims/CRT.PAS's own header comment for why this
@@ -122,11 +142,14 @@ $out = Join-Path $PSScriptRoot 'scratch'
 # shims/PRINTER.PAS's own header comment.
 $shims = @('CRT.PAS', 'PRINTER.PAS')
 
+# Include files to be copied to the output directory.
+$includes = @('COLORS.INC', 'BITPIC.INC')
+
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out | Out-Null
 foreach ($f in $units) { Copy-Item (Join-Path $src $f) $out }
 foreach ($f in $shims) { Copy-Item (Join-Path $PSScriptRoot "shims\$f") $out }
-Copy-Item (Join-Path $src 'COLORS.INC') $out
+foreach ($f in $includes) { Copy-Item (Join-Path $src $f) $out }
 
 $patches = Get-ChildItem (Join-Path $PSScriptRoot 'patches') -Filter '*.patch' -ErrorAction SilentlyContinue | Sort-Object Name
 Push-Location $out

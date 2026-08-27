@@ -1,0 +1,108 @@
+--- a/PROLOG.PAS
++++ b/PROLOG.PAS
+@@ -4,6 +4,20 @@
+ 
+ UNIT Prolog;
+ 
++{ PATCH (fpc): the V- flag below relaxes fpc's strict fixed-string-length type
++  matching (Turbo Pascal treated e.g. String16/String32 as interchangeable by
++  content; fpc's default V+ requires an exact declared-length match). }
++{$V-}
++
++{ PATCH (fpc): UpdateStarArray below used two raw-8086-machine-code blocks (via the
++  Turbo Pascal Inline directive; retrace-timed direct VGA memory writes at segment
++  ScrSeg) to erase/redraw a single twinkling title-screen star -- that directive emits
++  literal machine code bytes with no fpc equivalent, categorically uncompilable under a
++  flat i386 memory model, not an fpc-strictness gap. Star is local to Prologue (the
++  title/main-menu screen) and never read outside it, so removing just those two blocks
++  (pure display, same class as this lane's other Mem[]/inline-asm removals) leaves
++  Star's Pos/Chr bookkeeping -- and everything else in this unit -- unaffected. }
++
+ {$IFDEF Overlay}
+ {$F+}
+ {$O+}
+@@ -149,40 +163,7 @@ PROCEDURE UpdateStarArray(VAR Star: StarArray);
+          Pos2:=Pos;
+          Ch2:=Chr;
+ 
+-         Inline(
+-                                  {; This routine will erase the character at Pos if it is Chr.}
+-           $1E                    {        PUSH DS}
+-           /$A1/>SCRSEG           {        MOV AX,[>ScrSeg]}
+-           /$8A/$1E/>CHECKSNOW    {        MOV BL,[<WaitForRetrace]}
+-           /$8E/$D8               {        MOV DS,AX}
+-           /$8B/$86/>POS2         {        MOV AX,[BP+>Pos]}
+-           /$89/$C7               {        MOV DI,AX}
+-           /$8A/$8E/>CH2          {        MOV CL,[BP+>Chr]}
+-           /$D0/$DB               {        RCR BL,1                ;If WaitForRetrace is False...}
+-           /$73/$1D               {        JNC Mono                ; use Mono routine.}
+-                                  {; COLOR ROUTINE}
+-           /$BA/$DA/$03           {        MOV DX,$03DA            ;status port}
+-           /$B4/$09               {        MOV AH,$09}
+-           /$FA                   {        CLI}
+-           /$EC                   {Wait1:  IN AL,DX}
+-           /$D0/$D8               {        RCR AL,1}
+-           /$72/$FB               {        JC Wait1}
+-           /$EC                   {Wait2:  IN AL,DX}
+-           /$20/$E0               {        AND AL,AH}
+-           /$74/$FB               {        JZ Wait2}
+-           /$FB                   {        STI}
+-           /$8A/$05               {        MOV AL,[DI]}
+-           /$38/$C8               {        CMP AL,CL}
+-           /$75/$0F               {        JNE End1}
+-           /$C6/$05/$20           {        MOV BYTE PTR [DI],32}
+-           /$E9/$09/$00           {        JMP End1}
+-                                  {; MONO ROUTINE}
+-           /$8A/$05               {Mono:   MOV AL,[DI]}
+-           /$38/$C8               {        CMP AL,CL}
+-           /$75/$03               {        JNE End1}
+-           /$C6/$05/$20           {        MOV BYTE PTR [DI],32}
+-           /$1F                   {End1:   POP DS}
+-         );
++         { PATCH (fpc): removed -- Inline() raw-machine-code star erase/redraw, pure display. }
+ 
+          Pos:=Pos+Cycle[Cyc];
+          Pos2:=Pos;
+@@ -194,41 +175,7 @@ PROCEDURE UpdateStarArray(VAR Star: StarArray);
+          Chr:=ChrCycle[(Cyc-1) MOD 4];
+          Ch2:=Chr;
+ 
+-         Inline(
+-                                  {; This routine will draw character Ch2 at Pos2 if Pos2 is blank.}
+-           $1E                    {        PUSH DS}
+-           /$A1/>SCRSEG           {        MOV AX,[>ScrSeg]}
+-           /$8A/$1E/>CHECKSNOW    {        MOV BL,[<WaitForRetrace]}
+-           /$8E/$D8               {        MOV DS,AX}
+-           /$8B/$86/>POS2         {        MOV AX,[BP+>Pos2]}
+-           /$89/$C7               {        MOV DI,AX}
+-           /$8A/$8E/>CH2          {        MOV CL,[BP+>Ch2]}
+-           /$B5/$0F               {        MOV CH,$0F              ;bright attribute}
+-           /$D0/$DB               {        RCR BL,1}
+-           /$73/$1C               {        JNC Mono}
+-                                  {; COLOR ROUTINE}
+-           /$BA/$DA/$03           {        MOV DX,$03DA            ;status port}
+-           /$B4/$09               {        MOV AH,$09}
+-           /$FA                   {        CLI}
+-           /$EC                   {Wait1:  IN AL,DX}
+-           /$D0/$D8               {        RCR AL,1}
+-           /$72/$FB               {        JC Wait1}
+-           /$EC                   {Wait2:  IN AL,DX}
+-           /$20/$E0               {        AND AL,AH}
+-           /$74/$FB               {        JZ Wait2}
+-           /$FB                   {        STI}
+-           /$8A/$05               {        MOV AL,[DI]}
+-           /$3C/$20               {        CMP AL,32}
+-           /$75/$0D               {        JNE End1}
+-           /$89/$0D               {        MOV [DI],CX}
+-           /$E9/$08/$00           {        JMP End1}
+-                                  {; MONO ROUTINE}
+-           /$8A/$05               {Mono:   MOV AL,[DI]}
+-           /$3C/$20               {        CMP AL,32}
+-           /$75/$02               {        JNE End1}
+-           /$89/$0D               {        MOV [DI],CX}
+-           /$1F                   {End1:   POP DS}
+-         );
++         { PATCH (fpc): removed -- Inline() raw-machine-code star erase/redraw, pure display. }
+          END;
+    END;  { UpdateStarArray }
+ 

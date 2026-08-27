@@ -102,6 +102,24 @@ from this directory):
   is deliberately excluded: it's `PROGRAM ViewMap`, not a unit, and its `LoadGame(Filename,Error)`
   call doesn't match `LOADSAVE.PAS`'s current `LoadGame(FilenameStr):Word` signature (stale dev
   tooling, not an fpc-strictness gap).
+- **Tier 14** (`PLAYTURN` -- the main-menu/command-dispatch loop, single unit, full USES closure
+  satisfied by tier0-13): needed only the routine `{$V-}` fix.
+- **Tier 15** (`ARTIFACT`, `CODE` -- `uses-map.json`'s last remaining unconfirmed cycle, a pure
+  mutual `IMPLEMENTATION USES` with no `INTERFACE`-side cycle, same shape as `Environ`<->`PrimIntr`
+  and `Fleet`<->`Intrface`): confirmed to need **zero special handling**, same as those two.
+  `ARTIFACT` compiled unpatched; `CODE` needed the routine `{$V-}` fix.
+- **Tier 16** (`TRANSACT`, `NEWGAME` -- world-transaction and new-game-setup units, full USES
+  closure satisfied by tier0-15 plus fpc's own standard `Dos` unit): `TRANSACT` compiled unpatched;
+  `NEWGAME` needed the routine `{$V-}` fix.
+- **Tier 17** (`PROLOG` -- game-startup/title-screen unit, single unit, full USES closure satisfied
+  by tier0-16): needed `{$V-}` plus `BITPIC.INC` added to `build.ps1`'s copied-`.INC` list (same
+  handling as `COLORS.INC`), plus removal of two `Inline()` raw-8086-machine-code blocks in
+  `UpdateStarArray` (see "What got patched and why") -- same "real-mode-only, categorically
+  uncompilable" class as this lane's `Mem[]` removals, not an fpc-strictness gap.
+
+**With tier17, every unit in `uses-map.json` is now either built or deliberately excluded** --
+67 units compile clean; see "Dead code found" for the one newly-excluded unit (`OVERINIT.PAS`) and
+"Suggested next steps" for what's left.
 
 Verified working end to end from a clean checkout: `build.ps1` deletes and repopulates `scratch/`
 from pristine + `patches/*.patch` + `shims/*.PAS` every run, exactly like `reference/verify/build.ps1`
@@ -304,6 +322,20 @@ does for `patched/`.
   `Ord(ThgI)<>Ord(SRM)` instead of the enum values directly -- sidesteps the static check without
   changing the comparison's meaning (range checking is off in this build regardless, so `Inc`
   advancing `ThgI` past its declared range was never going to fault at runtime either way).
+- **`PLAYTURN.PAS`** -- needed only the routine `{$V-}` fix.
+- **`ARTIFACT.PAS`** -- compiled unpatched.
+- **`CODE.PAS`** -- needed only the routine `{$V-}` fix.
+- **`TRANSACT.PAS`** -- compiled unpatched.
+- **`NEWGAME.PAS`** -- needed only the routine `{$V-}` fix.
+- **`PROLOG.PAS`** -- needed `{$V-}` plus removal of two `Inline(...)` raw-8086-machine-code blocks
+  in `UpdateStarArray`: retrace-timed direct VGA writes at segment `ScrSeg` that erase/redraw a
+  single twinkling title-screen star. `Inline()` emits literal machine-code bytes with no fpc
+  equivalent -- categorically uncompilable under a flat i386 memory model, same class as this
+  lane's `Mem[]` removals, not an fpc-strictness gap. `Star` (the array both blocks operate on) is
+  local to `Prologue` and never read outside it, so removing the two blocks leaves `Star`'s
+  `Pos`/`Chr` bookkeeping, and everything else in the unit, unaffected. Also needed `BITPIC.INC`
+  added to `build.ps1`'s copied-`.INC` list (`{$I BITPIC.INC}` mid-unit, same handling as
+  `COLORS.INC`).
 
 ## Encoding incident: Read/Edit tool corrupted CP437 bytes in two patches (found and fixed)
 
@@ -347,6 +379,16 @@ excluded from `build.ps1`'s actual `$tier0` array:
   cannot compile regardless of strategy.
 - `QSORT.PAS` (also tier 0, no `Inline`/asm) is genuinely used (`FLTWIND.PAS`, `STAWIND.PAS`) and
   compiles clean untouched -- kept.
+
+`OVERINIT.PAS` is the last unit in `uses-map.json` not built or already excluded. Its entire body
+(empty `INTERFACE`, three-line `INITIALIZATION`) is `OvrInit('ANACREON.OVR'); OvrSetBuf(...);
+OvrSetRetry(...)` against `USES Overlay` -- Turbo Pascal's own real-mode disk-overlay manager (code
+segments swapped in/out of memory from a `.OVR` file), not a project source file and not present in
+`reference/DOSAnacreonSource131` at all. This is a real-mode-only mechanism with no meaning under a
+flat 32-bit memory model, not merely a strictness gap fpc could be talked out of -- same "doesn't
+apply to this target" category as the DList/Sort/LSort trio above, not the "removed as pure
+display" `Mem[]`/`Inline()` class. Excluded from tiering; nothing else in the source tree calls
+anything `OVERINIT.PAS` defines (its `INTERFACE` is empty), so nothing downstream is blocked by it.
 
 ## Tooling change: `regenerate-patch.ps1` now takes `-PristineDir`/`-PatchedDir`
 
@@ -394,12 +436,11 @@ not a substitute for `build.ps1` actually succeeding.
 `IMPLEMENTATION USES` on both sides, never through either unit's `INTERFACE USES`. Turbo
 Pascal/fpc's unit model elaborates interface sections first, and an interface section only needs
 its own `INTERFACE USES` satisfied -- so an implementation-only cycle like these is expected to
-compile fine. **Confirmed empirically, twice**: `Environ`<->`PrimIntr` (tier6) and the much bigger
-`Fleet`<->`Intrface` case (tier9) both compiled with zero special handling -- fpc's own unit loader
-auto-recompiled whichever cycle member wasn't built yet the moment the first one needed it. The
-earlier claim in this file that `Artifact`<->`Code` would need "joint compilation or an interface
-split" was wrong and has been removed; that pair hasn't been reached by a tier yet but the same
-mechanism should apply.
+compile fine. **Confirmed empirically, three times**: `Environ`<->`PrimIntr` (tier6), `Fleet`<->`Intrface`
+(tier9), and `Artifact`<->`Code` (tier15) all compiled with zero special handling -- fpc's own unit
+loader auto-recompiled whichever cycle member wasn't built yet the moment the first one needed it.
+The earlier claim in this file that `Artifact`<->`Code` would need "joint compilation or an
+interface split" was wrong; tier15 confirmed the same mechanism applies to it too.
 
 **The `cycles` list itself undersold `Fleet`<->`Intrface`**: it only checked direct pairwise
 mutual references, so it missed that `Intrface`'s `IMPLEMENTATION USES` reaches `NPE`, whose
@@ -425,29 +466,33 @@ in place.
 
 ## Suggested next steps
 
-**Pristine `INTRFACE.PAS` and `UPDATE.PAS` now both compile in full (tiers 9 and 11)** -- 61 units
-total, up from 18. Building `Intrface` was the core bet of this whole lane (see the note above
-about the sibling lane's 3-procedure stand-in); `Update.PAS` is the same kind of convergence with
-that lane's own driver target. Tiers 5-13 built with only the already-established patch classes
-(`{$V-}`, the `MaxAvail` heap-check fix, `Mem[ScrSeg:...]` removal) plus one-off landmines
-(`ORDERS.PAS` `GetFleetCode`'s hard type-cast, `NPE00.PAS`'s out-of-subrange sentinel,
-`MAPWIND.PAS`'s duplicate set elements, `FLTCOMM.PAS`'s cross-subrange constant comparison) --
-see "What got patched and why".
+**Every unit in `uses-map.json` is now either built or deliberately excluded** -- 67 units compile
+clean (tiers 0-17), up from 18 at the start of this lane. Recomputing the closure against the full
+built set (via a fresh script over `uses-map.json`, not eyeballing -- see "Dependency map" above)
+finds zero remaining ready candidates and zero remaining blocked units: the only unit left
+unaccounted for is `OVERINIT.PAS`, and it's excluded for a real reason (Turbo Pascal's real-mode
+disk-overlay manager, meaningless under a flat memory model -- see "Dead code found"), not because
+it's still blocked on something.
 
-Recomputing the closure against all of tier0-13 (61 units, via a fresh script over
-`uses-map.json` rather than eyeballing it -- see "Dependency map" above for why that matters) turns
-up exactly **one** newly-ready unit: `PlayTurn` (its full `USES` closure, both interface and
-implementation, lands entirely in tier0-13). Everything else is blocked on the still-unconfirmed
-`Artifact`<->`Code` cycle: `NewGame`/`Transact` need `Code` directly, `Prolog` needs `NewGame`.
-Run a manual SCC pass on `Artifact`<->`Code` before tiering it -- don't trust `cycles` alone, same
-lesson as `Fleet`<->`Intrface` and `MapWind`/`SWindows`/`Display` above. `Test`/`Test1` (standalone
-`PROGRAM`s, same category as the already-excluded `Compile1`/`ViewMap`) and `Anacreon` itself (the
-real DOS entry point) stay excluded per this lane's stated scope.
+This closes out the lane's core bet: pristine `INTRFACE.PAS` (tier9) and `UPDATE.PAS` (tier11)
+both compile in full, not the sibling `reference/verify/patches/` lane's trimmed stand-ins, and
+every dependency reachable from them -- including both cycles `uses-map.json` flagged as
+uncertain (`Environ`<->`PrimIntr`, `Artifact`<->`Code`) plus the two multi-hop SCCs its pairwise
+`cycles` check missed entirely (`Fleet`<->`Intrface`'s 11-unit component, `MapWind`/`SWindows`/
+`Display`'s 3-unit component) -- now builds standalone. All of it with only the already-established
+patch classes: `{$V-}` (by far the most common), `MaxAvail`/hard-type-cast/subrange-comparison
+one-offs, and two removal classes for real-mode-only mechanisms with no fpc equivalent
+(`Mem[ScrSeg:...]` segment:offset writes, `Inline()` raw machine code) -- see "What got patched
+and why" for the full per-unit list.
 
-Whatever's picked: try compiling it standalone against what's already in `scratch/` first (fpc's
-own error says exactly what's missing). If it lands at the same dependency depth as an existing
-tier, add it to that tier's array; only start a new tier if it genuinely needs something later
-than tier3 provides. Run `.\build.ps1`, patch whatever fpc actually complains about (following the
-"halt loudly on real interactivity, no-op on pure display" split established above), regenerate
-the patch via `regenerate-patch.ps1`, and update this README's "Status" section -- it should
-always reflect what's actually in `patches/`+`shims/`+`build.ps1`, not what's aspirational.
+What's left, all deliberately out of scope rather than blocked:
+- `Test`/`Test1`/`Compile1`/`ViewMap` -- standalone `PROGRAM`s (dev tooling), not units.
+- `Anacreon` itself -- the real DOS entry point, not a candidate for standalone compilation by this
+  lane's own definition of scope.
+- `OVERINIT.PAS` -- categorically inapplicable real-mode overlay-manager bootstrap (see above).
+
+If there's a next phase for this lane, it's no longer "find the next tier" -- it's deciding what to
+do with a fully-standalone-compiling pristine tree (e.g. wiring `Anacreon.PAS`'s own `BEGIN` block
+up as an actual runnable entry point, or using this as a reference build for the sibling
+`reference/verify/patches/` lane's own trimmed units). That's a scope decision for whoever picks
+this up next, not something to default into.
