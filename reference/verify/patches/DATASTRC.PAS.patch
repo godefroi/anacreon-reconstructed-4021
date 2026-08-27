@@ -1,0 +1,31 @@
+--- a/DATASTRC.PAS
++++ b/DATASTRC.PAS
+@@ -205,20 +205,6 @@ TYPE
+ 
+    EmpireDataArray = ARRAY [Empire] OF EmpireDataRecord;
+ 
+-   { SETS }
+-
+-   GlobalSetsRecord = RECORD
+-      SetOfActiveFleets: SET OF 1..MaxNoOfFleets;
+-      SetOfFleetsOf: ARRAY [Empire] OF SET OF 1..MaxNoOfFleets;
+-      SetOfActivePlanets: PlanetSet;
+-      SetOfPlanetsOf: ARRAY [Empire] OF PlanetSet;
+-      SetOfActiveStarbases: SET OF 1..MaxNoOfStarbases;
+-      SetOfStarbasesOf: ARRAY [Empire] OF SET OF 1..MaxNoOfStarbases;
+-      SetOfActiveGates: SET OF 1..MaxNoOfStargates;
+-      SetOfActiveConstructionSites: SET OF 1..MaxNoOfConstrSites;
+-      SetOfConstructionSitesOf: ARRAY [Empire] OF SET OF 1..MaxNoOfConstrSites;
+-   END;
+-
+    { THE UNIVERSE }
+ 
+    UniverseRecord = RECORD
+@@ -232,7 +218,6 @@ TYPE
+ 
+ VAR
+    Universe: ^UniverseRecord;
+-   GlobalSets: GlobalSetsRecord ABSOLUTE SetOfActiveFleets;
+ 
+ IMPLEMENTATION
+ 

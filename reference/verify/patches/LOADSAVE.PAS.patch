@@ -1,0 +1,27 @@
+--- a/LOADSAVE.PAS
++++ b/LOADSAVE.PAS
+@@ -511,9 +511,23 @@ PROCEDURE InitializeUniverse(StartingYear: Integer;
+    WITH Universe^ DO
+       BEGIN
+       FillChar(Universe^,SizeOf(Universe^),0);
+-      FillChar(GlobalSets,SizeOf(GlobalSets),0);
+       END;  { with scope }
+ 
++   { PATCH (fpc): the real GlobalSets ABSOLUTE SetOfActiveFleets overlay this used to clear in
++     one FillChar relied on Turbo Pascal's contiguous same-unit global layout, which fpc doesn't
++     reproduce (confirmed empirically: SizeOf(GlobalSetsRecord)=792 vs the 9 real vars' actual
++     777-byte span, and the record's field offsets don't match the real vars' addresses either) --
++     zero each of the 9 real vars by name instead. }
++   SetOfActiveFleets:=[];
++   FillChar(SetOfFleetsOf,SizeOf(SetOfFleetsOf),0);
++   SetOfActivePlanets:=[];
++   FillChar(SetOfPlanetsOf,SizeOf(SetOfPlanetsOf),0);
++   SetOfActiveStarbases:=[];
++   FillChar(SetOfStarbasesOf,SizeOf(SetOfStarbasesOf),0);
++   SetOfActiveGates:=[];
++   SetOfActiveConstructionSites:=[];
++   FillChar(SetOfConstructionSitesOf,SizeOf(SetOfConstructionSitesOf),0);
++
+    Year:=StartingYear;
+    TimePerTurn:=300;
+ 
