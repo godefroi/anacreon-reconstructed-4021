@@ -140,7 +140,7 @@ public sealed partial class AnnualTickHandler
 
         var result = new IndustryLevels();
         foreach (var industry in Enum.GetValues<IndustryType>())
-            result[industry] = PascalRound(tip * (dist[industry] / 100.0) * (_classIndustryAdjustment[(world.EffectiveClass, industry)] / 100.0));
+            result[industry] = PascalRound(tip * (dist[industry] / 100.0) * (ClassIndustryAdjustment[(world.EffectiveClass, industry)] / 100.0));
         return result;
     }
 

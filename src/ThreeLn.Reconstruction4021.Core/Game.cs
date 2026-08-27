@@ -72,4 +72,20 @@ public sealed class Game(Galaxy.Galaxy galaxy)
         Fleet f => empire.Fleets.Scouted.Contains(f),
         _ => false,
     };
+
+    /// <summary>
+    /// Known(Emp,ID) (PRIMINTR.PAS) — the weaker "has ever seen" tier, as opposed to
+    /// <see cref="HasScouted"/>'s "currently sees." Public: Npe/NpeToolkit.cs's targeting logic
+    /// (Phase 6c) reads this the same way <see cref="AddGlobalNews"/> already reads
+    /// <see cref="HasScouted"/>, rather than every caller hand-dispatching across the five
+    /// <see cref="ISectorObject"/> kinds itself.
+    /// </summary>
+    public static bool Known(Empire empire, ISectorObject source) => source switch {
+        Planet p => empire.Planets.Known.Contains(p),
+        Starbase s => empire.Starbases.Known.Contains(s),
+        Stargate g => empire.Stargates.Known.Contains(g),
+        ConstructionSite c => empire.ConstructionSites.Known.Contains(c),
+        Fleet f => empire.Fleets.Known.Contains(f),
+        _ => false,
+    };
 }

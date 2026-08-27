@@ -71,8 +71,12 @@ public sealed partial class AnnualTickHandler
         [IndustryType.TrillumMining] = 300,
     }.ToFrozenDictionary();
 
-    /// <summary>% of industry that is effective, by world class and industry: ClassIndAdj (DATACNST.PAS:321-343).</summary>
-    private static readonly FrozenDictionary<(WorldClass, IndustryType), int> _classIndustryAdjustment =
+    /// <summary>
+    /// % of industry that is effective, by world class and industry: ClassIndAdj (DATACNST.PAS:321-343).
+    /// Internal, not private: Npe/NpeToolkit.cs's GetNewDesignation (Phase 6c) reads the same table
+    /// rather than re-transcribing 21 rows of balance data.
+    /// </summary>
+    internal static readonly FrozenDictionary<(WorldClass, IndustryType), int> ClassIndustryAdjustment =
         BuildClassIndustryAdjustment();
 
     private static FrozenDictionary<(WorldClass, IndustryType), int> BuildClassIndustryAdjustment()
@@ -550,7 +554,7 @@ public sealed partial class AnnualTickHandler
         var temp = tip / 10000.0;
         var beta = new Dictionary<IndustryType, double>();
         foreach (var industry in Enum.GetValues<IndustryType>()) {
-            var value = temp * _classIndustryAdjustment[(world.EffectiveClass, industry)];
+            var value = temp * ClassIndustryAdjustment[(world.EffectiveClass, industry)];
             beta[industry] = value == 0 ? 1 : value;
         }
 
@@ -611,7 +615,7 @@ public sealed partial class AnnualTickHandler
         var temp = tip / 10000.0;
         foreach (var industry in Enum.GetValues<IndustryType>()) {
             var dist = industryDistribution[industry];
-            var optimumLevel = PascalRound(temp * dist * _classIndustryAdjustment[(world.EffectiveClass, industry)]);
+            var optimumLevel = PascalRound(temp * dist * ClassIndustryAdjustment[(world.EffectiveClass, industry)]);
             if (dist > 0 && optimumLevel == 0)
                 optimumLevel = 1;
 

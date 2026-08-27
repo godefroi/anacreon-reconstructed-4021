@@ -639,6 +639,68 @@ this isn't a regression introduced between versions; the original developers shi
 incomplete. Worth a note rather than a TODO when their host files are ported (Phase 6), since an
 empty body could otherwise look like a porting mistake instead of matched-to-source behavior.
 
+### `FleetDataRecord.Midway` (`NPETYPES.PAS`) is confirmed dead — declared, never read or written
+
+Grepped across the entire 1.31 source tree: `Midway: IDNumber` has exactly one hit, its own
+declaration at `NPETYPES.PAS:86`. No procedure in `NPEINTR.PAS`, `NPE00.PAS`-`NPE04.PAS`, or
+anywhere else reads or writes it, despite its comment ("coord to gather at or rendezvous")
+describing a real-sounding feature. Same category as `TraderNPE` above — a real field the original
+developers declared and then never wired up. An earlier `docs/PORT_DESIGN.md` pass guessed this
+field was "derivable from state the port already tracks" before the field-by-field audit (Phase 6c)
+actually read every call site; the guess was wrong in the opposite direction — not derivable,
+simply unused. Not ported (`Core/Npe/NpeTypes.cs`'s `KingdomFleetState`).
+
+### `GetFleetComposition`'s `SSeq` (`NPEINTR.PAS:247-248`) is declared but never referenced
+
+`GetFleetComposition`'s mission-to-ship-sequence `CASE` only names `LSeq`/`JSeq`/`ASeq`/`ESeq`/`RSeq`
+across its five branches (`ReturnMSN`/`ConquerMSN`&`ELSE`/`StackMSN`/`JumpAttackMSN`/`RaidTrnMSN`) —
+`SSeq: SequenceArray = (hkr,pen,jmp,ssp,fgt)` is declared right alongside the others but never
+appears in the `CASE`. Its declared shape (nothing but combat ships, no `jtn`/`trn`) reads like it
+was meant for `SlowAttackMSN`, which instead falls through to the `ELSE`→`JSeq` default like every
+other unlisted mission. Not ported (`Core/Npe/NpeToolkit.cs`'s `GetFleetComposition`).
+
+### `GetNewDesignation`'s `Persona` parameter (`NPEINTR.PAS:917-1036`) is confirmed unused
+
+`GetNewDesignation(WorldID, VAR Persona: NPECharacterRecord, VAR RCap, VAR NewType)` takes a
+`Persona` parameter but its ~120-line body never reads a single `Persona.` field — every adjustment
+to the type-chance table comes from tech level, population, world class, and proximity to bases/
+capitals, none of it persona-driven. Dropped from the C# signature
+(`Core/Npe/NpeToolkit.cs`'s `GetNewDesignation`) rather than threaded through unread.
+
+### `SetEmpireDefenses` (`NPEINTR.PAS:1691-1699`) always zeroes an empire's starbase defense stance
+
+`DATASTRC.PAS`'s `DefenseRecord` has two fields, `ShellDefDist` (fleets) and `StarbaseDefDist`
+(starbases) — but every one of the four preset constants `SetEmpireDefenses` rolls between
+(`InitDefenseRecord`, `DATACNST.PAS:373-379`; `Defense1`/`Defense2`/`Defense3`,
+`NPEINTR.PAS:41-63`) only initializes `ShellDefDist` in its typed-constant literal, confirmed by
+directly counting parens in each literal, not inferred from the type declaration alone.
+
+**Confirmed under this project's own toolchain**: a probe compiled with this repo's `fpc -Mtp`
+(the same mode/compiler the ground-truth harness uses) shows the omitted trailing field of a
+partially-specified record constant reads as zero, not garbage — so under our build, every real
+call to `SetEmpireDefenses` resets that empire's starbase shell distribution to all zeros too,
+100% of the time, regardless of which of the four fleet distributions the `Rnd(1,100)` roll
+picked. **Not independently confirmed against real Turbo Pascal 7** — there's no compiled 1.31
+`.EXE` or TP7/DOSBox setup anywhere in this repo to cross-check against, so this is FPC's
+documented behavior (which `-Mtp` mode exists specifically to match TP7 on), not something
+verified against the original 1988 toolchain directly. If a real 1.31 binary or a working TP7
+environment ever turns up, replaying a `.SAV` through a `SetEmpireDefenses` call is a concrete way
+to close that gap — noted here as a real, currently-blocked validation lead, not chased down now.
+Either way this isn't a bug to fix in the port: if FPC and TP7 agree (the likely case — the
+shipped 1.31 source had to compile under *some* real TP7 to ship, which is itself evidence TP7
+accepted this same abbreviated syntax), it's genuine original-game behavior; if they somehow
+disagree, that's a documented FPC-vs-TP divergence in the same category as this project's other
+ones ($V+/-, banker's rounding), not something to silently "fix" either. Ported verbatim
+(`Core/Npe/NpeToolkit.cs`'s `SetEmpireDefenses`).
+
+### `FleetDataRecord.BlockX`/`BlockY` are Pirate-only, not shared toolkit state
+
+Despite living on the same `FleetDataRecord` every NPE personality's fleet-data array uses, grepping
+`BlockX`/`BlockY` across the tree turns up exactly six hits, all in `NPE01.PAS` — the Pirate
+personality's own hunting-ground grid (`HuntingGroundArray`). `NPEINTR.PAS`'s shared toolkit never
+reads or writes either field. Not ported as part of Phase 6c's Kingdom-only field audit
+(`Core/Npe/NpeTypes.cs`'s `KingdomFleetState`) — add when Pirate is picked up.
+
 ---
 
 ## Outstanding Research (as of this draft)

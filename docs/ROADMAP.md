@@ -157,7 +157,7 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   tests (`AnnualTickHandlerHostileLifeTests`) exploiting `FixedRandom(N)`'s `min+N` resolution to
   deterministically pick each of the three branches.
 
-## 6. NPE AI — in progress, 6a-6b landed
+## 6. NPE AI — in progress, 6a-6c landed
 
 Implement an `ITurnHandler` for computer empires. The roadmap's original one-line framing here
 ("start with one classic implementation") undersold this phase the way "8 known News sites"
@@ -235,9 +235,27 @@ original developers shipped incomplete, not a port gap.
   rather than transcribed; no new method needed. `TraderNPE`'s dead-code finding and
   `DeployHarassFleet`/`ImplementDefendBMS`'s confirmed-no-op finding are in
   `PASCAL_ARCHITECTURE_NOTES.md`.
-- **6c, `NPEINTR.PAS` toolkit.** The shared fleet-deployment/targeting/mission-dispatch/bookkeeping
-  service `KingdomTurnHandler` depends on, including a field-by-field audit of `FleetDataRecord`
-  before any of it is mirrored onto `Fleet` (see `PORT_DESIGN.md`'s derive-don't-duplicate note).
+- ✅ **6c, `NPEINTR.PAS` toolkit — read-and-compute half** (`Core/Npe/NpeToolkit.cs`,
+  `Core/Npe/NpeConstants.cs`, `Core/Npe/NpeTypes.cs`) — `MilitaryPower`, targeting
+  (`GetBestTarget`/`GetBestRaiderTarget`/`GetBestBase`/`GetBestPlanetToProtect`/
+  `MinimumDefense`/`AverageMilitaryPower`), regional bookkeeping (`CreateRegionArray`/
+  `GetRegionalCapital`/`EnforceNpeDataLinks`), world (re)designation (`GetNewDesignation`/
+  `ReDesignateEmpire`), `GetFleetComposition`, `SetEmpireDefenses`, `PlunderWorld` — everything in
+  NPEINTR.PAS that reads state and computes a value rather than creating/moving a fleet. Includes
+  the `FleetDataRecord` field audit (see `PORT_DESIGN.md`'s derive-don't-duplicate note — `Waiting`
+  turned out real, not derivable as an earlier pass guessed; `Midway` confirmed dead;
+  `BlockX`/`BlockY` Pirate-only). Hardcoded-tested (`NpeToolkitTests.cs`), not golden-file — see
+  `PORT_DESIGN.md`'s own note on why, revisit once Phase 7's save/load makes a real test universe
+  cheap. Split off from this commit, not bundled in: the five `Deploy*Fleet`/eight `Implement*MSN`
+  procedures, which need fleet-lifecycle primitives (`DeployFleet`/`ChangeCompositionOfFleet`/
+  `EstimatedDateOfArrival`/`EstimatedRange`/`RefuelFleet`/`SetFleetDestination`) that don't exist
+  anywhere in this port yet — see 6c-2.
+- **6c-2, `NPEINTR.PAS` toolkit — fleet-lifecycle half.** `DeployFleet`/`ChangeCompositionOfFleet`/
+  `EstimatedDateOfArrival`/`EstimatedRange`/`RefuelFleet`/`SetFleetDestination` (FLEET.PAS/
+  PRIMINTR.PAS) — genuinely new primitives, since every prior phase only ever moved or destroyed
+  fleets scenario loading or human setup already created, never made one from a world's own stock.
+  Then the five `Deploy*Fleet` procedures and all eight `Implement*MSN` mission executors that
+  depend on them.
 - **6d, Kingdom core loop.** `NPE00.PAS` (defense, expansion, exploration, logistics) plus
   `NPE02.PAS`'s per-turn driver and both persona-seed presets. No diplomacy yet.
 - **6e, Kingdom diplomacy.** `StateDepartment`/`StateDeptReport`/`WarCabinet` and `ReviewNews`'s
