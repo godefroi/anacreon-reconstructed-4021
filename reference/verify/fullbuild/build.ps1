@@ -105,6 +105,14 @@ $out = Join-Path $PSScriptRoot 'scratch'
     # than trusting "cycles" (same lesson as tier9's 11-unit SCC). SWindows's other implementation
     # dependencies (HlpWind/FltWind/NwsWind/NmsWind/EmpWind/StaWind) are all already built in tier10.
     @('MAPWIND.PAS', 'SWINDOWS.PAS', 'DISPLAY.PAS')
+
+    # Tier 13: flat layer of "comm" command units, full USES closure satisfied by tier0-12
+    # (found via uses-map.json's closure). No interdependency among these seven. VIEWMAP.PAS
+    # is deliberately excluded: it's `PROGRAM ViewMap`, not a UNIT (a standalone dev map-viewer
+    # tool, same category as Compile1/Test/Test1), and its LoadGame(Filename,Error) call doesn't
+    # even match LOADSAVE.PAS's current LoadGame(FilenameStr):Word signature -- stale dev tooling
+    # predating a real signature change, not an fpc-strictness gap. Nothing else depends on it.
+    @('ATTCOMM.PAS', 'CLSCOMM.PAS', 'CONSTR.PAS', 'DESIGN.PAS', 'FLTCOMM.PAS', 'MSCCOMM.PAS', 'NAMES.PAS')
 )
 
 # CRT.PAS is not pristine source at all -- see shims/CRT.PAS's own header comment for why this

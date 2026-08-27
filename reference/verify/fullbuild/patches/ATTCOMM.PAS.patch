@@ -1,0 +1,190 @@
+--- a/ATTCOMM.PAS
++++ b/ATTCOMM.PAS
+@@ -4,6 +4,20 @@
+ 
+ UNIT AttComm;
+ 
++{ PATCH (fpc): the V- flag below relaxes fpc's strict fixed-string-length type
++  matching (Turbo Pascal treated e.g. String16/String32 as interchangeable by
++  content; fpc's default V+ requires an exact declared-length match). }
++{$V-}
++
++{ PATCH (fpc): this unit's attack-screen animation wrote combat sprites directly
++  into video memory via Mem[ScrSeg:offset] -- a real-mode segment:offset access with
++  no meaning under fpc's flat i386 memory model (categorically uncompilable, not an
++  fpc-strictness gap). Per this lane's "no UI" approach, every Mem[] write below is
++  removed as pure display/SFX with no effect on game state (Battle/GroupEngage compute
++  Casualties/Killed/GroupsDestroyed independently of these draws) -- see each removal
++  site's own comment for specifics. }
++
++
+ {$IFDEF Overlay}
+ {$O+,F+}
+ {$ENDIF}
+@@ -76,10 +90,7 @@ PROCEDURE AttReport(Line: LineStr);
+    BEGIN
+    ActivateWindow(AttackWindow);
+    GotoXY(1,2);   ClrEOL;
+-   Mem[ScrSeg:OrbLoc[DpSpc]-4*160]:=250;
+-   Mem[ScrSeg:OrbLoc[HiOrb]-4*160+2]:=250;
+-   Mem[ScrSeg:OrbLoc[Orbit]-4*160+4]:=250;
+-   Mem[ScrSeg:OrbLoc[Grnd]-4*160]:=250;
++   { PATCH (fpc): removed -- decorative Mem[] underline dots, pure display. }
+ 
+    x:=40-(Length(Line) div 2);
+    GotoXY(x,2);   Write(Line);
+@@ -108,19 +119,8 @@ PROCEDURE WarpIn(VAR Gp: GroupArray; G: Byte; NewPos: ShellPos);
+    Fin:=OrbLoc[NewPos]+PlayerOffset[G];
+    Dist:=(Fin-Str) div 2;
+ 
+-   WITH Gp[G] DO
+-      BEGIN
+-      Mem[ScrSeg:Str]:=32;
+-      FOR j:=0 TO Dist DO
+-         BEGIN
+-         temp:=Mem[ScrSeg:Str+2*j];
+-         Mem[ScrSeg:Str+2*j]:=16;
+-         Delay(TimeDelay);
+-         Mem[ScrSeg:Str+2*j]:=temp;
+-         END;
+-      IF NewPos<>Grnd THEN
+-         Mem[ScrSeg:Fin]:=16;
+-      END;  { with scope }
++   { PATCH (fpc): removed -- WarpIn's body was a Mem[] ship-icon slide animation;
++     Gp is never read or written by it, purely cosmetic. }
+    END;  { WarpIn }
+ 
+ PROCEDURE WarpOut(VAR Gp: GroupArray; G: Byte; NewPos: ShellPos);
+@@ -132,18 +132,8 @@ PROCEDURE WarpOut(VAR Gp: GroupArray; G: Byte; NewPos: ShellPos);
+    Fin:=OrbLoc[NewPos]+PlayerOffset[G];
+    Dist:=(Str-Fin) DIV 2;
+ 
+-   WITH Gp[G] DO
+-      BEGIN
+-      Mem[ScrSeg:Str]:=32;
+-      FOR j:=0 TO Dist DO
+-         BEGIN
+-         temp:=Mem[ScrSeg:Str-2*j];
+-         Mem[ScrSeg:Str-2*j]:=16;
+-         Delay(40);
+-         Mem[ScrSeg:Str-2*j]:=temp;
+-         END;
+-      Mem[ScrSeg:Fin]:=16;
+-      END;  { with scope }
++   { PATCH (fpc): removed -- WarpOut's body was a Mem[] ship-icon slide animation,
++     same as WarpIn, purely cosmetic. }
+    END;  { WarpOut }
+ 
+ PROCEDURE EnemyStatus(En: EnemyArray);
+@@ -193,22 +183,7 @@ PROCEDURE EnemyStatus(En: EnemyArray);
+       begin
+       ActivateWindow(AttackWindow);
+ 
+-      for PosI:=DpSpc to SbOrb do
+-         begin
+-         for i:=1 to 12 do
+-            Mem[ScrSeg:OrbLoc[PosI]+EnemyOffset[i]]:=32;
+-
+-         IF Total[PosI]>0 THEN
+-            BEGIN
+-            NoOfShapes:=Round(Total[PosI]/500)+1;
+-            IF NoOfShapes>12 THEN
+-               NoOfShapes:=12;
+-
+-            FOR i:=1 TO NoOfShapes DO
+-               Mem[ScrSeg:OrbLoc[PosI]+EnemyOffset[i]]:=17;
+-            END;
+-
+-         end;
++      { PATCH (fpc): removed -- pure Mem[] enemy-ship-icon rendering, no other effect. }
+       end;  { DrawEnemyShips }
+ 
+    { EnemyStatus: MAIN PROCEDURE }
+@@ -262,19 +237,7 @@ PROCEDURE Engage(NoOfGroups: Byte;
+ 
+          BEGIN
+          ActivateWindow(AttackWindow);   GotoXY(1,1);
+-         FOR i:=1 TO NoOfGroups DO
+-            with Gp[i] do
+-               begin
+-               if (Sta<>GDst) and (P=Pos) and (P<>Grnd) then
+-                  begin
+-                  Mem[ScrSeg:OrbLoc[P]+PlayerOffset[i]]:=16;
+-                  end
+-               else
+-                  if P<>Grnd then
+-                     begin
+-                     Mem[ScrSeg:OrbLoc[P]+PlayerOffset[i]]:=32;
+-                     end;
+-               end;  { with scope and loop }
++         { PATCH (fpc): removed -- pure Mem[] player-group-icon rendering, no other effect. }
+          end;  { DrawGroupShips }
+ 
+       PROCEDURE AdvanceGroupsSFX;
+@@ -306,16 +269,7 @@ PROCEDURE Engage(NoOfGroups: Byte;
+                Str(i:2,temp1);
+                AttReport('Group '+temp1+' destroyed.');
+ 
+-               { special effects }
+-               Loc:=OrbLoc[Pos]+PlayerOffset[i];
+-               IF Pos<>Grnd THEN
+-                  FOR j:=1 TO 10 DO
+-                     BEGIN
+-                     Mem[ScrSeg:Loc]:=16;
+-                     Delay((11-j)*10);
+-                     Mem[ScrSeg:Loc]:=32;
+-                     Delay((11-j)*10);
+-                     END;
++               { PATCH (fpc): removed -- Mem[] destroyed-group blink effect, pure display. }
+ 
+                AttReport('');
+                END;
+@@ -491,15 +445,7 @@ PROCEDURE Engage(NoOfGroups: Byte;
+                   Start:=OrbLoc[Pos]+PlayerOffset[i];
+                   Finish:=EdgeOfScreen+PlayerOffset[i];
+                   Distance:=(Start-Finish) div 2;
+-                  IF Pos<>Grnd THEN
+-                     Mem[ScrSeg:Start]:=32;
+-                  for j:=0 to Distance do
+-                     begin
+-                     temp:=Mem[ScrSeg:Start-2*j];
+-                     Mem[ScrSeg:Start-2*j]:=16;
+-                     Delay(15);
+-                     Mem[ScrSeg:Start-2*j]:=temp;
+-                     end;
++                  { PATCH (fpc): removed -- Mem[] retreat-slide animation, pure display. }
+                   end;
+ 
+          EndBattle:=True;
+@@ -1142,20 +1088,7 @@ PROCEDURE AttackCommand(FltID: IDNumber);
+                ( 0,0,10,14,16,16,16,14,10,0,0 );
+ 
+          BEGIN
+-         FOR j:=-5 TO 5 DO
+-            Mem[ScrSeg:OrbLoc[DpSpc]+j*160]:=250;
+-
+-         FOR PosI:=HiOrb TO Orbit DO
+-            BEGIN
+-            FOR j:=-5 TO 5 DO
+-               Mem[ScrSeg:OrbLoc[PosI]+j*160+Disp[PosI][j+6]]:=250;
+-            END;
+-
+-         FOR j:=-4 TO 4 DO
+-            BEGIN
+-            Mem[ScrSeg:OrbLoc[Grnd]+j*160+Disp2[j+6]]:=250;
+-            Mem[ScrSeg:OrbLoc[Grnd]+j*160-Disp2[j+6]]:=250;
+-            END;
++         { PATCH (fpc): removed -- pure Mem[] background-grid rendering, no other effect. }
+ 
+          WriteString('Range to attack defenses:                     Ã Def ´  Ã Ion/GDM ´',1,1,C.AttackWind);
+          WriteString('Range of defenses:         ÃÄÄ Defense Sat.  ÄÁ GDM ´    Ã Ion ´',1,11,C.AttackWind);
+@@ -1166,8 +1099,7 @@ PROCEDURE AttackCommand(FltID: IDNumber);
+             i: Byte;
+ 
+          BEGIN
+-         FOR i:=1 TO 100 DO
+-            Mem[ScrSeg:TopCornerLoc+Rnd(1,720)*2]:=250;
++         { PATCH (fpc): removed -- pure Mem[] random-star-field rendering. }
+          END;  { DrawStars }
+ 
+       { DrawScreen: MAIN PROCEDURE }

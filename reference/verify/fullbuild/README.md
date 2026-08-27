@@ -90,6 +90,18 @@ from this directory):
   set (see "What got patched and why"). All three cycle members' *other* dependencies were already
   built -- notably `SWINDOWS`'s own implementation-uses of `HlpWind`/`FltWind`/`NwsWind`/`NmsWind`/
   `EmpWind`/`StaWind`, all six already in tier10.
+- **Tier 13** (`ATTCOMM`, `CLSCOMM`, `CONSTR`, `DESIGN`, `FLTCOMM`, `MSCCOMM`, `NAMES` -- a flat
+  layer, full USES closure satisfied by tier0-12, no interdependency among the seven).
+  `CLSCOMM`/`CONSTR`/`DESIGN`/`MSCCOMM`/`NAMES` each needed only the routine `{$V-}` fix.
+  `ATTCOMM` and `FLTCOMM` each needed `{$V-}` plus real landmines of their own -- `ATTCOMM`'s
+  attack-screen animation wrote combat sprites via `Mem[ScrSeg:...]` at ten separate sites across
+  six procedures (same "real-mode segment:offset access, categorically uncompilable" class as
+  `WND.PAS`'s border-drawing in tier1), all removed as pure display/SFX; `FLTCOMM` had two more
+  `Mem[]` sites (same fix) plus a genuine subrange-comparison landmine in `InputNewDistribution`
+  (see "What got patched and why"). `VIEWMAP.PAS` -- structurally in this tier's candidate set --
+  is deliberately excluded: it's `PROGRAM ViewMap`, not a unit, and its `LoadGame(Filename,Error)`
+  call doesn't match `LOADSAVE.PAS`'s current `LoadGame(FilenameStr):Word` signature (stale dev
+  tooling, not an fpc-strictness gap).
 
 Verified working end to end from a clean checkout: `build.ps1` deletes and repopulates `scratch/`
 from pristine + `patches/*.patch` + `shims/*.PAS` every run, exactly like `reference/verify/build.ps1`
@@ -269,6 +281,29 @@ does for `patched/`.
   rejects them (`Error: range check error in set constructor or duplicate set element`). Fixed by
   dropping `CrossChar3` and `VertChar` from the literal -- the resulting set value is identical
   either way, so this is a no-op for behavior, purely a compiler-strictness accommodation.
+- **`CLSCOMM.PAS`/`CONSTR.PAS`/`DESIGN.PAS`/`MSCCOMM.PAS`/`NAMES.PAS`** -- each needed only the
+  routine `{$V-}` fix.
+- **`ATTCOMM.PAS`** -- needed `{$V-}` plus removal of ten `Mem[ScrSeg:...]` real-mode
+  segment:offset writes across six procedures (`AttReport`'s decorative underline dots; the
+  whole bodies of `WarpIn`/`WarpOut`, which existed only to slide a ship icon via `Mem[]` and
+  never read or wrote any field of the `GroupArray` passed in; `DrawEnemyShips`/`DrawGroupShips`,
+  both pure icon-rendering with no other effect; `GroupsDestroyedSFX`'s and `GroupRetreat`'s
+  blink/slide effects, both left the surrounding `AttReport` message calls and control flow
+  intact; `DrawGrid`/`DrawStars`, pure background decoration) -- same "real-mode segment:offset
+  access means nothing under fpc's flat i386 memory model" class as `WND.PAS`'s border-drawing in
+  tier1, not an fpc-strictness gap. Every site was confirmed to have no effect on `Casualties`/
+  `Killed`/`Result`/`EndBattle`, all of which `Battle`/`GroupEngage` compute independently.
+- **`FLTCOMM.PAS`** -- needed `{$V-}` plus the same two-site `Mem[]` removal as `ATTCOMM`
+  (`EraseOldPointer`/`UpdatePointer`'s cursor-highlight writes, both self-documented "WARNING!
+  MACHINE SPECIFIC!" in the pristine source) plus one genuine landmine in
+  `InputNewDistribution`: `ThgI` is declared `ResourceTypes` (`NoRes..tri`, ordinals 0-18) but
+  compared against `SRM` (ordinal 19, the next value in the shared base enum `TechnologyTypes`
+  and not a member of `ResourceTypes` at all). Turbo Pascal allowed the cross-subrange comparison
+  unchecked; fpc statically range-checks a compared constant against the variable's declared
+  subrange and rejects it (`range check error while evaluating constants`). Fixed by comparing
+  `Ord(ThgI)<>Ord(SRM)` instead of the enum values directly -- sidesteps the static check without
+  changing the comparison's meaning (range checking is off in this build regardless, so `Inc`
+  advancing `ThgI` past its declared range was never going to fault at runtime either way).
 
 ## Encoding incident: Read/Edit tool corrupted CP437 bytes in two patches (found and fixed)
 
@@ -390,24 +425,24 @@ in place.
 
 ## Suggested next steps
 
-**Pristine `INTRFACE.PAS` and `UPDATE.PAS` now both compile in full (tiers 9 and 11)** -- 54 units
+**Pristine `INTRFACE.PAS` and `UPDATE.PAS` now both compile in full (tiers 9 and 11)** -- 61 units
 total, up from 18. Building `Intrface` was the core bet of this whole lane (see the note above
 about the sibling lane's 3-procedure stand-in); `Update.PAS` is the same kind of convergence with
-that lane's own driver target. Tiers 5-12 built with only the already-established patch classes
-(`{$V-}`, the `MaxAvail` heap-check fix) plus three one-off landmines (`ORDERS.PAS` `GetFleetCode`'s
-hard type-cast, `NPE00.PAS`'s out-of-subrange sentinel, `MAPWIND.PAS`'s duplicate set elements) --
+that lane's own driver target. Tiers 5-13 built with only the already-established patch classes
+(`{$V-}`, the `MaxAvail` heap-check fix, `Mem[ScrSeg:...]` removal) plus one-off landmines
+(`ORDERS.PAS` `GetFleetCode`'s hard type-cast, `NPE00.PAS`'s out-of-subrange sentinel,
+`MAPWIND.PAS`'s duplicate set elements, `FLTCOMM.PAS`'s cross-subrange constant comparison) --
 see "What got patched and why".
 
-Recomputing the closure against all of tier0-12 (54 units) turns up eight newly-ready units:
-`AttComm`, `ClsComm`, `Constr`, `Design`, `FltComm`, `MscComm`, `Names`, `ViewMap` -- everything
-else is either already built or already-excluded (`Compile1`/`Test`/`Test1` are `PROGRAM`s not
-units; `DList`/`LSort`/`Sort` are dead code; `OVERINIT` is the real-mode overlay manager, out of
-scope per this lane's stated goal). These eight have no interdependency among themselves (each
-one's full `USES` closure lands entirely in tier0-12), so they're a single flat tier if picked up
-next. After those: the higher-level game-flow units (`NewGame`, `Prolog`, `PlayTurn`, `Transact`,
-and `Artifact`<->`Code`'s own cycle, still unconfirmed -- run a manual SCC pass on it before
-tiering, don't trust `cycles` alone, same lesson as `MapWind`/`SWindows`/`Display` above).
-`Anacreon` itself (the real DOS entry point) stays excluded per this lane's stated scope.
+Recomputing the closure against all of tier0-13 (61 units, via a fresh script over
+`uses-map.json` rather than eyeballing it -- see "Dependency map" above for why that matters) turns
+up exactly **one** newly-ready unit: `PlayTurn` (its full `USES` closure, both interface and
+implementation, lands entirely in tier0-13). Everything else is blocked on the still-unconfirmed
+`Artifact`<->`Code` cycle: `NewGame`/`Transact` need `Code` directly, `Prolog` needs `NewGame`.
+Run a manual SCC pass on `Artifact`<->`Code` before tiering it -- don't trust `cycles` alone, same
+lesson as `Fleet`<->`Intrface` and `MapWind`/`SWindows`/`Display` above. `Test`/`Test1` (standalone
+`PROGRAM`s, same category as the already-excluded `Compile1`/`ViewMap`) and `Anacreon` itself (the
+real DOS entry point) stay excluded per this lane's stated scope.
 
 Whatever's picked: try compiling it standalone against what's already in `scratch/` first (fpc's
 own error says exactly what's missing). If it lands at the same dependency depth as an existing

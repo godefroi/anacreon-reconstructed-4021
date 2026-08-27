@@ -1,0 +1,67 @@
+--- a/FLTCOMM.PAS
++++ b/FLTCOMM.PAS
+@@ -4,6 +4,11 @@
+ 
+ UNIT FltComm;
+ 
++{ PATCH (fpc): the V- flag below relaxes fpc's strict fixed-string-length type
++  matching (Turbo Pascal treated e.g. String16/String32 as interchangeable by
++  content; fpc's default V+ requires an exact declared-length match). }
++{$V-}
++
+ {$IFDEF Overlay}
+ {$O+,F+}
+ {$ENDIF}
+@@ -217,27 +222,19 @@ PROCEDURE InputNewDistribution(GrndID: IDNumber;
+          StartAddr,x,y: Integer;
+ 
+       BEGIN
+-      StartAddr:=DataOffset+(Ord(Point)-Ord(fgt))*10;
+-      FOR y:=0 TO 2 DO
+-         FOR x:=0 TO 4 DO
+-            Mem[ScrSeg:StartAddr+y*160+x*2+1]:=C.SYSDispWind;
+-
++      { PATCH (fpc): removed -- Mem[ScrSeg:...] highlight-color write is a real-mode
++        segment:offset access, meaningless under fpc's flat i386 memory model
++        (categorically uncompilable, not an fpc-strictness gap). Pure display. }
+       WriteError('');
+       END;  { EraseOldPointer }
+ 
+    PROCEDURE UpdatePointer;
+    { UpdatePointer: WARNING! MACHINE SPECIFIC!
+-      This procedure will highlight the field that Point currently holds.  
++      This procedure will highlight the field that Point currently holds.
+       See EraseOldPointer. }
+ 
+-      VAR
+-         StartAddr,x,y: Integer;
+-
+       BEGIN
+-      StartAddr:=DataOffset+(Ord(Point)-Ord(fgt))*10;
+-      FOR y:=0 TO 2 DO
+-         for x:=0 to 4 do
+-            Mem[ScrSeg:StartAddr+y*160+x*2+1]:=C.SYSDispSelect;
++      { PATCH (fpc): removed -- same Mem[] highlight write as EraseOldPointer, pure display. }
+       END;  { UpdatePointer }
+ 
+    PROCEDURE PointerLeft;
+@@ -475,10 +472,17 @@ PROCEDURE InputNewDistribution(GrndID: IDNumber;
+       { Send message if player left stuff. }
+       BEGIN
+       ThgI:=fgt;
+-      WHILE (ThgI<>SRM) AND (ResTrans[ThgI]>=0) DO
++      { PATCH (fpc): ThgI<>SRM below compares Ord() rather than the enum values directly.
++        ThgI is declared ResourceTypes (NoRes..tri, ordinals 0..18); SRM (ordinal 19) is the
++        next value in the shared base enum TechnologyTypes and isn't a member of ResourceTypes
++        at all -- Turbo Pascal allowed the cross-subrange comparison unchecked, but fpc
++        statically range-checks a compared constant against the variable's declared subrange
++        and rejects this one as always-false. Ord() sidesteps that static check without
++        changing the comparison's meaning or runtime behavior (range checking is off here). }
++      WHILE (Ord(ThgI)<>Ord(SRM)) AND (ResTrans[ThgI]>=0) DO
+          Inc(ThgI);
+ 
+-      IF ThgI<>SRM THEN
++      IF Ord(ThgI)<>Ord(SRM) THEN
+          BEGIN
+          Loc.ID:=GrndID;  Loc.XY:=Limbo;
+          AddNews(GroundStatus,TrnsShp,Loc,Ord(Player),0,0);
