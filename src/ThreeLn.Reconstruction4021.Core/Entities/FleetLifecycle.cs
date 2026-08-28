@@ -85,6 +85,10 @@ public static class FleetLifecycle
     /// says the ground ends up with, not whatever it held before this call. Ported verbatim: a caller
     /// that wants some of the ground's pre-existing trillum considered must carry it forward into
     /// <paramref name="newGroundCargo"/> itself.
+    ///
+    /// A caller may pass <paramref name="fleet"/>'s (or <paramref name="ground"/>'s) own live ships/cargo
+    /// straight through as the "new composition" arguments — the internal copies degenerate to
+    /// self-copies in that case, which is fine and intended, not a bug to fix.
     /// </summary>
     public static void ChangeCompositionOfFleet(
         Fleet fleet, object ground,

@@ -249,10 +249,17 @@ public static class NpeToolkit
         return best;
     }
 
-    /// <summary>GetBestPlanetToProtect (NPEINTR.PAS:630-666) — the weakest-defended non-base world within 5 sectors of a base, or that empire's capital if none qualifies.</summary>
-    public static IEconomicWorld? GetBestPlanetToProtect(IEconomicWorld baseWorld, Game game)
+    /// <summary>
+    /// GetBestPlanetToProtect (NPEINTR.PAS:630-666) — the weakest-defended non-base world within 5
+    /// sectors of <paramref name="baseObject"/>, or that empire's capital if none qualifies.
+    /// <paramref name="baseObject"/> is <see cref="ISectorObject"/>, not <see cref="IEconomicWorld"/>:
+    /// real Pascal's <c>BaseID: IDNumber</c> is generic, and its one real 6c-2 call site
+    /// (<c>ImplementStackMSN</c>) passes a <see cref="Fleet"/>, not a world — only
+    /// <see cref="ISectorObject.Owner"/>/<see cref="ISectorObject.Location"/> are ever read.
+    /// </summary>
+    public static IEconomicWorld? GetBestPlanetToProtect(ISectorObject baseObject, Game game)
     {
-        var emp = baseWorld.Owner;
+        var emp = baseObject.Owner;
         IEconomicWorld? best = emp.Capital;
         var lowestDefenses = long.MaxValue;
 
@@ -260,7 +267,7 @@ public static class NpeToolkit
             if (planet.Owner != emp || planet.Type is WorldType.Base or WorldType.Capital) {
                 continue;
             }
-            if (planet.Location.DistanceTo(baseWorld.Location) > 5) {
+            if (planet.Location.DistanceTo(baseObject.Location) > 5) {
                 continue;
             }
 
@@ -615,5 +622,526 @@ public static class NpeToolkit
 
         target.Type = WorldType.Independent;
         target.Reassign(Empire.Independent);
+    }
+
+    /// <summary>MaxNoOfGuards (NPEINTR.PAS:37) — how many guard fleets a stacking fleet can dump itself onto before it's redirected to protect a planet instead.</summary>
+    public const int MaxNoOfGuards = 3;
+
+    /// <summary>
+    /// DeployBattleFleet (NPEINTR.PAS:505-559) — composes and launches a fleet from
+    /// <paramref name="fromWorld"/> toward <paramref name="toTarget"/> for the given mission, aborting
+    /// it right back if it can't make the trip on the fuel it launched with. Real Pascal's own
+    /// "Slot=0" (fleet-data array full) arm can't happen with this port's Dictionary — dropped; the
+    /// EDA&gt;Range arm is the only one that ever fires here, and dropping the other half of an
+    /// already-false-short-circuited OR changes nothing observable (neither arm has a side effect).
+    /// </summary>
+    public static void DeployBattleFleet(
+        Empire emp, Dictionary<Fleet, KingdomFleetState> fleetStates,
+        IEconomicWorld fromWorld, long power, long gat, NpeMissionType newMission, ISectorObject toTarget,
+        Game game, Random random)
+    {
+        var (ships, cargo) = GetFleetComposition(fromWorld, power, gat, newMission);
+        var fleet = FleetLifecycle.DeployFleet(emp, fromWorld, ships, cargo, toTarget.Location, game);
+
+        if (FleetLifecycle.EstimatedDateOfArrival(fleet, game) > FleetLifecycle.EstimatedRange(fleet)) {
+            CombatOutcome.AbortFleet(fleet, fromWorld, report: true);
+            CombatOutcome.DestroyFleet(fleet, game);
+            return;
+        }
+
+        fleetStates[fleet] = new KingdomFleetState { Mission = newMission, HomeBase = fromWorld, Target = toTarget, Waiting = 0 };
+
+        if (toTarget.Owner != emp && !toTarget.Owner.IsIndependent) {
+            // Pascal's FOR i:=1 TO Rnd(1,4) DO draws the bound once, at loop entry — re-evaluating
+            // Rnd() on every iteration check (as a naive C# translation would) draws the RNG a
+            // different number of times and picks a different probe count.
+            var probesToLaunch = Rnd(random, 1, 4);
+            for (var i = 0; i < probesToLaunch; i++) {
+                emp.TryLaunchProbe(toTarget.Location);
+            }
+        }
+    }
+
+    /// <summary>
+    /// DeployCargoFleet (NPEINTR.PAS:561-628) — composes a jumptransport/transport-only fleet sized to
+    /// carry <paramref name="cargo"/> (clamped to what's actually on <paramref name="fromWorld"/> when
+    /// <paramref name="carryCargo"/> is true, zeroed otherwise — Pascal's own VAR in/out semantics on
+    /// <paramref name="cargo"/>, mutated in place here too), then launches it. Same EDA&gt;Range abort
+    /// check and dropped "Slot=0" arm as <see cref="DeployBattleFleet"/>; no probe launch here (real
+    /// Pascal doesn't send any for a cargo run).
+    /// </summary>
+    public static void DeployCargoFleet(
+        Empire emp, Dictionary<Fleet, KingdomFleetState> fleetStates,
+        IEconomicWorld fromWorld, CargoHold cargo, bool carryCargo, NpeMissionType newMission, ISectorObject toTarget,
+        Game game)
+    {
+        var atBase = fromWorld.Ships;
+        var cargoSpaceNeeded = -FleetLogistics.FleetCargoSpace(new ShipCounts(), cargo);
+
+        var ships = new ShipCounts {
+            Jumptransports = Math.Min(atBase.Jumptransports, PascalRound(cargoSpaceNeeded / FleetLogistics.JumptransportCargoAdjustment) + 1),
+            Transports = Math.Min(atBase.Transports, cargoSpaceNeeded + 1),
+        };
+
+        var jtnCargo = PascalRound(ships.Jumptransports * FleetLogistics.JumptransportCargoAdjustment);
+        if (jtnCargo < cargoSpaceNeeded && jtnCargo < ships.Transports) {
+            ships.Jumptransports = 0;
+        } else {
+            ships.Transports = 0;
+        }
+
+        if (carryCargo) {
+            var groundCargo = fromWorld.Cargo;
+            foreach (var t in Enum.GetValues<CargoType>()) {
+                cargo[t] = Math.Min(cargo[t], groundCargo[t]);
+            }
+        } else {
+            foreach (var t in Enum.GetValues<CargoType>()) {
+                cargo[t] = 0;
+            }
+        }
+
+        FleetLogistics.BalanceFleet(ships, cargo);
+
+        var fleet = FleetLifecycle.DeployFleet(emp, fromWorld, ships, cargo, toTarget.Location, game);
+
+        if (FleetLifecycle.EstimatedDateOfArrival(fleet, game) > FleetLifecycle.EstimatedRange(fleet)) {
+            CombatOutcome.AbortFleet(fleet, fromWorld, report: true);
+            CombatOutcome.DestroyFleet(fleet, game);
+            return;
+        }
+
+        fleetStates[fleet] = new KingdomFleetState { Mission = newMission, HomeBase = fromWorld, Target = toTarget, Waiting = 0 };
+    }
+
+    /// <summary>
+    /// DeployJumpAttack (NPEINTR.PAS:784-828) — finds the best known enemy target and launches a
+    /// battle fleet at it from the nearest regional capital, or another qualifying world if the
+    /// capital itself lacks the ships.
+    /// </summary>
+    public static void DeployJumpAttack(
+        Empire emp, Empire enemyEmp, IReadOnlyList<IEconomicWorld> regionCapitals, NpeCharacter persona,
+        Dictionary<Fleet, KingdomFleetState> fleetStates, Game game, Random random)
+    {
+        var basePower = AverageMilitaryPower(regionCapitals);
+        var candidates = game.Galaxy.Planets.Where(p => p.Owner == enemyEmp);
+        var (target, targetDefense, targetMen) = GetBestTarget(emp, candidates, basePower, persona, fleetStates, random);
+        if (target is null) {
+            return;
+        }
+
+        var fleetPower = 30000L + PascalRound((random.NextDouble() + Rnd(random, 2, 5)) * targetDefense);
+        var fleetGat = PascalRound(2.0 * targetMen);
+
+        var homeBase = GetRegionalCapital(target, regionCapitals);
+        if (homeBase is null) {
+            return;
+        }
+
+        if (MilitaryPower(homeBase.Ships, new DefenseCounts()) > fleetPower / 2) {
+            DeployBattleFleet(emp, fleetStates, homeBase, fleetPower, fleetGat, NpeMissionType.JumpAttack, target, game, random);
+        } else {
+            var betterBase = GetBestBase(emp, target, fleetPower, fleetGat, game);
+            if (betterBase is not null) {
+                DeployBattleFleet(emp, fleetStates, betterBase, fleetPower, fleetGat, NpeMissionType.JumpAttack, target, game, random);
+            }
+        }
+    }
+
+    /// <summary>DeployHKRaiders (NPEINTR.PAS:830-846) — sends a HunterKiller raiding fleet at the best available raider target (a gate, construction site, or planet — see <see cref="GetBestRaiderTarget"/>).</summary>
+    public static void DeployHKRaiders(
+        Empire emp, Empire enemyEmp, IReadOnlyList<IEconomicWorld> regionCapitals,
+        Dictionary<Fleet, KingdomFleetState> fleetStates, Game game, Random random)
+    {
+        if (GetBestRaiderTarget(emp, enemyEmp, game, random) is not ISectorObject target) {
+            return;
+        }
+
+        var homeBase = GetRegionalCapital(target, regionCapitals);
+        if (homeBase is null) {
+            return;
+        }
+
+        var fleetPower = (long)CombatConstants.CombatPower[AttackType.HunterKiller] * Rnd(random, 100, 5000);
+        DeployBattleFleet(emp, fleetStates, homeBase, fleetPower, 0, NpeMissionType.RaidTransports, target, game, random);
+    }
+
+    /// <summary>
+    /// DeploySlowAttack (NPEINTR.PAS:848-886) — the same shape as <see cref="DeployJumpAttack"/> with a
+    /// bigger power budget. Real Pascal quirk, ported verbatim: the primary branch deploys with
+    /// <see cref="NpeMissionType.SlowAttack"/>, but the fallback branch (nearest capital lacks ships,
+    /// <see cref="GetBestBase"/> finds another world) deploys with <see cref="NpeMissionType.JumpAttack"/>
+    /// instead (NPEINTR.PAS:883) — an adjacent-branch copy/paste slip in the original source, not a
+    /// transcription error here. See docs/PASCAL_ARCHITECTURE_NOTES.md.
+    /// </summary>
+    public static void DeploySlowAttack(
+        Empire emp, Empire enemyEmp, IReadOnlyList<IEconomicWorld> regionCapitals, NpeCharacter persona,
+        Dictionary<Fleet, KingdomFleetState> fleetStates, Game game, Random random)
+    {
+        var basePower = AverageMilitaryPower(regionCapitals);
+        var candidates = game.Galaxy.Planets.Where(p => p.Owner == enemyEmp);
+        var (target, targetDefense, targetMen) = GetBestTarget(emp, candidates, basePower, persona, fleetStates, random);
+        if (target is null) {
+            return;
+        }
+
+        var fleetPower = 50000L + PascalRound((random.NextDouble() + Rnd(random, 2, 5)) * targetDefense);
+        var fleetGat = PascalRound(2.0 * targetMen);
+
+        var homeBase = GetRegionalCapital(target, regionCapitals);
+        if (homeBase is null) {
+            return;
+        }
+
+        if (MilitaryPower(homeBase.Ships, new DefenseCounts()) > fleetPower / 2) {
+            DeployBattleFleet(emp, fleetStates, homeBase, fleetPower, fleetGat, NpeMissionType.SlowAttack, target, game, random);
+        } else {
+            var betterBase = GetBestBase(emp, target, fleetPower, fleetGat, game);
+            if (betterBase is not null) {
+                DeployBattleFleet(emp, fleetStates, betterBase, fleetPower, fleetGat, NpeMissionType.JumpAttack, target, game, random); // verbatim quirk, see doc comment above
+            }
+        }
+    }
+
+    /// <summary>SetFleetReturn (NPEINTR.PAS:1062-1079) — points a fleet back toward its home base. Real Pascal's own <c>Emp</c> parameter is confirmed unused (only FltID/BaseID/FleetData are ever read) — dropped here.</summary>
+    public static void SetFleetReturn(Fleet fleet, IEconomicWorld homeBase, Dictionary<Fleet, KingdomFleetState> fleetStates)
+    {
+        var state = fleetStates[fleet];
+        state.Mission = NpeMissionType.Return;
+        state.Target = homeBase;
+        FleetLifecycle.SetFleetDestination(fleet, homeBase.Location);
+    }
+
+    /// <summary>
+    /// SetRaidingFleetNewTarget (NPEINTR.PAS:1081-1124) — a raiding fleet presses on to a fresh target
+    /// or heads home, biased by <see cref="NpeCharacter.Offensive"/>. No caller exists yet in this port
+    /// (NPE00/NPE02's per-turn driver, Phase 6d) — ported now since it's part of NPEINTR.PAS's own
+    /// declared surface, same "primitive ready for whoever needs it" precedent as Phase 5g's
+    /// SelfDestructObject.
+    /// </summary>
+    public static void SetRaidingFleetNewTarget(
+        Empire emp, Fleet fleet, IEconomicWorld target, IEconomicWorld homeBase,
+        Dictionary<Fleet, KingdomFleetState> fleetStates, NpeCharacter persona, Game game, Random random)
+    {
+        var enemyEmp = target.Owner;
+
+        if (Rnd(random, 1, 100) <= persona.Offensive && enemyEmp != emp) {
+            var fleetPower = MilitaryPower(fleet.Ships, new DefenseCounts());
+            var candidates = game.Galaxy.Planets.Where(p => p.Owner == enemyEmp);
+            var (newTarget, _, _) = GetBestTarget(emp, candidates, fleetPower, persona, fleetStates, random);
+            if (newTarget is not null) {
+                FleetLifecycle.SetFleetDestination(fleet, newTarget.Location);
+                var state = fleetStates[fleet];
+                state.Mission = NpeMissionType.JumpAttack;
+                state.Target = newTarget;
+            } else {
+                SetFleetReturn(fleet, homeBase, fleetStates);
+            }
+        } else {
+            SetFleetReturn(fleet, homeBase, fleetStates);
+        }
+    }
+
+    /// <summary>
+    /// DestroyAllFleetsInSector (NPEINTR.PAS:1126-1162) — engages every other-empire fleet
+    /// <paramref name="fleet"/> currently shares a sector with, weaker-than-half-power ones only.
+    /// Iterates the galaxy's fleets in list order rather than Pascal's fixed slot-index order — this
+    /// port's own accepted iteration-order gap for scan-dependent RNG (see this class's own doc
+    /// comment on the hardcoded-test ground-truth split).
+    /// </summary>
+    public static bool DestroyAllFleetsInSector(Empire emp, Fleet fleet, long fleetPower, Game game, Random random)
+    {
+        var allDestroyed = true;
+        var emptyDefenses = new DefenseCounts();
+
+        foreach (var enemy in game.Galaxy.Fleets.Where(f => f.Location == fleet.Location).ToList()) {
+            if (enemy.Owner == emp || !Game.Scouted(emp, enemy)) {
+                continue;
+            }
+
+            if (fleetPower > MilitaryPower(enemy.Ships, emptyDefenses) / 2) {
+                var result = CombatResolution.NPEAttack(emp, fleet, enemy, AttackIntentionType.CaptureTransports, game, random);
+                if (result.Result != AttackResultType.DefenderConquered) {
+                    allDestroyed = false;
+                }
+            } else {
+                allDestroyed = false;
+            }
+        }
+
+        return allDestroyed;
+    }
+
+    /// <summary>ImplementReturnMSN (NPEINTR.PAS:1164-1168) — the fleet has arrived home; merge it into its target and dissolve it.</summary>
+    public static void ImplementReturnMSN(Fleet fleet, IEconomicWorld target, Game game)
+    {
+        CombatOutcome.AbortFleet(fleet, target, report: true);
+        CombatOutcome.DestroyFleet(fleet, game);
+    }
+
+    /// <summary>ImplementSupplyMSN (NPEINTR.PAS:1170-1189) — dumps the fleet's entire cargo onto the target (all types, unconditionally — MoveThings called with NoOfThg equal to the source's own current amount always takes its "move everything" branch), then heads home.</summary>
+    public static void ImplementSupplyMSN(Fleet fleet, IEconomicWorld target, IEconomicWorld homeBase, Dictionary<Fleet, KingdomFleetState> fleetStates, Game game)
+    {
+        foreach (var t in Enum.GetValues<CargoType>()) {
+            target.Cargo[t] = ClampResource(target.Cargo[t] + fleet.Cargo[t]);
+            fleet.Cargo[t] = 0;
+        }
+
+        FleetLifecycle.ChangeCompositionOfFleet(fleet, target, fleet.Ships, fleet.Cargo, target.Ships, target.Cargo, game);
+
+        SetFleetReturn(fleet, homeBase, fleetStates);
+    }
+
+    /// <summary>
+    /// ImplementRefuelMSN (NPEINTR.PAS:1191-1209) — the fleet dissolves into <paramref name="target"/>
+    /// (same as <see cref="ImplementReturnMSN"/>), which then converts as much of its own trillum into
+    /// fuel as it needs (capped at what's on hand). <paramref name="target"/>'s dynamic type is
+    /// ambiguous at this method's own source (depends on 6d-level mission-assignment logic not built
+    /// yet) — see <see cref="FleetLifecycle.RefuelFleet"/>'s own doc comment for what happens when it's
+    /// not a <see cref="Fleet"/>.
+    /// </summary>
+    public static void ImplementRefuelMSN(Fleet fleet, object target, Game game)
+    {
+        CombatOutcome.AbortFleet(fleet, target, report: true);
+        CombatOutcome.DestroyFleet(fleet, game);
+
+        var (targetShips, targetCargo) = target switch {
+            Fleet f => (f.Ships, f.Cargo),
+            IEconomicWorld w => (w.Ships, w.Cargo),
+            _ => throw new ArgumentException($"ImplementRefuelMSN: expected a Fleet or IEconomicWorld target, got {target.GetType()}.", nameof(target)),
+        };
+        var targetFuel = target is Fleet targetFleet ? targetFleet.Fuel : 0;
+        var maxFuel = FleetLogistics.FuelCapacity(targetShips);
+        var tonsNeeded = (int)((maxFuel - targetFuel) / FleetLogistics.FuelPerTon) + 1;
+        var maxTri = Math.Min(tonsNeeded, targetCargo.Trillum);
+
+        FleetLifecycle.RefuelFleet(target, target, maxTri);
+    }
+
+    /// <summary>
+    /// ImplementConquerMSN (NPEINTR.PAS:1211-1240) — attacks an undefended independent target
+    /// outright; otherwise a 25% chance per turn to give up and head home while waiting the enemy out.
+    /// </summary>
+    public static AttackResultType ImplementConquerMSN(
+        Empire emp, Fleet fleet, IEconomicWorld target, IEconomicWorld homeBase,
+        Dictionary<Fleet, KingdomFleetState> fleetStates, Game game, Random random)
+    {
+        var otherFleetsAtTarget = game.Galaxy.Fleets.Any(f => f.Location == target.Location && f.Owner != fleet.Owner);
+
+        AttackResultType result;
+        var shouldReturn = false;
+
+        if (!otherFleetsAtTarget && target.Owner.IsIndependent) {
+            result = CombatResolution.NPEAttack(emp, fleet, target, AttackIntentionType.Conquer, game, random).Result;
+            shouldReturn = true;
+        } else {
+            if (Rnd(random, 1, 4) == 1) {
+                shouldReturn = true;
+            }
+            result = AttackResultType.AttackerRetreats;
+        }
+
+        if (shouldReturn) {
+            SetFleetReturn(fleet, homeBase, fleetStates);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// ImplementRaidTrnMSN (NPEINTR.PAS:1242-1282) — clears the sector of weaker enemy fleets, destroys
+    /// whatever construction site/stargate sits there if the sector's fully cleared, then either heads
+    /// home after 5 turns of loitering or keeps waiting — stripping all booty every turn either way.
+    /// Real Pascal's own <c>TargetID</c> parameter is confirmed unused: <c>GetObject(TargetXY,TargetID)</c>
+    /// overwrites it with whatever's at the fleet's own location before it's ever read — dropped here.
+    /// </summary>
+    public static void ImplementRaidTrnMSN(Empire emp, Fleet fleet, IEconomicWorld homeBase, Dictionary<Fleet, KingdomFleetState> fleetStates, Game game, Random random)
+    {
+        var fleetPower = MilitaryPower(fleet.Ships, new DefenseCounts());
+        var allFleetsDestroyed = DestroyAllFleetsInSector(emp, fleet, fleetPower, game, random);
+
+        var objectHere = game.Galaxy.GetObjectAt(fleet.Location);
+        if (allFleetsDestroyed && objectHere is ConstructionSite or Stargate) {
+            CombatResolution.NPEAttack(emp, fleet, objectHere, AttackIntentionType.DestroyTransports, game, random);
+        }
+
+        var state = fleetStates[fleet];
+        if (state.Waiting == 5) {
+            SetFleetReturn(fleet, homeBase, fleetStates);
+        } else {
+            state.Waiting++;
+        }
+
+        // destroy booty (NPEINTR.PAS:1276-1281): every ship type except HunterKiller, and all cargo,
+        // gets stripped every turn a raiding fleet lingers — it can't hold onto captured loot.
+        foreach (var t in Enum.GetValues<ShipType>()) {
+            if (t != ShipType.HunterKiller) {
+                fleet.Ships[t] = 0;
+            }
+        }
+        foreach (var t in Enum.GetValues<CargoType>()) {
+            fleet.Cargo[t] = 0;
+        }
+    }
+
+    /// <summary>
+    /// ImplementJumpAttackMSN (NPEINTR.PAS:1284-1337) — clears the sector, optionally softens the
+    /// target with a LAM strike launched from <paramref name="homeBase"/> (within 5 sectors, at least
+    /// 500 LAMs on hand), then attacks if the fleet still outguns what's left.
+    /// </summary>
+    public static AttackResultType ImplementJumpAttackMSN(Empire emp, Fleet fleet, IEconomicWorld target, IEconomicWorld homeBase, Game game, Random random)
+    {
+        var fleetPower = MilitaryPower(fleet.Ships, new DefenseCounts());
+        var allFleetsDestroyed = DestroyAllFleetsInSector(emp, fleet, fleetPower, game, random);
+
+        if (!allFleetsDestroyed || target.Owner == emp) {
+            return AttackResultType.None;
+        }
+
+        // Pascal snapshots GetShips(TargetID,EnemySh) here (NPEINTR.PAS:1309), before any LAM strike.
+        var enemyShips = target.Ships;
+
+        if (homeBase.Defenses[DefenseType.Lam] > 500 && homeBase.Location.DistanceTo(target.Location) <= 5) {
+            var lamsToUse = Math.Min(
+                homeBase.Defenses[DefenseType.Lam],
+                2 * target.Defenses[DefenseType.DefenseSatellite] + target.Defenses[DefenseType.IonCannon] + target.Defenses[DefenseType.Gdm] / 2);
+            var (shipsDestroyed, _) = CombatStandalone.LAMAttack(emp, lamsToUse, target, game);
+            homeBase.Defenses[DefenseType.Lam] -= lamsToUse;
+
+            // Verbatim Pascal quirk (NPEINTR.PAS:1318, 1325): EnemySh is passed as LAMAttack's VAR
+            // ShipsDest out-param. TargetID here is always a world, and LAMAttack's world branch
+            // never writes ShipsDest (only fleet targets do) — so EnemySh comes back as LAMAttack's
+            // own zeroed local, clobbering the real enemy ship count read a moment earlier. The
+            // final power comparison below sees zero enemy ships whenever the LAM branch fires,
+            // regardless of what the world's real ship count is.
+            enemyShips = shipsDestroyed;
+        }
+
+        // MilitaryPower(Sh,Df) with Df zeroed — the fleet's own defenses is a local scratch var real
+        // Pascal never populates before this comparison, same verbatim quirk as AverageMilitaryPower/
+        // GetBestBase's own doc comments.
+        if (MilitaryPower(fleet.Ships, new DefenseCounts()) > MilitaryPower(enemyShips, target.Defenses) / 2) {
+            return CombatResolution.NPEAttack(emp, fleet, target, AttackIntentionType.Conquer, game, random).Result;
+        }
+
+        return AttackResultType.None;
+    }
+
+    /// <summary>
+    /// ImplementStackMSN (NPEINTR.PAS:1339-1422) — dumps as much of the fleet as fits onto every
+    /// same-empire guard fleet already in its sector; if it still has ships left and there's room
+    /// under <see cref="MaxNoOfGuards"/>, it becomes a guard itself, else it's redirected to protect
+    /// whatever planet needs it most.
+    /// </summary>
+    public static void ImplementStackMSN(Fleet fleet, Dictionary<Fleet, KingdomFleetState> fleetStates, Game game)
+    {
+        var emp = fleet.Owner;
+        var guardsHere = fleetStates
+            .Where(kv => !ReferenceEquals(kv.Key, fleet) && kv.Key.Owner == emp && kv.Key.Location == fleet.Location && kv.Value.Mission == NpeMissionType.Guard)
+            .Select(kv => kv.Key)
+            .ToList();
+
+        foreach (var guard in guardsHere) {
+            DumpStuff(fleet, guard, game);
+        }
+
+        if (game.Galaxy.Fleets.Contains(fleet) && guardsHere.Count < MaxNoOfGuards) {
+            fleetStates[fleet].Mission = NpeMissionType.Guard;
+        } else {
+            var newWorld = GetBestPlanetToProtect(fleet, game);
+            if (newWorld is not null) {
+                SetFleetReturn(fleet, newWorld, fleetStates);
+            }
+        }
+    }
+
+    /// <summary>
+    /// DumpStuff (NPEINTR.PAS's own nested procedure inside ImplementStackMSN) — transfers up to 9999
+    /// of each ship type (every type but HunterKiller) from <paramref name="fleet"/> onto
+    /// <paramref name="guard"/>, dragging along a proportional share of troops for jumptransports and
+    /// transports. Two asymmetric unit-conversion paths, ported verbatim: the jumptransport branch
+    /// treats the transferred ship count as directly comparable to a troop count with no CargoSpace
+    /// conversion, while the transport branch correctly divides by CargoSpace[Legion] — a real
+    /// inconsistency between the two branches in source, not a transcription slip here.
+    /// </summary>
+    private static void DumpStuff(Fleet fleet, Fleet guard, Game game)
+    {
+        var fleetShips = new ShipCounts();
+        var guardShips = new ShipCounts();
+        var fleetCargo = new CargoHold();
+        var guardCargo = new CargoHold();
+        foreach (var t in Enum.GetValues<ShipType>()) {
+            fleetShips[t] = fleet.Ships[t];
+            guardShips[t] = guard.Ships[t];
+        }
+        foreach (var t in Enum.GetValues<CargoType>()) {
+            fleetCargo[t] = fleet.Cargo[t];
+            guardCargo[t] = guard.Cargo[t];
+        }
+
+        var legionSpace = FleetLogistics.CargoSpacePerUnit[CargoType.Legion];
+
+        foreach (var t in Enum.GetValues<ShipType>()) {
+            if (t == ShipType.HunterKiller) {
+                continue;
+            }
+
+            var trans = fleetShips[t] + guardShips[t] < 9999 ? fleetShips[t] : 9999 - guardShips[t];
+            fleetShips[t] -= trans;
+            guardShips[t] += trans;
+
+            if (t == ShipType.Jumptransport) {
+                var gatTrn = Math.Min(trans, fleetCargo[CargoType.Legion]);
+                fleetCargo[CargoType.Legion] -= gatTrn;
+                guardCargo[CargoType.Legion] = Math.Min(9999, guardCargo[CargoType.Legion] + gatTrn);
+                trans -= gatTrn;
+
+                gatTrn = Math.Min(trans, fleetCargo[CargoType.NinjaLegion]);
+                fleetCargo[CargoType.NinjaLegion] -= gatTrn;
+                guardCargo[CargoType.NinjaLegion] = Math.Min(9999, guardCargo[CargoType.NinjaLegion] + gatTrn);
+            } else if (t == ShipType.Transport) {
+                var gatTrn = Math.Min(trans, legionSpace * fleetCargo[CargoType.Legion]);
+                fleetCargo[CargoType.Legion] -= gatTrn;
+                guardCargo[CargoType.Legion] = Math.Min(9999, guardCargo[CargoType.Legion] + gatTrn);
+                trans = Math.Max(0, trans - gatTrn / legionSpace);
+
+                gatTrn = Math.Min(trans, fleetCargo[CargoType.NinjaLegion]);
+                fleetCargo[CargoType.NinjaLegion] -= gatTrn;
+                guardCargo[CargoType.NinjaLegion] = Math.Min(9999, guardCargo[CargoType.NinjaLegion] + gatTrn);
+            }
+        }
+
+        FleetLifecycle.ChangeCompositionOfFleet(fleet, guard, fleetShips, fleetCargo, guardShips, guardCargo, game);
+    }
+
+    /// <summary>
+    /// ImplementGuardMSN (NPEINTR.PAS:1424-1456) — merges as much of the fleet as fits (capped at 9000
+    /// on the base's side, 9999 on the fleet's own remaining side) into its guarded base; cargo is
+    /// untouched, only ships transfer.
+    /// </summary>
+    public static void ImplementGuardMSN(Fleet fleet, IEconomicWorld baseWorld, Game game)
+    {
+        var newFleetShips = new ShipCounts();
+        var newBaseShips = new ShipCounts();
+        foreach (var t in Enum.GetValues<ShipType>()) {
+            newFleetShips[t] = fleet.Ships[t];
+            newBaseShips[t] = baseWorld.Ships[t];
+        }
+
+        foreach (var t in Enum.GetValues<ShipType>()) {
+            if (t == ShipType.HunterKiller) {
+                continue;
+            }
+
+            var trans = newBaseShips[t] + newFleetShips[t] <= 9000 ? newFleetShips[t] : 9000 - newBaseShips[t];
+            if (newFleetShips[t] - trans > 9999) {
+                trans = newFleetShips[t] - 9999;
+            }
+
+            newBaseShips[t] = ClampResource(newBaseShips[t] + trans);
+            newFleetShips[t] = ClampResource(newFleetShips[t] - trans);
+        }
+
+        FleetLifecycle.ChangeCompositionOfFleet(fleet, baseWorld, newFleetShips, fleet.Cargo, newBaseShips, baseWorld.Cargo, game);
     }
 }

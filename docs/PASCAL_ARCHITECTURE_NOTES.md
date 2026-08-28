@@ -720,6 +720,54 @@ Phase-5-shipped, Phase-5-tested code, and none of 6c-2's own tests observe a hom
 after a fleet returns, so bundling the fix would make a `CombatOutcome` regression look like a 6c-2
 bug. Tracked here for its own follow-up commit with a test that actually asserts the trillum arrives.
 
+### `DeploySlowAttack`'s fallback branch deploys with the wrong mission
+
+`DeploySlowAttack` (`NPEINTR.PAS:848-886`) mirrors `DeployJumpAttack`'s shape almost exactly — same
+`GetBestTarget`/`GetRegionalCapital`/`GetBestBase` sequence, just a bigger power budget (50000 vs.
+30000). Its primary branch correctly deploys with `SlowAttackMSN`. Its fallback branch (regional
+capital lacks the ships, `GetBestBase` finds another world instead) deploys with `JumpAttackMSN`
+(`NPEINTR.PAS:883`) — the same mission `DeployJumpAttack`'s own fallback branch uses, one line up in
+the source. Reads as an adjacent-branch copy/paste slip in the original 1988 code, not a
+transcription error here — ported verbatim in `Core/Npe/NpeToolkit.cs`'s `DeploySlowAttack`, with the
+mismatch called out at the call site itself so it doesn't read as a bug introduced by this port.
+
+### `ImplementRaidTrnMSN`'s `TargetID` parameter (`NPEINTR.PAS:1242`) is confirmed unused
+
+`GetObject(TargetXY,TargetID)` (`NPEINTR.PAS:1261`) overwrites the incoming parameter with whatever
+object sits at the fleet's own current location before the parameter is ever read — the value the
+caller passed in is discarded unconditionally. Same category as `GetNewDesignation`'s unused
+`Persona` and `SetFleetReturn`'s unused `Emp`: dropped from `Core/Npe/NpeToolkit.cs`'s
+`ImplementRaidTrnMSN` rather than threaded through unread.
+
+### Two 6c-2b porting bugs (not Pascal quirks) caught before commit
+
+Unlike the source-side findings above, these two were genuine C# translation mistakes, caught by a
+pre-commit review pass and fixed with regression tests that fail against the buggy code:
+
+- **`DeployBattleFleet`'s probe loop re-drew its RNG bound every iteration.** Pascal's
+  `FOR i:=1 TO Rnd(1,4) DO` (`NPEINTR.PAS:559`) evaluates the upper bound once, at loop entry. The
+  first C# draft wrote `for (var i = 0; i < Rnd(random, 1, 4); i++)`, which calls `Rnd` — and so
+  draws the RNG — on every condition check, launching a different (usually wrong) number of probes
+  and consuming extra draws from the shared RNG stream. Fixed by hoisting the draw out of the loop
+  header. `FixedRandom` (a constant-returning stub) can't distinguish the two forms since both draw
+  the same value every time; the regression test (`DeployBattleFleet_ProbeCount_DrawsRngBoundOnce`)
+  uses a small sequence-returning `Random` stub instead, confirmed to fail against the reintroduced
+  bug (1 probe launched instead of 4) before being kept.
+- **`ImplementJumpAttackMSN`'s post-LAM-strike power gate read the wrong ship count.** Pascal
+  (`NPEINTR.PAS:1309-1325`) snapshots `GetShips(TargetID,EnemySh)` before the LAM strike, then passes
+  `EnemySh` as `LAMAttack`'s `VAR ShipsDest` out-parameter. Since the target here is always a world,
+  and `LAMAttack`'s world-target branch (`ATTACK.PAS:1680+`) never writes `ShipsDest` — only the
+  fleet-target branch does — `EnemySh` comes back as `LAMAttack`'s own zeroed local, not the world's
+  real remaining ships, and the final `MilitaryPower` gate compares the attacker against an
+  enemy-ships value of zero whenever the LAM branch fires. The first C# draft read live
+  `target.Ships` at that point instead — a plausible-looking but wrong third behavior (matching
+  neither the LAM-fired nor LAM-skipped Pascal path). Fixed by snapshotting `target.Ships` before the
+  strike and swapping in `LAMAttack`'s returned (always-zero, for a world target) `ShipsDestroyed`
+  when the branch fires. Regression test:
+  `ImplementJumpAttackMSN_LamStrikeFires_ZeroesEnemyShipsInPowerGate`, which gives the target
+  1,000,000 ships (would clearly fail the gate on real ship counts) and confirms the attack proceeds
+  anyway once the LAM branch fires.
+
 ---
 
 ## Outstanding Research (as of this draft)

@@ -157,7 +157,7 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   tests (`AnnualTickHandlerHostileLifeTests`) exploiting `FixedRandom(N)`'s `min+N` resolution to
   deterministically pick each of the three branches.
 
-## 6. NPE AI — in progress, 6a-6c landed, 6c-2 primitives landed
+## 6. NPE AI — in progress, 6a-6c-2 landed
 
 Implement an `ITurnHandler` for computer empires. The roadmap's original one-line framing here
 ("start with one classic implementation") undersold this phase the way "8 known News sites"
@@ -250,7 +250,7 @@ original developers shipped incomplete, not a port gap.
   procedures, which need fleet-lifecycle primitives (`DeployFleet`/`ChangeCompositionOfFleet`/
   `EstimatedDateOfArrival`/`EstimatedRange`/`RefuelFleet`/`SetFleetDestination`) that don't exist
   anywhere in this port yet — see 6c-2.
-- 🚧 **6c-2, `NPEINTR.PAS` toolkit — fleet-lifecycle half.** Split into two landings: the six
+- ✅ **6c-2, `NPEINTR.PAS` toolkit — fleet-lifecycle half.** Split into two landings: the six
   fleet-lifecycle primitives first (independently verifiable), then the `Deploy*Fleet`/
   `Implement*MSN` layer on top (unverifiable until the primitives are right) — same reasoning that
   split 6c itself.
@@ -275,13 +275,22 @@ original developers shipped incomplete, not a port gap.
     vanishes instead of becoming trillum), deliberately left for its own follow-up commit rather than
     bundled here (see `PASCAL_ARCHITECTURE_NOTES.md`). Hardcoded-tested (`FleetLifecycleTests.cs`),
     same rationale as 6c.
-  - **`Deploy*Fleet`/`Implement*MSN` layer** — not started. The five `Deploy*Fleet` procedures
-    (`DeployBattleFleet`/`DeployCargoFleet`/`DeployJumpAttack`/`DeployHKRaiders`/`DeploySlowAttack`;
-    `DeployHarassFleet` is the confirmed no-op stub, not ported) and all eight `Implement*MSN`
-    mission executors (`ImplementReturnMSN`/`SupplyMSN`/`RefuelMSN`/`ConquerMSN`/`RaidTrnMSN`/
-    `JumpAttackMSN`/`StackMSN`/`GuardMSN`) plus their shared helpers (`SetFleetReturn`/
-    `SetRaidingFleetNewTarget`/`DestroyAllFleetsInSector`), landing in `Core/Npe/NpeToolkit.cs`
-    alongside 6c's read-and-compute half.
+  - ✅ **`Deploy*Fleet`/`Implement*MSN` layer** (`Core/Npe/NpeToolkit.cs`, alongside 6c's
+    read-and-compute half) — the five `Deploy*Fleet` procedures (`DeployBattleFleet`/
+    `DeployCargoFleet`/`DeployJumpAttack`/`DeployHKRaiders`/`DeploySlowAttack`; `DeployHarassFleet`
+    is the confirmed no-op stub, not ported) and all eight `Implement*MSN` mission executors
+    (`ImplementReturnMSN`/`SupplyMSN`/`RefuelMSN`/`ConquerMSN`/`RaidTrnMSN`/`JumpAttackMSN`/
+    `StackMSN`/`GuardMSN`) plus their shared helpers (`SetFleetReturn`/`SetRaidingFleetNewTarget`/
+    `DestroyAllFleetsInSector`). `GetBestPlanetToProtect` widened from `IEconomicWorld` to
+    `ISectorObject` — real Pascal's own `BaseID: IDNumber` is generic, and `ImplementStackMSN`'s
+    real call site passes a `Fleet`, not a world. Two more verbatim quirks found and documented (see
+    `PASCAL_ARCHITECTURE_NOTES.md`): `DeploySlowAttack`'s fallback branch deploys with
+    `JumpAttackMSN` instead of `SlowAttackMSN` (an adjacent-branch copy/paste slip in the 1988
+    source), and `ImplementRaidTrnMSN`'s `TargetID` parameter is confirmed unused (overwritten by
+    `GetObject` before ever being read). `SetRaidingFleetNewTarget` has no real caller yet (6d) —
+    ported anyway, same "primitive ready for whoever needs it" precedent as Phase 5g's
+    `SelfDestructObject`. Hardcoded-tested (`NpeToolkitDeployImplementTests.cs`), same rationale as
+    6c/6c-2's primitives.
 - **6d, Kingdom core loop.** `NPE00.PAS` (defense, expansion, exploration, logistics) plus
   `NPE02.PAS`'s per-turn driver and both persona-seed presets. No diplomacy yet.
 - **6e, Kingdom diplomacy.** `StateDepartment`/`StateDeptReport`/`WarCabinet` and `ReviewNews`'s
