@@ -41,20 +41,45 @@ public static class FleetLogistics
         [CargoType.Metals] = 10, [CargoType.Supplies] = 15, [CargoType.Trillum] = 20,
     }.ToFrozenDictionary();
 
-    /// <summary>Tons of transport-equivalent cargo space one unit of this cargo type takes up (DATACNST.PAS:382-384).</summary>
-    private static readonly FrozenDictionary<CargoType, int> _cargoSpacePerUnit = new Dictionary<CargoType, int> {
+    /// <summary>
+    /// Tons of transport-equivalent cargo space one unit of this cargo type takes up (DATACNST.PAS:382-384)
+    /// — Pascal's <c>CargoSpace</c> table. Internal, not private: Npe/NpeToolkit.cs's GetFleetComposition
+    /// (Phase 6c) reads the same table rather than re-transcribing it.
+    /// </summary>
+    internal static readonly FrozenDictionary<CargoType, int> CargoSpacePerUnit = new Dictionary<CargoType, int> {
         [CargoType.Legion] = 5, [CargoType.NinjaLegion] = 5, [CargoType.Ambrosia] = 100, [CargoType.Chemicals] = 3,
         [CargoType.Metals] = 3, [CargoType.Supplies] = 2, [CargoType.Trillum] = 100,
     }.ToFrozenDictionary();
 
-    /// <summary>Cargo space a jumptransport carries, relative to a transport's 1.0 (DATACNST.PAS:387-389) — only nonzero entry besides Transport itself.</summary>
-    private const double JumptransportCargoAdjustment = 0.2;
+    /// <summary>
+    /// Cargo space a jumptransport carries, relative to a transport's 1.0 (DATACNST.PAS:387-389's
+    /// <c>TrnAdj</c> table — only nonzero entry besides Transport itself, which is always 1.0 and so
+    /// never needs its own constant). Internal, not private: see <see cref="CargoSpacePerUnit"/>.
+    /// </summary>
+    internal const double JumptransportCargoAdjustment = 0.2;
 
     /// <summary>Removal priority when a fleet's cargo no longer fits (MISC.PAS:437-438) — chemicals first, ambrosia last.</summary>
     private static readonly CargoType[] _balancePriority = [
         CargoType.Chemicals, CargoType.Supplies, CargoType.Metals,
         CargoType.Legion, CargoType.NinjaLegion, CargoType.Trillum, CargoType.Ambrosia,
     ];
+
+    /// <summary>
+    /// FltMovementRate (DATACNST.PAS) — sectors per year a fleet type steps. Moved here from
+    /// <see cref="Turns.FleetMovementHandler"/> (its original sole consumer, Phase 6a) once
+    /// Phase 6c-2's <c>EstimatedDateOfArrival</c> (Entities/FleetLifecycle.cs) became a second real
+    /// consumer — one transcribed table, not two copies of the same DATACNST.PAS data.
+    /// </summary>
+    private static readonly FrozenDictionary<FleetType, int> _movementRateByType = new Dictionary<FleetType, int>() {
+        [FleetType.Standard] = 1,
+        [FleetType.JumpFleet] = 10,
+        [FleetType.HunterKillerFleet] = 10,
+        [FleetType.Penetrator] = 2,
+        [FleetType.AdvancedWarpFleet] = 2,
+    }.ToFrozenDictionary();
+
+    public static int MovementRate(FleetType fleetType) =>
+        _movementRateByType.TryGetValue(fleetType, out var rate) ? rate : 1;
 
     /// <summary>FuelCapacity (MISC.PAS:168-183) — maximum fuel this ship distribution can hold.</summary>
     public static double FuelCapacity(ShipCounts ships)
@@ -91,7 +116,7 @@ public static class FleetLogistics
     {
         var freeSpace = ships.Transports + ships.Jumptransports * JumptransportCargoAdjustment;
         foreach (var t in Enum.GetValues<CargoType>()) {
-            freeSpace -= cargo[t] / (double)_cargoSpacePerUnit[t];
+            freeSpace -= cargo[t] / (double)CargoSpacePerUnit[t];
         }
 
         return PascalRound(freeSpace);
@@ -118,7 +143,7 @@ public static class FleetLogistics
                 spaceLeft = newSpaceLeft;
                 priorityIndex++;
             } else {
-                cargo[t] = newSpaceLeft * _cargoSpacePerUnit[t];
+                cargo[t] = newSpaceLeft * CargoSpacePerUnit[t];
                 spaceLeft = 0;
             }
         }

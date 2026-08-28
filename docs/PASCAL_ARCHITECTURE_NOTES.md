@@ -223,7 +223,9 @@ This file has no types, only tuning constants and display-name tables — but it
 
 **Fleet/mission dispatch**: every archetype maintains its own 25-slot (`NoOfFleetsPerEmpire`) `FleetDataArray`, garbage-collected each turn (`EnforceNPEDataLinks`, `NPEINTR.PAS:1661-1689`) to clear slots whose fleet is no longer active. New fleets are always created through `DeployBattleFleet`/`DeployCargoFleet` (`NPEINTR.PAS:505-628`), which pick ship composition from one of six hardcoded per-mission `SequenceArray`s, spending a military-power budget ship-type by ship-type. `GetBestTarget` (`NPEINTR.PAS:715-775`) is the shared world-target scorer used by expansion, jump-attack, slow-attack, and raider retargeting alike: `value = Factor × (tech+1) × classValue × (pop/1000) / (100 + (defense+troops)/1000)`.
 
-**Several likely bugs were flagged (not verified against a live run)**: `StateDeptReport` calls `GetCapital(Emp,...)` instead of `GetCapital(EnemyEmp,...)` inside its per-enemy loop, meaning the tech-based threat-assessment multiplier never actually fires (`NPEINTR.PAS:1609`); `BSRKDestroyWorld`'s industry-loss calc (`NPE04.PAS:178`) reduces to `max(X,X-k)=X`, i.e. industry is always fully zeroed rather than partially reduced; `DeploySlowAttack`'s fallback path deploys a jump-attack instead of a slow-attack mission when the nearest base is too weak (`NPEINTR.PAS:883`); `LoadPirateNPE`'s legacy version-migration branch never propagates its I/O error code to the caller (`NPE01.PAS:501-513`); `InitializeGuardianNPE` allocates its data block without zero-filling it, so uninitialized heap memory gets written verbatim to save files (`NPE03.PAS:159-172`, harmless today only because Guardian never touches that field). **Per existing project memory on the v2-source caveat**: the 9999/9000 per-type ship-stacking caps found in `NPEINTR.PAS:1362-1365,1443-1449` are this v1.31 build's original behavior (the v2 source's removal of a "9999 ship cap" is an un-opted-in change) — preserve them deliberately, don't silently drop them by reusing v2-derived logic.
+**Several likely bugs were flagged (not verified against a live run)**: `StateDeptReport` calls `GetCapital(Emp,...)` instead of `GetCapital(EnemyEmp,...)` inside its per-enemy loop, meaning the tech-based threat-assessment multiplier never actually fires (`NPEINTR.PAS:1609`) — **confirmed and ported verbatim in Phase 6e**, see `NpeToolkit.StateDeptReport`'s own doc comment; `BSRKDestroyWorld`'s industry-loss calc (`NPE04.PAS:178`) reduces to `max(X,X-k)=X`, i.e. industry is always fully zeroed rather than partially reduced; `DeploySlowAttack`'s fallback path deploys a jump-attack instead of a slow-attack mission when the nearest base is too weak (`NPEINTR.PAS:883`); `LoadPirateNPE`'s legacy version-migration branch never propagates its I/O error code to the caller (`NPE01.PAS:501-513`); `InitializeGuardianNPE` allocates its data block without zero-filling it, so uninitialized heap memory gets written verbatim to save files (`NPE03.PAS:159-172`, harmless today only because Guardian never touches that field). A further bug found only while implementing Phase 6e, not from the earlier read-through: `WarCabinet` (`NPE00.PAS:511-601`) has no `EnemyEmp<>Emp` guard on its own enemy loop, unlike `StateDepartment`'s otherwise-identical one — an empire whose default Policy seeds at or above `HarassPLT` (Kingdom2's does) can deploy raiders/battle fleets against its own worlds once it has scouted them, since `GetBestRaiderTarget`/`GetBestTarget` filter only by ownership; see `NpeToolkit.WarCabinet`'s own doc comment. **Per existing project memory on the v2-source caveat**: the 9999/9000 per-type ship-stacking caps found in `NPEINTR.PAS:1362-1365,1443-1449` are this v1.31 build's original behavior (the v2 source's removal of a "9999 ship cap" is an un-opted-in change) — preserve them deliberately, don't silently drop them by reusing v2-derived logic.
+
+**A separate, port-introduced bug (not in Pascal) was found and fixed during Phase 6e**: `NpeToolkit.MilitaryPower` (Phase 6c) weighted ships/defenses by `CombatConstants.CombatPower` — `ATTACK.PAS:76-81`'s own table for the surrender algorithm — instead of `DATACNST.PAS:167-170`'s `MPower`, the table `MISC.PAS`'s real `MilitaryPower` function actually reads. The two tables are genuinely different (e.g. `LAM` is 100 in `MPower` vs. 80 in `CombatPower`; `trn` is 0 vs. 1), confirmed by reading both declarations directly rather than assumed from the similar name. This had been silently wrong since 6c for `AverageMilitaryPower`/`GetBestTarget`/`DeployJumpAttack`/`SlowAttack` budgets/`AttackEnemyFleets`/`ImperialExpansion` — found only because `AttackSeverity` (`NPE00.PAS:128`) indexes `MPower` directly and couldn't be written correctly against the wrong table. Fixed by adding `CombatConstants.MPower` as the real table; the full test suite passed 408/408 both before and after, confirming no golden-file domain routes through this arithmetic.
 
 DOS/porting notes specific to this subsystem: `NPEDataRecord.Data: Pointer` is reinterpreted per archetype via hard casts (`PirateDataPtr(DataPtr)` etc.) in every `Implement*NPE`/`Load*NPE`/`Save*NPE`/`CleanUp*NPE` — port to a proper discriminated union or one-implementation-per-archetype class hierarchy, not a reproduced cast. Save/load is raw `BlockRead`/`BlockWrite` of whole records, with a `Version<12` legacy migration path that hardcodes 25 fleet slots/empire and a manually-computed flat index — must be preserved if old saves need to load. `ImplementNPE` does direct `ClrScr`/`OpenWindow`/`WriteString` calls for a progress display inside the dispatcher (`NPE.PAS:70-84`) — needs factoring into a callback/progress-reporter interface for a headless C# port.
 
@@ -638,6 +640,158 @@ present and callable, but do nothing. Confirmed identical in both the 1.31 and 2
 this isn't a regression introduced between versions; the original developers shipped both
 incomplete. Worth a note rather than a TODO when their host files are ported (Phase 6), since an
 empty body could otherwise look like a porting mistake instead of matched-to-source behavior.
+
+### `FleetDataRecord.Midway` (`NPETYPES.PAS`) is confirmed dead — declared, never read or written
+
+Grepped across the entire 1.31 source tree: `Midway: IDNumber` has exactly one hit, its own
+declaration at `NPETYPES.PAS:86`. No procedure in `NPEINTR.PAS`, `NPE00.PAS`-`NPE04.PAS`, or
+anywhere else reads or writes it, despite its comment ("coord to gather at or rendezvous")
+describing a real-sounding feature. Same category as `TraderNPE` above — a real field the original
+developers declared and then never wired up. An earlier `docs/PORT_DESIGN.md` pass guessed this
+field was "derivable from state the port already tracks" before the field-by-field audit (Phase 6c)
+actually read every call site; the guess was wrong in the opposite direction — not derivable,
+simply unused. Not ported (`Core/Npe/NpeTypes.cs`'s `KingdomFleetState`).
+
+### `GetFleetComposition`'s `SSeq` (`NPEINTR.PAS:247-248`) is declared but never referenced
+
+`GetFleetComposition`'s mission-to-ship-sequence `CASE` only names `LSeq`/`JSeq`/`ASeq`/`ESeq`/`RSeq`
+across its five branches (`ReturnMSN`/`ConquerMSN`&`ELSE`/`StackMSN`/`JumpAttackMSN`/`RaidTrnMSN`) —
+`SSeq: SequenceArray = (hkr,pen,jmp,ssp,fgt)` is declared right alongside the others but never
+appears in the `CASE`. Its declared shape (nothing but combat ships, no `jtn`/`trn`) reads like it
+was meant for `SlowAttackMSN`, which instead falls through to the `ELSE`→`JSeq` default like every
+other unlisted mission. Not ported (`Core/Npe/NpeToolkit.cs`'s `GetFleetComposition`).
+
+### `GetNewDesignation`'s `Persona` parameter (`NPEINTR.PAS:917-1036`) is confirmed unused
+
+`GetNewDesignation(WorldID, VAR Persona: NPECharacterRecord, VAR RCap, VAR NewType)` takes a
+`Persona` parameter but its ~120-line body never reads a single `Persona.` field — every adjustment
+to the type-chance table comes from tech level, population, world class, and proximity to bases/
+capitals, none of it persona-driven. Dropped from the C# signature
+(`Core/Npe/NpeToolkit.cs`'s `GetNewDesignation`) rather than threaded through unread.
+
+### `SetEmpireDefenses` (`NPEINTR.PAS:1691-1699`) always zeroes an empire's starbase defense stance
+
+`DATASTRC.PAS`'s `DefenseRecord` has two fields, `ShellDefDist` (fleets) and `StarbaseDefDist`
+(starbases) — but every one of the four preset constants `SetEmpireDefenses` rolls between
+(`InitDefenseRecord`, `DATACNST.PAS:373-379`; `Defense1`/`Defense2`/`Defense3`,
+`NPEINTR.PAS:41-63`) only initializes `ShellDefDist` in its typed-constant literal, confirmed by
+directly counting parens in each literal, not inferred from the type declaration alone.
+
+**Confirmed two ways.** A probe compiled with this repo's `fpc -Mtp` (the same mode the
+ground-truth harness uses) shows the omitted trailing field of a partially-specified record
+constant reads as zero, not garbage. Then confirmed directly against the real thing: a raw byte
+scan of the user's actual TP-compiled `ANACREON.EXE` (1.31) for each constant's 35-byte
+`ShellDefDist` pattern (`Index = 0..100` is a 1-byte subrange, so each `DefenseRecord` constant is
+a 70-byte blob) finds exactly one match apiece, and in every case the 35 bytes immediately
+following are all zero:
+
+| Constant | Offset in `ANACREON.EXE` | 35 bytes after `ShellDefDist` |
+|---|---|---|
+| `InitDefenseRecord` | `0x30AE2` | all zero |
+| `Defense1` | `0x2FBB6` | all zero |
+| `Defense2` | `0x2FBFC` | all zero |
+| `Defense3` | `0x2FC42` | all zero |
+
+(`Defense1`/`Defense2`/`Defense3` sit contiguously 70 bytes apart in the binary, matching their
+declaration order in `NPEINTR.PAS` — a corroborating structural detail, not just a coincidence.)
+So every real call to `SetEmpireDefenses` — the only place any of these four constants is ever
+assigned to a live `DefenseSettings` — really did reset that empire's starbase shell distribution
+to all zeros in the shipped 1988 game, 100% of the time, regardless of which of the four fleet
+distributions the `Rnd(1,100)` roll picked. Real Turbo Pascal 7 behavior, not an FPC artifact.
+Not a bug to fix in the port — ported verbatim (`Core/Npe/NpeToolkit.cs`'s `SetEmpireDefenses`).
+
+### `FleetDataRecord.BlockX`/`BlockY` are Pirate-only, not shared toolkit state
+
+Despite living on the same `FleetDataRecord` every NPE personality's fleet-data array uses, grepping
+`BlockX`/`BlockY` across the tree turns up exactly six hits, all in `NPE01.PAS` — the Pirate
+personality's own hunting-ground grid (`HuntingGroundArray`). `NPEINTR.PAS`'s shared toolkit never
+reads or writes either field. Not ported as part of Phase 6c's Kingdom-only field audit
+(`Core/Npe/NpeTypes.cs`'s `KingdomFleetState`) — add when Pirate is picked up.
+
+### `CombatOutcome.AbortFleet` still doesn't convert leftover fuel to trillum — a real, known gap
+
+Phase 5g's `AbortFleet` (`FLEET.PAS:150-209`) doc comment excused skipping the fuel-to-trillum
+conversion (`IF GroundID.ObjTyp<>Flt THEN Cr2[Tri]:=ThgLmt(Cr2[Tri]+ThgLmt(FuelLeft/FuelPerTon)) ELSE
+SetFleetFuel(GroundID,GetFleetFuel(GroundID)+FuelLeft)`) because "no fuel-capacity... system exists
+anywhere in this port." Phase 6a added one (`Entities/FleetLogistics.cs`'s `Fuel`/`FuelCapacity`),
+so that excuse no longer holds — a fleet that dissolves via `AbortFleet` (every `ImplementReturnMSN`/
+`ImplementRefuelMSN` call, Phase 6c-2) silently loses whatever fuel it was carrying instead of it
+landing as trillum on the ground, or transferring directly if the ground is itself a fleet. Confirmed
+real and worth fixing, but deliberately **not** fixed as part of 6c-2: `AbortFleet` is
+Phase-5-shipped, Phase-5-tested code, and none of 6c-2's own tests observe a home world's trillum
+after a fleet returns, so bundling the fix would make a `CombatOutcome` regression look like a 6c-2
+bug. Tracked here for its own follow-up commit with a test that actually asserts the trillum arrives.
+
+### `DeploySlowAttack`'s fallback branch deploys with the wrong mission
+
+`DeploySlowAttack` (`NPEINTR.PAS:848-886`) mirrors `DeployJumpAttack`'s shape almost exactly — same
+`GetBestTarget`/`GetRegionalCapital`/`GetBestBase` sequence, just a bigger power budget (50000 vs.
+30000). Its primary branch correctly deploys with `SlowAttackMSN`. Its fallback branch (regional
+capital lacks the ships, `GetBestBase` finds another world instead) deploys with `JumpAttackMSN`
+(`NPEINTR.PAS:883`) — the same mission `DeployJumpAttack`'s own fallback branch uses, one line up in
+the source. Reads as an adjacent-branch copy/paste slip in the original 1988 code, not a
+transcription error here — ported verbatim in `Core/Npe/NpeToolkit.cs`'s `DeploySlowAttack`, with the
+mismatch called out at the call site itself so it doesn't read as a bug introduced by this port.
+
+### `ImplementRaidTrnMSN`'s `TargetID` parameter (`NPEINTR.PAS:1242`) is confirmed unused
+
+`GetObject(TargetXY,TargetID)` (`NPEINTR.PAS:1261`) overwrites the incoming parameter with whatever
+object sits at the fleet's own current location before the parameter is ever read — the value the
+caller passed in is discarded unconditionally. Same category as `GetNewDesignation`'s unused
+`Persona` and `SetFleetReturn`'s unused `Emp`: dropped from `Core/Npe/NpeToolkit.cs`'s
+`ImplementRaidTrnMSN` rather than threaded through unread.
+
+### Two 6c-2b porting bugs (not Pascal quirks) caught before commit
+
+Unlike the source-side findings above, these two were genuine C# translation mistakes, caught by a
+pre-commit review pass and fixed with regression tests that fail against the buggy code:
+
+- **`DeployBattleFleet`'s probe loop re-drew its RNG bound every iteration.** Pascal's
+  `FOR i:=1 TO Rnd(1,4) DO` (`NPEINTR.PAS:559`) evaluates the upper bound once, at loop entry. The
+  first C# draft wrote `for (var i = 0; i < Rnd(random, 1, 4); i++)`, which calls `Rnd` — and so
+  draws the RNG — on every condition check, launching a different (usually wrong) number of probes
+  and consuming extra draws from the shared RNG stream. Fixed by hoisting the draw out of the loop
+  header. `FixedRandom` (a constant-returning stub) can't distinguish the two forms since both draw
+  the same value every time; the regression test (`DeployBattleFleet_ProbeCount_DrawsRngBoundOnce`)
+  uses a small sequence-returning `Random` stub instead, confirmed to fail against the reintroduced
+  bug (1 probe launched instead of 4) before being kept.
+- **`ImplementJumpAttackMSN`'s post-LAM-strike power gate read the wrong ship count.** Pascal
+  (`NPEINTR.PAS:1309-1325`) snapshots `GetShips(TargetID,EnemySh)` before the LAM strike, then passes
+  `EnemySh` as `LAMAttack`'s `VAR ShipsDest` out-parameter. Since the target here is always a world,
+  and `LAMAttack`'s world-target branch (`ATTACK.PAS:1680+`) never writes `ShipsDest` — only the
+  fleet-target branch does — `EnemySh` comes back as `LAMAttack`'s own zeroed local, not the world's
+  real remaining ships, and the final `MilitaryPower` gate compares the attacker against an
+  enemy-ships value of zero whenever the LAM branch fires. The first C# draft read live
+  `target.Ships` at that point instead — a plausible-looking but wrong third behavior (matching
+  neither the LAM-fired nor LAM-skipped Pascal path). Fixed by snapshotting `target.Ships` before the
+  strike and swapping in `LAMAttack`'s returned (always-zero, for a world target) `ShipsDestroyed`
+  when the branch fires. Regression test:
+  `ImplementJumpAttackMSN_LamStrikeFires_ZeroesEnemyShipsInPowerGate`, which gives the target
+  1,000,000 ships (would clearly fail the gate on real ship counts) and confirms the attack proceeds
+  anyway once the LAM branch fires.
+
+### `ExplorationAndProbing`'s `REPEAT`/`UNTIL` loop can hang forever — a real Pascal property, not a porting bug
+
+`NPE00.PAS:695-737`'s `NoMoreProbes` flag is only ever set inside the `FOR i:=1 TO MaxNoOfRegions
+DO` body, and only when `InGalaxy(x,y)` is true for that iteration's roll. Two ways this loops
+forever in real Pascal, both reproduced faithfully (i.e., not specially guarded against) except
+where noted:
+
+- **Empty region-capital list.** If an empire owns no Base/Capital world yet, the `FOR` loop body
+  never runs at all, so `NoMoreProbes` never gets set — an infinite `REPEAT`/`UNTIL`. This port's
+  `NpeToolkit.ExplorationAndProbing` returns immediately when `regionCapitals` is empty instead of
+  reproducing the hang, matching this project's own precedent for genuine Pascal hangs it doesn't
+  reproduce (see `GetRegionalCapital`'s own doc comment).
+- **A non-progressing RNG.** Even with a non-empty region-capital list, the loop only terminates
+  once `InGalaxy(x,y)` succeeds `Empire.MaxProbesInTransit` (10) times in a row (each success either
+  launches a probe or, once the pool is exhausted, sets `NoMoreProbes`). With a *real* RNG this
+  converges almost surely, since the rolled coordinate changes every iteration and the roll range
+  always straddles the region capital's own (in-galaxy) position. With a constant-valued RNG stub
+  (this port's own `FixedRandom`, used across most hardcoded tests) rolling the same edge-adjacent,
+  permanently out-of-galaxy coordinate forever, the loop hangs exactly as real Pascal would under
+  the same degenerate input — not reproduced as a guard in the port (there's nothing to fix; a real
+  RNG doesn't have this problem), but `KingdomTurnHandlerTests` deliberately places its test capitals
+  away from the galaxy edge to avoid it.
 
 ---
 

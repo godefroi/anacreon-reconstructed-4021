@@ -31,7 +31,7 @@ public class LamAttackTests
         game.Empires.Add(player);
         game.Empires.Add(targetOwner);
 
-        object target;
+        IShipCargoHolder target;
         if (c.TargetIsFleet) {
             var fleet = new Fleet { Location = new Coordinate(5, 5), Owner = targetOwner };
             fleet.Ships.Fighters = c.Fgt;

@@ -157,7 +157,7 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   tests (`AnnualTickHandlerHostileLifeTests`) exploiting `FixedRandom(N)`'s `min+N` resolution to
   deterministically pick each of the three branches.
 
-## 6. NPE AI — in progress, 6a-6b landed
+## 6. NPE AI — ✅ done (Kingdom)
 
 Implement an `ITurnHandler` for computer empires. The roadmap's original one-line framing here
 ("start with one classic implementation") undersold this phase the way "8 known News sites"
@@ -235,17 +235,190 @@ original developers shipped incomplete, not a port gap.
   rather than transcribed; no new method needed. `TraderNPE`'s dead-code finding and
   `DeployHarassFleet`/`ImplementDefendBMS`'s confirmed-no-op finding are in
   `PASCAL_ARCHITECTURE_NOTES.md`.
-- **6c, `NPEINTR.PAS` toolkit.** The shared fleet-deployment/targeting/mission-dispatch/bookkeeping
-  service `KingdomTurnHandler` depends on, including a field-by-field audit of `FleetDataRecord`
-  before any of it is mirrored onto `Fleet` (see `PORT_DESIGN.md`'s derive-don't-duplicate note).
-- **6d, Kingdom core loop.** `NPE00.PAS` (defense, expansion, exploration, logistics) plus
-  `NPE02.PAS`'s per-turn driver and both persona-seed presets. No diplomacy yet.
-- **6e, Kingdom diplomacy.** `StateDepartment`/`StateDeptReport`/`WarCabinet` and `ReviewNews`'s
-  policy-tier state machine — the piece most likely to need real `PascalRandom` sequences rather
-  than `ForcedRandomValue`, since its RNG draws depend on live-galaxy iteration order.
-- **6f, roadmap wrap-up.** Flip Kingdom to done here; explicit one-line disposition for each
-  deferred/dead personality so picking this phase back up doesn't require re-deriving the
-  reachability table above.
+- ✅ **6c, `NPEINTR.PAS` toolkit — read-and-compute half** (`Core/Npe/NpeToolkit.cs`,
+  `Core/Npe/NpeConstants.cs`, `Core/Npe/NpeTypes.cs`) — `MilitaryPower`, targeting
+  (`GetBestTarget`/`GetBestRaiderTarget`/`GetBestBase`/`GetBestPlanetToProtect`/
+  `MinimumDefense`/`AverageMilitaryPower`), regional bookkeeping (`CreateRegionArray`/
+  `GetRegionalCapital`/`EnforceNpeDataLinks`), world (re)designation (`GetNewDesignation`/
+  `ReDesignateEmpire`), `GetFleetComposition`, `SetEmpireDefenses`, `PlunderWorld` — everything in
+  NPEINTR.PAS that reads state and computes a value rather than creating/moving a fleet. Includes
+  the `FleetDataRecord` field audit (see `PORT_DESIGN.md`'s derive-don't-duplicate note — `Waiting`
+  turned out real, not derivable as an earlier pass guessed; `Midway` confirmed dead;
+  `BlockX`/`BlockY` Pirate-only). Hardcoded-tested (`NpeToolkitTests.cs`), not golden-file — see
+  `PORT_DESIGN.md`'s own note on why, revisit once Phase 7's save/load makes a real test universe
+  cheap. Split off from this commit, not bundled in: the five `Deploy*Fleet`/eight `Implement*MSN`
+  procedures, which need fleet-lifecycle primitives (`DeployFleet`/`ChangeCompositionOfFleet`/
+  `EstimatedDateOfArrival`/`EstimatedRange`/`RefuelFleet`/`SetFleetDestination`) that don't exist
+  anywhere in this port yet — see 6c-2.
+- ✅ **6c-2, `NPEINTR.PAS` toolkit — fleet-lifecycle half.** Split into two landings: the six
+  fleet-lifecycle primitives first (independently verifiable), then the `Deploy*Fleet`/
+  `Implement*MSN` layer on top (unverifiable until the primitives are right) — same reasoning that
+  split 6c itself.
+  - ✅ **Primitives** (`Entities/FleetLifecycle.cs`) — `DeployFleet`/`ChangeCompositionOfFleet`/
+    `RefuelFleet`/`SetFleetDestination` (FLEET.PAS) and `EstimatedDateOfArrival`/`EstimatedRange`
+    (INTRFACE.PAS, both `Fleet` and `Starbase` arms ported). Genuinely new primitives — every prior
+    phase only ever moved or destroyed fleets scenario loading or human setup already created,
+    never made one from a world's own stock. `FltMovementRate` moved from
+    `Turns/FleetMovementHandler.cs` into `Entities/FleetLogistics.cs` (`MovementRate`) once
+    `EstimatedDateOfArrival` became a second real consumer of the same DATACNST.PAS table.
+    `CombatOutcome.AbortFleet` promoted `private`→`internal` (same precedent as `DestroyFleet`) so
+    `ChangeCompositionOfFleet`'s self-destruct branches can call it — no behavior change.
+    `Game.HasScouted`→`Scouted`, promoted `private`→`public` (roslyn-renamed), mirroring `Known`,
+    for 6c-2's second half's `DestroyAllFleetsInSector`. Two real quirks found and ported verbatim,
+    not fixed: `ChangeCompositionOfFleet`'s non-fleet-ground branch reads `GetTrillum(GroundID)`
+    *after* `PutCargo(GroundID,NewGCr)` already overwrote it (FLEET.PAS:356-365) — "how much trillum
+    is available to convert" is whatever the new ground composition says, not what was there before;
+    and `DeployFleet`'s `IF GetFleetFuel(FltID)=0 THEN SetFleetFuel(FltID,10)` is a genuine free
+    top-up when a small enough fuel deficit rounds down to "0 tons needed" even with zero trillum on
+    hand. `CombatOutcome.AbortFleet`'s pre-6a "no fuel-capacity system exists" excuse no longer holds
+    now that `FleetLogistics.Fuel`/`FuelCapacity` exist — a real, confirmed gap (leftover fuel
+    vanishes instead of becoming trillum), deliberately left for its own follow-up commit rather than
+    bundled here (see `PASCAL_ARCHITECTURE_NOTES.md`). Hardcoded-tested (`FleetLifecycleTests.cs`),
+    same rationale as 6c.
+  - ✅ **`Deploy*Fleet`/`Implement*MSN` layer** (`Core/Npe/NpeToolkit.cs`, alongside 6c's
+    read-and-compute half) — the five `Deploy*Fleet` procedures (`DeployBattleFleet`/
+    `DeployCargoFleet`/`DeployJumpAttack`/`DeployHKRaiders`/`DeploySlowAttack`; `DeployHarassFleet`
+    is the confirmed no-op stub, not ported) and all eight `Implement*MSN` mission executors
+    (`ImplementReturnMSN`/`SupplyMSN`/`RefuelMSN`/`ConquerMSN`/`RaidTrnMSN`/`JumpAttackMSN`/
+    `StackMSN`/`GuardMSN`) plus their shared helpers (`SetFleetReturn`/`SetRaidingFleetNewTarget`/
+    `DestroyAllFleetsInSector`). `GetBestPlanetToProtect` widened from `IEconomicWorld` to
+    `ISectorObject` — real Pascal's own `BaseID: IDNumber` is generic, and `ImplementStackMSN`'s
+    real call site passes a `Fleet`, not a world. Two more verbatim quirks found and documented (see
+    `PASCAL_ARCHITECTURE_NOTES.md`): `DeploySlowAttack`'s fallback branch deploys with
+    `JumpAttackMSN` instead of `SlowAttackMSN` (an adjacent-branch copy/paste slip in the 1988
+    source), and `ImplementRaidTrnMSN`'s `TargetID` parameter is confirmed unused (overwritten by
+    `GetObject` before ever being read). `SetRaidingFleetNewTarget` has no real caller yet (6d) —
+    ported anyway, same "primitive ready for whoever needs it" precedent as Phase 5g's
+    `SelfDestructObject`. Hardcoded-tested (`NpeToolkitDeployImplementTests.cs`), same rationale as
+    6c/6c-2's primitives.
+- ✅ **6d, Kingdom core loop** (`Core/Npe/NpeToolkit.cs`, `Core/Npe/NpeTypes.cs`,
+  `Core/Turns/KingdomTurnHandler.cs`) — `NPE00.PAS`'s `DefendEmpire`/`ImperialExpansion`/
+  `NPEConquest`/`CargoSupplyFleet`/`ExplorationAndProbing` (plus their own nested helpers —
+  `AttackEnemyFleets`/`NoOfGuardsAtBase`/`GetBestBaseToProtect`/`ModifyPersona`/
+  `GetClosestCargoWorld`/`SendRescueFleet`/`RNIndustryLack`) land on `NpeToolkit`, confirmed shared
+  with Pirate/Berserker (grepped: all three call into `NPE00.PAS`, same "shared toolkit" reasoning
+  as `NPEINTR.PAS`) rather than folded into `KingdomTurnHandler`. `NPEINTR.PAS`'s
+  `MidCourseCorrection` — missed by both 6c and 6c-2's own passes over that file — also lands here,
+  first real caller. `KingdomTurnHandler`'s constructor is now real Pascal's own `InitializeNPE`
+  call (`NEWGAME.PAS:1250`, immediately after `CreateEmpire`, during scenario load itself, not
+  lazily on first turn): `InitializeKingdom1NPE`/`InitializeKingdom2NPE`'s persona-seed presets,
+  seeded from the exact same `Random` instance `ScenarioLoader` already uses, so these draws land at
+  the real position in the scenario-load RNG stream (`ScenarioLoader.RunCreateNPEmpire` updated to
+  pass `(empire, npeType, random)` through). `PlayTurn` is `ImplementKingdom1NPE`'s real per-turn
+  sequence: `EnforceNPEDataLinks` → `CreateRegionArray` → `UpdateFleets` → `ReviewNews` →
+  (wars/foreign affairs — see below) → `DefendEmpire` → `ImperialExpansion` → (every-7th-turn
+  `ReDesignateEmpire`) → `ExplorationAndProbing`.
+  - **No diplomacy yet (Phase 6e).** `StateDepartment`/`StateDeptReport`/`WarCabinet` are real
+    Pascal but 100% diplomacy state — `ReviewNews` is scoped to its non-diplomacy branches (NoFuel/
+    IndLack) only; its enemy-attack case arm (the `Policy`/`Aggressiveness` state-machine plus the
+    News-driven `Balance` decrement) is deferred alongside them, since nothing else ever advances
+    `StateDeptRecord.Policy` off its initial seed. `StateDeptRecord`/`PolicyType`
+    (`Core/Npe/NpeTypes.cs`) are real now regardless — `Kingdom1DataRecord`'s own `State` field
+    needs to exist for the persona-seed presets to populate, even with the procedures that act on it
+    deferred.
+  - **`StateDeptRecord` lookup is create-on-demand, not pre-seeded**, keyed by the *other* empire —
+    including `Empire.Independent`. Real Pascal's `StateDeptArray = ARRAY[Empire]` (Empire1..Empire8
+    plus Indep) always has all 9 slots allocated; this port's empires don't all exist yet when a
+    `KingdomTurnHandler` is constructed (later `CreateNPEmpire`/`CreatePlayerEmpire` commands can
+    still be pending in the same scenario file), so a `Dictionary` snapshot at construction time
+    would miss them. Confirmed load-bearing, not speculative: `UpdateFleets`' `ConquerMSN` case does
+    `Inc(State[EnemyEmp].Balance)` where `EnemyEmp` is `Empire.Independent` for the overwhelmingly
+    common "conquered an independent world" case — a `KeyNotFoundException` without this, caught by
+    `KingdomTurnHandlerTests.PlayTurn_ConquersIndependentWorld_HandlesBalanceForIndependentTarget`.
+  - **`TurnEngine.AdvanceOneTurn` now clears `Empire.News` right after `PlayTurn`**, matching
+    `ANACREON.PAS:246-248`'s own `ImplementNPE(Emp); EraseNews(Emp);` sequencing — the Phase 4 gap
+    ("no consumer exists to validate the timing against") this phase's `ReviewNews` is the first real
+    consumer for: without it, a standing `NoFuel` item re-fires `SendRescueFleet` every turn forever
+    (no `AlreadyTargetted` guard on that path).
+  - **`ExplorationAndProbing`'s `REPEAT/UNTIL` hangs forever on an empty region-capital list** in
+    real Pascal (`NoMoreProbes` is only ever set inside the `FOR` loop's own body) — not reproduced;
+    an empty `regionCapitals` returns immediately instead, matching this port's own precedent for
+    not reproducing a genuine Pascal hang (see `GetRegionalCapital`'s null-return doc comment). Also
+    genuinely hangs with a *non-empty* region-capital list under a constant-valued RNG stub
+    (`FixedRandom`) if the capital sits at a galaxy edge — a property of the algorithm needing RNG
+    progress to terminate, not a porting bug; `KingdomTurnHandlerTests` places its capitals away from
+    the edge for exactly this reason.
+  - **`IEconomicWorld`/`Fleet`'s shared "has Ships and Cargo" duck-typing became a real interface**,
+    `IShipCargoHolder` (`Core/Entities/IShipCargoHolder.cs`) — every `object`-typed parameter whose
+    real type union was exactly `Fleet | IEconomicWorld` (`FleetLifecycle.DeployFleet`/
+    `ChangeCompositionOfFleet`/`RefuelFleet`, `CombatEngine.CalculateCombatData`/`GetEnemy`,
+    `CombatStandalone.LAMAttack`) is now compile-time checked instead of a runtime `switch`/`is`
+    dispatch. Deliberately *not* applied to `object` params with a wider real union
+    (`CombatOutcome.AbortFleet`'s `ground`, which also accepts a `ConstructionSite`/`Stargate` as a
+    no-op; `CombatResolution.ResolveAttack`'s `target`, which dispatches on concrete type for
+    different behavior, not uniform `Ships`/`Cargo` access) — see the type's own doc comment.
+  - Covered by `KingdomTurnHandlerTests.cs` — the first commit where a whole NPE turn runs end to
+    end, so unlike every prior 6x commit's per-procedure hardcoded tests, this exercises real
+    cross-procedure dispatch a single method's own test can't reach (the `State[Independent]` case
+    above, `UpdateFleets`' fleet-liveness guard, `ExplorationAndProbing`'s empty-list guard).
+- ✅ **6e, Kingdom diplomacy** (`Core/Npe/NpeToolkit.cs`, `Core/Turns/KingdomTurnHandler.cs`) —
+  `StateDepartment`/`StateDeptReport`/`WarCabinet`, and `ReviewNews`'s enemy-attack case arm
+  (`AttackSeverity`/`RespondToEnemyAttack`, its own nested procedures). `KingdomTurnHandler.PlayTurn`
+  now matches `ImplementKingdom1NPE`'s real sequence in full: `StateDeptReport` once at `Clock=0` →
+  `UpdateFleets` → `ReviewNews` → `StateDepartment` → `WarCabinet` → `DefendEmpire` →
+  `ImperialExpansion` → (every-7th-turn `StateDeptReport` + `ReDesignateEmpire`) →
+  `ExplorationAndProbing`.
+  - **Found and fixed a real Phase 6c bug before this landed: `NpeToolkit.MilitaryPower` was
+    weighting by the wrong Pascal table.** `MISC.PAS`'s real `MilitaryPower` weights by
+    `DATACNST.PAS`'s `MPower` (LAM=100, def=100, GDM=10, ion=50, fgt=1, hkr=20, jmp=12, jtn=1,
+    pen=25, str=100, trn=0); the port instead read `CombatConstants.CombatPower`,
+    `ATTACK.PAS`'s own, separately-declared, differently-valued table for the surrender algorithm
+    (LAM=80, def=75, ..., trn=1) — confirmed distinct by reading both declarations directly, not
+    assumed from the similar name/role. Found while porting `AttackSeverity`, which indexes
+    `MPower` directly (`NPE00.PAS:128`) and so couldn't be written correctly against the wrong
+    table. Fixed by adding the real `CombatConstants.MPower` and repointing `MilitaryPower` at it —
+    this had been silently wrong since 6c for `AverageMilitaryPower`/`GetBestTarget`/
+    `DeployJumpAttack`/`SlowAttack` budgets/`AttackEnemyFleets`/`ImperialExpansion`. Full suite
+    passed 408/408 both before and after the fix — no golden-file domain routes through this
+    arithmetic, so the fix is isolated to NPE decision logic with no other attributable movement.
+  - **`StateDeptReport`'s per-enemy loop reads its own capital, not the enemy's, for the tech-based
+    threat multiplier** — a real Pascal defect (`NPEINTR.PAS:1609`, already flagged at
+    `PASCAL_ARCHITECTURE_NOTES.md`'s 4.5 section), ported verbatim rather than fixed: `Tech` is
+    always identical to `EmpireTech`, so `IF Tech>EmpireTech`/`IF Tech<EmpireTech` can never fire.
+  - **`WarCabinet` has no `EnemyEmp<>Emp` guard**, unlike `StateDepartment`'s otherwise-identical
+    loop — `EmpireActive(Emp)` is trivially true, so an empire whose default Policy seeds at or
+    above `HarassPLT` (Kingdom2's does) has a real per-turn chance of deploying raiders/battle
+    fleets against its own gates/construction sites/planets, since `GetBestRaiderTarget`/
+    `GetBestTarget` filter candidates only by ownership. Gated on the attacker having scouted its
+    own worlds (`Game.Known`), which full turn sequencing normally already provides by the time NPE
+    turns run — a real, latent defect rather than one that fires every turn regardless of state.
+    Ported verbatim, not guarded against; see `NpeToolkit.WarCabinet`'s own doc comment.
+  - **Extracted `IndustryConstants.cs`** (`Core/Entities/`) for TechAdj2 — `StateDeptReport`'s own
+    `GetEmpireStatus` needs the same IP formula `AnnualTickHandler.Production.cs` already had as a
+    private table; a second real reader is exactly the "derive, don't duplicate" bar for pulling a
+    9-row balance table out rather than copying it.
+  - `StateDeptRecord.Worlds`/`TotalMilitary`/`ThreatAssess` (seeded but unused since 6d) are now
+    real, live fields — `GetEmpireStatus` (`INTRFACE.PAS:654-719`, scoped to just what
+    `StateDeptReport` reads: no `TotalPop`, since nothing downstream consumes it) sums owned
+    planets/starbases/fleets' ship counts and — for planets and `IndustrialComplex`-kind starbases
+    only — shipyard industry.
+  - Covered by `NpeDiplomacyTests.cs`, exercised through `ReviewNews`'s public entry point since
+    `AttackSeverity`/`RespondToEnemyAttack` are private nested procedures in real Pascal too: one
+    test confirms the severity scan stops at the next headline rather than reading into a second
+    attacker's own `DestructionDetail` entries, the other confirms `NeutralPLT`'s arm always
+    escalates (never stays `Neutral`). No new golden-file domain — `StateDeptReport` needs the same
+    full hand-assembled universe `NpeToolkit.cs`'s own doc comment already defers to Phase 7.
+- ✅ **6f, roadmap wrap-up.** Kingdom (both persona presets) is fully ported: dispatch/state (6b),
+  the shared `NPEINTR.PAS` toolkit's read-and-compute half (6c) and fleet-lifecycle half (6c-2),
+  the core per-turn loop (6d), and diplomacy (6e). Disposition of every other NPE personality, so
+  picking this phase back up doesn't require re-deriving the reachability table above:
+  - **Pirate** (`NPE01.PAS`) — real, reachable (ARRONAX/GAUNTLET/JAKARTA), not built. Its own future
+    roadmap entry; shares `NPEINTR.PAS`'s toolkit (already built) but has its own separate
+    `Implement`/persona-free dispatch, not a Kingdom variant.
+  - **Berserker** (`NPE04.PAS`) — real, reachable (ARRONAX only), not built. Own future entry;
+    distinguishing mechanic is that its starbases are the mobile roaming unit, driven by a separate
+    `BaseMissionTypes` state machine — a genuinely different shape from Kingdom/Pirate's fleet-based
+    missions, not a drop-in reuse of `KingdomFleetState`.
+  - **Guardian** (`NPE03.PAS`) — real but zero `dos_131` scenario usage. Deliberately not built
+    ahead of demonstrated need (would be speculative scope); smallest of the four to port when it's
+    actually needed (no fleet movement, no diplomacy — just a per-turn LAM-defense loop).
+  - **Trader** — confirmed dead code, not merely unreachable: zero case arms in any of `NPE.PAS`'s 5
+    dispatch procedures, no `TraderDataRecord` in `NPETYPES.PAS`, zero scenario usage. Not planned.
+  - `DeployHarassFleet` (`NPEINTR.PAS:777`)/`ImplementDefendBMS` (`NPE04.PAS`) stay confirmed empty
+    stubs for whichever personality eventually needs them (Pirate/Berserker respectively) — nothing
+    to port, already verified in both the 1.31 and 2.0 trees.
+  - `LoadNPE`/`SaveNPE` (binary `.SAV` serialization, including the `Version<12` legacy-format
+    branches) — Phase 7, not this phase, regardless of which personalities exist by then.
 
 ## 7. Save/load
 

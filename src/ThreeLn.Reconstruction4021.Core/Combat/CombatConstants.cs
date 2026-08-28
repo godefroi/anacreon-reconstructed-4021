@@ -75,6 +75,30 @@ public static class CombatConstants
         [AttackType.Legion] = 20, [AttackType.NinjaLegion] = 100,
     }.ToFrozenDictionary();
 
+    /// <summary>
+    /// MPower (DATACNST.PAS:167-170) — a genuinely separate, differently-valued table from
+    /// <see cref="CombatPower"/> above despite the similar name and role: Pascal declares
+    /// <c>CombatPower</c> locally in ATTACK.PAS for the surrender algorithm, and this one, also
+    /// locally named <c>MPower</c>, in DATACNST.PAS for the general-purpose <c>MISC.PAS</c>
+    /// <c>MilitaryPower</c> function real Pascal's NPE code (NPE00/01/03/04.PAS) and ATTACK.PAS's own
+    /// group-power totals all call. Confirmed distinct by reading both declarations directly — e.g.
+    /// Lam is 100 here vs. 80 in <see cref="CombatPower"/>, def is 100 vs. 75, trn is 0 vs. 1.
+    /// Pascal's own array is only <c>ARRAY[LAM..trn]</c> (no Legion/NinjaLegion entries at all) since
+    /// <c>MilitaryPower</c> never indexes past <c>trn</c> — but NPE00.PAS's <c>AttackSeverity</c>
+    /// (ReviewNews's own nested function) indexes this same table by a DestructionDetail news item's
+    /// raw AttackType, which — via this port's <c>ReportLosses</c> — can legitimately be Legion/
+    /// NinjaLegion when ground troops die. Real Pascal reads whatever garbage byte happens to sit past
+    /// the array's declared end there (no range checking); reproducing that isn't possible or
+    /// meaningful, so Legion/NinjaLegion get a defined entry here instead, borrowed from
+    /// <see cref="CombatPower"/>'s own values for those two types rather than left absent.
+    /// </summary>
+    public static readonly FrozenDictionary<AttackType, int> MPower = new Dictionary<AttackType, int> {
+        [AttackType.Lam] = 100, [AttackType.DefenseSatellite] = 100, [AttackType.Gdm] = 10, [AttackType.IonCannon] = 50,
+        [AttackType.Fighter] = 1, [AttackType.HunterKiller] = 20, [AttackType.Jumpship] = 12, [AttackType.Jumptransport] = 1,
+        [AttackType.Penetrator] = 25, [AttackType.Starship] = 100, [AttackType.Transport] = 0,
+        [AttackType.Legion] = 20, [AttackType.NinjaLegion] = 100,
+    }.ToFrozenDictionary();
+
     /// <summary>How well a given ship type can protect others in the same shell (DATACNST.PAS:208-211).</summary>
     public static readonly FrozenDictionary<ShipType, int> ProtecOffered = new Dictionary<ShipType, int> {
         [ShipType.Fighter] = 5, [ShipType.HunterKiller] = 10, [ShipType.Jumpship] = 10, [ShipType.Jumptransport] = 1,

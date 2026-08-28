@@ -41,7 +41,7 @@ public static class CombatStandalone
     /// <paramref name="target"/> reference already is.
     /// </summary>
     public static (ShipCounts ShipsDestroyed, DefenseCounts DefensesDestroyed) LAMAttack(
-        Empire player, int lamToUse, object target, Game game)
+        Empire player, int lamToUse, IShipCargoHolder target, Game game)
     {
         var shipsDestroyed = new ShipCounts();
         var defensesDestroyed = new DefenseCounts();

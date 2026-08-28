@@ -55,7 +55,7 @@ public sealed class Game(Galaxy.Galaxy galaxy)
         var excluded = exclude as ICollection<Empire> ?? [.. exclude];
 
         foreach (var empire in Empires) {
-            if (excluded.Contains(empire) || !HasScouted(empire, source)) {
+            if (excluded.Contains(empire) || !Scouted(empire, source)) {
                 continue;
             }
 
@@ -63,13 +63,34 @@ public sealed class Game(Galaxy.Galaxy galaxy)
         }
     }
 
-    /// <summary>Scouted(Emp,Source) (PRIMINTR.PAS) dispatched across the four ISectorObject kinds.</summary>
-    private static bool HasScouted(Empire empire, ISectorObject source) => source switch {
+    /// <summary>
+    /// Scouted(Emp,Source) (PRIMINTR.PAS) — the stronger "currently sees" tier, as opposed to
+    /// <see cref="Known"/>'s "has ever seen." Public: Npe/NpeToolkit.cs's DestroyAllFleetsInSector
+    /// (Phase 6c-2) reads this the same way <see cref="Known"/> already reads publicly, rather than
+    /// hand-dispatching across the five <see cref="ISectorObject"/> kinds itself.
+    /// </summary>
+    public static bool Scouted(Empire empire, ISectorObject source) => source switch {
         Planet p => empire.Planets.Scouted.Contains(p),
         Starbase s => empire.Starbases.Scouted.Contains(s),
         Stargate g => empire.Stargates.Scouted.Contains(g),
         ConstructionSite c => empire.ConstructionSites.Scouted.Contains(c),
         Fleet f => empire.Fleets.Scouted.Contains(f),
+        _ => false,
+    };
+
+    /// <summary>
+    /// Known(Emp,ID) (PRIMINTR.PAS) — the weaker "has ever seen" tier, as opposed to
+    /// <see cref="Scouted"/>'s "currently sees." Public: Npe/NpeToolkit.cs's targeting logic
+    /// (Phase 6c) reads this the same way <see cref="AddGlobalNews"/> already reads
+    /// <see cref="Scouted"/>, rather than every caller hand-dispatching across the five
+    /// <see cref="ISectorObject"/> kinds itself.
+    /// </summary>
+    public static bool Known(Empire empire, ISectorObject source) => source switch {
+        Planet p => empire.Planets.Known.Contains(p),
+        Starbase s => empire.Starbases.Known.Contains(s),
+        Stargate g => empire.Stargates.Known.Contains(g),
+        ConstructionSite c => empire.ConstructionSites.Known.Contains(c),
+        Fleet f => empire.Fleets.Known.Contains(f),
         _ => false,
     };
 }

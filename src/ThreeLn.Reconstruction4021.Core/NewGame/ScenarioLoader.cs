@@ -446,11 +446,13 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
     }
 
     /// <summary>
-    /// NEWGAME.PAS:1219-1259 (CreateNPEmpire), minus InitializeNPE's persona/state seeding (Phase 6
-    /// commit 6d's job, once KingdomTurnHandler's real per-turn logic exists to consume it). Kingdom1/
-    /// Kingdom2 empires get a KingdomTurnHandler registered in Game.TurnHandlers now; other NPE types
-    /// (Pirate/Berserker/Guardian/Trader) get NpeType recorded but no handler, matching the existing
-    /// "ai has no entry in TurnHandlers" precedent (TurnEngineTests.cs) for AI not implemented yet.
+    /// NEWGAME.PAS:1219-1259 (CreateNPEmpire). Kingdom1/Kingdom2 empires get a KingdomTurnHandler
+    /// registered in Game.TurnHandlers — its constructor is real Pascal's own InitializeNPE call
+    /// (NEWGAME.PAS:1250, right after CreateEmpire), seeding persona/diplomacy state from this same
+    /// <c>random</c> instance so those draws land in the exact position they do in the real
+    /// scenario-load RNG stream (Phase 6d). Other NPE types (Pirate/Berserker/Guardian/Trader) get
+    /// NpeType recorded but no handler, matching the existing "ai has no entry in TurnHandlers"
+    /// precedent (TurnEngineTests.cs) for AI not implemented yet.
     /// </summary>
     private void RunCreateNPEmpire(ScenarioTokenizer tokenizer, Game game)
     {
@@ -473,7 +475,7 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         game.Empires.Add(empire);
 
         if (npeType is NpeEmpireType.Kingdom1 or NpeEmpireType.Kingdom2) {
-            game.TurnHandlers[empire] = new KingdomTurnHandler();
+            game.TurnHandlers[empire] = new KingdomTurnHandler(empire, npeType, random);
         }
     }
 

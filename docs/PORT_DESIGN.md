@@ -268,11 +268,39 @@ an empire is) is real, needed-now state regardless of how many personalities are
 Phase 7's save/load needs it, and (landed in 6b) `ScenarioLoader.RunCreateNPEmpire` now records it
 on every NPE empire and constructs a `KingdomTurnHandler` for `Kingdom1`/`Kingdom2` specifically;
 other types are recorded but left with no `Game.TurnHandlers` entry until their own personality
-lands. Per-fleet AI mission state (Pascal's `FleetDataRecord`) gets a field-by-field audit
-before anything is ported, not a verbatim mirror — some fields (`Waiting`, `Midway`) look
-derivable from state the port already tracks (`FleetStatus`, `Location`/`Destination`); only what
-survives the audit is new state, homed on the owning `ITurnHandler` instance (AI bookkeeping only
-some fleets have), not bolted onto `Fleet` itself.
+lands. Per-fleet AI mission state (Pascal's `FleetDataRecord`) got a field-by-field audit before anything
+was ported (Phase 6c), not a verbatim mirror — every real read/write site checked directly rather
+than guessed. Result: `Mission`/`TargetID`/`HomeBaseID`/`Waiting` are real and kept (as
+`Core/Npe/NpeTypes.cs`'s `KingdomFleetState.Mission`/`Target`/`HomeBase`/`Waiting`); `Index`
+dissolves into the owning `Dictionary<Fleet, KingdomFleetState>`'s key. `Midway` is confirmed
+dead (declared at NPETYPES.PAS:86, never read or written anywhere in the 1.31 tree — see
+`PASCAL_ARCHITECTURE_NOTES.md`), and `BlockX`/`BlockY` are Pirate-only (NPE01.PAS's hunting-ground
+grid, not part of the shared toolkit) — neither ported for Kingdom. `Waiting` in particular turned
+out not to be derivable from `FleetStatus` as an earlier pass here guessed — it's a real 0-5
+raid-dwell counter `ImplementRaidTrnMSN` increments per turn, not a movement state.
+
+**`NPEINTR.PAS` itself splits into two commits along a real dependency line, not an arbitrary
+cut.** Every one of its procedures either reads state and computes a value, or creates/moves/
+refuels a fleet. The read-and-compute half (`MilitaryPower`, targeting, regional bookkeeping,
+world (re)designation — `Core/Npe/NpeToolkit.cs`, 6c) needs nothing beyond what already exists in
+the port. The other half (the five `Deploy*Fleet` procedures, all eight `Implement*MSN` mission
+executors) needs real fleet-lifecycle primitives — `DeployFleet`, `ChangeCompositionOfFleet`,
+`EstimatedDateOfArrival`/`EstimatedRange`, `RefuelFleet`, `SetFleetDestination` (FLEET.PAS/
+PRIMINTR.PAS) — that don't exist anywhere in this port yet; every prior phase only ever moved or
+destroyed fleets that scenario loading or human setup already created, never made a new one from a
+world's own stock. That half is its own later commit (6c-2 or folded into 6d), with
+`KingdomTurnHandler` as its first real caller, rather than bundled into 6c where it would make the
+whole file unverifiable until the very last primitive landed.
+
+**Ground truth for 6c stayed hardcoded, not golden-file, on purpose.** By the time 6c was scoped
+the fuller Pascal tree (see "Ground-truth harness generation" above) was already the default build,
+so the "grows one grudging function at a time" cost that used to justify reaching for
+transcription over patching no longer applies — but 6c's own methods don't need a new patched
+domain either way: every one either has no `Rnd`/`Random` call, or draws inside a scan-every-planet
+loop whose count depends on live galaxy shape, and a golden case for the second group would need a
+full hand-assembled universe to mean anything close to real play. Phase 7's save/load work is what
+makes building one of those cheap — revisit then rather than investing in scaffolding now that a
+few phases' wait makes unnecessary.
 
 Full commit breakdown and reachability data: `docs/ROADMAP.md`'s Phase 6 section.
 

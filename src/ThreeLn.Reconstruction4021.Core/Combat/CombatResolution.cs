@@ -53,9 +53,13 @@ public static class CombatResolution
             return new CombatEngagementResult(AttackResultType.DefenderConquered, new AttackTally(), new AttackTally());
         }
 
-        var combatData = CombatEngine.CalculateCombatData(attacker, target);
+        // target is Fleet or IEconomicWorld here — the ConstructionSite/Stargate cases already
+        // returned above; the cast makes that explicit for CalculateCombatData/GetEnemy's own
+        // narrower IFleetSource contract.
+        var fleetSourceTarget = (IShipCargoHolder)target;
+        var combatData = CombatEngine.CalculateCombatData(attacker, fleetSourceTarget);
         var groups = CombatEngine.DefaultDistribution(attackerFleet);
-        var enemy = CombatEngine.GetEnemy(target);
+        var enemy = CombatEngine.GetEnemy(fleetSourceTarget);
 
         var engagement = target is Fleet
             ? FleetEngage(groups, enemy, combatData, intent, random)

@@ -43,21 +43,6 @@ public sealed partial class AnnualTickHandler
         [TechLevel.Gate] = 100,
     }.ToFrozenDictionary();
 
-    /// <summary>Production adjustment by tech level: TechAdj2, used by the IP/Alpha formulas (DATACNST.PAS:231-233).</summary>
-    private static readonly FrozenDictionary<TechLevel, int> _industrialProductionTechAdjustment = new Dictionary<TechLevel, int> {
-        [TechLevel.PreTech] = 12,
-        [TechLevel.Primitive] = 24,
-        [TechLevel.PreAtomic] = 36,
-        [TechLevel.Atomic] = 47,
-        [TechLevel.PreWarp] = 58,
-        [TechLevel.Warp] = 67,
-        [TechLevel.Jump] = 76,
-        [TechLevel.Bio] = 84,
-        [TechLevel.Starship] = 90,
-        [TechLevel.PreGate] = 95,
-        [TechLevel.Gate] = 100,
-    }.ToFrozenDictionary();
-
     /// <summary>Units of metal needed per 100 points of industrial development: NewIndRawN (DATACNST.PAS:450-452).</summary>
     private static readonly FrozenDictionary<IndustryType, int> _industryMetalCost = new Dictionary<IndustryType, int> {
         [IndustryType.Bioindustry] = 100,
@@ -71,8 +56,12 @@ public sealed partial class AnnualTickHandler
         [IndustryType.TrillumMining] = 300,
     }.ToFrozenDictionary();
 
-    /// <summary>% of industry that is effective, by world class and industry: ClassIndAdj (DATACNST.PAS:321-343).</summary>
-    private static readonly FrozenDictionary<(WorldClass, IndustryType), int> _classIndustryAdjustment =
+    /// <summary>
+    /// % of industry that is effective, by world class and industry: ClassIndAdj (DATACNST.PAS:321-343).
+    /// Internal, not private: Npe/NpeToolkit.cs's GetNewDesignation (Phase 6c) reads the same table
+    /// rather than re-transcribing 21 rows of balance data.
+    /// </summary>
+    internal static readonly FrozenDictionary<(WorldClass, IndustryType), int> ClassIndustryAdjustment =
         BuildClassIndustryAdjustment();
 
     private static FrozenDictionary<(WorldClass, IndustryType), int> BuildClassIndustryAdjustment()
@@ -345,7 +334,7 @@ public sealed partial class AnnualTickHandler
         beforeProduce?.Invoke();
 
         var effectiveTech = EffectiveTechnologyLevel(world);
-        var ip = (_industrialProductionTechAdjustment[world.TechLevel] / 100.0) * ((world.Efficiency + 250) / 100.0) / K6;
+        var ip = (IndustryConstants.IndustrialProductionTechAdjustment[world.TechLevel] / 100.0) * ((world.Efficiency + 250) / 100.0) / K6;
 
         ProduceRawMaterial(world, effectiveTech, ip);
         var industryDistribution = GetIndustrialDistribution(world);
@@ -539,7 +528,7 @@ public sealed partial class AnnualTickHandler
         foreach (var industry in Enum.GetValues<IndustryType>())
             dist[industry] = 0;
 
-        var alpha = (_industrialProductionTechAdjustment[world.TechLevel] / 100.0) * (world.Efficiency + 250) / K6;
+        var alpha = (IndustryConstants.IndustrialProductionTechAdjustment[world.TechLevel] / 100.0) * (world.Efficiency + 250) / K6;
 
         double tip = TotalProd(world.Population, world.TechLevel);
         if (world.IsAddictedToAmbrosia)
@@ -550,7 +539,7 @@ public sealed partial class AnnualTickHandler
         var temp = tip / 10000.0;
         var beta = new Dictionary<IndustryType, double>();
         foreach (var industry in Enum.GetValues<IndustryType>()) {
-            var value = temp * _classIndustryAdjustment[(world.EffectiveClass, industry)];
+            var value = temp * ClassIndustryAdjustment[(world.EffectiveClass, industry)];
             beta[industry] = value == 0 ? 1 : value;
         }
 
@@ -611,7 +600,7 @@ public sealed partial class AnnualTickHandler
         var temp = tip / 10000.0;
         foreach (var industry in Enum.GetValues<IndustryType>()) {
             var dist = industryDistribution[industry];
-            var optimumLevel = PascalRound(temp * dist * _classIndustryAdjustment[(world.EffectiveClass, industry)]);
+            var optimumLevel = PascalRound(temp * dist * ClassIndustryAdjustment[(world.EffectiveClass, industry)]);
             if (dist > 0 && optimumLevel == 0)
                 optimumLevel = 1;
 
