@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Drawing;
 using System.Text;
 using Terminal.Gui.Drawing;
@@ -77,6 +76,11 @@ internal sealed class GalaxyView : View
     private readonly Dictionary<Coordinate, ISectorObject> _objectsByLocation = [];
     private readonly ILookup<Coordinate, Fleet> _fleetsByLocation;
 
+    // PRIMINTR.PAS's RelativeX/RelativeY report cursor position relative to the player's capital (X same
+    // sign, Y flipped since screen-down is universe-"south") -- captured once here rather than re-looked-up
+    // per move, since it's the same fallback-to-galaxy-center expression _cursor's initial value already uses.
+    private readonly Coordinate _origin;
+
     private Coordinate _cursor;
     private bool _viewportInitialized;
 
@@ -86,14 +90,12 @@ internal sealed class GalaxyView : View
     // so a run of same-colored cells spanning a row wrap still gets to skip the redundant call.
     private TgAttribute? _lastAttribute;
 
-    /// <summary>Diagnostic only: how long the last OnDrawingContent call took, for the caller to surface (e.g. in a window title) while chasing render performance.</summary>
-    public event EventHandler<TimeSpan>? FrameRendered;
-
     public GalaxyView(CoreGalaxy galaxy, Empire player)
     {
         _galaxy = galaxy;
         _player = player;
-        _cursor = player.Capital?.Location ?? new Coordinate(galaxy.Size / 2, galaxy.Size / 2);
+        _origin = player.Capital?.Location ?? new Coordinate(galaxy.Size / 2, galaxy.Size / 2);
+        _cursor = _origin;
         SetContentSize(new Size(galaxy.Size * CellWidth, galaxy.Size));
         CanFocus = true;
 
@@ -122,7 +124,6 @@ internal sealed class GalaxyView : View
     private void OnDrawingContent(object? sender, DrawEventArgs e)
     {
         e.Cancel = true;
-        var stopwatch = Stopwatch.StartNew();
         _lastAttribute = null;
 
         if (!_viewportInitialized) {
@@ -160,8 +161,6 @@ internal sealed class GalaxyView : View
         }
 
         DrawCursorOverlay(viewport, viewportWidth);
-
-        FrameRendered?.Invoke(this, stopwatch.Elapsed);
     }
 
     private void DrawColumn(int col, int row, (Rune Rune, TgAttribute Attribute) cell, int viewportWidth) => DrawColumn(col, row, cell.Rune, cell.Attribute, viewportWidth);
@@ -274,14 +273,9 @@ internal sealed class GalaxyView : View
         DrawColumn(col, row, rune, PlayerAttribute, viewportWidth);
     }
 
-    /// <summary>Diagnostic only: every key GalaxyView's KeyDown sees, for the caller to surface while chasing the arrow-key report.</summary>
-    public event EventHandler<Key>? KeyReceived;
-
     /// <summary>Arrows move the cursor one sector, PageUp/PageDown jump it CursorJump rows, Home/End jump it to the X axis's edges; the viewport auto-follows to keep the cursor visible.</summary>
     private void OnKeyDown(object? sender, Key key)
     {
-        KeyReceived?.Invoke(this, key);
-
         var newX = _cursor.X;
         var newY = _cursor.Y;
 
@@ -315,7 +309,14 @@ internal sealed class GalaxyView : View
         // every move regardless of whether the viewport itself changed.
         SetNeedsDraw();
         key.Handled = true;
+        CursorCoordinateChanged?.Invoke(this, CursorCoordinateText);
     }
+
+    /// <summary>Raised whenever the cursor moves, with the same text <see cref="CursorCoordinateText"/> would return.</summary>
+    public event EventHandler<string>? CursorCoordinateChanged;
+
+    /// <summary>PRIMINTR.PAS's GetCoordName format: cursor position relative to <see cref="_origin"/>, e.g. "0,0" at the origin.</summary>
+    public string CursorCoordinateText => $"{_cursor.X - _origin.X},{_origin.Y - _cursor.Y}";
 
     private void CenterOnCursor()
     {

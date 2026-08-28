@@ -35,6 +35,7 @@ this; it's purely about what sits underneath everything else.
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
 | Galaxy map viewport | F10 / main map view | `MAPWIND.PAS: ScanWindow` | Custom `View` subclass, own `Draw()` writing cells via `Move()`/`SetAttribute()`/`AddRune()` — done, this is `GalaxyView.cs` |
+| Top-level navigation shell | Always visible | `PLAYTURN.PAS`/`PULLDOWN.PAS` (menu), `SWINDOWS.PAS` (status/help line) | `MenuBar` + `StatusBar`, `GalaxyView` as the permanent base — done, this is `GameShell.cs`. Every menu/status-bar leaf item is still stubbed to a `MessageBox` placeholder; each gets a real implementation as its own surface is built |
 
 Not yet covered by the existing view, but part of the same screen:
 
@@ -166,13 +167,11 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 
 ## Suggested build order
 
-1. **Top-level navigation shell first**: `MenuBar` + `StatusBar`/help-line, with `GalaxyView` as
-   the permanent base view underneath (see "Deliberate deviation" above — not a swappable panel)
-   and every menu leaf item stubbed to a `MessageBox` placeholder. This is testable end-to-end
-   immediately (a navigable app, not just a static viewport) and front-loads the actual
-   integration risk — focus routing between the menu bar, overlay windows, and `GalaxyView` —
-   instead of infrastructure with no real usage yet to shape it. Initial focus on game/turn start
-   goes to the map, not the menu bar.
+1. ~~Top-level navigation shell first~~ — **done** (`GameShell.cs`): `MenuBar` + `StatusBar`, with
+   `GalaxyView` as the permanent base view underneath (see "Deliberate deviation" above — not a
+   swappable panel) and every menu/status-bar leaf item stubbed to a `MessageBox` placeholder.
+   Initial focus goes to the map, not the menu bar. This was built first specifically so there'd
+   be a testable, navigable app early rather than static infrastructure with no usage to shape it.
 2. From there, build individual command screens directly against their own Pascal source, starting
    with the simplest read-only ones (Close Up, Status/Empire/News/Names background windows).
    `MessageBox` needs no dedicated build step — it's a stock static helper, use it ad hoc for

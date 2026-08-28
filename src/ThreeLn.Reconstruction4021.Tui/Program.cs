@@ -37,7 +37,7 @@ Application.MaximumIterationsPerSecond = 240;
 // fix. See https://github.com/tui-cs/Terminal.Gui/issues/5323 for the upstream tracking issue.
 
 IApplication app = Application.Create().Init();
-app.Run(new GalaxyWindow(game), null);
+app.Run(new GameShell(game), null);
 app.Dispose();
 
 static string FindRepoRoot(string start)
