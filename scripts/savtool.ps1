@@ -8,6 +8,15 @@
     Enum/set fields are kept as raw integers/bit-lists (matching the on-disk ordinal), not
     symbolic names -- see the doc's "Enum reference" section to interpret them. Pointer and
     reserved byte regions round-trip as hex strings; they are never meaningful, only preserved.
+    A hex field is omitted from the JSON entirely when it's all-zero (the common case for a
+    hand-built or freshly-initialized record) -- a missing key writes back as zero-fill, so
+    this is lossless. Fixed-width strings work the same way: a string with an all-zero tail
+    is emitted as a plain JSON string instead of {text, tail_hex}.
+
+    The sector grid is emitted sparsely as {sizeOfGalaxy, default, cells}: `default` holds
+    the most-common value per field across the whole galaxy (almost always "empty"), and
+    `cells` lists only the (x, y) cells that differ, and only the fields that differ on each.
+    A real galaxy is 95%+ boring cells, so this cuts sector JSON size by an order of magnitude.
 
     Text fields are decoded/encoded as Latin-1 (byte value == code point), not the DOS-era
     CP437 code page, so round-tripping doesn't depend on the CP437 codepage provider being
@@ -56,12 +65,17 @@ $Script:Text = [System.Text.Encoding]::Latin1
 
 function Read-Str([System.IO.BinaryReader]$Reader, [int]$Width) {
     # Bytes past the logical length are leftover heap contents in Turbo Pascal, not zeroed --
-    # confirmed non-zero in a real played save (INTRO_2.SAV's NameRecord.Name tails). Keep them
-    # as tail_hex so an unmodified file round-trips byte-exact; Text is the editable value.
+    # confirmed non-zero in a real played save (INTRO_2.SAV's NameRecord.Name tails). When the
+    # tail is all-zero (the common case) this returns the plain decoded string; only a genuinely
+    # non-zero tail promotes it to {text, tail_hex} so a real save still round-trips byte-exact.
     $raw = $Reader.ReadBytes($Width)
     $len = $raw[0]
     $text = $Script:Text.GetString($raw, 1, $len)
-    $tailHex = [Convert]::ToHexString($raw, 1 + $len, $Width - 1 - $len)
+    $tailLen = $Width - 1 - $len
+    $tailIsZero = $true
+    for ($i = 0; $i -lt $tailLen; $i++) { if ($raw[1 + $len + $i] -ne 0) { $tailIsZero = $false; break } }
+    if ($tailIsZero) { return $text }
+    $tailHex = [Convert]::ToHexString($raw, 1 + $len, $tailLen)
     return [ordered]@{ text = $text; tail_hex = $tailHex }
 }
 
@@ -112,7 +126,12 @@ function Write-SetBits([System.IO.BinaryWriter]$Writer, $Bits, [int]$NumBytes) {
 }
 
 function Read-Hex([System.IO.BinaryReader]$Reader, [int]$N) {
-    return [Convert]::ToHexString($Reader.ReadBytes($N))
+    # Opaque byte region (pointer/reserved/legacy field). $null when all-zero -- Write-Hex
+    # already zero-fills a missing value, so omitting it here is lossless and cuts the common
+    # case (a freshly-initialized or hand-built record) from the JSON.
+    $raw = $Reader.ReadBytes($N)
+    foreach ($b in $raw) { if ($b -ne 0) { return [Convert]::ToHexString($raw) } }
+    return $null
 }
 
 function Write-Hex([System.IO.BinaryWriter]$Writer, [string]$Hex, [int]$N) {
@@ -150,6 +169,117 @@ function Read-Location([System.IO.BinaryReader]$Reader) {
 function Write-Location([System.IO.BinaryWriter]$Writer, $Loc) {
     Write-XY $Writer $Loc.xy
     Write-Id $Writer $Loc.id
+}
+
+function Get-ModeValue($Counts) {
+    # Most-common value among the tallied (key -> {count, value}) entries. Used to pick the
+    # sector default per field -- Turbo Pascal's galaxy init doesn't zero-fill (e.g. Special's
+    # "no mine" sentinel is 0x80, not 0), so "most common" is the only safe default, not "zero".
+    $bestCount = -1
+    $bestValue = $null
+    foreach ($k in $Counts.Keys) {
+        if ($Counts[$k].count -gt $bestCount) { $bestCount = $Counts[$k].count; $bestValue = $Counts[$k].value }
+    }
+    # Array values must be comma-wrapped or PowerShell unrolls them on return (an empty array
+    # becomes $null, a one-element array becomes a bare scalar) -- but obj's Hashtable value
+    # must NOT be wrapped, or the caller gets a 1-element array instead of the hashtable.
+    if ($bestValue -is [array]) { return , $bestValue }
+    return $bestValue
+}
+
+function Test-IdEqual($A, $B) {
+    return ($A.objType -eq $B.objType) -and ($A.index -eq $B.index)
+}
+
+function Test-ArrayEqual($A, $B) {
+    if ($A.Count -ne $B.Count) { return $false }
+    for ($i = 0; $i -lt $A.Count; $i++) { if ($A[$i] -ne $B[$i]) { return $false } }
+    return $true
+}
+
+function Read-Sector([System.IO.BinaryReader]$Reader) {
+    # SectorRecord grid, densely stored on disk (GALAXY.PAS:75-105) but re-emitted here as
+    # {sizeOfGalaxy, default, cells}: `default` is the most common value per field (almost
+    # always "empty"), `cells` lists only the (x, y) cells that differ, and only the fields
+    # that differ. A real galaxy is 95%+ boring cells, so this cuts JSON size by an order of
+    # magnitude and makes "add a fleet at (x, y)" a one-line edit instead of a grid hunt.
+    $sizeX = $Reader.ReadUInt16()
+    $Reader.ReadUInt16() | Out-Null  # SizeOfGalaxy written twice (GALAXY.PAS:81-82); always equal
+    $cells = @{}
+    for ($x = 0; $x -le $sizeX; $x++) {
+        for ($y = 0; $y -le $sizeX; $y++) {
+            $cells["$x,$y"] = [ordered]@{
+                obj       = Read-Id $Reader
+                flts      = Read-SetBits $Reader 1
+                mineScout = Read-SetBits $Reader 1
+                special   = $Reader.ReadByte()
+            }
+        }
+    }
+
+    $objCounts = @{}; $fltsCounts = @{}; $mineCounts = @{}; $specCounts = @{}
+    foreach ($cell in $cells.Values) {
+        $objKey = "$($cell.obj.objType),$($cell.obj.index)"
+        if (-not $objCounts.ContainsKey($objKey)) { $objCounts[$objKey] = @{ count = 0; value = $cell.obj } }
+        $objCounts[$objKey].count++
+
+        $fltsKey = $cell.flts -join ','
+        if (-not $fltsCounts.ContainsKey($fltsKey)) { $fltsCounts[$fltsKey] = @{ count = 0; value = $cell.flts } }
+        $fltsCounts[$fltsKey].count++
+
+        $mineKey = $cell.mineScout -join ','
+        if (-not $mineCounts.ContainsKey($mineKey)) { $mineCounts[$mineKey] = @{ count = 0; value = $cell.mineScout } }
+        $mineCounts[$mineKey].count++
+
+        $specKey = $cell.special
+        if (-not $specCounts.ContainsKey($specKey)) { $specCounts[$specKey] = @{ count = 0; value = $cell.special } }
+        $specCounts[$specKey].count++
+    }
+
+    $default = [ordered]@{
+        obj       = (Get-ModeValue $objCounts)
+        flts      = [array](Get-ModeValue $fltsCounts)
+        mineScout = [array](Get-ModeValue $mineCounts)
+        special   = (Get-ModeValue $specCounts)
+    }
+
+    $overrides = @()
+    for ($x = 0; $x -le $sizeX; $x++) {
+        for ($y = 0; $y -le $sizeX; $y++) {
+            $cell = $cells["$x,$y"]
+            $entry = [ordered]@{ x = $x; y = $y }
+            $changed = $false
+            if (-not (Test-IdEqual $cell.obj $default.obj)) { $entry.obj = $cell.obj; $changed = $true }
+            if (-not (Test-ArrayEqual $cell.flts $default.flts)) { $entry.flts = $cell.flts; $changed = $true }
+            if (-not (Test-ArrayEqual $cell.mineScout $default.mineScout)) { $entry.mineScout = $cell.mineScout; $changed = $true }
+            if ($cell.special -ne $default.special) { $entry.special = $cell.special; $changed = $true }
+            if ($changed) { $overrides += $entry }
+        }
+    }
+
+    return [ordered]@{ sizeOfGalaxy = $sizeX; default = $default; cells = $overrides }
+}
+
+function Write-Sector([System.IO.BinaryWriter]$Writer, $Sector) {
+    $size = $Sector.sizeOfGalaxy
+    $Writer.Write([UInt16]$size)
+    $Writer.Write([UInt16]$size)
+    $default = $Sector.default
+    $overrides = @{}
+    foreach ($o in $Sector.cells) { $overrides["$($o.x),$($o.y)"] = $o }
+    for ($x = 0; $x -le $size; $x++) {
+        for ($y = 0; $y -le $size; $y++) {
+            $o = $overrides["$x,$y"]
+            $obj = if ($o -and $o.Contains('obj')) { $o.obj } else { $default.obj }
+            $flts = if ($o -and $o.Contains('flts')) { $o.flts } else { $default.flts }
+            $mineScout = if ($o -and $o.Contains('mineScout')) { $o.mineScout } else { $default.mineScout }
+            $special = if ($o -and $o.Contains('special')) { $o.special } else { $default.special }
+            Write-Id $Writer $obj
+            Write-SetBits $Writer $flts 1
+            Write-SetBits $Writer $mineScout 1
+            $Writer.Write([byte]$special)
+        }
+    }
 }
 
 function Read-WordArray([System.IO.BinaryReader]$Reader, [int]$N) {
@@ -719,22 +849,7 @@ function ConvertFrom-SavBytes([byte[]]$Data) {
         reEnterGame   = [bool]$r.ReadByte()
     }
 
-    $sizeX = $r.ReadUInt16()
-    $sizeY = $r.ReadUInt16()
-    $rows = @()
-    for ($y = 0; $y -le $sizeY; $y++) {
-        $row = @()
-        for ($x = 0; $x -le $sizeX; $x++) {
-            $row += [ordered]@{
-                obj       = Read-Id $r
-                flts      = Read-SetBits $r 1
-                mineScout = Read-SetBits $r 1
-                special   = $r.ReadByte()
-            }
-        }
-        $rows += , $row
-    }
-    $sector = [ordered]@{ sizeOfGalaxy = $sizeX; rows = $rows }
+    $sector = Read-Sector $r
 
     $planets = Read-IndexedSection $r ${function:Read-PlanetRecord}
     $starbases = Read-IndexedSection $r ${function:Read-StarbaseRecord}
@@ -827,18 +942,7 @@ function ConvertTo-SavBytes($Doc) {
     $w.Write([byte]($(if ($env.pauseActive) { 1 } else { 0 })))
     $w.Write([byte]($(if ($env.reEnterGame) { 1 } else { 0 })))
 
-    $sector = $Doc.sector
-    $size = $sector.sizeOfGalaxy
-    $w.Write([UInt16]$size)
-    $w.Write([UInt16]$size)
-    foreach ($row in $sector.rows) {
-        foreach ($cell in $row) {
-            Write-Id $w $cell.obj
-            Write-SetBits $w $cell.flts 1
-            Write-SetBits $w $cell.mineScout 1
-            $w.Write([byte]$cell.special)
-        }
-    }
+    Write-Sector $w $Doc.sector
 
     Write-IndexedSection $w $Doc.planets ${function:Write-PlanetRecord}
     Write-IndexedSection $w $Doc.starbases ${function:Write-StarbaseRecord}

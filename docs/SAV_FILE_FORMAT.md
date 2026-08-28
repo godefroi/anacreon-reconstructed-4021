@@ -60,7 +60,11 @@ in the table above.
   whole-record `BlockWrite` — **the actual DOS-session heap address is written to disk as
   garbage bytes.** They are meaningless on read and are never dereferenced by `LoadGame`; the
   loader always reconstructs the real pointers from the flat data (see notes per-section
-  below). Treat them as 4 opaque bytes.
+  below). Treat them as 4 opaque bytes. `scripts/savtool.py`/`.ps1` round-trip every opaque
+  byte region (pointers, `Reserved` arrays, the legacy `OrderData`/`NextOrder` fields) as a
+  `*_hex` JSON field, but omit the key entirely when the region is all-zero — the common case
+  for anything hand-built or freshly initialized — since a missing key already zero-fills on
+  write. A real captured save with genuine garbage bytes still round-trips byte-exact.
 
 ### Strings
 
@@ -89,7 +93,9 @@ genuine non-zero heap garbage in its remaining 6 buffer bytes. A fresh, just-gen
 it — but that's a property of freshly-initialized memory, not of the file format, and a
 converter that assumes zero tails will not reproduce a real save byte-for-byte.
 `scripts/savtool.ps1`/`.py` handle this by keeping each string as `{text, tail_hex}` rather than
-just the decoded text.
+just the decoded text — except when the tail happens to be all-zero (the common case for a
+hand-built or freshly-initialized record), in which case the JSON is just the plain decoded
+string, since a missing `tail_hex` already zero-fills the buffer on write.
 
 ### Sets
 
@@ -171,6 +177,16 @@ Driven by `LoadGame`/`SaveGame`, `LOADSAVE.PAS:572-714`.
 The galaxy is always square; the field is written twice for historical reasons but both
 copies hold the same value (`GALAXY.PAS:81-82`). There are `SizeOfGalaxy + 1` rows (0-indexed,
 inclusive), each `SizeOfGalaxy + 1` records wide.
+
+**JSON representation is sparse, not this dense grid.** A real galaxy is 95%+ boring cells —
+`INTRO_1.SAV`'s 484-cell galaxy has only 140 cells that aren't the single most common value per
+field. `scripts/savtool.py`/`.ps1` emit `sector` as `{sizeOfGalaxy, default, cells}`: `default`
+is the most-common value of each of `obj`/`flts`/`mineScout`/`special` across the whole grid
+(computed at read time, **not** hardcoded to zero — `Special`'s "no mine here" sentinel is
+`0x80`, not `0`, so "most common" is the only default that's actually correct), and `cells` is
+a list of `{x, y, ...}` entries, one per cell that differs from `default` in at least one field,
+carrying only the fields that actually differ. Editing "add a fleet at (8, 18)" is then adding
+or extending one `{x: 8, y: 18, ...}` entry instead of hunting through a dense 2D array.
 
 **SectorRecord — 5 bytes** (`GALAXY.PAS:32-38`):
 

@@ -6,6 +6,15 @@ Layout reference: docs/SAV_FILE_FORMAT.md (every field here corresponds to a row
 Enum/set fields are kept as raw integers/bit-lists (matching the on-disk ordinal), not
 symbolic names -- see the doc's "Enum reference" section to interpret them. Pointer and
 reserved byte regions round-trip as hex strings; they are never meaningful, only preserved.
+A hex field is omitted from the JSON entirely when it's all-zero (the common case for a
+hand-built or freshly-initialized record) -- a missing key writes back as zero-fill, so this
+is lossless. Fixed-width strings work the same way: a string with an all-zero tail (see
+"Strings" below) is emitted as a plain JSON string instead of {text, tail_hex}.
+
+The sector grid is emitted sparsely as {sizeOfGalaxy, default, cells}: `default` holds the
+most-common value per field across the whole galaxy (almost always "empty"), and `cells`
+lists only the (x, y) cells that differ, and only the fields that differ on each. A real
+galaxy is 95%+ boring cells, so this cuts sector JSON size by an order of magnitude.
 
 Usage:
     savtool.py to-json input.SAV output.json
@@ -55,7 +64,11 @@ class Reader:
         return struct.unpack_from("<l", self.bytes(4))[0]
 
     def hex(self, n):
-        return self.bytes(n).hex()
+        """Opaque byte region (pointer/reserved/legacy field). `None` when all-zero --
+        `Writer.hex` already zero-fills a missing value, so omitting it here is lossless
+        and cuts the common case (a freshly-initialized or hand-built record) from the JSON."""
+        b = self.bytes(n)
+        return b.hex() if any(b) else None
 
     def remaining(self):
         return len(self.data) - self.pos
@@ -94,14 +107,18 @@ def read_string(r, width):
     """STRING[width-1]: 1 length byte + (width-1) char slots, whole buffer consumed.
 
     Bytes past the logical length are leftover heap contents in Turbo Pascal, not zeroed --
-    confirmed non-zero in a real played save (INTRO_2.SAV's NameRecord.Name tails). Keep them
-    as `tail_hex` so an unmodified file round-trips byte-exact; `text` is the editable value.
+    confirmed non-zero in a real played save (INTRO_2.SAV's NameRecord.Name tails). When the
+    tail is all-zero (the common case: freshly-initialized or hand-built records) this returns
+    the plain decoded string; only a genuinely non-zero tail promotes it to `{text, tail_hex}`
+    so an unmodified real save still round-trips byte-exact.
     """
     raw = r.bytes(width)
     n = raw[0]
     text = raw[1:1 + n].decode("cp437", errors="replace")
-    tail_hex = raw[1 + n:].hex()
-    return {"text": text, "tail_hex": tail_hex}
+    tail = raw[1 + n:]
+    if any(tail):
+        return {"text": text, "tail_hex": tail.hex()}
+    return text
 
 
 def write_string(w, s, width):
@@ -158,6 +175,59 @@ def read_location(r):
 def write_location(w, loc):
     write_xy(w, loc["xy"])
     write_id(w, loc["id"])
+
+
+def _mode(values):
+    """Most-common value in `values` (a list of hashable keys). Used to pick the sector
+    default per field -- Turbo Pascal's galaxy init doesn't zero-fill (e.g. `Special`'s
+    "no mine" sentinel is 0x80, not 0), so "most common" is the only safe default, not "zero"."""
+    from collections import Counter
+    return Counter(values).most_common(1)[0][0]
+
+
+def read_sector(r):
+    """SectorRecord grid, densely stored on disk (`GALAXY.PAS:75-105`) but re-emitted here
+    as {sizeOfGalaxy, default, cells}: `default` is the most common value per field (almost
+    always "empty"), `cells` lists only the (x, y) cells that differ, and only the fields
+    that differ. A real galaxy is 95%+ boring cells, so this cuts JSON size by an order of
+    magnitude and makes "add a fleet at (x, y)" a one-line edit instead of a grid hunt."""
+    size_x = r.u16()
+    r.u16()  # SizeOfGalaxy written twice (GALAXY.PAS:81-82); both copies are always equal
+    cells = {}
+    for x in range(size_x + 1):
+        for y in range(size_x + 1):
+            cells[(x, y)] = {
+                "obj": read_id(r), "flts": read_set(r, 1),
+                "mineScout": read_set(r, 1), "special": r.u8(),
+            }
+    default = {
+        "obj": dict(zip(("objType", "index"), _mode((c["obj"]["objType"], c["obj"]["index"]) for c in cells.values()))),
+        "flts": list(_mode(tuple(c["flts"]) for c in cells.values())),
+        "mineScout": list(_mode(tuple(c["mineScout"]) for c in cells.values())),
+        "special": _mode(c["special"] for c in cells.values()),
+    }
+    overrides = []
+    for x in range(size_x + 1):
+        for y in range(size_x + 1):
+            cell = cells[(x, y)]
+            diff = {k: v for k, v in cell.items() if v != default[k]}
+            if diff:
+                overrides.append({"x": x, "y": y, **diff})
+    return {"sizeOfGalaxy": size_x, "default": default, "cells": overrides}
+
+
+def write_sector(w, sector):
+    size = sector["sizeOfGalaxy"]
+    w.u16(size); w.u16(size)
+    default = sector["default"]
+    overrides = {(o["x"], o["y"]): o for o in sector["cells"]}
+    for x in range(size + 1):
+        for y in range(size + 1):
+            o = overrides.get((x, y), {})
+            write_id(w, o.get("obj", default["obj"]))
+            write_set(w, o.get("flts", default["flts"]), 1)
+            write_set(w, o.get("mineScout", default["mineScout"]), 1)
+            w.u8(o.get("special", default["special"]))
 
 
 def read_word_array(r, n):
@@ -590,18 +660,7 @@ def parse_sav(data):
         "pauseActive": bool(r.u8()), "reEnterGame": bool(r.u8()),
     }
 
-    size_x = r.u16()
-    size_y = r.u16()
-    rows = []
-    for _ in range(size_x + 1):
-        row = []
-        for _ in range(size_y + 1):
-            row.append({
-                "obj": read_id(r), "flts": read_set(r, 1),
-                "mineScout": read_set(r, 1), "special": r.u8(),
-            })
-        rows.append(row)
-    sector = {"sizeOfGalaxy": size_x, "rows": rows}
+    sector = read_sector(r)
 
     planets = read_indexed_section(r, read_planet)
     starbases = read_indexed_section(r, read_starbase)
@@ -670,13 +729,7 @@ def build_sav(doc):
     w.u8(1 if env["autoSave"] else 0); w.u8(1 if env["asyncTurns"] else 0)
     w.u8(1 if env["pauseActive"] else 0); w.u8(1 if env["reEnterGame"] else 0)
 
-    sector = doc["sector"]
-    size = sector["sizeOfGalaxy"]
-    w.u16(size); w.u16(size)
-    for row in sector["rows"]:
-        for cell in row:
-            write_id(w, cell["obj"]); write_set(w, cell["flts"], 1)
-            write_set(w, cell["mineScout"], 1); w.u8(cell["special"])
+    write_sector(w, doc["sector"])
 
     write_indexed_section(w, doc["planets"], write_planet)
     write_indexed_section(w, doc["starbases"], write_starbase)
