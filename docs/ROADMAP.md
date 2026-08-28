@@ -509,11 +509,27 @@ feature.
   bytes). `DefeatedBy`'s decode branch has no exercising reference save (none of the 13 capture a
   defeated human empire) — implemented and reasoned through directly from `ConquerEmpire`, not
   covered by a ground-truth test; flagged for whoever next captures or hand-builds one.
-- **7e, NPE Data `LoadGame` + `KingdomTurnHandler` state seam.** A construct-from-saved-state/
-  read-state-back-out seam on `KingdomTurnHandler`, reused by 7f's JSON serializer. Opaque
-  per-empire blob storage for Pirate/Berserker/Guardian (no `ITurnHandler` exists for any of them
-  yet, but real scenarios mix them with Kingdom empires — their `.SAV` blobs must still
-  round-trip). Completes `.SAV` import end to end.
+- ✅ **7e, NPE Data `LoadGame` + `KingdomTurnHandler` state seam.** New `internal` constructor on
+  `KingdomTurnHandler` builds a handler straight from a saved persona/`State`/`FleetStates` (no
+  fresh persona roll, no `SetEmpireDefenses` re-seed) plus matching internal read-back accessors
+  (`Persona`/`State`/`FleetStates`/`DefaultPolicy`) for 7f's JSON serializer to reuse — kept
+  `internal`, not exposed to tests, matching this port's standing precedent of testing Kingdom's
+  private state indirectly through public entry points (here, actually running `PlayTurn` against
+  loaded state rather than reaching into fields). `FleetDataRecord`'s field order confirmed
+  directly against `NPETYPES.PAS` (`Mission`/`TargetID`/`HomeBaseID`/`Midway`(dead)/`Waiting`/
+  `BlockX`/`BlockY`(Pirate-only)/`Index`), same for `StateDeptRecord`/`NPECharacterRecord` — all
+  three enums (`MissionTypes`, `PolicyTypes`, and `NPEmpireTypes` itself) confirmed in exact
+  Pascal ordinal order, direct cast. Opaque per-empire blob storage
+  (`Game.UnimplementedNpeBlobs`) for Pirate/Berserker/Guardian/Trader/unrecognized (no
+  `ITurnHandler` exists for any of them yet, but real scenarios mix them with Kingdom empires —
+  their blobs must still round-trip, not be silently dropped). **Completes `.SAV` import end to
+  end** — every reference save loads cleanly start to finish, no truncated/partial reads.
+  Tested against `INTRO_1.SAV` (4 real `KingdomTurnHandler`s constructed from saved persona/state,
+  one of them actually run through a live `PlayTurn` from that loaded state — the strongest
+  available check on `State`'s 9-entry `Empire`+`Indep` completeness and `FleetStates`
+  well-formedness, since a gap there throws during real NPE decision logic, not silently),
+  `GAUNTLET_1.SAV` (Pirate blob alongside Kingdom2 empires), `Confront_1.SAV` (Guardian + Berserker
+  blobs, correct byte lengths).
 - **7f, native JSON save format.** `Game ↔ JSON`, `System.Text.Json` with `ReferenceHandler.
   Preserve` for the port's real reference cycles and a pragmatic concrete-type switch (not a
   general polymorphic contract) for `IEconomicWorld`/`ISectorObject`/`Game.TurnHandlers` — only

@@ -32,6 +32,16 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     /// </summary>
     public string? ScenarioFilename { get; set; }
 
+    /// <summary>
+    /// Raw `.SAV` NPE-Data blobs for empires whose personality this port doesn't implement a
+    /// <see cref="ITurnHandler"/> for yet (Pirate/Berserker/Guardian/Trader/unrecognized) — real
+    /// scenarios routinely mix these with Kingdom empires (`docs/ROADMAP.md`'s Phase 6
+    /// reachability table), so their state must round-trip opaquely rather than being silently
+    /// dropped on `.SAV` write-back. Populated by <see cref="SaveFormat.SavGameLoader"/>; nothing
+    /// reads the bytes themselves — this port has no representation of what's inside them.
+    /// </summary>
+    public Dictionary<Empire, byte[]> UnimplementedNpeBlobs { get; } = new();
+
     public Empire NextEmpire(Empire current)
     {
         var index = Empires.IndexOf(current);

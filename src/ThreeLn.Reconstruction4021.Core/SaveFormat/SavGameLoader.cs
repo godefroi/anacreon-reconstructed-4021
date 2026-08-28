@@ -1,5 +1,7 @@
 using ThreeLn.Reconstruction4021.Core.Entities;
 using ThreeLn.Reconstruction4021.Core.Galaxy;
+using ThreeLn.Reconstruction4021.Core.Npe;
+using ThreeLn.Reconstruction4021.Core.Turns;
 using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Core.SaveFormat;
@@ -43,6 +45,18 @@ public sealed class SavGameLoader
     private readonly bool[] _empireInUse = new bool[8];
     private readonly bool[] _empireIsPlayer = new bool[8];
 
+    /// <summary>
+    /// Drives whichever `ITurnHandler` a loaded NPE empire needs going forward (e.g.
+    /// `KingdomTurnHandler`'s ongoing `PlayTurn` decisions) — not tied to anything in the save
+    /// file itself. Real Pascal's own `.SAV` format has no `RandSeed` field either (confirmed:
+    /// not in `docs/SAV_FILE_FORMAT.md`'s Environment section or anywhere else) — RNG continuity
+    /// across a save/load was never part of the real format's contract, so a caller-supplied or
+    /// fresh <see cref="Random"/> is exactly as faithful as real Pascal gets.
+    /// </summary>
+    private readonly Random _random;
+
+    public SavGameLoader(Random? random = null) => _random = random ?? new Random();
+
     private static Empire[] BuildPlaceholderSlots()
     {
         var slots = new Empire[8];
@@ -85,6 +99,7 @@ public sealed class SavGameLoader
         LoadMessages(reader);
         LoadEmpireData(reader, game);
         LoadNewsData(reader, game);
+        LoadNpeData(reader, game);
 
         return game;
     }
@@ -755,4 +770,151 @@ public sealed class SavGameLoader
         2 => parm2,
         _ => parm3,
     };
+
+    /// <summary>
+    /// `LoadNPEData` (`LOADSAVE.PAS:453-465`), two parts. Part 1: the fixed 9-entry `NPEDataArray`
+    /// (`Empire1..Empire8` + `Indep`, `Indep` always `NoNPE`) — just the type tag per slot,
+    /// `Data`'s pointer discarded. Part 2: for each `Empire1..Empire8` where `EmpireActive(Emp)
+    /// AND NOT EmpirePlayer(Emp)` (`docs/SAV_FILE_FORMAT.md`'s own dispatch note — no index/length
+    /// prefix, order and presence entirely determined by state already parsed in Empire Data),
+    /// one variant-specific blob: Kingdom1/Kingdom2 share one real, interpreted layout (via the
+    /// `KingdomTurnHandler` construct-from-saved-state seam); Pirate/Berserker/Guardian/Trader/
+    /// unrecognized (`NPE.PAS:100-111`'s own dispatch: unrecognized values fall through to the
+    /// Pirate layout, same as `TraderNPE`) have no `ITurnHandler` in this port at all yet, so their
+    /// blobs are kept as opaque bytes in <see cref="Game.UnimplementedNpeBlobs"/> rather than
+    /// dropped.
+    /// </summary>
+    private void LoadNpeData(SavReader reader, Game game)
+    {
+        var npeTypes = new NpeEmpireType?[9];
+        for (var i = 0; i < 9; i++) {
+            var typ = reader.ReadByte();
+            reader.Skip(4); // Data -- pointer, discarded
+
+            npeTypes[i] = typ switch {
+                1 => NpeEmpireType.Pirate,
+                2 => NpeEmpireType.Kingdom1,
+                3 => NpeEmpireType.Kingdom2,
+                4 => NpeEmpireType.Berserker,
+                5 => NpeEmpireType.Guardian,
+                6 => NpeEmpireType.Trader,
+                _ => null, // 0 = NoNPE; anything else is malformed and treated the same (no type recorded)
+            };
+        }
+
+        for (var slot = 0; slot < 8; slot++) {
+            if (!_empireInUse[slot] || _empireIsPlayer[slot]) {
+                continue; // NPE Data blobs only exist for EmpireActive AND NOT EmpirePlayer slots.
+            }
+
+            var empire = _empireSlots[slot];
+            var npeType = npeTypes[slot];
+            empire.NpeType = npeType;
+
+            switch (npeType) {
+                case NpeEmpireType.Kingdom1 or NpeEmpireType.Kingdom2:
+                    var (persona, state, fleetStates) = LoadKingdomBlob(reader);
+                    game.TurnHandlers[empire] = new KingdomTurnHandler(npeType.Value, persona, state, fleetStates, _random);
+                    break;
+
+                case NpeEmpireType.Berserker:
+                    game.UnimplementedNpeBlobs[empire] = reader.ReadBytes(930);
+                    break;
+
+                case NpeEmpireType.Guardian:
+                    game.UnimplementedNpeBlobs[empire] = reader.ReadBytes(430);
+                    break;
+
+                default:
+                    // Pirate, Trader, and unrecognized/malformed values all share the pirate
+                    // layout (NPE.PAS:108-109's own dispatch), including when npeType is null
+                    // here because the raw byte was out of range -- real data never hits that,
+                    // but the layout choice still matches what real Pascal would do with it.
+                    game.UnimplementedNpeBlobs[empire] = reader.ReadBytes(739);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// `Kingdom1DataRecord`/`Kingdom2DataRecord` (`NPETYPES.PAS:136-141`, 454 bytes): `FleetData`
+    /// (30 × `FleetDataRecord`, 11 bytes each), `State` (9 × `StateDeptRecord`, 12 bytes each,
+    /// `Empire1..Empire8` then `Indep`), `Persona` (`NPECharacterRecord`, 16 bytes) — field order
+    /// confirmed directly against `NPETYPES.PAS`, not assumed from the format doc's summary alone.
+    /// A `FleetDataRecord` with `Index=0` is an unused slot (Kingdom tracks at most 30 fleets at
+    /// once, not one slot per real fleet) — skipped, same for a nonzero `Index` that doesn't
+    /// resolve to a real fleet (shouldn't happen for valid data). `Midway`/`BlockX`/`BlockY` are
+    /// confirmed dead/Pirate-only per `KingdomFleetState`'s own doc comment — discarded.
+    /// </summary>
+    private (NpeCharacter Persona, Dictionary<Empire, StateDeptRecord> State, Dictionary<Fleet, KingdomFleetState> FleetStates) LoadKingdomBlob(SavReader reader)
+    {
+        var fleetStates = new Dictionary<Fleet, KingdomFleetState>();
+
+        for (var i = 0; i < 30; i++) {
+            var mission = (NpeMissionType)reader.ReadByte();
+            var targetId = reader.ReadIdNumber();
+            var homeBaseId = reader.ReadIdNumber();
+            reader.ReadIdNumber(); // Midway -- confirmed dead
+            var waiting = reader.ReadByte();
+            reader.Skip(1); // BlockX -- Pirate-only
+            reader.Skip(1); // BlockY -- Pirate-only
+            var index = reader.ReadByte();
+
+            if (index == 0) {
+                continue;
+            }
+
+            if (_objectsById.GetValueOrDefault((SavObjectType.Flt, index)) is not Fleet fleet) {
+                continue;
+            }
+
+            fleetStates[fleet] = new KingdomFleetState {
+                Mission = mission,
+                Target = ResolveObject(targetId),
+                HomeBase = ResolveObject(homeBaseId) as IEconomicWorld,
+                Waiting = waiting,
+            };
+        }
+
+        var state = new Dictionary<Empire, StateDeptRecord>();
+        for (var i = 0; i < 9; i++) {
+            var policy = (PolicyType)reader.ReadByte();
+            var attackChance = reader.ReadByte();
+            var totalMilitary = reader.ReadLongInt();
+            var worlds = reader.ReadWord();
+            var threatAssess = reader.ReadByte();
+            var aggressiveness = reader.ReadByte();
+            var balance = reader.ReadInteger();
+
+            state[ResolveEmpire(i)] = new StateDeptRecord {
+                Policy = policy,
+                AttackChance = attackChance,
+                TotalMilitary = totalMilitary,
+                Worlds = worlds,
+                ThreatAssess = threatAssess,
+                Aggressiveness = aggressiveness,
+                Balance = balance,
+            };
+        }
+
+        var persona = new NpeCharacter {
+            ImperialistGene = reader.ReadByte(),
+            DefensiveGene = reader.ReadByte(),
+            OffensiveGene = reader.ReadByte(),
+            FactorGene = reader.ReadByte(),
+            RandomGene = reader.ReadByte(),
+            Defensive = reader.ReadByte(),
+            Offensive = reader.ReadByte(),
+            Techno = reader.ReadByte(),
+            Provoke = reader.ReadByte(),
+            Imperialist = reader.ReadByte(),
+            WorldPower = reader.ReadByte(),
+            Honorable = reader.ReadByte(),
+            SphereX = reader.ReadByte(),
+            Clock = reader.ReadWord(),
+            Offset = reader.ReadByte(),
+        };
+
+        return (persona, state, fleetStates);
+    }
 }

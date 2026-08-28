@@ -1,6 +1,7 @@
 using ThreeLn.Reconstruction4021.Core.Entities;
 using ThreeLn.Reconstruction4021.Core.Galaxy;
 using ThreeLn.Reconstruction4021.Core.SaveFormat;
+using ThreeLn.Reconstruction4021.Core.Turns;
 using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Tests;
@@ -283,5 +284,65 @@ public class SavGameLoaderTests
         await Assert.That(detail.Parm2).IsEqualTo(6);
         await Assert.That(detail.OtherEmpire).IsNull();
         await Assert.That(detail.TechGrant).IsNull();
+    }
+
+    [Test]
+    public async Task LoadGame_Intro1_ConstructsKingdomTurnHandlerForEachNpeEmpire()
+    {
+        // Ground truth: slots 1-4 (Trantor/Lazarus/Freberon/First Sun) are all Kingdom2NPE (typ=3).
+        var game = new SavGameLoader().LoadGame(LoadIntro1());
+
+        foreach (var name in new[] { "Trantor", "Lazarus", "Freberon", "First Sun" }) {
+            var empire = game.Empires.Single(e => e.Name == name);
+            await Assert.That(empire.NpeType).IsEqualTo(NpeEmpireType.Kingdom2);
+            await Assert.That(game.TurnHandlers).ContainsKey(empire);
+            await Assert.That(game.TurnHandlers[empire]).IsTypeOf<KingdomTurnHandler>();
+            await Assert.That(game.TurnHandlers[empire].IsHuman).IsFalse();
+        }
+    }
+
+    [Test]
+    public async Task LoadGame_Intro1_KingdomTurnHandlerPlaysATurnFromLoadedState()
+    {
+        // Real correctness check for the persona/State/FleetStates deserialized from the blob:
+        // NpeToolkit's own State[Independent] lookup would KeyNotFoundException if the 9-entry
+        // State dictionary weren't populated correctly for all 9 slots (Empire1-8 + Indep), and a
+        // malformed FleetStates/persona would surface as some other exception during a real turn.
+        var game = new SavGameLoader().LoadGame(LoadIntro1());
+        var trantor = game.Empires.Single(e => e.Name == "Trantor");
+
+        game.TurnHandlers[trantor].PlayTurn(trantor, game);
+    }
+
+    [Test]
+    public async Task LoadGame_Gauntlet1_StoresPirateBlobOpaquely()
+    {
+        // Ground truth: slot 5 ("Thinnva") is PirateNPE (typ=1) -- no ITurnHandler exists for
+        // Pirate yet, so its 739-byte blob must round-trip opaquely instead of being dropped.
+        var game = new SavGameLoader().LoadGame(LoadSave("GAUNTLET_1.SAV"));
+        var pirate = game.Empires.Single(e => e.Name == "Thinnva");
+
+        await Assert.That(pirate.NpeType).IsEqualTo(NpeEmpireType.Pirate);
+        await Assert.That(game.TurnHandlers).DoesNotContainKey(pirate);
+        await Assert.That(game.UnimplementedNpeBlobs).ContainsKey(pirate);
+        await Assert.That(game.UnimplementedNpeBlobs[pirate].Length).IsEqualTo(739);
+    }
+
+    [Test]
+    public async Task LoadGame_Confront1_StoresGuardianAndBerserkerBlobsOpaquely()
+    {
+        // Ground truth: slot 4 ("Solaria") is GuardianNPE (typ=5, 430-byte blob), slot 6 ("Datan")
+        // is BerserkerNPE (typ=4, 930-byte blob) -- neither has an ITurnHandler yet.
+        var game = new SavGameLoader().LoadGame(LoadSave("Confront_1.SAV"));
+
+        var guardian = game.Empires.Single(e => e.Name == "Solaria");
+        await Assert.That(guardian.NpeType).IsEqualTo(NpeEmpireType.Guardian);
+        await Assert.That(game.TurnHandlers).DoesNotContainKey(guardian);
+        await Assert.That(game.UnimplementedNpeBlobs[guardian].Length).IsEqualTo(430);
+
+        var berserker = game.Empires.Single(e => e.Name == "Datan");
+        await Assert.That(berserker.NpeType).IsEqualTo(NpeEmpireType.Berserker);
+        await Assert.That(game.TurnHandlers).DoesNotContainKey(berserker);
+        await Assert.That(game.UnimplementedNpeBlobs[berserker].Length).IsEqualTo(930);
     }
 }
