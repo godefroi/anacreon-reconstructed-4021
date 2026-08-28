@@ -157,7 +157,7 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   tests (`AnnualTickHandlerHostileLifeTests`) exploiting `FixedRandom(N)`'s `min+N` resolution to
   deterministically pick each of the three branches.
 
-## 6. NPE AI — in progress, 6a-6e landed
+## 6. NPE AI — ✅ done (Kingdom)
 
 Implement an `ITurnHandler` for computer empires. The roadmap's original one-line framing here
 ("start with one classic implementation") undersold this phase the way "8 known News sites"
@@ -398,9 +398,27 @@ original developers shipped incomplete, not a port gap.
     attacker's own `DestructionDetail` entries, the other confirms `NeutralPLT`'s arm always
     escalates (never stays `Neutral`). No new golden-file domain — `StateDeptReport` needs the same
     full hand-assembled universe `NpeToolkit.cs`'s own doc comment already defers to Phase 7.
-- **6f, roadmap wrap-up.** Flip Kingdom to done here; explicit one-line disposition for each
-  deferred/dead personality so picking this phase back up doesn't require re-deriving the
-  reachability table above.
+- ✅ **6f, roadmap wrap-up.** Kingdom (both persona presets) is fully ported: dispatch/state (6b),
+  the shared `NPEINTR.PAS` toolkit's read-and-compute half (6c) and fleet-lifecycle half (6c-2),
+  the core per-turn loop (6d), and diplomacy (6e). Disposition of every other NPE personality, so
+  picking this phase back up doesn't require re-deriving the reachability table above:
+  - **Pirate** (`NPE01.PAS`) — real, reachable (ARRONAX/GAUNTLET/JAKARTA), not built. Its own future
+    roadmap entry; shares `NPEINTR.PAS`'s toolkit (already built) but has its own separate
+    `Implement`/persona-free dispatch, not a Kingdom variant.
+  - **Berserker** (`NPE04.PAS`) — real, reachable (ARRONAX only), not built. Own future entry;
+    distinguishing mechanic is that its starbases are the mobile roaming unit, driven by a separate
+    `BaseMissionTypes` state machine — a genuinely different shape from Kingdom/Pirate's fleet-based
+    missions, not a drop-in reuse of `KingdomFleetState`.
+  - **Guardian** (`NPE03.PAS`) — real but zero `dos_131` scenario usage. Deliberately not built
+    ahead of demonstrated need (would be speculative scope); smallest of the four to port when it's
+    actually needed (no fleet movement, no diplomacy — just a per-turn LAM-defense loop).
+  - **Trader** — confirmed dead code, not merely unreachable: zero case arms in any of `NPE.PAS`'s 5
+    dispatch procedures, no `TraderDataRecord` in `NPETYPES.PAS`, zero scenario usage. Not planned.
+  - `DeployHarassFleet` (`NPEINTR.PAS:777`)/`ImplementDefendBMS` (`NPE04.PAS`) stay confirmed empty
+    stubs for whichever personality eventually needs them (Pirate/Berserker respectively) — nothing
+    to port, already verified in both the 1.31 and 2.0 trees.
+  - `LoadNPE`/`SaveNPE` (binary `.SAV` serialization, including the `Version<12` legacy-format
+    branches) — Phase 7, not this phase, regardless of which personalities exist by then.
 
 ## 7. Save/load
 
