@@ -826,3 +826,68 @@ Empire8,Indep` (ordinals 0–8).
 | `BaseMissionTypes` | `NoBMS,DefendBMS,AttackBMS,FindHomeBMS,RefuelBMS,WaitForAttackBMS,WanderAroundBMS` (7) | `NPETYPES.PAS:73-80` |
 | `PolicyTypes` | `NoPLT,NeutralPLT,DefendPLT,HarassPLT,PreemptPLT,ConflictPLT,WarPLT` (7) | `NPETYPES.PAS:100-106` |
 | `NewsTypes` | ~90 members | `NEWS.PAS:21-109` |
+
+---
+
+## Toward a higher-level JSON format (not yet built)
+
+Everything above documents `scripts/savtool.py`/`.ps1`'s current JSON output, which is
+deliberately a **jsonification of the binary layout**: every field keeps its Pascal shape
+(`IDNumber` as `{objType, index}`, enums as raw ordinals rather than names, `*_hex` for opaque
+byte regions) so the JSON ↔ binary round trip can be checked byte-for-byte against a real
+captured save. That property is what makes every claim in this document falsifiable (see
+[Verification](#verification)), and is worth keeping exactly as is — nothing below replaces it.
+
+A **separate**, higher-level JSON representation would be worth having on top of it, for a
+human (or a tool) that wants to read or hand-edit a save without holding the Pascal record
+layout in their head. Sketch of what it would change, relative to the current format:
+
+- **Resolve `IDNumber` references to something legible.** `{objType: 2, index: 50}` becomes a
+  nested reference or a stable key (a planet's name, or a synthetic `"planet:50"` id) — the raw
+  slot index is an artifact of the flat-array storage layout, not something an editor should
+  have to look up in a table.
+- **Unpack `SET OF T` bitsets into named-flag arrays.** A `Technology` value becomes
+  `["WrpTchLvl", "JmpTchLvl", ...]` instead of an integer bitmask (see [Sets](#sets),
+  [Enum reference](#enum-reference)).
+- **Translate enum ordinals to names.** `Cls: 7` becomes `"ClsM"`; a `Headline` ordinal becomes
+  its `NewsTypes` member name.
+- **Drop opaque fields entirely**, not just when zero. Pointers, `Reserved` arrays, and the
+  legacy `OrderData`/`NextOrder` fields carry no game-relevant information at all regardless of
+  their byte value (see the pointer note under [Conventions](#conventions) and
+  [NPE Data](#npe-data)'s `NPEDataRecord.Data`); a semantic format has no reason to keep even
+  the non-zero garbage bytes the low-level format preserves today.
+- **Restructure by relationship instead of by storage section.** Fleets nested under their
+  owning empire, or referenced from the sector cell they occupy, instead of one flat `fleets`
+  array the reader has to cross-reference against `sector.cells[].obj` by hand.
+
+None of this has been built. The considerations that make it a genuinely different kind of
+artifact from the existing tool, not just "the same tool with nicer field names":
+
+- **It can't be the save format, only a view derived from it.** Producing a binary `.SAV` from
+  semantic JSON is possible in principle — it's the same kind of work `build_sav`/`ConvertTo-
+  SavBytes` already do, plus a linking pass that resolves whatever the semantic layer uses as a
+  reference back into a real `{objType, index}` slot pair, and re-zeros the opaque fields
+  (already established as safe — see the `*_hex` note above). But it's a strictly harder, less-
+  verifiable operation than the existing round trip, for two independent reasons:
+  1. **Reordering breaks byte-identical comparison even when the result is correct.** If the
+     semantic format writes planets in name order, or compacts a sparse slot array, the rebuilt
+     file is a different byte string from any original capture even though every cross-reference
+     was updated consistently and the game would load and play it identically. `check`'s
+     byte-diff doesn't just fail to confirm this case — it actively reports a correct file as
+     broken.
+  2. **The low-level round trip's correctness guarantee doesn't transfer.** Today's confidence
+     that, say, a pointer field is truly never read back, or a `Reserved` array is truly inert,
+     comes from checking real captured saves byte-for-byte end to end (see
+     [Verification](#verification)) — saves the actual game produced and would load again. A
+     semantic round trip that reorders or renumbers things can produce byte combinations none of
+     those thirteen saves ever exercised. If some field currently classified as "ignored" turns
+     out to matter in a combination we haven't seen, a byte diff wouldn't catch it — there would
+     be nothing to diff against — only loading the result in the actual game would.
+- **Verification has to change shape, not just get skipped.** A meaningful check for this layer
+  looks like re-parsing the rebuilt binary back into the existing low-level model and comparing
+  *that* structurally (order-independent, opaque-byte-independent) rather than comparing raw
+  bytes — or, for real confidence, loading the rebuilt save in the actual game.
+- **Keep the existing tool as ground truth.** Whatever a semantic layer ends up looking like, it
+  should be built as a transform on top of `savtool`'s existing low-level JSON (or its internal
+  model), not as a second independent binary parser — one canonical byte-accurate reader/writer,
+  with any number of derived, lossy views on top of it.
