@@ -12,7 +12,7 @@ namespace ThreeLn.Reconstruction4021.Core.Entities;
 /// differently from a planet for exactly these four things, so each implementation encodes one
 /// accessor's Base-case behavior instead of a shared field.
 /// </summary>
-public interface IEconomicWorld : ISectorObject
+public interface IEconomicWorld : ISectorObject, IShipCargoHolder
 {
     /// <summary>
     /// Changes this world's owner (Rebellion in UPDATE.PAS reassigns to Indep; GalaxySetup's
@@ -30,8 +30,6 @@ public interface IEconomicWorld : ISectorObject
     int RevolutionIndex { get; set; }
     bool IsAddictedToAmbrosia { get; set; }
     int Population { get; set; }
-    ShipCounts Ships { get; }
-    CargoHold Cargo { get; }
     IndustryLevels Industry { get; }
     DefenseCounts Defenses { get; }
 

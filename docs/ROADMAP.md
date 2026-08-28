@@ -157,7 +157,7 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   tests (`AnnualTickHandlerHostileLifeTests`) exploiting `FixedRandom(N)`'s `min+N` resolution to
   deterministically pick each of the three branches.
 
-## 6. NPE AI — in progress, 6a-6c-2 landed
+## 6. NPE AI — in progress, 6a-6d landed
 
 Implement an `ITurnHandler` for computer empires. The roadmap's original one-line framing here
 ("start with one classic implementation") undersold this phase the way "8 known News sites"
@@ -291,8 +291,66 @@ original developers shipped incomplete, not a port gap.
     ported anyway, same "primitive ready for whoever needs it" precedent as Phase 5g's
     `SelfDestructObject`. Hardcoded-tested (`NpeToolkitDeployImplementTests.cs`), same rationale as
     6c/6c-2's primitives.
-- **6d, Kingdom core loop.** `NPE00.PAS` (defense, expansion, exploration, logistics) plus
-  `NPE02.PAS`'s per-turn driver and both persona-seed presets. No diplomacy yet.
+- ✅ **6d, Kingdom core loop** (`Core/Npe/NpeToolkit.cs`, `Core/Npe/NpeTypes.cs`,
+  `Core/Turns/KingdomTurnHandler.cs`) — `NPE00.PAS`'s `DefendEmpire`/`ImperialExpansion`/
+  `NPEConquest`/`CargoSupplyFleet`/`ExplorationAndProbing` (plus their own nested helpers —
+  `AttackEnemyFleets`/`NoOfGuardsAtBase`/`GetBestBaseToProtect`/`ModifyPersona`/
+  `GetClosestCargoWorld`/`SendRescueFleet`/`RNIndustryLack`) land on `NpeToolkit`, confirmed shared
+  with Pirate/Berserker (grepped: all three call into `NPE00.PAS`, same "shared toolkit" reasoning
+  as `NPEINTR.PAS`) rather than folded into `KingdomTurnHandler`. `NPEINTR.PAS`'s
+  `MidCourseCorrection` — missed by both 6c and 6c-2's own passes over that file — also lands here,
+  first real caller. `KingdomTurnHandler`'s constructor is now real Pascal's own `InitializeNPE`
+  call (`NEWGAME.PAS:1250`, immediately after `CreateEmpire`, during scenario load itself, not
+  lazily on first turn): `InitializeKingdom1NPE`/`InitializeKingdom2NPE`'s persona-seed presets,
+  seeded from the exact same `Random` instance `ScenarioLoader` already uses, so these draws land at
+  the real position in the scenario-load RNG stream (`ScenarioLoader.RunCreateNPEmpire` updated to
+  pass `(empire, npeType, random)` through). `PlayTurn` is `ImplementKingdom1NPE`'s real per-turn
+  sequence: `EnforceNPEDataLinks` → `CreateRegionArray` → `UpdateFleets` → `ReviewNews` →
+  (wars/foreign affairs — see below) → `DefendEmpire` → `ImperialExpansion` → (every-7th-turn
+  `ReDesignateEmpire`) → `ExplorationAndProbing`.
+  - **No diplomacy yet (Phase 6e).** `StateDepartment`/`StateDeptReport`/`WarCabinet` are real
+    Pascal but 100% diplomacy state — `ReviewNews` is scoped to its non-diplomacy branches (NoFuel/
+    IndLack) only; its enemy-attack case arm (the `Policy`/`Aggressiveness` state-machine plus the
+    News-driven `Balance` decrement) is deferred alongside them, since nothing else ever advances
+    `StateDeptRecord.Policy` off its initial seed. `StateDeptRecord`/`PolicyType`
+    (`Core/Npe/NpeTypes.cs`) are real now regardless — `Kingdom1DataRecord`'s own `State` field
+    needs to exist for the persona-seed presets to populate, even with the procedures that act on it
+    deferred.
+  - **`StateDeptRecord` lookup is create-on-demand, not pre-seeded**, keyed by the *other* empire —
+    including `Empire.Independent`. Real Pascal's `StateDeptArray = ARRAY[Empire]` (Empire1..Empire8
+    plus Indep) always has all 9 slots allocated; this port's empires don't all exist yet when a
+    `KingdomTurnHandler` is constructed (later `CreateNPEmpire`/`CreatePlayerEmpire` commands can
+    still be pending in the same scenario file), so a `Dictionary` snapshot at construction time
+    would miss them. Confirmed load-bearing, not speculative: `UpdateFleets`' `ConquerMSN` case does
+    `Inc(State[EnemyEmp].Balance)` where `EnemyEmp` is `Empire.Independent` for the overwhelmingly
+    common "conquered an independent world" case — a `KeyNotFoundException` without this, caught by
+    `KingdomTurnHandlerTests.PlayTurn_ConquersIndependentWorld_HandlesBalanceForIndependentTarget`.
+  - **`TurnEngine.AdvanceOneTurn` now clears `Empire.News` right after `PlayTurn`**, matching
+    `ANACREON.PAS:246-248`'s own `ImplementNPE(Emp); EraseNews(Emp);` sequencing — the Phase 4 gap
+    ("no consumer exists to validate the timing against") this phase's `ReviewNews` is the first real
+    consumer for: without it, a standing `NoFuel` item re-fires `SendRescueFleet` every turn forever
+    (no `AlreadyTargetted` guard on that path).
+  - **`ExplorationAndProbing`'s `REPEAT/UNTIL` hangs forever on an empty region-capital list** in
+    real Pascal (`NoMoreProbes` is only ever set inside the `FOR` loop's own body) — not reproduced;
+    an empty `regionCapitals` returns immediately instead, matching this port's own precedent for
+    not reproducing a genuine Pascal hang (see `GetRegionalCapital`'s null-return doc comment). Also
+    genuinely hangs with a *non-empty* region-capital list under a constant-valued RNG stub
+    (`FixedRandom`) if the capital sits at a galaxy edge — a property of the algorithm needing RNG
+    progress to terminate, not a porting bug; `KingdomTurnHandlerTests` places its capitals away from
+    the edge for exactly this reason.
+  - **`IEconomicWorld`/`Fleet`'s shared "has Ships and Cargo" duck-typing became a real interface**,
+    `IShipCargoHolder` (`Core/Entities/IShipCargoHolder.cs`) — every `object`-typed parameter whose
+    real type union was exactly `Fleet | IEconomicWorld` (`FleetLifecycle.DeployFleet`/
+    `ChangeCompositionOfFleet`/`RefuelFleet`, `CombatEngine.CalculateCombatData`/`GetEnemy`,
+    `CombatStandalone.LAMAttack`) is now compile-time checked instead of a runtime `switch`/`is`
+    dispatch. Deliberately *not* applied to `object` params with a wider real union
+    (`CombatOutcome.AbortFleet`'s `ground`, which also accepts a `ConstructionSite`/`Stargate` as a
+    no-op; `CombatResolution.ResolveAttack`'s `target`, which dispatches on concrete type for
+    different behavior, not uniform `Ships`/`Cargo` access) — see the type's own doc comment.
+  - Covered by `KingdomTurnHandlerTests.cs` — the first commit where a whole NPE turn runs end to
+    end, so unlike every prior 6x commit's per-procedure hardcoded tests, this exercises real
+    cross-procedure dispatch a single method's own test can't reach (the `State[Independent]` case
+    above, `UpdateFleets`' fleet-liveness guard, `ExplorationAndProbing`'s empty-list guard).
 - **6e, Kingdom diplomacy.** `StateDepartment`/`StateDeptReport`/`WarCabinet` and `ReviewNews`'s
   policy-tier state machine — the piece most likely to need real `PascalRandom` sequences rather
   than `ForcedRandomValue`, since its RNG draws depend on live-galaxy iteration order.

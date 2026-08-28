@@ -1,5 +1,6 @@
 using ThreeLn.Reconstruction4021.Core.Combat;
 using ThreeLn.Reconstruction4021.Core.Entities;
+using ThreeLn.Reconstruction4021.Core.Galaxy;
 using ThreeLn.Reconstruction4021.Core.Turns;
 using ThreeLn.Reconstruction4021.Core.Types;
 using static ThreeLn.Reconstruction4021.Core.PascalMath;
@@ -551,6 +552,26 @@ public static class NpeToolkit
     }
 
     /// <summary>
+    /// MidCourseCorrection (NPEINTR.PAS:1542-1561) — a returning fleet whose home base has fallen to
+    /// someone else mid-flight gets redirected to the nearest remaining base instead. Missed by both
+    /// 6c and 6c-2's own NPEINTR.PAS passes — Phase 6d's UpdateFleets is the first real caller.
+    /// </summary>
+    public static void MidCourseCorrection(Empire emp, Fleet fleet, KingdomFleetState state, IReadOnlyList<IEconomicWorld> regionCapitals)
+    {
+        if (state.Mission != NpeMissionType.Return || state.Target is not IEconomicWorld target || target.Owner == emp) {
+            return;
+        }
+
+        var newBase = GetRegionalCapital(fleet, regionCapitals);
+        if (newBase is null) {
+            return;
+        }
+
+        FleetLifecycle.SetFleetDestination(fleet, newBase.Location);
+        state.Target = newBase;
+    }
+
+    /// <summary>
     /// SetEmpireDefenses (NPEINTR.PAS:1691-1699) — rolls one of four preset fleet-defense
     /// distributions. A real, easy-to-miss quirk, ported verbatim rather than "fixed": DATASTRC.PAS's
     /// DefenseRecord has two fields, ShellDefDist (fleets) and StarbaseDefDist (starbases), but every
@@ -900,20 +921,15 @@ public static class NpeToolkit
     /// yet) — see <see cref="FleetLifecycle.RefuelFleet"/>'s own doc comment for what happens when it's
     /// not a <see cref="Fleet"/>.
     /// </summary>
-    public static void ImplementRefuelMSN(Fleet fleet, object target, Game game)
+    public static void ImplementRefuelMSN(Fleet fleet, IShipCargoHolder target, Game game)
     {
         CombatOutcome.AbortFleet(fleet, target, report: true);
         CombatOutcome.DestroyFleet(fleet, game);
 
-        var (targetShips, targetCargo) = target switch {
-            Fleet f => (f.Ships, f.Cargo),
-            IEconomicWorld w => (w.Ships, w.Cargo),
-            _ => throw new ArgumentException($"ImplementRefuelMSN: expected a Fleet or IEconomicWorld target, got {target.GetType()}.", nameof(target)),
-        };
         var targetFuel = target is Fleet targetFleet ? targetFleet.Fuel : 0;
-        var maxFuel = FleetLogistics.FuelCapacity(targetShips);
+        var maxFuel = FleetLogistics.FuelCapacity(target.Ships);
         var tonsNeeded = (int)((maxFuel - targetFuel) / FleetLogistics.FuelPerTon) + 1;
-        var maxTri = Math.Min(tonsNeeded, targetCargo.Trillum);
+        var maxTri = Math.Min(tonsNeeded, target.Cargo.Trillum);
 
         FleetLifecycle.RefuelFleet(target, target, maxTri);
     }
@@ -1143,5 +1159,328 @@ public static class NpeToolkit
         }
 
         FleetLifecycle.ChangeCompositionOfFleet(fleet, baseWorld, newFleetShips, fleet.Cargo, newBaseShips, baseWorld.Cargo, game);
+    }
+
+    // --- NPE00.PAS: defense, expansion, logistics, exploration -----------------------------------
+    // Confirmed shared with Pirate (NPE01.PAS) and Berserker (NPE04.PAS) call sites, not
+    // Kingdom-exclusive — same "shared toolkit" reasoning as NPEINTR.PAS above, so these live here
+    // rather than on KingdomTurnHandler. ReviewNews is scoped to its non-diplomacy branches
+    // (NoFuel/IndLack) for Phase 6d; its enemy-attack case arm plus StateDepartment/StateDeptReport/
+    // WarCabinet are 100% diplomacy state (State[].Policy/Aggressiveness/Balance's own state-machine
+    // half) and land in Phase 6e — see KingdomTurnHandler.PlayTurn's own doc comment.
+
+    /// <summary>
+    /// AttackEnemyFleets (NPE00.PAS's own nested procedure inside DefendEmpire) — LAM-strikes then
+    /// directly attacks any weaker enemy fleet sitting over <paramref name="world"/>, using a
+    /// one-shot battle fleet dissolved back into <paramref name="world"/>'s stock afterward (not a
+    /// tracked mission — this is same-turn combat, not a deployed fleet). Verbatim quirks: the LAM
+    /// strike zeroes the base's entire LAM stock (not just what was used, unlike
+    /// ImplementJumpAttackMSN's subtract-what-was-used), and the post-strike military-power
+    /// comparisons deliberately reuse <c>mPower</c> computed *before* the strike, not a fresh read.
+    /// </summary>
+    private static void AttackEnemyFleets(Empire emp, IEconomicWorld world, IEconomicWorld baseWorld, Game game, Random random)
+    {
+        var xy = world.Location;
+
+        foreach (var enemyFleet in game.Galaxy.Fleets.Where(f => f.Owner != emp && Game.Scouted(emp, f) && f.Location == xy).ToList()) {
+            var mPower = MilitaryPower(enemyFleet.Ships, new DefenseCounts());
+
+            if (mPower > 30000 && baseWorld.Location.DistanceTo(xy) <= 5) {
+                var lam = baseWorld.Defenses[DefenseType.Lam];
+                if (lam > 500 && Rnd(random, 1, 100) < 50) {
+                    CombatStandalone.LAMAttack(emp, lam, enemyFleet, game);
+                    baseWorld.Defenses[DefenseType.Lam] = 0;
+                }
+            }
+
+            if (!game.Galaxy.Fleets.Contains(enemyFleet)) {
+                continue; // ASSERT (NPE00.PAS): enemy fleet not destroyed by LAMs.
+            }
+
+            var (ships, cargo) = GetFleetComposition(world, mPower * 2, 0, NpeMissionType.JumpAttack);
+            if (!FleetLifecycle.NoShips(ships) && (MilitaryPower(ships, world.Defenses) < mPower || MilitaryPower(ships, new DefenseCounts()) > mPower)) {
+                var battleFleet = FleetLifecycle.DeployFleet(emp, world, ships, cargo, xy, game);
+                var result = CombatResolution.NPEAttack(emp, battleFleet, enemyFleet, AttackIntentionType.CaptureTransports, game, random).Result;
+                if (result != AttackResultType.AttackerDestroyed) {
+                    CombatOutcome.AbortFleet(battleFleet, world, report: true);
+                    CombatOutcome.DestroyFleet(battleFleet, game);
+                }
+            }
+        }
+    }
+
+    /// <summary>NoOfGuardsAtBase (NPE00.PAS's own nested procedure inside DefendEmpire) — how many of this empire's own tracked fleets are guarding the given base right now.</summary>
+    private static int NoOfGuardsAtBase(Empire emp, IEconomicWorld baseWorld, Dictionary<Fleet, KingdomFleetState> fleetStates) =>
+        fleetStates.Count(kv => kv.Key.Owner == emp && kv.Value.Mission == NpeMissionType.Guard && kv.Key.Location == baseWorld.Location);
+
+    /// <summary>GetBestBaseToProtect (NPE00.PAS's own nested procedure inside DefendEmpire) — the regional capital (other than <paramref name="fromWorld"/>) with the fewest guard fleets on station.</summary>
+    private static IEconomicWorld? GetBestBaseToProtect(Empire emp, IReadOnlyList<IEconomicWorld> regionCapitals, Dictionary<Fleet, KingdomFleetState> fleetStates, IEconomicWorld fromWorld)
+    {
+        IEconomicWorld? best = null;
+        var lowest = MaxNoOfGuards;
+
+        foreach (var candidate in regionCapitals) {
+            if (ReferenceEquals(candidate, fromWorld)) {
+                continue;
+            }
+            var guards = NoOfGuardsAtBase(emp, candidate, fleetStates);
+            if (guards < lowest) {
+                lowest = guards;
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// DefendEmpire (NPE00.PAS:198-404) — attacks any enemy fleet sitting over an owned world, then
+    /// reinforces worlds that are under the persona's own minimum defense, sends a non-base world's
+    /// surplus ships home to its regional capital, and redirects an overfull base's own surplus to
+    /// whichever planet/base needs it most.
+    /// </summary>
+    public static void DefendEmpire(Empire emp, IReadOnlyList<IEconomicWorld> regionCapitals, Dictionary<Fleet, KingdomFleetState> fleetStates, NpeCharacter persona, Game game, Random random)
+    {
+        foreach (var world in game.Galaxy.Planets.Where(p => p.Owner == emp).ToList()) {
+            if (world.Type is WorldType.Base or WorldType.Capital) {
+                AttackEnemyFleets(emp, world, world, game, random);
+
+                if (NoOfGuardsAtBase(emp, world, fleetStates) == MaxNoOfGuards) {
+                    var protectWorld = GetBestPlanetToProtect(world, game);
+                    if (protectWorld is not null) {
+                        DeployBattleFleet(emp, fleetStates, world, 9000L * CombatConstants.CombatPower[AttackType.Fighter], 0, NpeMissionType.Return, protectWorld, game, random);
+                    }
+
+                    var protectBase = GetBestBaseToProtect(emp, regionCapitals, fleetStates, world);
+                    if (protectBase is not null) {
+                        DeployBattleFleet(emp, fleetStates, world, 150000, 0, NpeMissionType.Stack, protectBase, game, random);
+                    }
+                }
+
+                continue;
+            }
+
+            var (ships, cargo) = GetPotentialRes(world, fleetStates);
+            var powerAvail = MilitaryPower(ships, world.Defenses);
+            var shipPower = MilitaryPower(ships, new DefenseCounts());
+            var optimumPower = MinimumDefense(world, persona, game);
+            var optimumGat = optimumPower / 20;
+            var gatPower = cargo[CargoType.Legion] + 3L * cargo[CargoType.NinjaLegion];
+            var homeBase = GetRegionalCapital(world, regionCapitals);
+            if (homeBase is null) {
+                continue; // real Pascal's GetRegionalCapital leaves BaseID undefined here (no regional capitals at all yet) — nothing sane to do.
+            }
+
+            AttackEnemyFleets(emp, world, homeBase, game, random);
+
+            var powerDiff = optimumPower - powerAvail;
+            var gatDiff = optimumGat - gatPower;
+            if (Math.Min(shipPower, Math.Abs(powerDiff)) > 10000) {
+                if (powerAvail < optimumPower) {
+                    var maxBaseGat = Math.Max(0, homeBase.Cargo[CargoType.Legion] + 3L * homeBase.Cargo[CargoType.NinjaLegion] - 3000);
+                    gatDiff = Math.Min(maxBaseGat, Math.Max(0, gatDiff));
+                    DeployBattleFleet(emp, fleetStates, homeBase, powerDiff, gatDiff, NpeMissionType.Return, world, game, random);
+                } else if (NoOfGuardsAtBase(emp, homeBase, fleetStates) < MaxNoOfGuards) {
+                    gatDiff = Math.Max(0, -gatDiff);
+                    DeployBattleFleet(emp, fleetStates, world, -powerDiff, gatDiff, NpeMissionType.Stack, homeBase, game, random);
+                }
+            }
+        }
+    }
+
+    /// <summary>ModifyPersona (NPE00.PAS's own nested procedure inside ImperialExpansion) — evolves Imperialist toward ImpGene by a RandomGene-gated random walk.</summary>
+    private static void ModifyPersona(NpeCharacter persona, Random random)
+    {
+        if (Rnd(random, 1, 100) > persona.RandomGene) {
+            return;
+        }
+
+        var delta = Jitter(random, persona.ImperialistGene, persona.FactorGene) - Jitter(random, persona.Imperialist, persona.FactorGene);
+        var temp = persona.Imperialist + PascalRound(delta / 12.0 * persona.FactorGene);
+
+        persona.Imperialist = temp switch {
+            > 100 => 100,
+            < 0 => 0,
+            _ => temp,
+        };
+    }
+
+    /// <summary>
+    /// ImperialExpansion (NPE00.PAS:406-509) — rolls a persona-driven chance to conquer an
+    /// independent world within reach of a regional capital; if it fires, picks the best known
+    /// target and launches one battle fleet at it. Always evolves Imperialist afterward, whether or
+    /// not the roll fired.
+    /// </summary>
+    public static void ImperialExpansion(Empire emp, IReadOnlyList<IEconomicWorld> regionCapitals, Dictionary<Fleet, KingdomFleetState> fleetStates, NpeCharacter persona, Game game, Random random)
+    {
+        if (Rnd(random, 1, 100) <= persona.Imperialist) {
+            var basePower = AverageMilitaryPower(regionCapitals);
+            var threshold = 2 + 10 - persona.SphereX / 10;
+
+            var candidates = new List<IEconomicWorld>();
+            foreach (var planet in game.Galaxy.Planets) {
+                if (!planet.Owner.IsIndependent) {
+                    continue;
+                }
+                var nearestBase = GetRegionalCapital(planet, regionCapitals);
+                if (nearestBase is not null && planet.Location.DistanceTo(nearestBase.Location) <= threshold) {
+                    candidates.Add(planet);
+                }
+            }
+
+            var (target, targetDefense, targetMen) = GetBestTarget(emp, candidates, basePower, persona, fleetStates, random);
+            if (target is not null) {
+                var fleetPower = PascalRound((1.5 + random.NextDouble()) * targetDefense);
+                var fleetGat = PascalRound(1.5 * targetMen);
+                var homeBase = GetRegionalCapital(target, regionCapitals);
+                if (homeBase is not null && MilitaryPower(homeBase.Ships, new DefenseCounts()) > targetDefense) {
+                    DeployBattleFleet(emp, fleetStates, homeBase, fleetPower, fleetGat, NpeMissionType.Conquer, target, game, random);
+                }
+            }
+        }
+
+        ModifyPersona(persona, random);
+    }
+
+    /// <summary>NPEConquest (NPE00.PAS:674-693) — redesignates a world this empire just conquered, per its own persona. Real Pascal's trailing GetCoord/GetRegionalCapital calls compute values never read again — dead, dropped here.</summary>
+    public static void NPEConquest(Empire emp, IEconomicWorld world, AttackResultType result, IReadOnlyList<IEconomicWorld> regionCapitals, NpeCharacter persona, Game game, Random random)
+    {
+        if (result != AttackResultType.DefenderConquered || world.Owner != emp) {
+            return;
+        }
+
+        var newType = GetNewDesignation(world, regionCapitals, game, random);
+        if (newType != world.Type) {
+            RedesignateWorldType(world, newType, random);
+        }
+    }
+
+    /// <summary>
+    /// GetClosestCargoWorld (NPE00.PAS:603-642) — the nearest owned world holding at least as much
+    /// of every requested cargo type as <paramref name="required"/> asks for. A closer world that
+    /// falls short doesn't block a farther one that qualifies — real Pascal only ever advances
+    /// ClosestDist on an accepted candidate.
+    /// </summary>
+    private static IEconomicWorld? GetClosestCargoWorld(Empire emp, ISectorObject subject, CargoHold required, Game game)
+    {
+        IEconomicWorld? closest = null;
+        var closestDist = 99;
+
+        foreach (var planet in game.Galaxy.Planets) {
+            if (planet.Owner != emp) {
+                continue;
+            }
+            var dist = planet.Location.DistanceTo(subject.Location);
+            if (dist < closestDist) {
+                var cargo = planet.Cargo;
+                if (Enum.GetValues<CargoType>().All(t => cargo[t] >= required[t])) {
+                    closest = planet;
+                    closestDist = dist;
+                }
+            }
+        }
+
+        return closest;
+    }
+
+    /// <summary>
+    /// CargoSupplyFleet (NPE00.PAS:644-672) — finds the nearest owned world holding enough of
+    /// <paramref name="cargo"/> and either ships it straight to <paramref name="destination"/>, or,
+    /// if that world doesn't have the transports to spare, first routes empty transports there from
+    /// its own regional capital.
+    /// </summary>
+    public static void CargoSupplyFleet(Empire emp, IEconomicWorld destination, CargoHold cargo, IReadOnlyList<IEconomicWorld> regionCapitals, Dictionary<Fleet, KingdomFleetState> fleetStates, Game game)
+    {
+        var cargoWorld = GetClosestCargoWorld(emp, destination, cargo, game);
+        if (cargoWorld is null) {
+            return;
+        }
+
+        if (FleetLogistics.FleetCargoSpace(cargoWorld.Ships, cargo) > 0) {
+            if (!AlreadyTargetted(fleetStates, destination, NpeMissionType.Supply)) {
+                DeployCargoFleet(emp, fleetStates, cargoWorld, cargo, carryCargo: true, NpeMissionType.Supply, destination, game);
+            }
+        } else if (!AlreadyTargetted(fleetStates, cargoWorld, NpeMissionType.SupplyTransports)) {
+            var homeBase = GetRegionalCapital(cargoWorld, regionCapitals);
+            if (homeBase is not null) {
+                DeployCargoFleet(emp, fleetStates, homeBase, cargo, carryCargo: false, NpeMissionType.SupplyTransports, cargoWorld, game);
+            }
+        }
+    }
+
+    /// <summary>RNIndustryLack (NPE00.PAS:59-69) — ReviewNews's IndLack handler: request 1000 metals for whichever world reported the shortfall.</summary>
+    private static void RNIndustryLack(Empire emp, IEconomicWorld world, IReadOnlyList<IEconomicWorld> regionCapitals, Dictionary<Fleet, KingdomFleetState> fleetStates, Game game) =>
+        CargoSupplyFleet(emp, world, new CargoHold { Metals = 1000 }, regionCapitals, fleetStates, game);
+
+    /// <summary>SendRescueFleet (NPE00.PAS's own nested procedure inside ReviewNews) — ReviewNews's NoFuel handler: if the fleet's own regional capital can spare the trillum, sends it enough fuel to get moving again.</summary>
+    private static void SendRescueFleet(Empire emp, Fleet fleet, IReadOnlyList<IEconomicWorld> regionCapitals, Dictionary<Fleet, KingdomFleetState> fleetStates, Game game)
+    {
+        var homeBase = GetRegionalCapital(fleet, regionCapitals);
+        if (homeBase is null) {
+            return;
+        }
+
+        var fuelNeeded = 1 + PascalRound(FleetLogistics.FuelCapacity(fleet.Ships) / FleetLogistics.FuelPerTon);
+        var jtnNeeded = 1 + PascalRound(fuelNeeded / 10.0);
+
+        if (homeBase.Ships.Jumptransports > jtnNeeded && homeBase.Cargo.Trillum > fuelNeeded) {
+            DeployCargoFleet(emp, fleetStates, homeBase, new CargoHold { Trillum = fuelNeeded }, carryCargo: true, NpeMissionType.Refuel, fleet, game);
+        }
+    }
+
+    /// <summary>
+    /// ReviewNews (NPE00.PAS:71-196), scoped to its non-diplomacy branches for Phase 6d: NoFuel
+    /// (<see cref="SendRescueFleet"/>) and IndLack (<see cref="RNIndustryLack"/>). The enemy-attack
+    /// case arm (BattleL/BattleW1/BattleW2/ConDs/GteDs/LAMDm/LAMDs/LAMDef —
+    /// RespondToEnemyAttack's Policy-tier state machine plus the News-driven Balance decrement) is
+    /// real Pascal but 100% diplomacy state, deferred to Phase 6e alongside StateDepartment/
+    /// StateDeptReport/WarCabinet — see KingdomTurnHandler.PlayTurn's own doc comment.
+    /// </summary>
+    public static void ReviewNews(Empire emp, IReadOnlyList<IEconomicWorld> regionCapitals, Dictionary<Fleet, KingdomFleetState> fleetStates, Game game)
+    {
+        foreach (var news in emp.News) {
+            switch (news.Headline) {
+                case NewsType.FleetOutOfFuel:
+                    if (news.Subject is Fleet fleet) {
+                        SendRescueFleet(emp, fleet, regionCapitals, fleetStates, game);
+                    }
+                    break;
+                case NewsType.IndustryLacksMetals:
+                    if (news.Subject is IEconomicWorld world) {
+                        RNIndustryLack(emp, world, regionCapitals, fleetStates, game);
+                    }
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// ExplorationAndProbing (NPE00.PAS:695-737) — launches every available probe from each regional
+    /// capital at a random nearby sector, sized by persona SphereX. Real Pascal's REPEAT/UNTIL hangs
+    /// forever when RCap is empty (NoMoreProbes is only ever set inside the FOR loop's own body) —
+    /// not reproduced; an empty <paramref name="regionCapitals"/> returns immediately instead.
+    /// </summary>
+    public static void ExplorationAndProbing(Empire emp, IReadOnlyList<IEconomicWorld> regionCapitals, NpeCharacter persona, Game game, Random random)
+    {
+        if (regionCapitals.Count == 0) {
+            return;
+        }
+
+        var maxProbeDist = 24 - 2 * ISqrt(persona.SphereX);
+
+        bool noMoreProbes;
+        do {
+            noMoreProbes = false;
+            foreach (var capital in regionCapitals) {
+                var baseXy = capital.Location;
+                var x = Rnd(random, baseXy.X - maxProbeDist, baseXy.X + maxProbeDist);
+                var y = Rnd(random, baseXy.Y - maxProbeDist, baseXy.Y + maxProbeDist);
+                if (x >= 0 && x < game.Galaxy.Size && y >= 0 && y < game.Galaxy.Size) {
+                    if (!emp.TryLaunchProbe(new Coordinate(x, y))) {
+                        noMoreProbes = true;
+                    }
+                }
+            }
+        } while (!noMoreProbes);
     }
 }

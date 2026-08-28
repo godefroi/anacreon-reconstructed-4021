@@ -3,7 +3,7 @@ using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Core.Entities;
 
-public sealed class Fleet : IMovable, ISectorObject
+public sealed class Fleet : IMovable, ISectorObject, IShipCargoHolder
 {
     public required Coordinate Location { get; set; }
     public Empire Owner { get; set; } = Empire.Independent;

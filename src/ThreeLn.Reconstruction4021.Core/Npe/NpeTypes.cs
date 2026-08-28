@@ -61,6 +61,38 @@ public sealed class NpeCharacter
     public int Offset { get; set; }
 }
 
+/// <summary>Kingdom's per-enemy diplomatic posture (NPETYPES.PAS's PolicyTypes) — real Pascal ordinal order preserved. <see cref="None"/> stands in for NoPLT (never assigned by anything ported so far — every real State slot starts at Neutral or Harass, per InitializeKingdom1NPE/2NPE).</summary>
+public enum PolicyType
+{
+    None,
+    Neutral,
+    Defend,
+    Harass,
+    Preempt,
+    Conflict,
+    War,
+}
+
+/// <summary>
+/// One empire's standing in this Kingdom empire's foreign office (NPETYPES.PAS's StateDeptRecord) —
+/// indexed by the *other* empire, one record per enemy (including <see cref="Empire.Independent"/>;
+/// see <see cref="Turns.KingdomTurnHandler"/>'s own doc comment on why that slot needs an entry even
+/// though real Pascal's own seeding loop, <c>FOR EmpI:=Empire1 TO Empire8</c>, never touches it).
+/// <see cref="TotalMilitary"/>/<see cref="Worlds"/>/<see cref="ThreatAssess"/> are written only by
+/// StateDeptReport (Phase 6e) — real fields on the same record, kept here rather than split out,
+/// since splitting would just be Phase 6e re-adding what Phase 6d removed.
+/// </summary>
+public sealed class StateDeptRecord
+{
+    public PolicyType Policy { get; set; }
+    public int AttackChance { get; set; }
+    public long TotalMilitary { get; set; }
+    public int Worlds { get; set; }
+    public int ThreatAssess { get; set; }
+    public int Aggressiveness { get; set; }
+    public int Balance { get; set; }
+}
+
 /// <summary>
 /// One Kingdom fleet's AI mission state — the survivors of NPETYPES.PAS's FleetDataRecord field
 /// audit (Phase 6c). Homed in a <c>Dictionary&lt;Fleet, KingdomFleetState&gt;</c> owned by

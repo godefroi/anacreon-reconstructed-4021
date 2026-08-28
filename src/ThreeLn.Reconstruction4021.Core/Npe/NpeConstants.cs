@@ -15,6 +15,9 @@ namespace ThreeLn.Reconstruction4021.Core.Npe;
 /// </summary>
 internal static class NpeConstants
 {
+    /// <summary>MaxNoOfRaiders (NPEINTR.PAS:38) — how many RaidTrnMSN fleets an empire keeps out against one enemy at once.</summary>
+    public const int MaxNoOfRaiders = 3;
+
     /// <summary>Base chance (before adjustment) a world becomes each type: NPETypeDefault (NPEINTR.PAS:157-178).</summary>
     public static readonly FrozenDictionary<WorldType, int> TypeDefault = new Dictionary<WorldType, int> {
         [WorldType.Agricultural] = 10, [WorldType.Ambrosia] = 0, [WorldType.Base] = 75, [WorldType.BaseStarbase] = 0,

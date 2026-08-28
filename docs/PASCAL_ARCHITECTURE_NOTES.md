@@ -768,6 +768,29 @@ pre-commit review pass and fixed with regression tests that fail against the bug
   1,000,000 ships (would clearly fail the gate on real ship counts) and confirms the attack proceeds
   anyway once the LAM branch fires.
 
+### `ExplorationAndProbing`'s `REPEAT`/`UNTIL` loop can hang forever — a real Pascal property, not a porting bug
+
+`NPE00.PAS:695-737`'s `NoMoreProbes` flag is only ever set inside the `FOR i:=1 TO MaxNoOfRegions
+DO` body, and only when `InGalaxy(x,y)` is true for that iteration's roll. Two ways this loops
+forever in real Pascal, both reproduced faithfully (i.e., not specially guarded against) except
+where noted:
+
+- **Empty region-capital list.** If an empire owns no Base/Capital world yet, the `FOR` loop body
+  never runs at all, so `NoMoreProbes` never gets set — an infinite `REPEAT`/`UNTIL`. This port's
+  `NpeToolkit.ExplorationAndProbing` returns immediately when `regionCapitals` is empty instead of
+  reproducing the hang, matching this project's own precedent for genuine Pascal hangs it doesn't
+  reproduce (see `GetRegionalCapital`'s own doc comment).
+- **A non-progressing RNG.** Even with a non-empty region-capital list, the loop only terminates
+  once `InGalaxy(x,y)` succeeds `Empire.MaxProbesInTransit` (10) times in a row (each success either
+  launches a probe or, once the pool is exhausted, sets `NoMoreProbes`). With a *real* RNG this
+  converges almost surely, since the rolled coordinate changes every iteration and the roll range
+  always straddles the region capital's own (in-galaxy) position. With a constant-valued RNG stub
+  (this port's own `FixedRandom`, used across most hardcoded tests) rolling the same edge-adjacent,
+  permanently out-of-galaxy coordinate forever, the loop hangs exactly as real Pascal would under
+  the same degenerate input — not reproduced as a guard in the port (there's nothing to fix; a real
+  RNG doesn't have this problem), but `KingdomTurnHandlerTests` deliberately places its test capitals
+  away from the galaxy edge to avoid it.
+
 ---
 
 ## Outstanding Research (as of this draft)

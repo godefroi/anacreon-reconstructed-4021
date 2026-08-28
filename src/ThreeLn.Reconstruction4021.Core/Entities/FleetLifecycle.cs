@@ -31,7 +31,7 @@ public static class FleetLifecycle
     /// itself a fleet (so the fuel-proration math treats the right side as "the fleet") is preserved
     /// verbatim — see that method's own doc comment for which side can end up destroyed.
     /// </summary>
-    public static Fleet DeployFleet(Empire emp, object launchSource, ShipCounts ships, CargoHold cargo, Coordinate destination, Game game)
+    public static Fleet DeployFleet(Empire emp, IShipCargoHolder launchSource, ShipCounts ships, CargoHold cargo, Coordinate destination, Game game)
     {
         var fleet = new Fleet { Location = ((ISectorObject)launchSource).Location, Owner = emp };
         emp.Fleets.MarkScouted(fleet);
@@ -39,9 +39,8 @@ public static class FleetLifecycle
 
         SetFleetDestination(fleet, destination);
 
-        var (launchShips, launchCargo) = ShipsAndCargoOf(launchSource);
-        var remainingShips = Subtract(launchShips, ships);
-        var remainingCargo = Subtract(launchCargo, cargo);
+        var remainingShips = Subtract(launchSource.Ships, ships);
+        var remainingCargo = Subtract(launchSource.Cargo, cargo);
 
         if (launchSource is Fleet launchFleet) {
             ChangeCompositionOfFleet(launchFleet, fleet, remainingShips, remainingCargo, ships, cargo, game);
@@ -91,7 +90,7 @@ public static class FleetLifecycle
     /// self-copies in that case, which is fine and intended, not a bug to fix.
     /// </summary>
     public static void ChangeCompositionOfFleet(
-        Fleet fleet, object ground,
+        Fleet fleet, IShipCargoHolder ground,
         ShipCounts newFleetShips, CargoHold newFleetCargo,
         ShipCounts newGroundShips, CargoHold newGroundCargo,
         Game game)
@@ -159,22 +158,19 @@ public static class FleetLifecycle
     /// method is a no-op (the ground's trillum is still spent for nothing) — ported verbatim, not
     /// "fixed," matching this port's existing GetFleetFuel/SetFleetFuel no-op precedent.
     /// </summary>
-    public static void RefuelFleet(object target, object ground, int trillum)
+    public static void RefuelFleet(IShipCargoHolder target, IShipCargoHolder ground, int trillum)
     {
-        var (targetShips, targetCargo) = ShipsAndCargoOf(target);
-        var (_, groundCargo) = ShipsAndCargoOf(ground);
-
         var targetFuel = target is Fleet targetAsFleet ? targetAsFleet.Fuel : 0;
-        var maxFuel = FleetLogistics.FuelCapacity(targetShips);
+        var maxFuel = FleetLogistics.FuelCapacity(target.Ships);
 
-        groundCargo.Trillum -= trillum;
+        ground.Cargo.Trillum -= trillum;
         targetFuel = Math.Min(targetFuel + trillum * FleetLogistics.FuelPerTon, maxFuel);
 
         if (target is Fleet fleetTarget) {
             fleetTarget.Fuel = targetFuel;
         }
 
-        if (targetFuel > FleetLogistics.FuelConsumption(targetShips, targetCargo) && target is IMovable movable) {
+        if (targetFuel > FleetLogistics.FuelConsumption(target.Ships, target.Cargo) && target is IMovable movable) {
             var location = ((ISectorObject)target).Location;
             movable.Status = movable.Destination == location ? FleetStatus.Ready : FleetStatus.InTransit;
         }
@@ -236,7 +232,8 @@ public static class FleetLifecycle
         _ => throw new ArgumentException($"EstimatedRange: expected a Fleet or Starbase, got {id.GetType()}.", nameof(id)),
     };
 
-    private static bool NoShips(ShipCounts ships)
+    /// <summary>NoShips (MISC.PAS): whether every ship-type count is zero. Internal: Npe/NpeToolkit.cs's AttackEnemyFleets (Phase 6d) needs the same check DeployFleet/ChangeCompositionOfFleet already make.</summary>
+    internal static bool NoShips(ShipCounts ships)
     {
         foreach (var t in Enum.GetValues<ShipType>()) {
             if (ships[t] != 0) {
@@ -278,10 +275,4 @@ public static class FleetLifecycle
         }
         return result;
     }
-
-    private static (ShipCounts Ships, CargoHold Cargo) ShipsAndCargoOf(object obj) => obj switch {
-        Fleet f => (f.Ships, f.Cargo),
-        IEconomicWorld w => (w.Ships, w.Cargo),
-        _ => throw new ArgumentException($"Expected a Fleet or IEconomicWorld, got {obj.GetType()}.", nameof(obj)),
-    };
 }

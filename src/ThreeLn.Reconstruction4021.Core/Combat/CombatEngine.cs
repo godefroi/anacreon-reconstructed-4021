@@ -37,7 +37,7 @@ public static class CombatEngine
     /// Pascal's IDNumber union: a <see cref="IEconomicWorld"/> (planet or starbase) or a
     /// <see cref="Fleet"/>.
     /// </summary>
-    public static CombatDataRecord CalculateCombatData(Empire attacker, object target)
+    public static CombatDataRecord CalculateCombatData(Empire attacker, IShipCargoHolder target)
     {
         var capital = attacker.Capital
             ?? throw new InvalidOperationException("CalculateCombatData: attacker has no capital (GetCapital's Pascal precondition) — a live, still-attacking empire always has one.");
@@ -75,7 +75,7 @@ public static class CombatEngine
     /// <c>TechCatalog.MinTechForShip[ship] &lt;= Tech</c>, per TechCatalog's own monotonic-superset doc
     /// comment.
     /// </summary>
-    public static EnemyForces GetEnemy(object target)
+    public static EnemyForces GetEnemy(IShipCargoHolder target)
     {
         var enemy = new EnemyForces();
 
