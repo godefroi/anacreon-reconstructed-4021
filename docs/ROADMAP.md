@@ -442,9 +442,25 @@ feature.
   merging, so a clean merge) so the NPE Data section has real `KingdomTurnHandler` state to read.
   Byte-level primitive readers for `SAV_FILE_FORMAT.md`'s documented conventions (fixed-width
   little-endian ints, `STRING[N]`, `SET OF T` bitsets, `IDNumber`, opaque-byte passthrough).
-- **7b, Header + Environment + Sector `LoadGame`.** The `IDNumber ↔ ISectorObject` resolver every
-  later section reuses; Sector reconstruction into `Galaxy`'s lists/dictionaries (no dense grid
-  exists in this port's model, so this is real reconstruction, not a 1:1 read).
+- ✅ **7b, Header + Environment + Sector `LoadGame`** (`Core/SaveFormat/SavGameLoader.cs`). Eight
+  placeholder `Empire` slots allocated up front resolve every empire ordinal read before Empire
+  Data actually names/activates them (Environment's `Player`, Sector's mine owner/`MineScout`) —
+  same object identity Empire Data (7d) later fills in with real fields, never added to
+  `Game.Empires` unless that slot turns out `InUse`. Confirmed directly from `GALAXY.PAS`/
+  `INTRFACE.PAS` (grepped every `.Obj:=`/`Flts:=` write site in the 1.31 tree) that `Sector.Obj`
+  is never a fleet reference — only `CreatePlanet`/`CreateStarbase`/`CreateStargate`/construction
+  -site creation write it — so `Obj`/`Flts` are fully redundant with what Planets/Starbases/
+  Fleets/Stargates/ConstructionSites (7c) independently provide and are read-and-discarded;
+  `Special`'s nibbles (nebula type, mine-placing empire — sentinel `Ord(Indep)`=8 meaning "no
+  mine," `GALAXY.PAS`'s own `NoSRMField` constant) and `MineScout` reconstruct `Galaxy`'s sparse
+  nebula/minefield/mine-scouted-by dictionaries, the only place this port's model has to put them.
+  Confirmed the on-disk row loop is X-outer/Y-inner (Pascal's own loop variable is misleadingly
+  named `y` but indexes `Sector[XY.x]`, per `SetMineScout`'s usage) by reading `GALAXY.PAS`
+  directly, not assumed from the format doc's looser "Row 0.. Row SizeOfGalaxy" phrasing.
+  `EmpiresToMove`/`TimePerTurn`/`AutoSave`/`AsyncTurns`/`PauseActive`/`ReEnterGame` read and
+  discarded, `ScenaFilename` kept via the new `Game.ScenarioFilename`. Tested against real bytes
+  from `INTRO_1.SAV`, ground truth cross-checked against `scripts/savtool.py`'s own JSON parse
+  (year 4021, player ordinal 0, `INTRO.SCN`, `SizeOfGalaxy=21`, 90 nebula cells, zero minefields).
 - **7c, Planets/Starbases/Fleets/Stargates/Constructions `LoadGame`.** Fleet's `FuelHigh`/`Fuel`
   split → single `double` conversion; `CommandRecord` order queues read and discarded (no
   in-memory representation exists — Phase 8's job once a human turn handler needs one).

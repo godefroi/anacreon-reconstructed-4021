@@ -23,6 +23,15 @@ public sealed class Game(Galaxy.Galaxy galaxy)
 
     public int Year { get; set; }
 
+    /// <summary>
+    /// Which scenario this game started from (Environment section's ScenaFilename,
+    /// ENVIRON.PAS:35) — real save metadata with no other home in this port's model.
+    /// <see cref="Core.NewGame.ScenarioLoader"/> doesn't set this (a .SCN load has no equivalent
+    /// concept of "this game's own save filename"); it's populated by
+    /// <see cref="SaveFormat.SavGameLoader"/> on `.SAV` import.
+    /// </summary>
+    public string? ScenarioFilename { get; set; }
+
     public Empire NextEmpire(Empire current)
     {
         var index = Empires.IndexOf(current);
