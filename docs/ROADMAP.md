@@ -420,10 +420,54 @@ original developers shipped incomplete, not a port gap.
   - `LoadNPE`/`SaveNPE` (binary `.SAV` serialization, including the `Version<12` legacy-format
     branches) — Phase 7, not this phase, regardless of which personalities exist by then.
 
-## 7. Save/load
+## 7. Save/load — in progress, 7a landed
 
-Translation layer to read/write original `.SAV` files. Does not shape the in-memory model — the
-on-disk format is a serialization concern, not a design input.
+`docs/SAV_FILE_FORMAT.md` documents the real on-disk `.SAV` byte layout in full (every section,
+file:line cited into `reference/DOSAnacreonSource131/`, checked against 13 real save files in
+`reference/saves/`), with `scripts/savtool.py`/`.ps1` as an independently-built, byte-verified
+`.SAV` ⟷ JSON oracle. This phase builds on that:
+
+**Scope, decided with the user, revising this entry's original two-line blurb**: DOS `.SAV`
+*import* (`LoadGame`) is the real priority — real captured/played saves are a valuable ground-truth
+and testing asset, and user-facing import convenience. This port's actual long-term native save
+format will be a **new JSON format** (direct object-graph serialization of `Game`, not the DOS
+binary shape, and not the "higher-level semantic" format `SAV_FILE_FORMAT.md`'s closing section
+sketches — that's more design/maintenance effort than warranted while the entity model is still
+moving). `SaveGame`-to-`.SAV` is downgraded to a minimal, test-only tool whose only job is
+confirming real Pascal `LoadGame` accepts this port's output — not a maintained, byte-faithful
+feature.
+
+- ✅ **7a, merge + scope + primitives.** Merged `main` (Phase 6 Kingdom AI, landed after this
+  branch split off `sav_file_format_doc` at `28afe88` — confirmed zero file overlap before
+  merging, so a clean merge) so the NPE Data section has real `KingdomTurnHandler` state to read.
+  Byte-level primitive readers for `SAV_FILE_FORMAT.md`'s documented conventions (fixed-width
+  little-endian ints, `STRING[N]`, `SET OF T` bitsets, `IDNumber`, opaque-byte passthrough).
+- **7b, Header + Environment + Sector `LoadGame`.** The `IDNumber ↔ ISectorObject` resolver every
+  later section reuses; Sector reconstruction into `Galaxy`'s lists/dictionaries (no dense grid
+  exists in this port's model, so this is real reconstruction, not a 1:1 read).
+- **7c, Planets/Starbases/Fleets/Stargates/Constructions `LoadGame`.** Fleet's `FuelHigh`/`Fuel`
+  split → single `double` conversion; `CommandRecord` order queues read and discarded (no
+  in-memory representation exists — Phase 8's job once a human turn handler needs one).
+- **7d, Messages/Empire Data/News `LoadGame`.** Full `Empire` field mapping (`DefeatedBy`,
+  `Modifiers`, `Technology`, `EntityVisibility` inverse-indexing, `LocationBookmark`); a News
+  decode table built from this port's own existing `AddNews` call sites.
+- **7e, NPE Data `LoadGame` + `KingdomTurnHandler` state seam.** A construct-from-saved-state/
+  read-state-back-out seam on `KingdomTurnHandler`, reused by 7f's JSON serializer. Opaque
+  per-empire blob storage for Pirate/Berserker/Guardian (no `ITurnHandler` exists for any of them
+  yet, but real scenarios mix them with Kingdom empires — their `.SAV` blobs must still
+  round-trip). Completes `.SAV` import end to end.
+- **7f, native JSON save format.** `Game ↔ JSON`, `System.Text.Json` with `ReferenceHandler.
+  Preserve` for the port's real reference cycles and a pragmatic concrete-type switch (not a
+  general polymorphic contract) for `IEconomicWorld`/`ISectorObject`/`Game.TurnHandlers` — only
+  the types that exist today, not speculative support for handler types not yet built.
+- **7g, minimal `.SAV` write-back + real-Pascal acceptance check.** Just enough write-side to
+  produce a structurally valid file real Pascal `LoadGame` accepts — no fidelity effort beyond
+  that. Verified through `reference/verify/`'s harness (`LOADSAVE.PAS` already compiles cleanly
+  there, Tier 11) against every reference save — the strongest available proof 7b-7e's `LoadGame`
+  is correct, not just internally self-consistent.
+- **7h, roadmap wrap-up.** Flip this phase to done; confirm the tracked gaps (order queues,
+  UI/session Environment fields, `.SAV` write not being a maintained feature) are described
+  accurately for Phase 8.
 
 ## 8. Human interactive turn handler + Terminal.Gui UI
 
