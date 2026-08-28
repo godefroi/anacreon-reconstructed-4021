@@ -461,9 +461,26 @@ feature.
   discarded, `ScenaFilename` kept via the new `Game.ScenarioFilename`. Tested against real bytes
   from `INTRO_1.SAV`, ground truth cross-checked against `scripts/savtool.py`'s own JSON parse
   (year 4021, player ordinal 0, `INTRO.SCN`, `SizeOfGalaxy=21`, 90 nebula cells, zero minefields).
-- **7c, Planets/Starbases/Fleets/Stargates/Constructions `LoadGame`.** Fleet's `FuelHigh`/`Fuel`
-  split → single `double` conversion; `CommandRecord` order queues read and discarded (no
-  in-memory representation exists — Phase 8's job once a human turn handler needs one).
+- ✅ **7c, Planets/Starbases/Fleets/Stargates/Constructions `LoadGame`** (`SavGameLoader.cs`).
+  Fleet's `FuelHigh`/`Fuel` split → single `double` (`FuelHigh*32767+Fuel`); `CommandRecord` order
+  queues read and discarded (no in-memory representation exists — Phase 8's job once a human turn
+  handler needs one), confirmed not to desync the byte cursor against `FLEET_ORDERS.SAV` (a real
+  4-order queue). `STyp`/`GTyp`/`CTyp` all confirmed (via `docs/SAV_FILE_FORMAT.md`'s own worked
+  examples, e.g. `STARGATE_DONE.SAV`'s `GTyp=24`) to be the full `TechnologyTypes` ordinal, not a
+  0-based subrange index — each decodes as a constant offset (`StarbaseKind`-20, `StargateKind`
+  -24, `ConstructionType`-19) since `TYPES.PAS:83-85` declares all three as genuine Pascal
+  subranges, which preserve the base enum's ordinals rather than renumbering. **Found and fixed a
+  real semantic gap while implementing this, not caught by the format doc alone**: `Fleet.
+  Destination`/`Starbase.Destination` being `null` means "not moving" in this port's own model
+  (`FleetMovementHandler`), but real Pascal's `Dest` field is never optional — a non-moving
+  fleet/starbase's `Dest` is just its own current `XY` on disk (confirmed via `INTRO_2.SAV`: every
+  fleet with `Dest==XY` has `Status=Ready`, every fleet with `Dest≠XY` has `Status=InTransit`, no
+  exceptions across all 9). Translated as `Destination = (Dest==XY) ? null : Dest` for both types
+  — *not* the same as `Stargate.LinkedTo`'s actual `(0,0)`-`Limbo` sentinel, confirmed a genuinely
+  different convention by reading `CreateStarbase`/`CreateStargate` directly (the former
+  initializes `Dest:=XY`, the latter `Dest:=Limbo`). Tested against real bytes from `INTRO_2.SAV`
+  (9 fleets, including one already-arrived), `GAUNTLET_1.SAV` (10 starbases), `FLEET_ORDERS.SAV`
+  (13 fleets, one with a real discarded order queue), `STARGATE_DONE.SAV`, `Confront_2.SAV`.
 - **7d, Messages/Empire Data/News `LoadGame`.** Full `Empire` field mapping (`DefeatedBy`,
   `Modifiers`, `Technology`, `EntityVisibility` inverse-indexing, `LocationBookmark`); a News
   decode table built from this port's own existing `AddNews` call sites.
