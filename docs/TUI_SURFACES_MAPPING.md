@@ -9,6 +9,27 @@ Primitive vocabulary matches `TUI_LIBRARY_RECOMMENDATION.md`.
 Not a spec for each screen's exact fields — go read the cited Pascal procedure when it's time to
 build that surface. This is the map of what exists and what to build it out of.
 
+## Deliberate deviation from the original: the galaxy map is the shell
+
+In the Pascal original, the galaxy map (`MAPWIND.PAS: ScanWindow`) is just one of several F-key
+panels (`SWINDOWS.PAS`) that get swapped into a content area beneath the menu bar — structurally
+no different from the Fleet, Empire, News, or Names windows. But in practice the player spends
+nearly all their time either looking at the map or acting on something selected from it.
+
+We're deliberately not reproducing that structure. In this port, **the galaxy map is the
+permanent base view — the shell itself** — not a panel that gets swapped out. Every other surface
+above (menus, pickers, dialogs, background windows) opens as an overlay on top of the map rather
+than replacing it. Concretely:
+
+- A game/turn opens directly onto the map, with initial focus on the map, not on the menu bar.
+- F1/F3/F5/F7/F8/F9 open their windows as floating overlays above the map (closable back to it),
+  rather than swapping the map out for their content.
+- F10 (or Esc from an overlay) means "return focus to the map," not "switch to the map panel."
+
+This mainly affects the "Function-key background panels" and "Suggested build order" entries
+below — noted inline where relevant. No other surface's own content or behavior changes because of
+this; it's purely about what sits underneath everything else.
+
 ## Already built
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
@@ -21,6 +42,18 @@ Not yet covered by the existing view, but part of the same screen:
 |---|---|---|---|
 | Cursor coordinate/name readout | Help line, updates as cursor moves | `MAPWIND.PAS: DrawMapCursor` | `StatusBar`/`Label` bound to cursor position |
 | Sector Selected Popup | Enter on a sector with 2+ objects | `MAPWIND.PAS: GetMapObject`/`SelectPoint` | `Dialog` + `ListView` (Enter on a single-object sector skips straight to Close Up) |
+
+## Turn Start / Player Login (hotseat)
+
+Chained sequence run once per player, per turn, before that player gets to `PlayerTakesTurn` —
+driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each empire in turn.
+
+| Surface | Where used | Pascal source | Terminal.Gui primitives |
+|---|---|---|---|
+| Turn Start Greeting | First thing shown in `SetUpPlayer`, every turn | `PROLOG.PAS: DisplayIntroScreen` | Small `Dialog`/`Label` — header (empire name + year) plus one of 3 greeting lines, picked via `CASE Rnd(1,3)` in the original (`Random.Shared.Next(1, 4)` equivalent) |
+| Password Prompt | Immediately after the greeting | `PROLOG.PAS: GetPassword` | `TextField` (secret) in a `Dialog`; Esc cancels back out to the prologue/main menu without taking the turn |
+| Capital Fallen Report | After password, only if this empire's capital was conquered since its last turn | `PROLOG.PAS: EmpireNews` (the `CapID.ObjTyp=Void` branch) | Read-only `TextView`/`Label`, dismiss-on-any-key — narrative defeat text, then triggers empire elimination. (Despite the name, `EmpireNews` is this conquest check, not a news feed — it's a no-op UI otherwise.) |
+| Empire Status Report | After the above, skipped if this was the player's last turn | `PROLOG.PAS: EmpireStatus` | Read-only, scrollable `TextView` — plain narrative summary (world/population counts, average industry/efficiency, mastered technologies, military totals); original renders it with raw `Writeln` rather than the windowing system |
 
 ## Galaxy/Sector views
 
@@ -87,7 +120,7 @@ Not yet covered by the existing view, but part of the same screen:
 |---|---|---|---|
 | Main Menu Bar | Always visible, top line | `PLAYTURN.PAS: InitializeMainMenu`, `PULLDOWN.PAS` | `MenuBar` + `MenuBarItem`/`MenuItem`, built-in mnemonics |
 | Generic scrollable menu widget | Underlies nearly every picker above | `MENU.PAS` | `ListView` — this is the direct built-in replacement, no custom widget needed |
-| Function-key background panels | F1/F3/F5/F7/F8/F9/F10 | `SWINDOWS.PAS` | No stock "panel switcher" widget — one container `View` whose child is swapped based on F-key state |
+| Function-key background panels | F1/F3/F5/F7/F8/F9 (F10 returns focus to the map) | `SWINDOWS.PAS` | Floating overlay `Window`s opened above the permanent `GalaxyView` shell, not a swapped-in panel — see "Deliberate deviation" above. No stock "panel manager" widget needed, just `Window`s added/removed from the `Toplevel`. |
 | Help-line hint bar | Bottom line, changes per active screen | `DISPLAY.PAS: WriteMainHelpLine`/`WriteHelpLine` | `StatusBar` composed of `Shortcut` items |
 | Turn countdown clock | Top-right, always visible during play | `SWINDOWS.PAS: UpdateClock` | `Label` updated via `Application.AddTimeout` |
 
@@ -120,6 +153,7 @@ Not yet covered by the existing view, but part of the same screen:
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
+| TMA Logo Splash | Once, at program launch, before the main menu | `ANACREON.PAS: Introduction` calls `TMA.PAS: TMALogo` | Custom `View`/`Dialog` doing a timed reveal animation (original wipes the logo in column-by-column) via `Application.AddTimeout`; auto-continues after a few seconds or on keypress. One-shot animated splash, not the 3-random-variant thing — that's Turn Start Greeting above. |
 | About Anacreon | ⌂ menu → About | `TMA.PAS: AboutAnacreon` | Static `Dialog`/`Window` with `Label`/`TextView` content, dismiss on any key |
 | Pause | Game menu → Pause | `SWINDOWS.PAS: PauseCommand` | `MessageBox` |
 | End Turn / Quit confirmations | Game menu → End Turn / Quit, or timer expiry | `PLAYTURN.PAS` | `MessageBox` |
@@ -132,14 +166,20 @@ Not yet covered by the existing view, but part of the same screen:
 
 ## Suggested build order
 
-Everything above is built on a handful of shared primitives. Build these first, then the
-individual surfaces are mostly wiring:
-
-1. `MessageBox` usage conventions (Attention/Confirm popup) — used everywhere.
-2. Command Dialog `FrameView`/`Dialog` container — the shell most screens render into.
-3. `ListView`-in-`Dialog` picker pattern (ID/menu choice picker) — the base for every target/ground/empire/type picker.
-4. `MenuBar` (Main Menu Bar) + the F-key panel switcher — the top-level navigation shell.
-
-Once those exist, the custom-drawn grids (Resource Distribution Editor, Defenses, Fleet Group
-Configuration, Tactical Battle Display) are the remaining genuinely novel work — same category of
-effort as `GalaxyView`, no stock widget covers them.
+1. **Top-level navigation shell first**: `MenuBar` + `StatusBar`/help-line, with `GalaxyView` as
+   the permanent base view underneath (see "Deliberate deviation" above — not a swappable panel)
+   and every menu leaf item stubbed to a `MessageBox` placeholder. This is testable end-to-end
+   immediately (a navigable app, not just a static viewport) and front-loads the actual
+   integration risk — focus routing between the menu bar, overlay windows, and `GalaxyView` —
+   instead of infrastructure with no real usage yet to shape it. Initial focus on game/turn start
+   goes to the map, not the menu bar.
+2. From there, build individual command screens directly against their own Pascal source, starting
+   with the simplest read-only ones (Close Up, Status/Empire/News/Names background windows).
+   `MessageBox` needs no dedicated build step — it's a stock static helper, use it ad hoc for
+   confirms and stubs. Don't pre-build a shared `FrameView`/`ListView`-in-`Dialog` picker
+   convention speculatively; per the project's "abstract on the second or third real use" rule,
+   write the first couple of pickers concretely and extract the shared pattern from what actually
+   repeats.
+3. The custom-drawn grids (Resource Distribution Editor, Defenses, Fleet Group Configuration,
+   Tactical Battle Display) are the remaining genuinely novel work — same category of effort as
+   `GalaxyView`, no stock widget covers them. Save these for last; everything else is wiring.
