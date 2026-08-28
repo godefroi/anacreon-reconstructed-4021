@@ -12,16 +12,6 @@ namespace ThreeLn.Reconstruction4021.Core.Turns;
 /// in NPECharacterRecord's seed values, not in code). Persona/per-fleet mission state/per-enemy
 /// diplomacy state live as this class's own instance fields (see docs/PORT_DESIGN.md) — one instance
 /// per Kingdom empire, via Game.TurnHandlers.
-///
-/// <b>No diplomacy yet (Phase 6e).</b> NPE02.PAS's real per-turn sequence also calls
-/// StateDeptReport (once at Persona.Clock=0, and again every 7th turn), StateDepartment, and
-/// WarCabinet — all deliberately not called here. All three either read or write
-/// <see cref="StateDeptRecord.Policy"/>/<see cref="StateDeptRecord.Aggressiveness"/>, which only
-/// ever advance via ReviewNews's enemy-attack case arm (also not ported this phase, same reason) —
-/// calling WarCabinet/StateDepartment now, against a Policy that can never leave its initial seed,
-/// would be a static approximation of real behavior, not real behavior. ReDesignateEmpire has no
-/// such dependency, so it still runs on its own real 7-year cadence even with StateDeptReport itself
-/// skipped.
 /// </summary>
 public sealed class KingdomTurnHandler : ITurnHandler
 {
@@ -80,20 +70,25 @@ public sealed class KingdomTurnHandler : ITurnHandler
     {
         NpeToolkit.EnforceNpeDataLinks(_fleetStates, game);
 
+        if (_persona.Clock == 0) {
+            // ImplementKingdom1NPE (NPE02.PAS:280-284) — "Initialize things first year."
+            NpeToolkit.StateDeptReport(empire, _state, _defaultPolicy, game);
+        }
+
         var regionCapitals = NpeToolkit.CreateRegionArray(empire, game);
 
         UpdateFleets(empire, regionCapitals, game);
-        NpeToolkit.ReviewNews(empire, regionCapitals, _fleetStates, game);
+        NpeToolkit.ReviewNews(empire, regionCapitals, _fleetStates, _persona, _state, _defaultPolicy, game, _random);
 
-        // Wars and foreign affairs (NPE02.PAS: StateDepartment/WarCabinet) — Phase 6e, see this
-        // class's own doc comment.
+        // Wars and foreign affairs (NPE02.PAS:291-293).
+        NpeToolkit.StateDepartment(empire, _persona, _state, _defaultPolicy, game, _random);
+        NpeToolkit.WarCabinet(empire, regionCapitals, _fleetStates, _persona, _state, _defaultPolicy, game, _random);
 
         NpeToolkit.DefendEmpire(empire, regionCapitals, _fleetStates, _persona, game, _random);
         NpeToolkit.ImperialExpansion(empire, regionCapitals, _fleetStates, _persona, game, _random);
 
         if ((_persona.Clock + _persona.Offset) % 7 == 0) {
-            // StateDeptReport's own call here (NPE02.PAS:300) is Phase 6e; ReDesignateEmpire has no
-            // dependency on it and keeps its real cadence.
+            NpeToolkit.StateDeptReport(empire, _state, _defaultPolicy, game);
             NpeToolkit.ReDesignateEmpire(empire, regionCapitals, game, _random);
         }
 
@@ -211,24 +206,9 @@ public sealed class KingdomTurnHandler : ITurnHandler
     }
 
     /// <summary>
-    /// State[Emp] (NPETYPES.PAS's StateDeptArray), created on first reference rather than
-    /// pre-seeded: real Pascal's fixed <c>ARRAY[Empire]</c> always has all 9 slots (Empire1..Empire8
-    /// plus Indep) allocated regardless of creation order, but this port's empires don't all exist
-    /// yet when this handler is constructed (later CreateNPEmpire/CreatePlayerEmpire commands in the
-    /// same scenario file can still be pending) — so entries are created lazily instead of snapshotting
-    /// Game.Empires at construction time. Includes <see cref="Empire.Independent"/>: real Pascal's own
-    /// seeding loop (<c>FOR EmpI:=Empire1 TO Empire8</c>) never touches its Indep slot either, but
-    /// UpdateFleets' ConquerMSN case increments Balance for whatever GetStatus(TargID) returns — which
-    /// is Independent for the overwhelmingly common "conquered an independent world" case — so that
-    /// slot needs *some* valid value to write into, matching how real Pascal reads/writes whatever
-    /// happened to be at that heap slot (never read back meaningfully either way).
+    /// State[Emp] (NPETYPES.PAS's StateDeptArray) — see <see cref="NpeToolkit.GetOrCreateState"/> for
+    /// why entries are created lazily rather than pre-seeded, including for
+    /// <see cref="Empire.Independent"/>'s own slot.
     /// </summary>
-    private StateDeptRecord GetOrCreateState(Empire emp)
-    {
-        if (!_state.TryGetValue(emp, out var record)) {
-            record = new StateDeptRecord { Policy = _defaultPolicy, AttackChance = 50 };
-            _state[emp] = record;
-        }
-        return record;
-    }
+    private StateDeptRecord GetOrCreateState(Empire emp) => NpeToolkit.GetOrCreateState(_state, emp, _defaultPolicy);
 }

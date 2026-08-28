@@ -157,7 +157,7 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   tests (`AnnualTickHandlerHostileLifeTests`) exploiting `FixedRandom(N)`'s `min+N` resolution to
   deterministically pick each of the three branches.
 
-## 6. NPE AI — in progress, 6a-6d landed
+## 6. NPE AI — in progress, 6a-6e landed
 
 Implement an `ITurnHandler` for computer empires. The roadmap's original one-line framing here
 ("start with one classic implementation") undersold this phase the way "8 known News sites"
@@ -351,9 +351,53 @@ original developers shipped incomplete, not a port gap.
     end, so unlike every prior 6x commit's per-procedure hardcoded tests, this exercises real
     cross-procedure dispatch a single method's own test can't reach (the `State[Independent]` case
     above, `UpdateFleets`' fleet-liveness guard, `ExplorationAndProbing`'s empty-list guard).
-- **6e, Kingdom diplomacy.** `StateDepartment`/`StateDeptReport`/`WarCabinet` and `ReviewNews`'s
-  policy-tier state machine — the piece most likely to need real `PascalRandom` sequences rather
-  than `ForcedRandomValue`, since its RNG draws depend on live-galaxy iteration order.
+- ✅ **6e, Kingdom diplomacy** (`Core/Npe/NpeToolkit.cs`, `Core/Turns/KingdomTurnHandler.cs`) —
+  `StateDepartment`/`StateDeptReport`/`WarCabinet`, and `ReviewNews`'s enemy-attack case arm
+  (`AttackSeverity`/`RespondToEnemyAttack`, its own nested procedures). `KingdomTurnHandler.PlayTurn`
+  now matches `ImplementKingdom1NPE`'s real sequence in full: `StateDeptReport` once at `Clock=0` →
+  `UpdateFleets` → `ReviewNews` → `StateDepartment` → `WarCabinet` → `DefendEmpire` →
+  `ImperialExpansion` → (every-7th-turn `StateDeptReport` + `ReDesignateEmpire`) →
+  `ExplorationAndProbing`.
+  - **Found and fixed a real Phase 6c bug before this landed: `NpeToolkit.MilitaryPower` was
+    weighting by the wrong Pascal table.** `MISC.PAS`'s real `MilitaryPower` weights by
+    `DATACNST.PAS`'s `MPower` (LAM=100, def=100, GDM=10, ion=50, fgt=1, hkr=20, jmp=12, jtn=1,
+    pen=25, str=100, trn=0); the port instead read `CombatConstants.CombatPower`,
+    `ATTACK.PAS`'s own, separately-declared, differently-valued table for the surrender algorithm
+    (LAM=80, def=75, ..., trn=1) — confirmed distinct by reading both declarations directly, not
+    assumed from the similar name/role. Found while porting `AttackSeverity`, which indexes
+    `MPower` directly (`NPE00.PAS:128`) and so couldn't be written correctly against the wrong
+    table. Fixed by adding the real `CombatConstants.MPower` and repointing `MilitaryPower` at it —
+    this had been silently wrong since 6c for `AverageMilitaryPower`/`GetBestTarget`/
+    `DeployJumpAttack`/`SlowAttack` budgets/`AttackEnemyFleets`/`ImperialExpansion`. Full suite
+    passed 408/408 both before and after the fix — no golden-file domain routes through this
+    arithmetic, so the fix is isolated to NPE decision logic with no other attributable movement.
+  - **`StateDeptReport`'s per-enemy loop reads its own capital, not the enemy's, for the tech-based
+    threat multiplier** — a real Pascal defect (`NPEINTR.PAS:1609`, already flagged at
+    `PASCAL_ARCHITECTURE_NOTES.md`'s 4.5 section), ported verbatim rather than fixed: `Tech` is
+    always identical to `EmpireTech`, so `IF Tech>EmpireTech`/`IF Tech<EmpireTech` can never fire.
+  - **`WarCabinet` has no `EnemyEmp<>Emp` guard**, unlike `StateDepartment`'s otherwise-identical
+    loop — `EmpireActive(Emp)` is trivially true, so an empire whose default Policy seeds at or
+    above `HarassPLT` (Kingdom2's does) has a real per-turn chance of deploying raiders/battle
+    fleets against its own gates/construction sites/planets, since `GetBestRaiderTarget`/
+    `GetBestTarget` filter candidates only by ownership. Gated on the attacker having scouted its
+    own worlds (`Game.Known`), which full turn sequencing normally already provides by the time NPE
+    turns run — a real, latent defect rather than one that fires every turn regardless of state.
+    Ported verbatim, not guarded against; see `NpeToolkit.WarCabinet`'s own doc comment.
+  - **Extracted `IndustryConstants.cs`** (`Core/Entities/`) for TechAdj2 — `StateDeptReport`'s own
+    `GetEmpireStatus` needs the same IP formula `AnnualTickHandler.Production.cs` already had as a
+    private table; a second real reader is exactly the "derive, don't duplicate" bar for pulling a
+    9-row balance table out rather than copying it.
+  - `StateDeptRecord.Worlds`/`TotalMilitary`/`ThreatAssess` (seeded but unused since 6d) are now
+    real, live fields — `GetEmpireStatus` (`INTRFACE.PAS:654-719`, scoped to just what
+    `StateDeptReport` reads: no `TotalPop`, since nothing downstream consumes it) sums owned
+    planets/starbases/fleets' ship counts and — for planets and `IndustrialComplex`-kind starbases
+    only — shipyard industry.
+  - Covered by `NpeDiplomacyTests.cs`, exercised through `ReviewNews`'s public entry point since
+    `AttackSeverity`/`RespondToEnemyAttack` are private nested procedures in real Pascal too: one
+    test confirms the severity scan stops at the next headline rather than reading into a second
+    attacker's own `DestructionDetail` entries, the other confirms `NeutralPLT`'s arm always
+    escalates (never stays `Neutral`). No new golden-file domain — `StateDeptReport` needs the same
+    full hand-assembled universe `NpeToolkit.cs`'s own doc comment already defers to Phase 7.
 - **6f, roadmap wrap-up.** Flip Kingdom to done here; explicit one-line disposition for each
   deferred/dead personality so picking this phase back up doesn't require re-deriving the
   reachability table above.

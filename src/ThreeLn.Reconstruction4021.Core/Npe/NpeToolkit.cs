@@ -1161,13 +1161,10 @@ public static class NpeToolkit
         FleetLifecycle.ChangeCompositionOfFleet(fleet, baseWorld, newFleetShips, fleet.Cargo, newBaseShips, baseWorld.Cargo, game);
     }
 
-    // --- NPE00.PAS: defense, expansion, logistics, exploration -----------------------------------
+    // --- NPE00.PAS: defense, expansion, logistics, exploration, diplomacy ------------------------
     // Confirmed shared with Pirate (NPE01.PAS) and Berserker (NPE04.PAS) call sites, not
     // Kingdom-exclusive — same "shared toolkit" reasoning as NPEINTR.PAS above, so these live here
-    // rather than on KingdomTurnHandler. ReviewNews is scoped to its non-diplomacy branches
-    // (NoFuel/IndLack) for Phase 6d; its enemy-attack case arm plus StateDepartment/StateDeptReport/
-    // WarCabinet are 100% diplomacy state (State[].Policy/Aggressiveness/Balance's own state-machine
-    // half) and land in Phase 6e — see KingdomTurnHandler.PlayTurn's own doc comment.
+    // rather than on KingdomTurnHandler.
 
     /// <summary>
     /// AttackEnemyFleets (NPE00.PAS's own nested procedure inside DefendEmpire) — LAM-strikes then
@@ -1429,17 +1426,96 @@ public static class NpeToolkit
     }
 
     /// <summary>
-    /// ReviewNews (NPE00.PAS:71-196), scoped to its non-diplomacy branches for Phase 6d: NoFuel
-    /// (<see cref="SendRescueFleet"/>) and IndLack (<see cref="RNIndustryLack"/>). The enemy-attack
-    /// case arm (BattleL/BattleW1/BattleW2/ConDs/GteDs/LAMDm/LAMDs/LAMDef —
-    /// RespondToEnemyAttack's Policy-tier state machine plus the News-driven Balance decrement) is
-    /// real Pascal but 100% diplomacy state, deferred to Phase 6e alongside StateDepartment/
-    /// StateDeptReport/WarCabinet — see KingdomTurnHandler.PlayTurn's own doc comment.
+    /// AttackSeverity (ReviewNews's own nested function, NPE00.PAS:118-135) — how bad a single attack
+    /// report was, 10-100, scored off the total power of every ship/defense/troop type destroyed in
+    /// the DestructionDetail entries that immediately follow the headline in the news list (real
+    /// Pascal's linked-list <c>News^.Next</c> walk collapses to a forward index scan here, since
+    /// <see cref="Empire.News"/> is a plain list in insertion order — the same order ReportLosses
+    /// appends its own detail entries in). <see cref="CombatConstants.MPower"/>, not
+    /// <see cref="CombatConstants.CombatPower"/> — see that field's own doc comment.
     /// </summary>
-    public static void ReviewNews(Empire emp, IReadOnlyList<IEconomicWorld> regionCapitals, Dictionary<Fleet, KingdomFleetState> fleetStates, Game game)
+    private static int AttackSeverity(IReadOnlyList<NewsItem> news, int headlineIndex, long basePower)
     {
-        foreach (var news in emp.News) {
+        long total = 1;
+        for (var i = headlineIndex + 1; i < news.Count && news[i].Headline == NewsType.DestructionDetail; i++) {
+            var attackType = (AttackType)(news[i].Parm2 - 1);
+            total += news[i].Parm1 * CombatConstants.MPower[attackType];
+        }
+
+        if (basePower == 0) {
+            basePower = 1;
+        }
+
+        return (int)Math.Min(100, 10 + PascalRound(50.0 * total / basePower));
+    }
+
+    /// <summary>
+    /// RespondToEnemyAttack (ReviewNews's own nested procedure, NPE00.PAS:81-116) — escalates this
+    /// enemy's Policy tier and raises Aggressiveness in response to one attack report. Each Policy
+    /// arm's condition chain is an ELSE-IF ladder, ported as one <c>&amp;&amp;</c>/ternary chain per
+    /// arm rather than a nested if, matching the established short-circuit-evaluation-order convention
+    /// (docs/PORT_DESIGN.md) so the Rnd draw count/order stays identical to source.
+    /// </summary>
+    private static void RespondToEnemyAttack(StateDeptRecord state, NpeCharacter persona, int severity, Random random)
+    {
+        state.Policy = state.Policy switch {
+            PolicyType.Neutral => severity > 50 && Rnd(random, 1, 100) < persona.Provoke ? PolicyType.Preempt : PolicyType.Harass,
+            PolicyType.Harass when severity > 50 && Rnd(random, 1, 100) < persona.Provoke => PolicyType.Conflict,
+            PolicyType.Harass when Rnd(random, 1, 100) < persona.Provoke => PolicyType.Preempt,
+            PolicyType.Preempt when severity > 35 && Rnd(random, 1, 100) <= persona.Provoke => PolicyType.Conflict,
+            PolicyType.Conflict when severity > 75 && Rnd(random, 1, 100) <= persona.Provoke / 2 => PolicyType.War,
+            _ => state.Policy,
+        };
+
+        var aggInc = 10 + PascalRound(severity / 5.0);
+        if (state.Aggressiveness + aggInc > 100) {
+            state.Aggressiveness = 100;
+        } else if (aggInc > 0 && state.Aggressiveness + aggInc < 35) {
+            state.Aggressiveness = 35;
+        } else {
+            state.Aggressiveness += aggInc;
+        }
+    }
+
+    /// <summary>
+    /// ReviewNews (NPE00.PAS:71-196). NoFuel (<see cref="SendRescueFleet"/>) and IndLack
+    /// (<see cref="RNIndustryLack"/>) landed in Phase 6d; the enemy-attack case arm
+    /// (BattleL/BattleW1/BattleW2/ConDs/GteDs/LAMDm/LAMDs/LAMDef) lands here in 6e. Its own Balance
+    /// decrement only special-cases BattleL: real Pascal checks <c>Loc1.ID.ObjTyp IN [Pln,Base,Gate]</c>
+    /// against the conquered object's own type; this port's WorldConqueredByEnemy headline is only
+    /// ever raised with an <see cref="IEconomicWorld"/> subject (never a Fleet, Gate, or ConstructionSite
+    /// — confirmed by reading every AddNews call site for it in CombatOutcome.cs), so
+    /// <c>news.Subject is IEconomicWorld</c> is the exact same condition, not an approximation.
+    /// </summary>
+    public static void ReviewNews(
+        Empire emp, IReadOnlyList<IEconomicWorld> regionCapitals, Dictionary<Fleet, KingdomFleetState> fleetStates,
+        NpeCharacter persona, Dictionary<Empire, StateDeptRecord> state, PolicyType defaultPolicy, Game game, Random random)
+    {
+        var basePower = AverageMilitaryPower(regionCapitals);
+
+        for (var i = 0; i < emp.News.Count; i++) {
+            var news = emp.News[i];
             switch (news.Headline) {
+                case NewsType.WorldConqueredByEnemy:
+                case NewsType.EnemyEmpireDestroyed:
+                case NewsType.EnemyEmpireRetreated:
+                case NewsType.ConstructionSiteDestroyed:
+                case NewsType.StargateDestroyed:
+                case NewsType.FleetDamagedByLams:
+                case NewsType.FleetDestroyedByLams:
+                case NewsType.EmpireAttackedWithLams:
+                    if (news.OtherEmpire is { } attEmp) {
+                        var attEmpState = GetOrCreateState(state, attEmp, defaultPolicy);
+                        var alwaysDecrement = news.Headline == NewsType.WorldConqueredByEnemy && news.Subject is IEconomicWorld;
+                        if (alwaysDecrement || Rnd(random, 1, 100) < 25) {
+                            attEmpState.Balance--;
+                        }
+
+                        var severity = AttackSeverity(emp.News, i, basePower);
+                        RespondToEnemyAttack(attEmpState, persona, severity, random);
+                    }
+                    break;
+
                 case NewsType.FleetOutOfFuel:
                     if (news.Subject is Fleet fleet) {
                         SendRescueFleet(emp, fleet, regionCapitals, fleetStates, game);
@@ -1450,6 +1526,306 @@ public static class NpeToolkit
                         RNIndustryLack(emp, world, regionCapitals, fleetStates, game);
                     }
                     break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// State[Emp] (NPETYPES.PAS's StateDeptArray) — created on first reference rather than pre-seeded,
+    /// same rationale as <see cref="Turns.KingdomTurnHandler"/>'s own doc comment on why
+    /// <see cref="Entities.Empire.Independent"/> needs a slot too. Shared here (not a
+    /// KingdomTurnHandler-private method) since StateDepartment/StateDeptReport/WarCabinet/ReviewNews
+    /// all need the identical creation semantics KingdomTurnHandler.UpdateFleets already established
+    /// in Phase 6d for its own Conquer/JumpAttack Balance increments.
+    /// </summary>
+    internal static StateDeptRecord GetOrCreateState(Dictionary<Empire, StateDeptRecord> state, Empire emp, PolicyType defaultPolicy)
+    {
+        if (!state.TryGetValue(emp, out var record)) {
+            record = new StateDeptRecord { Policy = defaultPolicy, AttackChance = 50 };
+            state[emp] = record;
+        }
+        return record;
+    }
+
+    private static readonly IndustryType[] _shipyardIndustryTypes = [IndustryType.ShipyardGeneral, IndustryType.ShipyardJump, IndustryType.ShipyardStarship, IndustryType.ShipyardTransport];
+    private const double ShipyardIndustryK6 = 11000.0; // K6 (DATACNST.PAS) — same constant AnnualTickHandler.Production.cs's own IP formula uses, a single scalar not worth extracting alongside IndustryConstants' table.
+
+    /// <summary>
+    /// The SInd half of GetEmpireStatus (INTRFACE.PAS:654-719) — a world's shipyard industry
+    /// contribution, <c>IP*Sqr(Indus[IndI]+K4)</c> summed over the four shipyard industry types. K4 is
+    /// always 0 (DATACNST.PAS), so it's dropped rather than carried as a dead term.
+    /// </summary>
+    private static double ShipyardIndustryOf(IEconomicWorld world)
+    {
+        var ip = (IndustryConstants.IndustrialProductionTechAdjustment[world.TechLevel] / 100.0) * ((world.Efficiency + 250) / 100.0) / ShipyardIndustryK6;
+        var total = 0.0;
+        foreach (var t in _shipyardIndustryTypes) {
+            var level = world.Industry[t];
+            total += ip * level * level;
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// GetEmpireStatus (INTRFACE.PAS:654-719), scoped to what StateDeptReport actually reads —
+    /// Planets, SInd, and TotalShips. TotalPop is a real Pascal out-param too, but nothing in
+    /// StateDeptReport ever reads it back after the call, so it's not computed here at all (no C#
+    /// consumer to derive it for). Starbases only add to SInd when <see cref="StarbaseKind.IndustrialComplex"/>
+    /// (Pascal's <c>STyp=cmp</c> guard), matching the real per-kind gate; every starbase kind still
+    /// counts toward Planets/TotalShips regardless.
+    /// </summary>
+    private static (int Worlds, int ShipyardIndustry, ShipCounts TotalShips) GetEmpireStatus(Empire emp, Game game)
+    {
+        var worlds = 0;
+        var shipyardIndustry = 0.0;
+        var totalShips = new ShipCounts();
+
+        void AddShips(ShipCounts ships)
+        {
+            foreach (var t in Enum.GetValues<ShipType>()) {
+                totalShips[t] += ships[t];
+            }
+        }
+
+        foreach (var planet in game.Galaxy.Planets) {
+            if (planet.Owner != emp) {
+                continue;
+            }
+            worlds++;
+            shipyardIndustry += ShipyardIndustryOf(planet);
+            AddShips(planet.Ships);
+        }
+
+        foreach (var starbase in game.Galaxy.Starbases) {
+            if (starbase.Owner != emp) {
+                continue;
+            }
+            worlds++;
+            AddShips(starbase.Ships);
+            if (starbase.Kind == StarbaseKind.IndustrialComplex) {
+                shipyardIndustry += ShipyardIndustryOf(starbase);
+            }
+        }
+
+        foreach (var fleet in game.Galaxy.Fleets) {
+            if (fleet.Owner == emp) {
+                AddShips(fleet.Ships);
+            }
+        }
+
+        return (worlds, PascalRound(shipyardIndustry), totalShips);
+    }
+
+    /// <summary>EmpireMilitary/TotalMilitary (StateDeptReport, NPEINTR.PAS:1588-1590,1605-1607) — 1 plus each ship type's thousands-of-hulls count times its MPower weight.</summary>
+    private static long MilitaryTotal(ShipCounts totalShips)
+    {
+        long military = 1;
+        foreach (var t in Enum.GetValues<ShipType>()) {
+            military += PascalRound(totalShips[t] / 1000.0) * CombatConstants.MPower[t.ToAttackType()];
+        }
+        return military;
+    }
+
+    /// <summary>
+    /// StateDeptReport (NPEINTR.PAS:1563-1632) — refreshes TotalMilitary/Worlds for this empire's own
+    /// State slot, then TotalMilitary/Worlds/ThreatAssess for every other active empire's slot.
+    /// Real Pascal bug, ported verbatim (already documented at docs/PASCAL_ARCHITECTURE_NOTES.md's
+    /// "StateDeptReport calls GetCapital(Emp,...) instead of GetCapital(EnemyEmp,...)"): the per-enemy
+    /// loop's <c>Tech</c> local is read off <paramref name="emp"/>'s own capital every iteration, so
+    /// it's always identical to <c>empireTech</c> — the tech-based threat multiplier below can
+    /// therefore never actually fire (<c>tech &gt; empireTech</c>/<c>tech &lt; empireTech</c> are both
+    /// always false), left in rather than "fixed" since this is a real observed source defect, not a
+    /// transcription slip.
+    /// </summary>
+    public static void StateDeptReport(Empire emp, Dictionary<Empire, StateDeptRecord> state, PolicyType defaultPolicy, Game game)
+    {
+        var (empireWorlds, empireSInd, empireShips) = GetEmpireStatus(emp, game);
+        var empireMilitary = MilitaryTotal(empireShips);
+        var empireTech = emp.Capital?.TechLevel ?? TechLevel.PreTech;
+
+        var selfState = GetOrCreateState(state, emp, defaultPolicy);
+        selfState.TotalMilitary = empireMilitary;
+        selfState.Worlds = empireWorlds;
+
+        foreach (var enemyEmp in game.Empires) {
+            if (enemyEmp == emp) {
+                continue;
+            }
+
+            var (worlds, enemySInd, enemyShips) = GetEmpireStatus(enemyEmp, game);
+            var enemyMilitary = MilitaryTotal(enemyShips);
+
+            var enemyState = GetOrCreateState(state, enemyEmp, defaultPolicy);
+            enemyState.TotalMilitary = enemyMilitary;
+            enemyState.Worlds = worlds;
+
+            var tech = empireTech; // see this method's own doc comment — the confirmed GetCapital(Emp,...) bug.
+
+            var threat = 50.0;
+            if (tech > empireTech) {
+                threat *= 1.5;
+            } else if (tech < empireTech) {
+                threat *= 0.75;
+            }
+
+            threat *= 1 + ((enemySInd - empireSInd) / 5.0);
+            threat *= (double)enemyMilitary / empireMilitary;
+
+            enemyState.ThreatAssess = threat > 100 ? 100 : PascalRound(threat);
+        }
+    }
+
+    /// <summary>
+    /// StateDepartment (NPEINTR.PAS:1460-1540) — starts and ends wars: recomputes each active enemy's
+    /// Policy tier off the Balance/UsefulPower/ThreatAssess numbers StateDeptReport/UpdateFleets keep
+    /// current, then cools Aggressiveness by 1-2 every turn regardless of which branch fired. Each
+    /// Policy arm is an ELSE-IF ladder ending in "policy unchanged" when nothing qualifies — ported as
+    /// one if/else-if chain per arm so the Rnd draw order matches the &amp;&amp;-short-circuit
+    /// convention exactly (docs/PORT_DESIGN.md).
+    /// </summary>
+    public static void StateDepartment(Empire emp, NpeCharacter persona, Dictionary<Empire, StateDeptRecord> state, PolicyType defaultPolicy, Game game, Random random)
+    {
+        var selfState = GetOrCreateState(state, emp, defaultPolicy);
+        var usefulPower = selfState.Worlds == 0 ? (double)selfState.TotalMilitary : (double)selfState.TotalMilitary / selfState.Worlds;
+
+        foreach (var enemyEmp in game.Empires) {
+            if (enemyEmp == emp) {
+                continue;
+            }
+
+            var enemyState = GetOrCreateState(state, enemyEmp, defaultPolicy);
+            var enemyPower = enemyState.Worlds == 0 ? (double)enemyState.TotalMilitary : (double)enemyState.TotalMilitary / enemyState.Worlds;
+            var newPolicy = enemyState.Policy;
+
+            if (enemyState.Balance < -1) {
+                newPolicy = PolicyType.Conflict;
+            } else if (enemyState.Balance < 0) {
+                newPolicy = PolicyType.Preempt;
+            } else {
+                switch (enemyState.Policy) {
+                    case PolicyType.Neutral:
+                        if (usefulPower > enemyPower && usefulPower > 10 && enemyState.ThreatAssess > 50 && Rnd(random, 1, 100) < persona.Offensive) {
+                            newPolicy = PolicyType.Harass;
+                        } else if (usefulPower > 3 * enemyPower && usefulPower > 30 && enemyState.ThreatAssess > 75 && Rnd(random, 1, 100) < persona.Offensive / 2) {
+                            newPolicy = PolicyType.Preempt;
+                        }
+                        break;
+
+                    case PolicyType.Harass:
+                        if (usefulPower > enemyPower && usefulPower > 30 && enemyState.ThreatAssess > 50 && Rnd(random, 1, 100) < persona.Offensive) {
+                            newPolicy = PolicyType.Preempt;
+                        } else if (usefulPower > 3 * enemyPower && usefulPower > 30 && enemyState.ThreatAssess > 75 && Rnd(random, 1, 100) < persona.Offensive) {
+                            newPolicy = PolicyType.Preempt;
+                        } else if (enemyState.Aggressiveness < 10 && Rnd(random, 1, 100) > persona.Offensive) {
+                            newPolicy = PolicyType.Neutral;
+                        } else if (usefulPower < 5) {
+                            newPolicy = PolicyType.Neutral;
+                        }
+                        break;
+
+                    case PolicyType.Preempt:
+                        if (usefulPower > enemyPower && enemyState.ThreatAssess > 50 && Rnd(random, 1, 100) < persona.Offensive) {
+                            newPolicy = PolicyType.Conflict;
+                        } else if (usefulPower > 4 * enemyPower && enemyState.ThreatAssess > 50 && Rnd(random, 1, 100) < persona.Offensive) {
+                            newPolicy = PolicyType.Conflict;
+                        } else if (enemyState.Aggressiveness < 15 && enemyState.ThreatAssess < 50 && Rnd(random, 1, 100) > persona.Offensive) {
+                            newPolicy = PolicyType.Neutral;
+                        } else if (usefulPower < 10) {
+                            newPolicy = PolicyType.Harass;
+                        }
+                        break;
+
+                    case PolicyType.Conflict:
+                        if (enemyState.Aggressiveness < 20 && enemyState.ThreatAssess < 50 && Rnd(random, 1, 100) > persona.Offensive) {
+                            newPolicy = PolicyType.Neutral;
+                        } else if (enemyState.Aggressiveness > 80 && enemyPower > 2 * usefulPower) {
+                            newPolicy = PolicyType.Neutral;
+                        }
+                        break;
+                }
+            }
+
+            enemyState.Policy = newPolicy;
+            enemyState.Aggressiveness -= Rnd(random, 1, 2);
+        }
+    }
+
+    /// <summary>
+    /// WarCabinet (NPE00.PAS:511-601) — deploys raiding/battle fleets against every active empire per
+    /// its current Policy tier, then probes each active empire's capital. Real Pascal quirk, ported
+    /// verbatim, not fixed: unlike <see cref="StateDepartment"/>'s own loop (which explicitly skips
+    /// <c>EnemyEmp=Emp</c>), this one has no such guard — <c>EmpireActive(Emp)</c> is trivially true,
+    /// so an empire whose default Policy seeds at or above HarassPLT (Kingdom2's does, per
+    /// InitializeKingdom2NPE) has a real per-turn chance of deploying HK raiders/battle fleets against
+    /// its own gates/construction sites/planets: <see cref="GetBestRaiderTarget"/>/<see cref="GetBestTarget"/>
+    /// filter candidates only by "owned by EnemyEmp," with no separate "not the attacker" exclusion.
+    /// Gated on <see cref="Game.Known"/> for the attacker's own worlds, same as any other target — in
+    /// full turn sequencing that's normally already true by the time NPE turns run (VisibilityHandler
+    /// marks an empire's own worlds known), so this is a real, latent defect rather than one that
+    /// necessarily fires every turn; <c>KingdomTurnHandlerTests</c>' own fixtures don't trigger it only
+    /// because they never call <c>MarkScouted</c> on the capital. Same category of verbatim-preserved
+    /// defect as <see cref="DeploySlowAttack"/>'s mission-type copy/paste slip.
+    /// </summary>
+    public static void WarCabinet(
+        Empire emp, IReadOnlyList<IEconomicWorld> regionCapitals, Dictionary<Fleet, KingdomFleetState> fleetStates,
+        NpeCharacter persona, Dictionary<Empire, StateDeptRecord> state, PolicyType defaultPolicy, Game game, Random random)
+    {
+        foreach (var enemyEmp in game.Empires) {
+            var enemyState = GetOrCreateState(state, enemyEmp, defaultPolicy);
+            var noOfRaidersOut = fleetStates.Values.Count(s => s.Mission == NpeMissionType.RaidTransports);
+
+            if (noOfRaidersOut < NpeConstants.MaxNoOfRaiders
+                && (enemyState.Balance < 0 || (enemyState.Policy >= PolicyType.Harass && Rnd(random, 1, 100) <= enemyState.AttackChance))) {
+                DeployHKRaiders(emp, enemyEmp, regionCapitals, fleetStates, game, random);
+            }
+
+            if ((enemyState.Balance < 0 && Rnd(random, 1, 2) == 1) || Rnd(random, 1, 100) <= enemyState.AttackChance) {
+                switch (enemyState.Policy) {
+                    case PolicyType.Harass:
+                        if (noOfRaidersOut < NpeConstants.MaxNoOfRaiders) {
+                            DeployHKRaiders(emp, enemyEmp, regionCapitals, fleetStates, game, random);
+                        }
+                        break;
+
+                    case PolicyType.Preempt:
+                        if (Rnd(random, 1, 100) <= 50) {
+                            if (noOfRaidersOut < NpeConstants.MaxNoOfRaiders) {
+                                DeployHKRaiders(emp, enemyEmp, regionCapitals, fleetStates, game, random);
+                            }
+                        } else {
+                            DeployJumpAttack(emp, enemyEmp, regionCapitals, persona, fleetStates, game, random);
+                        }
+                        break;
+
+                    case PolicyType.Conflict:
+                        if (Rnd(random, 1, 100) <= 75) {
+                            DeployJumpAttack(emp, enemyEmp, regionCapitals, persona, fleetStates, game, random);
+                        } else {
+                            DeploySlowAttack(emp, enemyEmp, regionCapitals, persona, fleetStates, game, random);
+                        }
+                        break;
+
+                    case PolicyType.War:
+                        if (Rnd(random, 1, 100) <= 50) {
+                            DeployJumpAttack(emp, enemyEmp, regionCapitals, persona, fleetStates, game, random);
+                        } else {
+                            DeploySlowAttack(emp, enemyEmp, regionCapitals, persona, fleetStates, game, random);
+                        }
+                        break;
+                }
+            }
+
+            if (Rnd(random, 1, 100) <= enemyState.Aggressiveness && enemyEmp.Capital is { } enemyCapital) {
+                // FOR i:=1 TO Rnd(1,4) DO — bound drawn once at loop entry, same gotcha as
+                // DeployBattleFleet's own probe-launch loop (see that method's own doc comment).
+                var probesToLaunch = Rnd(random, 1, 4);
+                for (var i = 0; i < probesToLaunch; i++) {
+                    var x = Rnd(random, enemyCapital.Location.X - 4, enemyCapital.Location.X + 4);
+                    var y = Rnd(random, enemyCapital.Location.Y - 4, enemyCapital.Location.Y + 4);
+                    if (x >= 0 && x < game.Galaxy.Size && y >= 0 && y < game.Galaxy.Size) {
+                        emp.TryLaunchProbe(new Coordinate(x, y));
+                    }
+                }
             }
         }
     }
