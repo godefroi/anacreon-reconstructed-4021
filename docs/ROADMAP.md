@@ -481,9 +481,34 @@ feature.
   initializes `Dest:=XY`, the latter `Dest:=Limbo`). Tested against real bytes from `INTRO_2.SAV`
   (9 fleets, including one already-arrived), `GAUNTLET_1.SAV` (10 starbases), `FLEET_ORDERS.SAV`
   (13 fleets, one with a real discarded order queue), `STARGATE_DONE.SAV`, `Confront_2.SAV`.
-- **7d, Messages/Empire Data/News `LoadGame`.** Full `Empire` field mapping (`DefeatedBy`,
-  `Modifiers`, `Technology`, `EntityVisibility` inverse-indexing, `LocationBookmark`); a News
-  decode table built from this port's own existing `AddNews` call sites.
+- ✅ **7d, Messages/Empire Data/News `LoadGame`.** Messages read and discarded — no in-memory
+  message concept exists anywhere in this port (a human-UI feature, same `ATTCOMM`/`FLTCOMM`
+  -adjacent Phase 8 cluster). Empire Data fills the same 8 placeholder slots earlier sections
+  already resolved references against; only `InUse` slots join `Game.Empires`.
+  **`DefeatedBy` decode confirms a real ambiguity in the on-disk sentinel, resolved correctly**:
+  `ConquerEmpire`'s human-defeat trick (`ATTACK.PAS:1120-1131`) writes `Capital.ObjTyp:=Void,
+  Index:=Ord(Player)` — the conqueror's raw 0-based ordinal, which can legitimately be `0`
+  (Empire1). Gating on `Index>0` (as `IDNumber`'s usual "empty" convention would suggest) would
+  silently misread a real Empire1-conquered-you case as "no capital data" — gated on `ObjTyp==Void`
+  alone instead, since an `InUse` empire's `Capital` is never legitimately `EmptyQuadrant`
+  otherwise. `Technology`/`EmpireGainedTechnology`'s `TechGrant` share one 27-entry ordinal table
+  (`TechCatalog.Grant` already existed; this is its `.SAV`-side ordinal mapping, transcribed
+  separately from `ScenarioLoader`'s own — same Pascal declaration order, different parsing
+  boundary, not shared code). `NameRecord`'s `Location` union (raw XY or a resolved object
+  reference — same shape as `CommandRecord`'s `DestCOM` variant) resolves to a plain `Coordinate`
+  for `LocationBookmark`. News's `Loc1` decodes the same way, per-item not per-headline — the only
+  real per-headline exceptions are `OtherEmpire`/`TechGrant`, confirmed (by reading the exact real
+  `AddNews` call site, not guessed) for exactly the headlines this phase's ground truth exercises:
+  `FleetDestroyedByLams`/`FleetDamagedByLams`/`ProbeDestroyedByYou` (`Parm1`=`Ord(Player)`) and
+  `EmpireGainedTechnology` (`Parm1`=`Ord(NewTech)`, the granted item's full ordinal). Every other
+  headline (including `MessageReceived`, which has no real call site anywhere in this port) keeps
+  `Parm1-3` as plain ints, matching `NewsItem`'s own shape. Tested against `INTRO_1.SAV` (5 active
+  empire slots, 3 correctly-excluded inactive ones), `IMPERIUM_1.SAV` (all 8 slots active, a real
+  `Technology` bitset decode), `FLEET_ORDERS.SAV` and `Confront_2.SAV` (real `TechGrantIdentity`
+  and `OtherEmpire` decodes, cross-checked against `scripts/savtool.py`'s JSON parse of the same
+  bytes). `DefeatedBy`'s decode branch has no exercising reference save (none of the 13 capture a
+  defeated human empire) — implemented and reasoned through directly from `ConquerEmpire`, not
+  covered by a ground-truth test; flagged for whoever next captures or hand-builds one.
 - **7e, NPE Data `LoadGame` + `KingdomTurnHandler` state seam.** A construct-from-saved-state/
   read-state-back-out seam on `KingdomTurnHandler`, reused by 7f's JSON serializer. Opaque
   per-empire blob storage for Pirate/Berserker/Guardian (no `ITurnHandler` exists for any of them

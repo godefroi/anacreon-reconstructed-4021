@@ -1,4 +1,5 @@
 using ThreeLn.Reconstruction4021.Core.Entities;
+using ThreeLn.Reconstruction4021.Core.Galaxy;
 using ThreeLn.Reconstruction4021.Core.Types;
 
 namespace ThreeLn.Reconstruction4021.Core.SaveFormat;
@@ -25,6 +26,23 @@ public sealed class SavGameLoader
 {
     private readonly Empire[] _empireSlots = BuildPlaceholderSlots();
 
+    /// <summary>
+    /// Real object references by on-disk `IDNumber`, populated as each of Planets/Starbases/
+    /// Fleets/Stargates/ConstructionSites is loaded (all five sections precede every reference to
+    /// one — `NameRecord.Coord` in Empire Data, `FleetDataRecord.TargetID`/`HomeBaseID` in NPE Data
+    /// — so the index is always complete by the time it's needed). Not populated for object types
+    /// this port has no representation of (`Con`'s own type tag aside, that one IS
+    /// `ConstructionSite` — the ones genuinely missing are `BlkHl`/`Plsr`/`WrmHl`/`Wndr`/`ArtObj`,
+    /// none of which any real `dos_131` reference save exercises).
+    /// </summary>
+    private readonly Dictionary<(SavObjectType, int), ISectorObject> _objectsById = new();
+
+    /// Per-slot `InUse`/`IsAPlayer`, populated by <see cref="LoadEmpireData"/> — NPE Data (Phase
+    /// 7e) needs both to know which slots get an NPE blob at all (`EmpireActive(Emp) AND NOT
+    /// EmpirePlayer(Emp)`, `docs/SAV_FILE_FORMAT.md`'s NPE Data section).
+    private readonly bool[] _empireInUse = new bool[8];
+    private readonly bool[] _empireIsPlayer = new bool[8];
+
     private static Empire[] BuildPlaceholderSlots()
     {
         var slots = new Empire[8];
@@ -37,6 +55,13 @@ public sealed class SavGameLoader
     /// Empire ordinal 0-7 = Empire1..Empire8 (this port's empire slots); 8 = Indep
     /// (`docs/SAV_FILE_FORMAT.md`'s Empire enum reference).
     private Empire ResolveEmpire(int ordinal) => ordinal == 8 ? Empire.Independent : _empireSlots[ordinal];
+
+    /// <summary>
+    /// Resolves a raw on-disk `IDNumber` to the real object it names, or null for an empty
+    /// reference (`Index=0`) or an object type this port doesn't model.
+    /// </summary>
+    private ISectorObject? ResolveObject(SavIdNumber id) =>
+        id.IsEmpty ? null : _objectsById.GetValueOrDefault((id.ObjectType, id.Index));
 
     public Game LoadGame(byte[] data)
     {
@@ -57,6 +82,9 @@ public sealed class SavGameLoader
         LoadFleets(reader, galaxy);
         LoadStargates(reader, galaxy);
         LoadConstructionSites(reader, galaxy);
+        LoadMessages(reader);
+        LoadEmpireData(reader, game);
+        LoadNewsData(reader, game);
 
         return game;
     }
@@ -253,6 +281,7 @@ public sealed class SavGameLoader
 
             galaxy.Planets.Add(planet);
             ApplyVisibility(scoutedBy, knownBy, planet, e => e.Planets);
+            _objectsById[(SavObjectType.Pln, index)] = planet;
 
             index = reader.ReadWord();
         }
@@ -316,6 +345,7 @@ public sealed class SavGameLoader
 
             galaxy.Starbases.Add(starbase);
             ApplyVisibility(scoutedBy, knownBy, starbase, e => e.Starbases);
+            _objectsById[(SavObjectType.Base, index)] = starbase;
 
             index = reader.ReadWord();
         }
@@ -367,6 +397,7 @@ public sealed class SavGameLoader
 
             galaxy.Fleets.Add(fleet);
             ApplyVisibility(scoutedBy, knownBy, fleet, e => e.Fleets);
+            _objectsById[(SavObjectType.Flt, index)] = fleet;
 
             var orderCount = reader.ReadWord();
             reader.Skip(orderCount * 5); // CommandRecord queue -- discarded, see doc comment above.
@@ -401,6 +432,7 @@ public sealed class SavGameLoader
 
             galaxy.Stargates.Add(stargate);
             ApplyVisibility(scoutedBy, knownBy, stargate, e => e.Stargates);
+            _objectsById[(SavObjectType.Gate, index)] = stargate;
 
             index = reader.ReadWord();
         }
@@ -431,8 +463,296 @@ public sealed class SavGameLoader
 
             galaxy.ConstructionSites.Add(site);
             ApplyVisibility(scoutedBy, knownBy, site, e => e.ConstructionSites);
+            _objectsById[(SavObjectType.Con, index)] = site;
 
             index = reader.ReadWord();
         }
     }
+
+    /// <summary>
+    /// `LoadMessageData` (`MESS.PAS:252-367`). No in-memory message concept exists anywhere in this
+    /// port — in-game player-to-player messages are a human-UI feature (the same
+    /// `ATTCOMM`/`FLTCOMM`/`ORDERS`-adjacent DOS-UI cluster `docs/ROADMAP.md` already scopes to
+    /// Phase 8), so every message is read and discarded, same "no home yet" treatment as the Fleet
+    /// order queue.
+    /// </summary>
+    private static void LoadMessages(SavReader reader)
+    {
+        var messageCount = reader.ReadByte();
+
+        for (var i = 0; i < messageCount; i++) {
+            reader.Skip(23); // MessageRecord
+            var lineCount = reader.ReadByte();
+            reader.Skip(lineCount * 81); // LineStr: 1 length byte + 80 chars
+        }
+    }
+
+    private static void ReadDefenseSettings(SavReader reader, DefenseSettings settings)
+    {
+        ReadShellDefensePlan(reader, settings.Fleets);
+        ReadShellDefensePlan(reader, settings.Starbases);
+    }
+
+    private static void ReadShellDefensePlan(SavReader reader, ShellDefensePlan plan)
+    {
+        foreach (var shell in Enum.GetValues<ShellPosition>()) {
+            var distribution = plan[shell];
+            foreach (var ship in Enum.GetValues<ShipType>()) {
+                distribution[ship] = reader.ReadByte();
+            }
+        }
+    }
+
+    /// `ProbeRecord`'s 10 fixed slots collapse to just the in-transit destinations
+    /// (`Empire.ProbesInTransit`'s own doc comment) — only `Status=PInTrans` (ordinal 1) slots
+    /// contribute; `Ready`/`AtDest`/`Lost` probes carry no state this port's model keeps.
+    private static List<Coordinate> ReadProbes(SavReader reader)
+    {
+        var inTransit = new List<Coordinate>();
+
+        for (var i = 0; i < 10; i++) {
+            var destination = reader.ReadCoordinate();
+            var status = reader.ReadByte();
+            if (status == 1) { // PInTrans
+                inTransit.Add(destination);
+            }
+        }
+
+        return inTransit;
+    }
+
+    /// <summary>
+    /// Pascal's single `TechnologyTypes` ordinal space (`NoRes,LAM..dis`, `TYPES.PAS:63-85`) —
+    /// mirrors `ScenarioLoader`'s own `_technologyTypeGrants` decode table exactly (same source
+    /// declaration order), kept as its own small transcription here rather than shared across the
+    /// two unrelated file-format parsing boundaries (`.SCN` vs `.SAV`). Serves both the Empire
+    /// Data `Technology` bitset (<see cref="ApplyTechnology"/>) and News's `EmpireGainedTechnology`
+    /// `TechGrant` decode (<see cref="ResolveTechGrant"/>) — one raw ordinal, two consumers.
+    /// </summary>
+    private static readonly (Action<UnlockedTechnology> Grant, TechCatalog.TechGrantIdentity Identity)?[] _technologyByOrdinal = BuildTechnologyByOrdinal();
+
+    private static (Action<UnlockedTechnology>, TechCatalog.TechGrantIdentity)?[] BuildTechnologyByOrdinal()
+    {
+        var table = new (Action<UnlockedTechnology>, TechCatalog.TechGrantIdentity)?[27];
+
+        void SetDefense(int ordinal, DefenseType type) => table[ordinal] = (TechCatalog.Grant(type), new TechCatalog.TechGrantIdentity(TechCategory.Defense, (int)type));
+        void SetShip(int ordinal, ShipType type) => table[ordinal] = (TechCatalog.Grant(type), new TechCatalog.TechGrantIdentity(TechCategory.Ship, (int)type));
+        void SetCargo(int ordinal, CargoType type) => table[ordinal] = (TechCatalog.Grant(type), new TechCatalog.TechGrantIdentity(TechCategory.Cargo, (int)type));
+        void SetConstruction(int ordinal, ConstructionType type) => table[ordinal] = (TechCatalog.Grant(type), new TechCatalog.TechGrantIdentity(TechCategory.Construction, (int)type));
+
+        SetDefense(1, DefenseType.Lam);
+        SetDefense(2, DefenseType.DefenseSatellite);
+        SetDefense(3, DefenseType.Gdm);
+        SetDefense(4, DefenseType.IonCannon);
+        SetShip(5, ShipType.Fighter);
+        SetShip(6, ShipType.HunterKiller);
+        SetShip(7, ShipType.Jumpship);
+        SetShip(8, ShipType.Jumptransport);
+        SetShip(9, ShipType.Penetrator);
+        SetShip(10, ShipType.Starship);
+        SetShip(11, ShipType.Transport);
+        SetCargo(12, CargoType.Legion);
+        SetCargo(13, CargoType.NinjaLegion);
+        SetCargo(14, CargoType.Ambrosia);
+        SetCargo(15, CargoType.Chemicals);
+        SetCargo(16, CargoType.Metals);
+        SetCargo(17, CargoType.Supplies);
+        SetCargo(18, CargoType.Trillum);
+        SetConstruction(19, ConstructionType.Minefield);
+        SetConstruction(20, ConstructionType.CommandBase);
+        SetConstruction(21, ConstructionType.Fortress);
+        SetConstruction(22, ConstructionType.IndustrialComplex);
+        SetConstruction(23, ConstructionType.Outpost);
+        SetConstruction(24, ConstructionType.Gate);
+        SetConstruction(25, ConstructionType.WarpLink);
+        SetConstruction(26, ConstructionType.Disrupter);
+
+        return table;
+    }
+
+    private static void ApplyTechnology(HashSet<int> ordinals, UnlockedTechnology unlocked)
+    {
+        foreach (var ordinal in ordinals) {
+            if (ordinal is >= 0 and < 27) {
+                _technologyByOrdinal[ordinal]?.Grant(unlocked);
+            }
+        }
+    }
+
+    private static TechCatalog.TechGrantIdentity? ResolveTechGrant(int ordinal) =>
+        ordinal is >= 0 and < 27 ? _technologyByOrdinal[ordinal]?.Identity : null;
+
+    /// <summary>
+    /// `NameRecord` (`DATASTRC.PAS:152-157`) — `Coord` is a `Location` union exactly like
+    /// `CommandRecord`'s `DestCOM` variant (see `docs/SAV_FILE_FORMAT.md`'s own worked example):
+    /// a raw coordinate when nothing occupies that cell, or a resolved object reference when
+    /// something does. Resolved down to a plain <see cref="Coordinate"/> at load time (the
+    /// referenced object's current location) — matches <see cref="LocationBookmark"/>'s existing
+    /// shape with no type change needed, at the cost of which of the two on-disk forms the
+    /// original used (fine under this phase's semantic-round-trip bar).
+    /// </summary>
+    private LocationBookmark ReadNameRecord(SavReader reader)
+    {
+        var name = reader.ReadPascalString(8);
+        var xy = reader.ReadCoordinate();
+        var id = reader.ReadIdNumber();
+        reader.Skip(4); // Next -- pointer, discarded; read order already is list order
+
+        var location = id.IsEmpty ? xy : (ResolveObject(id)?.Location ?? xy);
+        return new LocationBookmark { Name = name, Location = location };
+    }
+
+    /// <summary>
+    /// `LoadEmpireData` (`LOADSAVE.PAS:368-410`). Writes into the same 8 placeholder
+    /// <see cref="Empire"/> objects every earlier section already resolved references against
+    /// (see this class's own doc comment) — only `InUse` slots get added to
+    /// <see cref="Game.Empires"/>. <c>TimeLeft</c> has no session/turn-clock concept in this port
+    /// yet — read and discarded, same tracked-gap treatment as the Environment section's UI
+    /// fields. <c>Names</c>/<c>LastName</c> are the linked list's head/tail pointers — garbage on
+    /// disk, discarded; the real list follows immediately as `NameRecord × NoOfNames`.
+    /// </summary>
+    private void LoadEmpireData(SavReader reader, Game game)
+    {
+        for (var slot = 0; slot < 8; slot++) {
+            var empire = _empireSlots[slot];
+
+            var inUse = reader.ReadBoolean();
+            var isAPlayer = reader.ReadBoolean();
+            var name = reader.ReadPascalString(32);
+            var password = reader.ReadPascalString(8);
+            reader.Skip(2); // TimeLeft
+            var capitalId = reader.ReadIdNumber();
+
+            ReadDefenseSettings(reader, empire.DefenseSettings);
+            var probesInTransit = ReadProbes(reader);
+
+            reader.Skip(4); // Names -- pointer, discarded
+            reader.Skip(4); // LastName -- pointer, discarded
+
+            var totalRevIndex = reader.ReadInteger();
+            var techLevel = (TechLevel)reader.ReadByte();
+            var technology = reader.ReadBitSet(4);
+            var isAnEmpress = reader.ReadBoolean();
+            var revFactor = reader.ReadInteger();
+            var founding = reader.ReadWord();
+            var modifiers = reader.ReadBitSet(1);
+            reader.Skip(14); // Reserved
+
+            var nameCount = reader.ReadByte();
+            var bookmarks = new List<LocationBookmark>();
+            for (var i = 0; i < nameCount; i++) {
+                bookmarks.Add(ReadNameRecord(reader));
+            }
+
+            _empireInUse[slot] = inUse;
+            _empireIsPlayer[slot] = isAPlayer;
+
+            if (!inUse) {
+                continue; // Placeholder stays inert -- never added to Game.Empires (Empire.cs's own doc comment).
+            }
+
+            empire.Name = name;
+            empire.Password = password.Length == 0 ? null : password;
+
+            // Human-defeat sentinel (ATTACK.PAS:1120-1131's ConquerEmpire): ObjTyp=Void with
+            // Index the conqueror's own raw empire ordinal -- even Index=0 (Empire1) is a real,
+            // meaningful value here, a different meaning of "0" than IDNumber's usual "no object"
+            // convention (an InUse empire's Capital is never legitimately EmptyQuadrant
+            // otherwise -- every active empire has a real capital until this exact defeat path).
+            if (capitalId.ObjectType == SavObjectType.Void) {
+                empire.Capital = null;
+                empire.DefeatedBy = ResolveEmpire(capitalId.Index);
+            } else {
+                empire.Capital = ResolveObject(capitalId) as IEconomicWorld;
+            }
+
+            empire.ProbesInTransit.AddRange(probesInTransit);
+            empire.TotalRevolutionIndex = totalRevIndex;
+            empire.TechnologyLevel = techLevel;
+            ApplyTechnology(technology, empire.Technology);
+            empire.IsEmpress = isAnEmpress;
+            empire.RevolutionFactor = revFactor;
+            empire.FoundingYear = founding;
+            empire.LosesIfCapitalConquered = modifiers.Contains(0); // CentralEMD
+            empire.Bookmarks.AddRange(bookmarks);
+
+            game.Empires.Add(empire);
+        }
+    }
+
+    /// <summary>
+    /// Headlines confirmed (by reading the exact real Pascal `AddNews` call site, not guessed from
+    /// this port's own parameter names) to carry another empire's raw ordinal in `Parm1` —
+    /// `Ord(Player)`/`Integer(Player)` in every case. Deliberately small: only the headlines this
+    /// phase's own reference-save ground truth actually exercises are confirmed here; every other
+    /// headline falls back to <see cref="LoadNewsData"/>'s generic decode (raw `Parm1-3`, no
+    /// `OtherEmpire`) rather than a guessed mapping.
+    /// </summary>
+    private static readonly Dictionary<NewsType, int> _otherEmpireInParm = new() {
+        [NewsType.FleetDestroyedByLams] = 1, // ATTACK.PAS:1664 (LAMDs)
+        [NewsType.FleetDamagedByLams] = 1, // ATTACK.PAS:1669 (LAMDm)
+        [NewsType.ProbeDestroyedByYou] = 1, // INTRFACE.PAS:1329 (PCap)
+    };
+
+    /// <summary>Same confirmed-not-guessed discipline as <see cref="_otherEmpireInParm"/>: `EmpireGainedTechnology`'s `Parm1` is `Ord(NewTech)` (`UPDATE.PAS:399`, NCapTech) -- the full `TechnologyTypes` ordinal of one newly-granted item.</summary>
+    private static readonly Dictionary<NewsType, int> _techGrantInParm = new() {
+        [NewsType.EmpireGainedTechnology] = 1,
+    };
+
+    /// <summary>
+    /// `LoadNewsData` (`NEWS.PAS:266-297`). `Loc1` decodes the same way as every other `Location`
+    /// union in this format (`NameRecord.Coord`, `CommandRecord`'s `DestCOM` variant): an object
+    /// reference when `ID` is populated, a bare coordinate otherwise — this is a per-item decision
+    /// baked into the bytes themselves (whichever field the original `AddNews` call filled),
+    /// not a per-headline one. `OtherEmpire`/`TechGrant` are the two exceptions with real,
+    /// per-headline meaning beyond that, decoded via the two confirmed tables above; every other
+    /// headline keeps `Parm1-3` as plain ints with no further interpretation, matching
+    /// <see cref="NewsItem"/>'s own shape for whatever this port hasn't wired a real call site for
+    /// yet (e.g. `MessageReceived`, since no in-memory message concept exists — see
+    /// <see cref="LoadMessages"/>).
+    /// </summary>
+    private void LoadNewsData(SavReader reader, Game game)
+    {
+        for (var slot = 0; slot < 8; slot++) {
+            var count = reader.ReadWord();
+
+            for (var i = 0; i < count; i++) {
+                var headline = (NewsType)reader.ReadByte();
+                var xy = reader.ReadCoordinate();
+                var id = reader.ReadIdNumber();
+                var parm1 = reader.ReadInteger();
+                var parm2 = reader.ReadInteger();
+                var parm3 = reader.ReadInteger();
+                reader.Skip(4); // Next -- pointer, discarded; read order already is list order
+
+                if (!_empireInUse[slot]) {
+                    continue; // Placeholder slot -- nothing real to attach this to.
+                }
+
+                ISectorObject? subject = null;
+                Coordinate? position = null;
+                if (id.IsEmpty) {
+                    position = xy;
+                } else {
+                    subject = ResolveObject(id);
+                }
+
+                Empire? otherEmpire = _otherEmpireInParm.TryGetValue(headline, out var empireParm)
+                    ? ResolveEmpire(SelectParm(empireParm, parm1, parm2, parm3))
+                    : null;
+
+                TechCatalog.TechGrantIdentity? techGrant = _techGrantInParm.TryGetValue(headline, out var techParm)
+                    ? ResolveTechGrant(SelectParm(techParm, parm1, parm2, parm3))
+                    : null;
+
+                _empireSlots[slot].AddNews(headline, subject, position, otherEmpire, techGrant, parm1, parm2, parm3);
+            }
+        }
+    }
+
+    private static int SelectParm(int index, int parm1, int parm2, int parm3) => index switch {
+        1 => parm1,
+        2 => parm2,
+        _ => parm3,
+    };
 }

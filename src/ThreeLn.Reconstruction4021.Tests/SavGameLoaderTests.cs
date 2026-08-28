@@ -1,3 +1,4 @@
+using ThreeLn.Reconstruction4021.Core.Entities;
 using ThreeLn.Reconstruction4021.Core.Galaxy;
 using ThreeLn.Reconstruction4021.Core.SaveFormat;
 using ThreeLn.Reconstruction4021.Core.Types;
@@ -172,5 +173,115 @@ public class SavGameLoaderTests
         await Assert.That(site.Location).IsEqualTo(new Coordinate(30, 38));
         await Assert.That(site.Building).IsEqualTo(ConstructionType.Outpost);
         await Assert.That(site.YearsToCompletion).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task LoadGame_Intro1_ReadsEmpireData()
+    {
+        // Ground truth: 5 InUse slots (Player_empire is the only player), capitals = planet
+        // indices 1-5 respectively, TechLevel=7 (Bio), founding=4021, no CentralEMD modifier.
+        // 3 trailing inactive slots correctly excluded from Game.Empires.
+        var game = new SavGameLoader().LoadGame(LoadIntro1());
+
+        await Assert.That(game.Empires.Count).IsEqualTo(5);
+
+        var player = game.Empires.Single(e => e.Name == "Player_empire");
+        await Assert.That(player.TechnologyLevel).IsEqualTo(TechLevel.Bio);
+        await Assert.That(player.FoundingYear).IsEqualTo(4021);
+        await Assert.That(player.LosesIfCapitalConquered).IsFalse();
+        await Assert.That(player.Capital).IsNotNull();
+        await Assert.That(player.Capital!.Location).IsEqualTo(game.Galaxy.Planets[0].Location);
+
+        foreach (var name in new[] { "Trantor", "Lazarus", "Freberon", "First Sun" }) {
+            await Assert.That(game.Empires.Any(e => e.Name == name)).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task LoadGame_Imperium1_AllEightSlotsActive()
+    {
+        var game = new SavGameLoader().LoadGame(LoadSave("IMPERIUM_1.SAV"));
+
+        await Assert.That(game.Empires.Count).IsEqualTo(8);
+    }
+
+    [Test]
+    public async Task LoadGame_Imperium1_DecodesTechnologyBitset()
+    {
+        // Ground truth (slot 0's raw TechnologySet ordinals): [3,4,5,7,8,11,12,15,16,17,18] ->
+        // Defenses={Gdm,IonCannon}, Ships={Fighter,Jumpship,Jumptransport,Transport},
+        // Resources={Legion,Chemicals,Metals,Supplies,Trillum}, Constructions={} (none unlocked).
+        var game = new SavGameLoader().LoadGame(LoadSave("IMPERIUM_1.SAV"));
+
+        var empire = game.Empires.Single(e => e.Name == "Imperium_pl_1");
+        var tech = empire.Technology;
+
+        await Assert.That(tech.Defenses).IsEquivalentTo([DefenseType.Gdm, DefenseType.IonCannon]);
+        await Assert.That(tech.Ships).IsEquivalentTo([ShipType.Fighter, ShipType.Jumpship, ShipType.Jumptransport, ShipType.Transport]);
+        await Assert.That(tech.Resources).IsEquivalentTo([CargoType.Legion, CargoType.Chemicals, CargoType.Metals, CargoType.Supplies, CargoType.Trillum]);
+        await Assert.That(tech.Constructions).IsEmpty();
+    }
+
+    [Test]
+    public async Task LoadGame_FleetOrders_DecodesGenericNewsSubjectAndTechGrant()
+    {
+        // Ground truth (savtool.py): slot 0 has headline=3 (TechLevelIncreased) with Loc1.ID
+        // referencing Planet index 2, parm1=7; and headline=14 (EmpireGainedTechnology) with
+        // Loc1.ID referencing Planet index 1, parm1=6 -- ordinal 6 is ShipType.HunterKiller
+        // (Ship category). Slot 2 has headline=46 (MessageReceived, no real AddNews call site
+        // anywhere in this port) with an empty Loc1 -- falls back to Position=(0,0), no Subject.
+        var game = new SavGameLoader().LoadGame(LoadSave("FLEET_ORDERS.SAV"));
+        var allNews = game.Empires.SelectMany(e => e.News).ToList();
+
+        var techLevelNews = allNews.Single(n => n.Headline == NewsType.TechLevelIncreased && n.Parm1 == 7);
+        await Assert.That(techLevelNews.Subject).IsNotNull();
+        await Assert.That(techLevelNews.Subject).IsTypeOf<Planet>();
+
+        var techGrantNews = allNews.Single(n => n.Headline == NewsType.EmpireGainedTechnology);
+        await Assert.That(techGrantNews.Parm1).IsEqualTo(6);
+        await Assert.That(techGrantNews.TechGrant).IsEqualTo(new TechCatalog.TechGrantIdentity(TechCategory.Ship, (int)ShipType.HunterKiller));
+
+        var messageNews = allNews.Single(n => n.Headline == NewsType.MessageReceived);
+        await Assert.That(messageNews.Subject).IsNull();
+        await Assert.That(messageNews.Position).IsEqualTo(new Coordinate(0, 0));
+        await Assert.That(messageNews.OtherEmpire).IsNull();
+    }
+
+    [Test]
+    public async Task LoadGame_Confront2_DecodesOtherEmpireFromConfirmedHeadlines()
+    {
+        // Ground truth (savtool.py, ATTACK.PAS:1664/1669/INTRFACE.PAS:1329 confirmed directly):
+        // FleetDestroyedByLams/FleetDamagedByLams both carry parm1=4 (Empire5); ProbeDestroyedByYou
+        // carries parm1=7 (Empire8).
+        var game = new SavGameLoader().LoadGame(LoadSave("Confront_2.SAV"));
+        var allNews = game.Empires.SelectMany(e => e.News).ToList();
+
+        var destroyedByLams = allNews.Single(n => n.Headline == NewsType.FleetDestroyedByLams);
+        await Assert.That(destroyedByLams.OtherEmpire).IsNotNull();
+        await Assert.That(destroyedByLams.Subject).IsTypeOf<Fleet>();
+
+        var damagedByLams = allNews.Single(n => n.Headline == NewsType.FleetDamagedByLams);
+        await Assert.That(damagedByLams.OtherEmpire).IsEqualTo(destroyedByLams.OtherEmpire);
+
+        // Ground truth has 3 ProbeDestroyedByYou entries (slot 4 x1, slot 6 x2, both parm1=7) --
+        // all three must decode OtherEmpire, not just the first.
+        var probeDestroyedEntries = allNews.Where(n => n.Headline == NewsType.ProbeDestroyedByYou).ToList();
+        await Assert.That(probeDestroyedEntries.Count).IsEqualTo(3);
+        foreach (var entry in probeDestroyedEntries) {
+            await Assert.That(entry.OtherEmpire).IsNotNull();
+        }
+    }
+
+    [Test]
+    public async Task LoadGame_Confront2_KeepsDestructionDetailParmsRaw()
+    {
+        // DestructionDetail has no OtherEmpire/TechGrant mapping -- Parm1/Parm2 stay plain ints.
+        var game = new SavGameLoader().LoadGame(LoadSave("Confront_2.SAV"));
+        var allNews = game.Empires.SelectMany(e => e.News).ToList();
+
+        var detail = allNews.Single(n => n.Headline == NewsType.DestructionDetail && n.Parm1 == 1742);
+        await Assert.That(detail.Parm2).IsEqualTo(6);
+        await Assert.That(detail.OtherEmpire).IsNull();
+        await Assert.That(detail.TechGrant).IsNull();
     }
 }
