@@ -29,11 +29,12 @@ public class NpeToolkitTests
 
         var power = NpeToolkit.MilitaryPower(ships, defenses);
 
-        // CombatPower: Fighter=?, Starship=?, Lam=? — computed independently here rather than
-        // re-deriving CombatConstants' own values, so this actually exercises the real table.
-        var expected = 10L * CombatConstants.CombatPower[AttackType.Fighter]
-                      + 2L * CombatConstants.CombatPower[AttackType.Starship]
-                      + 5L * CombatConstants.CombatPower[AttackType.Lam];
+        // MPower (DATACNST.PAS:167-170) — the table MilitaryPower actually weights by, not
+        // CombatConstants.CombatPower (ATTACK.PAS's own, differently-valued table for the surrender
+        // algorithm — see CombatConstants.MPower's own doc comment).
+        var expected = 10L * CombatConstants.MPower[AttackType.Fighter]
+                      + 2L * CombatConstants.MPower[AttackType.Starship]
+                      + 5L * CombatConstants.MPower[AttackType.Lam];
         await Assert.That(power).IsEqualTo(expected);
     }
 
@@ -149,7 +150,7 @@ public class NpeToolkitTests
 
         var avg = NpeToolkit.AverageMilitaryPower([capital]);
 
-        await Assert.That(avg).IsEqualTo(10L * CombatConstants.CombatPower[AttackType.Fighter]);
+        await Assert.That(avg).IsEqualTo(10L * CombatConstants.MPower[AttackType.Fighter]);
     }
 
     [Test]

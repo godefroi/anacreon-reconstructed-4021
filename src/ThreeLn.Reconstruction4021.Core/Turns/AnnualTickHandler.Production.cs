@@ -43,21 +43,6 @@ public sealed partial class AnnualTickHandler
         [TechLevel.Gate] = 100,
     }.ToFrozenDictionary();
 
-    /// <summary>Production adjustment by tech level: TechAdj2, used by the IP/Alpha formulas (DATACNST.PAS:231-233).</summary>
-    private static readonly FrozenDictionary<TechLevel, int> _industrialProductionTechAdjustment = new Dictionary<TechLevel, int> {
-        [TechLevel.PreTech] = 12,
-        [TechLevel.Primitive] = 24,
-        [TechLevel.PreAtomic] = 36,
-        [TechLevel.Atomic] = 47,
-        [TechLevel.PreWarp] = 58,
-        [TechLevel.Warp] = 67,
-        [TechLevel.Jump] = 76,
-        [TechLevel.Bio] = 84,
-        [TechLevel.Starship] = 90,
-        [TechLevel.PreGate] = 95,
-        [TechLevel.Gate] = 100,
-    }.ToFrozenDictionary();
-
     /// <summary>Units of metal needed per 100 points of industrial development: NewIndRawN (DATACNST.PAS:450-452).</summary>
     private static readonly FrozenDictionary<IndustryType, int> _industryMetalCost = new Dictionary<IndustryType, int> {
         [IndustryType.Bioindustry] = 100,
@@ -349,7 +334,7 @@ public sealed partial class AnnualTickHandler
         beforeProduce?.Invoke();
 
         var effectiveTech = EffectiveTechnologyLevel(world);
-        var ip = (_industrialProductionTechAdjustment[world.TechLevel] / 100.0) * ((world.Efficiency + 250) / 100.0) / K6;
+        var ip = (IndustryConstants.IndustrialProductionTechAdjustment[world.TechLevel] / 100.0) * ((world.Efficiency + 250) / 100.0) / K6;
 
         ProduceRawMaterial(world, effectiveTech, ip);
         var industryDistribution = GetIndustrialDistribution(world);
@@ -543,7 +528,7 @@ public sealed partial class AnnualTickHandler
         foreach (var industry in Enum.GetValues<IndustryType>())
             dist[industry] = 0;
 
-        var alpha = (_industrialProductionTechAdjustment[world.TechLevel] / 100.0) * (world.Efficiency + 250) / K6;
+        var alpha = (IndustryConstants.IndustrialProductionTechAdjustment[world.TechLevel] / 100.0) * (world.Efficiency + 250) / K6;
 
         double tip = TotalProd(world.Population, world.TechLevel);
         if (world.IsAddictedToAmbrosia)

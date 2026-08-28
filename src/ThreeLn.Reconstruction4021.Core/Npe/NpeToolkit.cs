@@ -39,15 +39,15 @@ public static class NpeToolkit
     private static readonly ShipType[] _jumpAttackSequence = [ShipType.Jumpship, ShipType.HunterKiller, ShipType.HunterKiller, ShipType.HunterKiller, ShipType.HunterKiller];
     private static readonly ShipType[] _raidTransportsSequence = [ShipType.HunterKiller, ShipType.HunterKiller, ShipType.HunterKiller, ShipType.HunterKiller, ShipType.HunterKiller];
 
-    /// <summary>MilitaryPower (MISC.PAS:40-63) — a composite strength score, ships and defenses both weighted by <see cref="CombatConstants.CombatPower"/> (Pascal's MPower).</summary>
+    /// <summary>MilitaryPower (MISC.PAS:40-63) — a composite strength score, ships and defenses both weighted by <see cref="CombatConstants.MPower"/> (not <see cref="CombatConstants.CombatPower"/> — see that field's own doc comment on why these are two distinct tables).</summary>
     public static long MilitaryPower(ShipCounts ships, DefenseCounts defenses)
     {
         long power = 0;
         foreach (var t in Enum.GetValues<DefenseType>()) {
-            power += (long)defenses[t] * CombatConstants.CombatPower[t.ToAttackType()];
+            power += (long)defenses[t] * CombatConstants.MPower[t.ToAttackType()];
         }
         foreach (var t in Enum.GetValues<ShipType>()) {
-            power += (long)ships[t] * CombatConstants.CombatPower[t.ToAttackType()];
+            power += (long)ships[t] * CombatConstants.MPower[t.ToAttackType()];
         }
         return power;
     }
