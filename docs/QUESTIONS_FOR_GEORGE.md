@@ -87,6 +87,31 @@ quirk findings these questions are drawn from, with more detail on how each was 
   tuned against playtesting, or is there a simpler rule of thumb behind the specific numbers (e.g.
   "10 sectors" as a stand-in for realistic administrative/supply reach)?
 
+## Shipped scenario files with real bugs — known, or missed by QA?
+
+- **`AWAKEN.SCN` creates more planets than the engine allows for.** Its last `CreateRandomWorlds 16
+  1` command brings the file's planet count to 212, twelve past `TYPES.PAS`'s own
+  `MaxNoOfPlanets = 200`. Turbo Pascal ships with range checking off (confirmed: no `{$R+}`
+  anywhere in the 1.31 tree), so the twelve overrun `Planet` records silently spill into the very
+  next field declared in `DATASTRC.PAS`'s `UniverseRecord` — `Starbase` — corrupting whichever
+  starbase slots the scenario populates (here, the only two `AWAKEN.SCN` creates). Found while
+  building this port's `.SAV` write-back test tool (`docs/ROADMAP.md`'s Phase 7g entry has the full
+  trace); confirmed the real DOS 1.31 binary would corrupt the same two starbases loading this
+  exact file, since range checking is off in the shipped build too, not just this port's harness.
+  Since the corruption is silent rather than a crash (unlike `PRINCES.SCN` below), it could easily
+  have shipped and been played without anyone noticing a starbase's stats were wrong. Was this
+  scenario known to be broken, ever fixed in a later patch, or did nobody catch it because nothing
+  about playing it looks wrong?
+- **`PRINCES.SCN`'s first `CREATESTARBASE` command has one extra integer field that matches
+  neither the 1.31 nor the 2.0 source's `CreateBase`.** Confirmed directly against both trees, and
+  independently against the genuine pristine DOS 1.31 binary, which hits the identical "Unknown
+  command 3500" failure this port's own harness produces, in the same place, right after empire
+  creation (`src/ThreeLn.Reconstruction4021.Tests/PascalGroundTruth/ScenarioCases.cs`'s own doc
+  comment has the detail) — so this isn't a desync this port introduced, real 1.31 can't load this
+  file either. Was `PRINCES.SCN` ever played successfully in some other build, or does this point
+  at a bug in whatever tool originally authored/edited the `.SCN` file rather than in the game
+  engine itself?
+
 ## Formulas with a visible asymmetry
 
 - **`GetOptimumIndus`'s missing 999 clamp** (`INTRFACE.PAS:1264-1287`, this port's construction
