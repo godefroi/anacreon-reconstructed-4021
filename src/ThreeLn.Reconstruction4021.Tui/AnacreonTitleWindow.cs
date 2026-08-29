@@ -157,6 +157,15 @@ internal sealed class AnacreonTitleWindow : Window
                     AdvanceFocus(NavigationDirection.Forward, null);
                     key.Handled = true;
                     break;
+                case KeyCode.Esc:
+                    // Esc has no meaning on this menu (Quit is its own button/hotkey) -- left unhandled,
+                    // it fell through to some Terminal.Gui default that stopped this Run anyway without
+                    // setting Choice, which Program.cs's New-Game-vs-Quit check then silently mistook for
+                    // "New Game chosen," confirmed from real testing (Esc here landed on the scenario
+                    // picker). Marking it handled and otherwise doing nothing keeps this screen a true
+                    // no-op on Esc.
+                    key.Handled = true;
+                    break;
             }
         };
 

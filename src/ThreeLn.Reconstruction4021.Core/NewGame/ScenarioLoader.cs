@@ -1,3 +1,4 @@
+using System.Text;
 using ThreeLn.Reconstruction4021.Core.Entities;
 using ThreeLn.Reconstruction4021.Core.Galaxy;
 using ThreeLn.Reconstruction4021.Core.Turns;
@@ -24,6 +25,29 @@ namespace ThreeLn.Reconstruction4021.Core.NewGame;
 public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
 {
     public sealed record PlayerInfo(string Name, string? Password, bool IsEmpress);
+
+    static ScenarioLoader()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    }
+
+    /// <summary>
+    /// .SCN files are plain DOS text -- ASCII for most scenarios, but some (AFTERMAT.SCN's box-drawing
+    /// banner, confirmed from its raw bytes) use CP437's high byte range for box-drawing/accented
+    /// characters, the same encoding the .PAS source itself uses. Detected per file rather than assumed
+    /// universally: a strict UTF-8 decode is tried first (a plain-ASCII file is valid UTF-8 by
+    /// construction, so this never misclassifies the common case, and correctly reads any scenario that
+    /// happens to already be genuine UTF-8), falling back to CP437 only when that decode fails.
+    /// </summary>
+    public static string ReadScenarioFile(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        try {
+            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
+        } catch (DecoderFallbackException) {
+            return Encoding.GetEncoding(437).GetString(bytes);
+        }
+    }
 
     /// <summary>NEWGAME.PAS:60-85 (RndEmpireName) — GetRandomEmpireName's candidate pool.</summary>
     private static readonly string[] _rndEmpireNames = [
@@ -88,16 +112,7 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         var versionLine = tokenizer.ReadLine();
         _scenaVersion = int.Parse(versionLine.Substring(9, 2));
 
-        NextToken(tokenizer); // Title -- consumed, not modeled (no UI to display it in)
-        NextToken(tokenizer); // Seed -- consumed, discarded (see class doc comment)
-        NextToken(tokenizer); // MinPlay -- consumed, not enforced (caller already decided players.Count)
-        NextToken(tokenizer); // MaxPlay -- consumed, same reason
-        var sizeOfGalaxy = int.Parse(NextToken(tokenizer));
-        NextToken(tokenizer); // NoOfPlanets cap -- consumed; Galaxy.Planets is an unbounded List
-        NextToken(tokenizer); // Difficulty -- consumed, no C# equivalent (never read elsewhere in NEWGAME.PAS either)
-        NextToken(tokenizer); // MinLen -- consumed, same reason
-        NextToken(tokenizer); // MaxLen -- consumed, same reason
-        var firstYear = int.Parse(NextToken(tokenizer));
+        var (_, _, _, sizeOfGalaxy, firstYear) = ReadHeaderTokens(tokenizer);
 
         var galaxy = new Galaxy.Galaxy(sizeOfGalaxy);
         var game = new Game(galaxy) { Year = firstYear };
@@ -138,6 +153,56 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         }
     }
 
+    public sealed record ScenarioHeader(string Title, int MinPlayers, int MaxPlayers, int GalaxySize);
+
+    /// <summary>
+    /// NEWGAME.PAS:1650-1701's header-token sequence, shared by <see cref="Load"/>, <see
+    /// cref="ReadHeader"/>, and <see cref="ReadIntroText"/> so all three can never drift out of sync
+    /// with what a real load actually consumes first. Assumes the caller has already consumed the
+    /// version line (Load parses it into <see cref="_scenaVersion"/>; the other two don't need it).
+    /// </summary>
+    private static (string Title, int MinPlayers, int MaxPlayers, int GalaxySize, int FirstYear) ReadHeaderTokens(ScenarioTokenizer tokenizer)
+    {
+        var title = NextToken(tokenizer); // Title -- consumed, not modeled (no UI to display it in)
+        NextToken(tokenizer); // Seed -- consumed, discarded (see class doc comment)
+        var minPlayers = NextInteger(tokenizer); // MinPlay -- consumed, not enforced (caller already decided players.Count)
+        var maxPlayers = NextInteger(tokenizer); // MaxPlay -- consumed, same reason
+        var galaxySize = NextInteger(tokenizer);
+        NextToken(tokenizer); // NoOfPlanets cap -- consumed; Galaxy.Planets is an unbounded List
+        NextToken(tokenizer); // Difficulty -- consumed, no C# equivalent (never read elsewhere in NEWGAME.PAS either)
+        NextToken(tokenizer); // MinLen -- consumed, same reason
+        NextToken(tokenizer); // MaxLen -- consumed, same reason
+        var firstYear = NextInteger(tokenizer);
+        return (title, minPlayers, maxPlayers, galaxySize, firstYear);
+    }
+
+    /// <summary>NEWGAME.PAS:1650-1812 (LoadScenario)'s header only, for a scenario picker to list without running a full Load.</summary>
+    public static ScenarioHeader ReadHeader(string scenarioText)
+    {
+        var tokenizer = new ScenarioTokenizer(scenarioText);
+        tokenizer.ReadLine(); // version line -- not needed for a picker
+        var (title, minPlayers, maxPlayers, galaxySize, _) = ReadHeaderTokens(tokenizer);
+        return new ScenarioHeader(title, minPlayers, maxPlayers, galaxySize);
+    }
+
+    /// <summary>
+    /// NEWGAME.PAS:1491-1505 (ScenarioIntroduction's own ReadPage loop) -- the intro narrative text
+    /// between BEGINTEXT and ENDTEXT. NEWPAGE markers are real, author-intended page breaks (confirmed
+    /// from AFTERMAT.SCN: three NEWPAGEs, one after each of its three decorative boxes) -- dropping them
+    /// and paginating by a blind fixed line count instead (an earlier version of this method did that)
+    /// split a box's own border across two screens, confirmed from real testing. Pages are joined with
+    /// '\f' (a form feed can't appear in real scenario prose) for IntroTextWindow.Paginate to split back
+    /// apart and, only if any single one of these real pages is still too long for one screen, further
+    /// chunk by a fixed line count as a fallback.
+    /// </summary>
+    public static string ReadIntroText(string scenarioText)
+    {
+        var tokenizer = new ScenarioTokenizer(scenarioText);
+        tokenizer.ReadLine(); // version line
+        ReadHeaderTokens(tokenizer);
+        return string.Join('\f', CollectIntroTextPages(tokenizer).Select(page => string.Join('\n', page)));
+    }
+
     /// <summary>DFA.PAS's DFA1NextToken, wrapped to throw the same way a malformed token would report through ScenaError.</summary>
     private static string NextToken(ScenarioTokenizer tokenizer)
     {
@@ -158,11 +223,26 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
     /// <summary>
     /// NEWGAME.PAS:1388-1515 (ScenarioIntroduction), file-consumption only — the display/PressAnyKey
     /// pagination and GetNoOfPlayers/NoChoice prompt are dead UI (player count is this call's own
-    /// input instead). NEWPAGE markers only affect how the real UI paginates, not where the text
-    /// block ends, so scanning straight for ENDTEXT (ignoring NEWPAGE) lands the cursor in the same
-    /// place a real page-by-page read would.
+    /// input instead).
     /// </summary>
-    private static void SkipIntroText(ScenarioTokenizer tokenizer)
+    private static void SkipIntroText(ScenarioTokenizer tokenizer) => CollectIntroTextPages(tokenizer);
+
+    /// <summary>
+    /// Shared by <see cref="SkipIntroText"/> and <see cref="ReadIntroText"/> — scans for BEGINTEXT, then
+    /// reads lines until one that's ENDTEXT (trimmed) or EoF, splitting into a new page on each line
+    /// that's NEWPAGE. Matched as a whole trimmed line, not real Pascal's own Pos('NEWPAGE',Line)&lt;&gt;0
+    /// substring-anywhere check (ScenarioIntroduction's ReadPage) -- that quirk has no RNG/parse-stream
+    /// stakes riding on it the way e.g. ScenarioTokenizer's quote-swallowing one does, so there's no
+    /// compatibility reason to keep the footgun of a scenario author's own prose accidentally containing
+    /// "NEWPAGE" or "ENDTEXT" as a substring and silently truncating their text; every real committed
+    /// scenario's marker lines are just the bare word plus trailing whitespace, so this is unaffected by
+    /// any of them. A trailing NEWPAGE immediately followed by ENDTEXT (FENCES.SCN does this) produces a
+    /// genuinely empty final page here, matching real Pascal exactly: its own ReadPage would hit ENDTEXT
+    /// on the very next call with LineNo still at 1, so its "FOR i:=1 TO LineNo-1" print loop runs zero
+    /// times and PressAnyKey never fires -- IntroTextWindow.Paginate drops empty pages for the same
+    /// reason, not by coincidence.
+    /// </summary>
+    private static List<List<string>> CollectIntroTextPages(ScenarioTokenizer tokenizer)
     {
         string token;
         do {
@@ -170,10 +250,24 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         } while (token.ToUpperInvariant() != "BEGINTEXT" && !tokenizer.AtEnd);
         tokenizer.ReadLine();
 
-        string line;
-        do {
-            line = tokenizer.ReadLine();
-        } while (!line.ToUpperInvariant().Contains("ENDTEXT") && !tokenizer.AtEnd);
+        var pages = new List<List<string>>();
+        var currentPage = new List<string>();
+        while (!tokenizer.AtEnd) {
+            var line = tokenizer.ReadLine();
+            var trimmedUpper = line.Trim().ToUpperInvariant();
+            if (trimmedUpper == "ENDTEXT")
+                break;
+            if (trimmedUpper == "NEWPAGE") {
+                pages.Add(currentPage);
+                currentPage = [];
+                continue;
+            }
+
+            currentPage.Add(line);
+        }
+
+        pages.Add(currentPage);
+        return pages;
     }
 
     /// <summary>NEWGAME.PAS:1372-1386 (SkipDescriptions) — whole-line reads, not tokens, until a line containing ENDDESCRIPTION or EoF.</summary>
@@ -504,15 +598,23 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         return central;
     }
 
-    /// <summary>NEWGAME.PAS:175-195 (GetRandomEmpireName) — retries until a name not already used by any empire created so far in this game.</summary>
-    private string GetRandomEmpireName(Game game)
+    /// <summary>
+    /// NEWGAME.PAS:1576 (InputEmpireName's own GetRandomEmpireName call) — the same random-name pool
+    /// and until-unused retry loop as <see cref="GetRandomEmpireName"/> below, exposed for the New Game
+    /// player-name prompt (no Game exists yet at that point, hence an explicit already-chosen list
+    /// instead of scanning Game.Empires).
+    /// </summary>
+    public static string SuggestEmpireName(Random random, IReadOnlyCollection<string> alreadyChosen)
     {
         string name;
         do {
             name = _rndEmpireNames[PascalMath.Rnd(random, 1, _rndEmpireNames.Length) - 1];
-        } while (game.Empires.Any(emp => emp.Name == name));
+        } while (alreadyChosen.Contains(name));
         return name;
     }
+
+    /// <summary>NEWGAME.PAS:175-195 (GetRandomEmpireName) — retries until a name not already used by any empire created so far in this game.</summary>
+    private string GetRandomEmpireName(Game game) => SuggestEmpireName(random, game.Empires.Select(emp => emp.Name).ToList());
 
     /// <summary>The 18-integer NLAM,Ndef,NGDM,Nion,Nfgt,...,Ntri tail shared by CreateWorld/CreateBase.</summary>
     private static (ShipCounts Ships, CargoHold Cargo, DefenseCounts Defenses) ReadShipCargoDefenseBase(ScenarioTokenizer tokenizer)

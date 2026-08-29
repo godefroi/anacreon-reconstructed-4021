@@ -97,13 +97,33 @@ internal sealed class GameShell : Window
         };
     }
 
+    /// <summary>Which way this window's Run ended -- <see cref="ExitChoice.None"/> if it's still showing.</summary>
+    public enum ExitChoice { None, MainMenu, ExitToOs }
+
+    public ExitChoice Choice { get; private set; }
+
     private void ConfirmQuit()
     {
-        // MessageBox's last button is the default (focused) one -- "No" here, so a stray Enter doesn't
-        // quit. The leading underscores give Y/N as hotkeys too (same HotKeyBindings mechanism as the
-        // menu items below -- both the bare key and Alt+key are bound, and it works regardless of which
-        // button currently has focus).
-        if (MessageBox.Query(App!, "Quit", "Are you sure you want to quit?", "_Yes", "_No") == 0) {
+        // PLAYTURN.PAS:1075/1178 (XXXCom) -- Quit here just sets ExitGame:=True, which unwinds the
+        // per-turn loop back to ANACREON.PAS's outer REPEAT, landing back on Prologue (the main menu),
+        // not a full process exit. MessageBox's last button is the default (focused) one -- "No" here,
+        // so a stray Enter doesn't quit. The leading underscores give Y/N as hotkeys too (same
+        // HotKeyBindings mechanism as the menu items below -- both the bare key and Alt+key are bound,
+        // and it works regardless of which button currently has focus).
+        if (MessageBox.Query(App!, "Quit", "Are you sure you want to quit? You'll return to the main menu.", "_Yes", "_No") == 0) {
+            Choice = ExitChoice.MainMenu;
+            App?.RequestStop();
+        }
+    }
+
+    // No Pascal equivalent -- real Quit (PLAYTURN.PAS's XXXCom) only ever returns to the main menu; a
+    // full exit is a separate command on Prologue's own menu bar, one screen further back. Added here as
+    // a TUI-only convenience once Quit stopped exiting the app outright, so leaving the game still has a
+    // one-step way out instead of forcing a trip back through the main menu first.
+    private void ConfirmExitToOs()
+    {
+        if (MessageBox.Query(App!, "Exit to OS", "Are you sure you want to exit to the operating system?", "_Yes", "_No") == 0) {
+            Choice = ExitChoice.ExitToOs;
             App?.RequestStop();
         }
     }
@@ -119,6 +139,7 @@ internal sealed class GameShell : Window
             new("_Status Hardcopy", Key.Empty, () => Stub("Status Hardcopy")),
             new("_Next Turn", Key.Empty, () => Stub("Next Turn")),
             new("_Quit", Key.Empty, ConfirmQuit),
+            new("_Exit to OS", Key.Empty, ConfirmExitToOs),
         }),
         new MenuBarItem("_Empire", new MenuItem[] {
             new("_Send Message", Key.Empty, () => Stub("Send Message")),
