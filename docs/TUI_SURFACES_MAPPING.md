@@ -36,6 +36,9 @@ this; it's purely about what sits underneath everything else.
 |---|---|---|---|
 | Galaxy map viewport | F10 / main map view | `MAPWIND.PAS: ScanWindow` | Custom `View` subclass, own `Draw()` writing cells via `Move()`/`SetAttribute()`/`AddRune()` — done, this is `GalaxyView.cs` |
 | Top-level navigation shell | Always visible | `PLAYTURN.PAS`/`PULLDOWN.PAS` (menu), `SWINDOWS.PAS` (status/help line) | `MenuBar` + `StatusBar`, `GalaxyView` as the permanent base — done, this is `GameShell.cs`. Every menu/status-bar leaf item is still stubbed to a `MessageBox` placeholder; each gets a real implementation as its own surface is built |
+| TMA Logo Splash | Once, at program launch | `ANACREON.PAS: Introduction` / `TMA.PAS: TMALogo` | Done — see Meta/one-off below for detail |
+| Anacreon Title + Orbit | Immediately after the TMA logo, once | `PROLOG.PAS: MainTitle`/`ZoomOutSFX`, `InitStarArray`/`UpdateStarArray` | Done — see Meta/one-off below for detail |
+| Turn Start Greeting | First thing shown in `SetUpPlayer`, every turn | `PROLOG.PAS: DisplayIntroScreen` | Done — see Turn Start / Player Login below for detail |
 
 Not yet covered by the existing view, but part of the same screen:
 
@@ -51,7 +54,7 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
-| Turn Start Greeting | First thing shown in `SetUpPlayer`, every turn | `PROLOG.PAS: DisplayIntroScreen` | Small `Dialog`/`Label` — header (empire name + year) plus one of 3 greeting lines, picked via `CASE Rnd(1,3)` in the original (`Random.Shared.Next(1, 4)` equivalent) |
+| Turn Start Greeting | First thing shown in `SetUpPlayer`, every turn | `PROLOG.PAS: DisplayIntroScreen` | **Done** (`TurnStartGreetingWindow.cs`) — small `Window`/`Label`, header (empire name + year) plus one of 3 greeting lines, picked via `CASE Rnd(1,3)` in the original (`Random.Shared.Next(1, 4)` equivalent); `--greetings` cycles all 3 once each then exits, for review |
 | Password Prompt | Immediately after the greeting | `PROLOG.PAS: GetPassword` | `TextField` (secret) in a `Dialog`; Esc cancels back out to the prologue/main menu without taking the turn |
 | Capital Fallen Report | After password, only if this empire's capital was conquered since its last turn | `PROLOG.PAS: EmpireNews` (the `CapID.ObjTyp=Void` branch) | Read-only `TextView`/`Label`, dismiss-on-any-key — narrative defeat text, then triggers empire elimination. (Despite the name, `EmpireNews` is this conquest check, not a news feed — it's a no-op UI otherwise.) |
 | Empire Status Report | After the above, skipped if this was the player's last turn | `PROLOG.PAS: EmpireStatus` | Read-only, scrollable `TextView` — plain narrative summary (world/population counts, average industry/efficiency, mastered technologies, military totals); original renders it with raw `Writeln` rather than the windowing system |
@@ -154,7 +157,8 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
-| TMA Logo Splash | Once, at program launch, before the main menu | `ANACREON.PAS: Introduction` calls `TMA.PAS: TMALogo` | Custom `View`/`Dialog` doing a timed reveal animation (original wipes the logo in column-by-column) via `Application.AddTimeout`; auto-continues after a few seconds or on keypress. One-shot animated splash, not the 3-random-variant thing — that's Turn Start Greeting above. |
+| TMA Logo Splash | Once, at program launch, before the main menu | `ANACREON.PAS: Introduction` calls `TMA.PAS: TMALogo` | **Done** (`TmaLogoWindow.cs`) — custom `Window`, reveal animation via `Application.AddTimeout` (a growing-suffix "characters march in from a fixed column" effect, matching `TMALogo`'s actual prepend loop, not a simple left-to-right wipe); auto-continues after a few seconds or on keypress. One-shot, not the 3-random-variant thing — that's Turn Start Greeting above. |
+| Anacreon Title + Orbit | Immediately after the TMA logo, once | `PROLOG.PAS: MainTitle`/`ZoomOutSFX`, `InitStarArray`/`UpdateStarArray` | **Done** (`AnacreonTitleWindow.cs`) — custom `Window`. Deliberately not a literal port: the original flies the word in via `BITPIC.INC`'s 4 hand-drawn bitmap frames (only 4 discrete images, always a jump-cut regardless of hold time) and only starts the star orbit afterward, in the outer menu loop; replaced with one continuous formula-driven system instead — the same 12 stars (still `PROLOG.PAS`'s `∙ o ☼ o` cycle, CP437 15 confirmed as the sunburst) orbit the title from frame one, radius easing out from 0 as the "fly-in," reprojected as an obliquely-viewed vertical ring (rather than the original's flat `Cycle`/`InitCycle` screen-offset table) so it passes convincingly behind/in front of the text. The white highlight band sweep is unchanged from the original. `--intro-only` plays the logo + this then exits; `--skip-intro` skips both plus the greeting, straight to the map. |
 | About Anacreon | ⌂ menu → About | `TMA.PAS: AboutAnacreon` | Static `Dialog`/`Window` with `Label`/`TextView` content, dismiss on any key |
 | Pause | Game menu → Pause | `SWINDOWS.PAS: PauseCommand` | `MessageBox` |
 | End Turn / Quit confirmations | Game menu → End Turn / Quit, or timer expiry | `PLAYTURN.PAS` | `MessageBox` |

@@ -36,7 +36,43 @@ Application.MaximumIterationsPerSecond = 240;
 // of our process, in ConPTY/Windows Terminal's rendering pipeline, not something app-side code can
 // fix. See https://github.com/tui-cs/Terminal.Gui/issues/5323 for the upstream tracking issue.
 
+// --greetings: cycle every Turn Start Greeting variant once each, then exit -- for reviewing the text
+// without relying on random luck to see all 3. --intro-only: play the TMA logo and the Anacreon
+// title/orbit animation, then exit -- for reviewing those without waiting through the greeting/map too.
+// --skip-intro: skip the TMA logo, the Anacreon title/orbit animation, and the greeting entirely,
+// straight to the map (the fast dev-iteration path this project used before any of them existed; will
+// likely instead land on the DOS pre-game main menu once that screen exists, but it's currently a bit
+// awkward -- a whole menu bar for only a handful of actionable items -- and due for a rethink before
+// it's worth wiring in here). None given: play the full original sequence once (ANACREON.PAS's
+// Introduction, then PROLOG.PAS's MainTitle/SetUpPlayer).
+var showAllGreetings = args.Contains("--greetings");
+var introOnly = args.Contains("--intro-only");
+var skipIntro = args.Contains("--skip-intro");
+
 IApplication app = Application.Create().Init();
+
+if (showAllGreetings) {
+    for (var variant = 1; variant <= 3; variant++) {
+        app.Run(new TurnStartGreetingWindow(game.Empires[0], game.Year, variant), null);
+    }
+
+    app.Dispose();
+    return;
+}
+
+if (introOnly) {
+    app.Run(new TmaLogoWindow(), null);
+    app.Run(new AnacreonTitleWindow(), null);
+    app.Dispose();
+    return;
+}
+
+if (!skipIntro) {
+    app.Run(new TmaLogoWindow(), null);
+    app.Run(new AnacreonTitleWindow(), null);
+    app.Run(new TurnStartGreetingWindow(game.Empires[0], game.Year, Random.Shared.Next(1, 4)), null);
+}
+
 app.Run(new GameShell(game), null);
 app.Dispose();
 
