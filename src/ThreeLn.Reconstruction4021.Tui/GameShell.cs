@@ -99,8 +99,11 @@ internal sealed class GameShell : Window
 
     private void ConfirmQuit()
     {
-        // MessageBox's last button is the default (focused) one -- "No" here, so a stray Enter doesn't quit.
-        if (MessageBox.Query(App!, "Quit", "Are you sure you want to quit?", "Yes", "No") == 0) {
+        // MessageBox's last button is the default (focused) one -- "No" here, so a stray Enter doesn't
+        // quit. The leading underscores give Y/N as hotkeys too (same HotKeyBindings mechanism as the
+        // menu items below -- both the bare key and Alt+key are bound, and it works regardless of which
+        // button currently has focus).
+        if (MessageBox.Query(App!, "Quit", "Are you sure you want to quit?", "_Yes", "_No") == 0) {
             App?.RequestStop();
         }
     }

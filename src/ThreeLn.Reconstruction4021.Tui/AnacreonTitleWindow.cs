@@ -1,5 +1,7 @@
 using System.Text;
 using Terminal.Gui.Drawing;
+using Terminal.Gui.Drivers;
+using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
@@ -8,10 +10,14 @@ namespace ThreeLn.Reconstruction4021.Tui;
 
 /// <summary>
 /// PROLOG.PAS's MainTitle/ZoomOutSFX plus the ambient orbiting-stars decoration
-/// (InitStarArray/UpdateStarArray) that normally runs continuously behind the DOS pre-game main menu.
-/// We don't have that menu screen yet (docs/TUI_SURFACES_MAPPING.md's "Pre-game setup" -- a separate,
-/// unscoped backlog item), so this plays the reveal once and lets the orbit run for a few seconds
-/// before continuing, rather than tying it to a menu-input loop that doesn't exist yet.
+/// (InitStarArray/UpdateStarArray) that runs continuously behind the DOS pre-game main menu, plus a menu
+/// of our own: New Game/Load Game/Options/Quit. PROLOG.PAS's <c>Prologue</c> drives the real thing with a
+/// Terminal.Gui-unrelated MenuBar type (InitializeMenuBar/AddBarItem/AddBarMenuItem) with four top-level
+/// items (⌂/Game/Options/Configure) covering ~20 commands total -- config toggles, save-game slots,
+/// multi-empire setup -- most of which this project has no backing feature for yet, so reproducing that
+/// exact menu shape isn't worth it before those features exist; see docs/TUI_SURFACES_MAPPING.md's
+/// "Pre-game setup" entry. Load Game/Options are still stubs; New Game and Quit are wired up (see
+/// <see cref="Choice"/>).
 /// </summary>
 /// <remarks>
 /// A deliberate departure from PROLOG.PAS here, not a literal port: the original flies the word in via
@@ -21,13 +27,20 @@ namespace ThreeLn.Reconstruction4021.Tui;
 /// formula-driven system: the same 12 stars (cycling '∙ o ☼ o' -- CP437 15, the sunburst, is the 3rd
 /// frame) orbit the title from the very first frame, easing their radius out from 0 to its resting size
 /// -- the "fly-in" -- with the title text itself static at its final position throughout. Once the ring
-/// reaches full size, PROLOG.PAS's white highlight band sweeps across the text exactly as before, while
-/// the ring keeps spinning uninterrupted underneath/around it. The ring is drawn in two passes so it
-/// passes behind the far side of the text and in front of the near side, rather than always drawing flat
-/// on top of it.
+/// reaches full size, PROLOG.PAS's white highlight band sweeps across the text exactly as before, then
+/// the ring keeps spinning indefinitely -- ambient decoration behind the menu, same as the original,
+/// rather than stopping after a fixed hold and auto-continuing (which was fine when there was no menu
+/// here to interact with, but isn't once there is one). The ring is drawn in two passes so it passes
+/// behind the far side of the text and in front of the near side, rather than always drawing flat on top
+/// of it.
 /// </remarks>
 internal sealed class AnacreonTitleWindow : Window
 {
+    public enum MenuChoice { None, NewGame, Quit }
+
+    /// <summary>Which menu item ended the window's run -- <see cref="MenuChoice.None"/> if it's still showing (Load Game/Options don't dismiss it).</summary>
+    public MenuChoice Choice { get; private set; }
+
     // PROLOG.PAS's TitleAnacreon (CP437-decoded -- see the project's CP437 caveat).
     private static readonly string[] TitleText = [
         "        █                                                                ",
@@ -39,11 +52,24 @@ internal sealed class AnacreonTitleWindow : Window
         "▄▄█▄      ▄▄███▄▄ ▄██▄  ██▄ ▀█▄█▀█▄ ▀█▄▄▄▀ ██    ▀█▄▄▄▀  ▀█▄▄█▀ ▄██▄  ██▄",
     ];
 
-    // COLORS.INC: Title1 = 4 -> Red on Black (same red as the TMA logo). The orbiting stars use the
+    // COLORS.INC: Title1 = 4 -> Red on Black (same red as the TMA logo, and as PROLOG.PAS's own
+    // WriteString(...,C.Title1) calls for the version/copyright lines below). The orbiting stars use the
     // inline assembly's hardcoded "bright" attribute 0x0F -> White on Black.
     private static readonly TgAttribute TitleAttribute = new(StandardColor.Red, StandardColor.Black);
     private static readonly TgAttribute BandAttribute = new(StandardColor.White, StandardColor.Black);
     private static readonly TgAttribute StarAttribute = new(StandardColor.White, StandardColor.Black);
+
+    // Red on black, same as the title text and copyright lines below (TitleAttribute) -- no Pascal
+    // equivalent for a widget like this (see the class doc comment), so matching this screen's own
+    // existing color reads better than introducing a new one. Focus brightens it (BrightRed) rather than
+    // inverting to a light background -- black stays the background in both states, so the bright-yellow
+    // hotkey letter stays legible either way (a white focus background is what made it unreadable before).
+    private static readonly Scheme MenuButtonScheme = new() {
+        Normal = new TgAttribute(StandardColor.Red, StandardColor.Black),
+        Focus = new TgAttribute(StandardColor.BrightRed, StandardColor.Black),
+        HotNormal = new TgAttribute(StandardColor.BrightYellow, StandardColor.Black),
+        HotFocus = new TgAttribute(StandardColor.BrightYellow, StandardColor.Black),
+    };
 
     private static readonly char[] OrbitGlyphs = ['∙', 'o', '☼', 'o'];
 
@@ -65,7 +91,6 @@ internal sealed class AnacreonTitleWindow : Window
     private const double OrbitLapMs = 3000; // time for one full revolution once at full radius.
     private const int OrbitGlyphTicksPerFrame = 4; // how many ticks each of the 4 glyphs holds for -- cycling every tick would flicker too fast to read as a twinkle.
     private const double FlyInDurationMs = 1800; // time for the ring to ease from radius 0 out to full size -- the "fly-in".
-    private const int OrbitHoldTicks = 150; // ~4.5s of ambient orbit, after the band sweep, at the tick interval below.
     private static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(30);
     private static readonly double OrbitAngleStep = 2 * Math.PI / (OrbitLapMs / TickInterval.TotalMilliseconds);
 
@@ -80,14 +105,13 @@ internal sealed class AnacreonTitleWindow : Window
     private Phase _phase = Phase.FlyIn;
     private double _flyInElapsedMs;
     private int _bandColumn;
-    private int _orbitTicksLeft = OrbitHoldTicks;
     private int _tickCount;
     private readonly Star[] _stars = new Star[OrbitStars];
 
     private int _titleX;
     private int _titleY;
 
-    // Every timer currently scheduled, so a keypress dismissal can cancel all of them -- otherwise an
+    // Every timer currently scheduled, so choosing New Game/Quit can cancel all of them -- otherwise an
     // abandoned one fires later against whatever window happens to be running by then. See
     // TmaLogoWindow's Dismiss for the full explanation of why this matters. This window can have two
     // concurrently pending (the ongoing orbit ticker, plus the band sweep's own chain while it runs).
@@ -102,16 +126,91 @@ internal sealed class AnacreonTitleWindow : Window
         SetScheme(new Scheme(new TgAttribute(StandardColor.Black, StandardColor.Black)));
 
         DrawingContent += OnDrawingContent;
-        KeyDown += (_, _) => Dismiss();
 
         for (var i = 0; i < OrbitStars; i++) {
             _stars[i] = new Star { Angle = i * 2 * Math.PI / OrbitStars, GlyphOffset = i };
         }
 
+        var newGameButton = CreateMenuButton(0, "_New Game", Key.N, () => Choose(MenuChoice.NewGame));
+        Add(newGameButton);
+        Add(CreateMenuButton(1, "_Load Game", Key.L, () => Stub("Load Game")));
+        Add(CreateMenuButton(2, "_Options", Key.O, () => Stub("Options")));
+        Add(CreateMenuButton(3, "_Quit", Key.Q, () => Choose(MenuChoice.Quit)));
+
+        var versionLabel = new Label { X = Pos.Center(), Y = Pos.AnchorEnd(3), Text = "Reconstruction 4021" };
+        var copyrightLabel = new Label { X = Pos.Center(), Y = Pos.AnchorEnd(2), Text = "(c) Copyright 1990 by T M A   All Rights Reserved" };
+        versionLabel.SetScheme(new Scheme(TitleAttribute));
+        copyrightLabel.SetScheme(new Scheme(TitleAttribute));
+        Add(versionLabel);
+        Add(copyrightLabel);
+
+        // Left/Right cycle focus among the four menu buttons -- they're the only focusable subviews here,
+        // so this is unambiguous. Attached to the Window (not each button) for the same reason GameShell's
+        // Esc handler is: unhandled key events bubble up from whichever button currently has focus.
+        KeyDown += (_, key) => {
+            switch (key.NoAlt.NoCtrl.NoShift.KeyCode) {
+                case KeyCode.CursorLeft:
+                    AdvanceFocus(NavigationDirection.Backward, null);
+                    key.Handled = true;
+                    break;
+                case KeyCode.CursorRight:
+                    AdvanceFocus(NavigationDirection.Forward, null);
+                    key.Handled = true;
+                    break;
+            }
+        };
+
         // App isn't assigned yet during construction (only once Application.Run begins this window's
         // session), so the first tick has to wait for Initialized rather than starting here.
-        Initialized += (_, _) => ScheduleTimeout(TickInterval, OrbitTick);
+        Initialized += (_, _) => {
+            ScheduleTimeout(TickInterval, OrbitTick);
+            newGameButton.SetFocus();
+        };
     }
+
+    /// <summary>Four equal-width framed cells tiling one row -- Pos/Dim percentages do the layout, not manual column arithmetic. A 1-column inset on each side keeps adjacent buttons' borders from touching.</summary>
+    private View CreateMenuButton(int index, string text, Key hotKey, Action action)
+    {
+        var button = new View {
+            X = Pos.Percent(index * 25) + 1,
+            Y = 1,
+            Width = Dim.Percent(25) - 2,
+            Height = 5,
+            Text = text,
+            TextAlignment = Alignment.Center,
+            VerticalTextAlignment = Alignment.Center,
+            BorderStyle = LineStyle.Double, // a classic DOS-dialog look, and reads as heavier/bolder than a plain single line without needing a custom glyph set.
+            CanFocus = true,
+            HotKey = hotKey,
+        };
+        button.SetScheme(MenuButtonScheme);
+
+        button.KeyDown += (_, key) => {
+            if (key.KeyCode is KeyCode.Enter or KeyCode.Space) {
+                action();
+                key.Handled = true;
+            }
+        };
+        button.MouseEvent += (_, mouse) => {
+            if (mouse.IsSingleClicked) {
+                action();
+                mouse.Handled = true;
+            }
+        };
+        // The base View's default hot-key handling only moves focus; this is what actually fires the
+        // button's action on a bare N/L/O/Q press, regardless of which button currently has focus.
+        button.HotKeyCommand += (_, _) => action();
+
+        return button;
+    }
+
+    private void Choose(MenuChoice choice)
+    {
+        Choice = choice;
+        Dismiss();
+    }
+
+    private void Stub(string label) => MessageBox.Query(App!, label, "Not yet implemented.", "OK");
 
     private object ScheduleTimeout(TimeSpan delay, Func<bool> callback)
     {
@@ -131,7 +230,9 @@ internal sealed class AnacreonTitleWindow : Window
     }
 
     // Runs continuously from the first frame until the window closes -- spins the ring every tick
-    // regardless of phase, and separately drives whichever phase-specific progress is current.
+    // regardless of phase, and separately drives whichever phase-specific progress is current. Never
+    // stops itself: unlike a one-shot splash, this screen's ambient animation is meant to keep running
+    // behind the menu for as long as the menu is up (see the class doc comment).
     private bool OrbitTick()
     {
         _tickCount++;
@@ -140,24 +241,12 @@ internal sealed class AnacreonTitleWindow : Window
             star.Angle += OrbitAngleStep;
         }
 
-        switch (_phase) {
-            case Phase.FlyIn:
-                _flyInElapsedMs += TickInterval.TotalMilliseconds;
-                if (_flyInElapsedMs >= FlyInDurationMs) {
-                    _phase = Phase.Band;
-                    AdvanceBand();
-                }
-
-                break;
-
-            case Phase.Orbit:
-                if (--_orbitTicksLeft <= 0) {
-                    SetNeedsDraw();
-                    Dismiss();
-                    return false;
-                }
-
-                break;
+        if (_phase == Phase.FlyIn) {
+            _flyInElapsedMs += TickInterval.TotalMilliseconds;
+            if (_flyInElapsedMs >= FlyInDurationMs) {
+                _phase = Phase.Band;
+                AdvanceBand();
+            }
         }
 
         SetNeedsDraw();

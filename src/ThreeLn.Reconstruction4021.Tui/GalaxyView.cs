@@ -84,6 +84,12 @@ internal sealed class GalaxyView : View
     private Coordinate _cursor;
     private bool _viewportInitialized;
 
+    // Screen-space position of the last drag event, so a left-button-held move can scroll by the pixel
+    // delta rather than jumping the viewport to the raw cursor position. Null when no drag is active.
+    // MAPWIND.PAS has no mouse handling at all (DOS-era, keyboard-only) -- this is a TUI-only addition,
+    // not a port of anything.
+    private Point? _dragOrigin;
+
     // Terminal.Gui's SetAttribute is persistent (like a terminal SGR code) until changed again, so
     // re-setting an unchanged color is a pure no-op that still costs a full framework call. Reset once
     // per frame (not per row): the attribute genuinely persists across Move() calls and row boundaries,
@@ -119,6 +125,7 @@ internal sealed class GalaxyView : View
 
         DrawingContent += OnDrawingContent;
         KeyDown += OnKeyDown;
+        MouseEvent += OnMouseEvent;
     }
 
     private void OnDrawingContent(object? sender, DrawEventArgs e)
@@ -310,6 +317,38 @@ internal sealed class GalaxyView : View
         SetNeedsDraw();
         key.Handled = true;
         CursorCoordinateChanged?.Invoke(this, CursorCoordinateText);
+    }
+
+    /// <summary>Left-button drag pans the viewport by the pixel delta since the last event; released or moved-without-the-button ends the drag.</summary>
+    private void OnMouseEvent(object? sender, Mouse mouse)
+    {
+        if (!mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed) || mouse.Position is not { } position) {
+            if (_dragOrigin is not null) {
+                _dragOrigin = null;
+                App?.Mouse.UngrabMouse();
+            }
+
+            return;
+        }
+
+        if (_dragOrigin is { } last) {
+            var viewport = Viewport;
+            var content = GetContentSize();
+            var maxX = Math.Max(0, content.Width - viewport.Width);
+            var maxY = Math.Max(0, content.Height - viewport.Height);
+            var newX = Math.Clamp(viewport.X - (position.X - last.X), 0, maxX);
+            var newY = Math.Clamp(viewport.Y - (position.Y - last.Y), 0, maxY);
+            if (newX != viewport.X || newY != viewport.Y) {
+                Viewport = new Rectangle(newX, newY, viewport.Width, viewport.Height);
+            }
+        } else {
+            // First event of the drag: grabbing keeps events routed here even once the pointer moves
+            // outside the view's own bounds mid-drag.
+            App?.Mouse.GrabMouse(this);
+        }
+
+        _dragOrigin = position;
+        mouse.Handled = true;
     }
 
     /// <summary>Raised whenever the cursor moves, with the same text <see cref="CursorCoordinateText"/> would return.</summary>
