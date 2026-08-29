@@ -66,6 +66,35 @@ public sealed class KingdomTurnHandler : ITurnHandler
         NpeToolkit.SetEmpireDefenses(empire, random);
     }
 
+    /// <summary>
+    /// `.SAV`/native-JSON import (`SaveFormat.SavGameLoader`/the Phase 7f JSON serializer):
+    /// reconstructs a handler from state a save file already recorded, rather than freshly
+    /// rolling a new persona — real Pascal's own `LoadNPEData` reads a `Kingdom1DataRecord`
+    /// wholesale into memory, it doesn't re-run `InitializeKingdom1NPE`/`2NPE`. No
+    /// `SetEmpireDefenses` call here for the same reason: that seeds a *new* empire's starting
+    /// defenses, and a loaded empire's `DefenseSettings` already came from Empire Data.
+    /// </summary>
+    internal KingdomTurnHandler(NpeEmpireType npeType, NpeCharacter persona, Dictionary<Empire, StateDeptRecord> state, Dictionary<Fleet, KingdomFleetState> fleetStates, Random random)
+    {
+        _random = random;
+        _defaultPolicy = npeType == NpeEmpireType.Kingdom2 ? PolicyType.Harass : PolicyType.Neutral;
+        _persona = persona;
+        _state = state;
+        _fleetStates = fleetStates;
+    }
+
+    /// <summary>Read-back seam for `.SAV`/native-JSON export — the inverse of the constructor above.</summary>
+    internal NpeCharacter Persona => _persona;
+
+    /// <summary>See <see cref="Persona"/>.</summary>
+    internal IReadOnlyDictionary<Empire, StateDeptRecord> State => _state;
+
+    /// <summary>See <see cref="Persona"/>.</summary>
+    internal IReadOnlyDictionary<Fleet, KingdomFleetState> FleetStates => _fleetStates;
+
+    /// <summary>See <see cref="Persona"/>.</summary>
+    internal PolicyType DefaultPolicy => _defaultPolicy;
+
     public void PlayTurn(Empire empire, Game game)
     {
         NpeToolkit.EnforceNpeDataLinks(_fleetStates, game);

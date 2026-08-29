@@ -1,0 +1,11 @@
+--- a/NPETYPES.PAS
++++ b/NPETYPES.PAS
+@@ -17,6 +17,8 @@ USES
+ CONST
+    MaxNoOfBlocks = MaxSizeOfGalaxy DIV 5;
+ 
++{$PACKRECORDS 1}
++
+ TYPE
+    NPEmpireTypes = ( NoNPE,
+                      PirateNPE,           { Pirate empire }

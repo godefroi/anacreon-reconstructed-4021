@@ -420,10 +420,262 @@ original developers shipped incomplete, not a port gap.
   - `LoadNPE`/`SaveNPE` (binary `.SAV` serialization, including the `Version<12` legacy-format
     branches) — Phase 7, not this phase, regardless of which personalities exist by then.
 
-## 7. Save/load
+## 7. Save/load — ✅ done, all 8 commits landed
 
-Translation layer to read/write original `.SAV` files. Does not shape the in-memory model — the
-on-disk format is a serialization concern, not a design input.
+`docs/SAV_FILE_FORMAT.md` documents the real on-disk `.SAV` byte layout in full (every section,
+file:line cited into `reference/DOSAnacreonSource131/`, checked against 13 real save files in
+`reference/saves/`), with `scripts/savtool.py`/`.ps1` as an independently-built, byte-verified
+`.SAV` ⟷ JSON oracle. This phase builds on that:
+
+**Scope, decided with the user, revising this entry's original two-line blurb**: DOS `.SAV`
+*import* (`LoadGame`) is the real priority — real captured/played saves are a valuable ground-truth
+and testing asset, and user-facing import convenience. This port's actual long-term native save
+format will be a **new JSON format** (direct object-graph serialization of `Game`, not the DOS
+binary shape, and not the "higher-level semantic" format `SAV_FILE_FORMAT.md`'s closing section
+sketches — that's more design/maintenance effort than warranted while the entity model is still
+moving). `SaveGame`-to-`.SAV` is downgraded to a minimal, test-only tool whose only job is
+confirming real Pascal `LoadGame` accepts this port's output — not a maintained, byte-faithful
+feature.
+
+- ✅ **7a, merge + scope + primitives.** Merged `main` (Phase 6 Kingdom AI, landed after this
+  branch split off `sav_file_format_doc` at `28afe88` — confirmed zero file overlap before
+  merging, so a clean merge) so the NPE Data section has real `KingdomTurnHandler` state to read.
+  Byte-level primitive readers for `SAV_FILE_FORMAT.md`'s documented conventions (fixed-width
+  little-endian ints, `STRING[N]`, `SET OF T` bitsets, `IDNumber`, opaque-byte passthrough).
+- ✅ **7b, Header + Environment + Sector `LoadGame`** (`Core/SaveFormat/SavGameLoader.cs`). Eight
+  placeholder `Empire` slots allocated up front resolve every empire ordinal read before Empire
+  Data actually names/activates them (Environment's `Player`, Sector's mine owner/`MineScout`) —
+  same object identity Empire Data (7d) later fills in with real fields, never added to
+  `Game.Empires` unless that slot turns out `InUse`. Confirmed directly from `GALAXY.PAS`/
+  `INTRFACE.PAS` (grepped every `.Obj:=`/`Flts:=` write site in the 1.31 tree) that `Sector.Obj`
+  is never a fleet reference — only `CreatePlanet`/`CreateStarbase`/`CreateStargate`/construction
+  -site creation write it — so `Obj`/`Flts` are fully redundant with what Planets/Starbases/
+  Fleets/Stargates/ConstructionSites (7c) independently provide and are read-and-discarded;
+  `Special`'s nibbles (nebula type, mine-placing empire — sentinel `Ord(Indep)`=8 meaning "no
+  mine," `GALAXY.PAS`'s own `NoSRMField` constant) and `MineScout` reconstruct `Galaxy`'s sparse
+  nebula/minefield/mine-scouted-by dictionaries, the only place this port's model has to put them.
+  Confirmed the on-disk row loop is X-outer/Y-inner (Pascal's own loop variable is misleadingly
+  named `y` but indexes `Sector[XY.x]`, per `SetMineScout`'s usage) by reading `GALAXY.PAS`
+  directly, not assumed from the format doc's looser "Row 0.. Row SizeOfGalaxy" phrasing.
+  `EmpiresToMove`/`TimePerTurn`/`AutoSave`/`AsyncTurns`/`PauseActive`/`ReEnterGame` read and
+  discarded, `ScenaFilename` kept via the new `Game.ScenarioFilename`. Tested against real bytes
+  from `INTRO_1.SAV`, ground truth cross-checked against `scripts/savtool.py`'s own JSON parse
+  (year 4021, player ordinal 0, `INTRO.SCN`, `SizeOfGalaxy=21`, 90 nebula cells, zero minefields).
+- ✅ **7c, Planets/Starbases/Fleets/Stargates/Constructions `LoadGame`** (`SavGameLoader.cs`).
+  Fleet's `FuelHigh`/`Fuel` split → single `double` (`FuelHigh*32767+Fuel`); `CommandRecord` order
+  queues read and discarded (no in-memory representation exists — Phase 8's job once a human turn
+  handler needs one), confirmed not to desync the byte cursor against `FLEET_ORDERS.SAV` (a real
+  4-order queue). `STyp`/`GTyp`/`CTyp` all confirmed (via `docs/SAV_FILE_FORMAT.md`'s own worked
+  examples, e.g. `STARGATE_DONE.SAV`'s `GTyp=24`) to be the full `TechnologyTypes` ordinal, not a
+  0-based subrange index — each decodes as a constant offset (`StarbaseKind`-20, `StargateKind`
+  -24, `ConstructionType`-19) since `TYPES.PAS:83-85` declares all three as genuine Pascal
+  subranges, which preserve the base enum's ordinals rather than renumbering. **Found and fixed a
+  real semantic gap while implementing this, not caught by the format doc alone**: `Fleet.
+  Destination`/`Starbase.Destination` being `null` means "not moving" in this port's own model
+  (`FleetMovementHandler`), but real Pascal's `Dest` field is never optional — a non-moving
+  fleet/starbase's `Dest` is just its own current `XY` on disk (confirmed via `INTRO_2.SAV`: every
+  fleet with `Dest==XY` has `Status=Ready`, every fleet with `Dest≠XY` has `Status=InTransit`, no
+  exceptions across all 9). Translated as `Destination = (Dest==XY) ? null : Dest` for both types
+  — *not* the same as `Stargate.LinkedTo`'s actual `(0,0)`-`Limbo` sentinel, confirmed a genuinely
+  different convention by reading `CreateStarbase`/`CreateStargate` directly (the former
+  initializes `Dest:=XY`, the latter `Dest:=Limbo`). Tested against real bytes from `INTRO_2.SAV`
+  (9 fleets, including one already-arrived), `GAUNTLET_1.SAV` (10 starbases), `FLEET_ORDERS.SAV`
+  (13 fleets, one with a real discarded order queue), `STARGATE_DONE.SAV`, `Confront_2.SAV`.
+- ✅ **7d, Messages/Empire Data/News `LoadGame`.** Messages read and discarded — no in-memory
+  message concept exists anywhere in this port (a human-UI feature, same `ATTCOMM`/`FLTCOMM`
+  -adjacent Phase 8 cluster). Empire Data fills the same 8 placeholder slots earlier sections
+  already resolved references against; only `InUse` slots join `Game.Empires`.
+  **`DefeatedBy` decode confirms a real ambiguity in the on-disk sentinel, resolved correctly**:
+  `ConquerEmpire`'s human-defeat trick (`ATTACK.PAS:1120-1131`) writes `Capital.ObjTyp:=Void,
+  Index:=Ord(Player)` — the conqueror's raw 0-based ordinal, which can legitimately be `0`
+  (Empire1). Gating on `Index>0` (as `IDNumber`'s usual "empty" convention would suggest) would
+  silently misread a real Empire1-conquered-you case as "no capital data" — gated on `ObjTyp==Void`
+  alone instead, since an `InUse` empire's `Capital` is never legitimately `EmptyQuadrant`
+  otherwise. `Technology`/`EmpireGainedTechnology`'s `TechGrant` share one 27-entry ordinal table
+  (`TechCatalog.Grant` already existed; this is its `.SAV`-side ordinal mapping, transcribed
+  separately from `ScenarioLoader`'s own — same Pascal declaration order, different parsing
+  boundary, not shared code). `NameRecord`'s `Location` union (raw XY or a resolved object
+  reference — same shape as `CommandRecord`'s `DestCOM` variant) resolves to a plain `Coordinate`
+  for `LocationBookmark`. News's `Loc1` decodes the same way, per-item not per-headline — the only
+  real per-headline exceptions are `OtherEmpire`/`TechGrant`, confirmed (by reading the exact real
+  `AddNews` call site, not guessed) for exactly the headlines this phase's ground truth exercises:
+  `FleetDestroyedByLams`/`FleetDamagedByLams`/`ProbeDestroyedByYou` (`Parm1`=`Ord(Player)`) and
+  `EmpireGainedTechnology` (`Parm1`=`Ord(NewTech)`, the granted item's full ordinal). Every other
+  headline (including `MessageReceived`, which has no real call site anywhere in this port) keeps
+  `Parm1-3` as plain ints, matching `NewsItem`'s own shape. Tested against `INTRO_1.SAV` (5 active
+  empire slots, 3 correctly-excluded inactive ones), `IMPERIUM_1.SAV` (all 8 slots active, a real
+  `Technology` bitset decode), `FLEET_ORDERS.SAV` and `Confront_2.SAV` (real `TechGrantIdentity`
+  and `OtherEmpire` decodes, cross-checked against `scripts/savtool.py`'s JSON parse of the same
+  bytes). `DefeatedBy`'s decode branch has no exercising reference save (none of the 13 capture a
+  defeated human empire) — implemented and reasoned through directly from `ConquerEmpire`, not
+  covered by a ground-truth test; flagged for whoever next captures or hand-builds one.
+- ✅ **7e, NPE Data `LoadGame` + `KingdomTurnHandler` state seam.** New `internal` constructor on
+  `KingdomTurnHandler` builds a handler straight from a saved persona/`State`/`FleetStates` (no
+  fresh persona roll, no `SetEmpireDefenses` re-seed) plus matching internal read-back accessors
+  (`Persona`/`State`/`FleetStates`/`DefaultPolicy`) for 7f's JSON serializer to reuse — kept
+  `internal`, not exposed to tests, matching this port's standing precedent of testing Kingdom's
+  private state indirectly through public entry points (here, actually running `PlayTurn` against
+  loaded state rather than reaching into fields). `FleetDataRecord`'s field order confirmed
+  directly against `NPETYPES.PAS` (`Mission`/`TargetID`/`HomeBaseID`/`Midway`(dead)/`Waiting`/
+  `BlockX`/`BlockY`(Pirate-only)/`Index`), same for `StateDeptRecord`/`NPECharacterRecord` — all
+  three enums (`MissionTypes`, `PolicyTypes`, and `NPEmpireTypes` itself) confirmed in exact
+  Pascal ordinal order, direct cast. Opaque per-empire blob storage
+  (`Game.UnimplementedNpeBlobs`) for Pirate/Berserker/Guardian/Trader/unrecognized (no
+  `ITurnHandler` exists for any of them yet, but real scenarios mix them with Kingdom empires —
+  their blobs must still round-trip, not be silently dropped). **Completes `.SAV` import end to
+  end** — every reference save loads cleanly start to finish, no truncated/partial reads.
+  Tested against `INTRO_1.SAV` (4 real `KingdomTurnHandler`s constructed from saved persona/state,
+  one of them actually run through a live `PlayTurn` from that loaded state — the strongest
+  available check on `State`'s 9-entry `Empire`+`Indep` completeness and `FleetStates`
+  well-formedness, since a gap there throws during real NPE decision logic, not silently),
+  `GAUNTLET_1.SAV` (Pirate blob alongside Kingdom2 empires), `Confront_1.SAV` (Guardian + Berserker
+  blobs, correct byte lengths).
+- ✅ **7f, native JSON save format.** `Core/SaveFormat/GameJson.cs`: `Serialize(Game) → string` /
+  `Deserialize(string) → Game`. The plan called for `ReferenceHandler.Preserve` on the real
+  reference cycles (`Owner`, `Empire`'s `EntityVisibility` sets, `NewsItem`) — dropped after hitting
+  four separate hard `System.Text.Json` incompatibilities, each confirmed by a real failing test,
+  not by reading docs: `JsonObjectCreationHandling.Populate` flatly rejects any `ReferenceHandler`
+  (global or per-property, same exception either way); a converter that delegates via a nested
+  `JsonSerializer.Serialize(writer, ...)` call starts a *fresh* `WriteStack` that doesn't share the
+  outer reference-tracking session, so a real cycle blows through the 64-level depth guard instead
+  of resolving via `$ref`; `Preserve`'s metadata wrapping is unsupported on constructor-bound
+  parameters, which both `Game`'s and `NewsItem`'s constructors are. All four trace to the same
+  root cause — `ReferenceHandler` doesn't compose with the rest of STJ's object model — and fixing
+  it by reshaping `Game`'s constructor or `NewsItem`'s positional shape would've inverted the
+  dependency this phase is supposed to respect. Replaced with the same fix `.SAV`'s own format
+  already uses: every entity reference is a stable per-kind integer id, resolved through a
+  write-side `EntityIndex`/read-side `EntityLookup` pair (mirroring `.SAV`'s `IDNumber`). `Empire`
+  is the one type that never goes through automatic reflection at all — it's referenced before its
+  own data is known, so `WriteEmpires`/`FillEmpireFields` hand-write every field, reusing
+  `SavGameLoader`'s own placeholder-Empire-slots trick for the forward reference.
+  **Real domain finding, not a bug**: `CombatOutcome.DestroyEmpire` drops a defeated empire from
+  `Game.Empires` but never clears references to it elsewhere (that method's own doc comment:
+  `CleanUpNPE isn't ported`) — so a Kingdom handler's own `State` diplomacy dictionary can hold a
+  live `Empire` no longer listed anywhere. `EntityIndex` auto-registers such "orphan" empires the
+  first time anything asks for their id, and a `realEmpireCount` field tells `Deserialize` how many
+  of the reconstructed placeholder `Empire`s to actually add to `Game.Empires` — the rest stay
+  alive, referenced only through the lookup, matching original state exactly. Verified with
+  `DeepGraphComparer` (new test-only exhaustive reflection-walk structural comparer, matching
+  entities across the two independently-built graphs by list position rather than reference
+  equality) round-tripping every reference `.SAV` plus one freshly-built `ScenarioLoader` game.
+  Confirmed the orphan path is actually exercised (`INTRO_1.SAV` has 3) and, after extending the
+  comparer to also walk `KingdomTurnHandler`'s `internal` `Persona`/`State`/`FleetStates` (it's
+  invisible to public-only reflection — the first pass over this silently checked nothing), that
+  Kingdom's saved diplomacy/mission state genuinely survives the round trip, not just its presence.
+- ✅ **7g, minimal `.SAV` write-back + real-Pascal acceptance check.** `Core/SaveFormat/
+  SavGameWriter.cs`: `WriteGame(Game) → byte[]`, the exact section-by-section mirror of
+  `SavGameLoader`'s own `Load*` methods. `EmpireSlotIndex` compacts `Game.Empires` down to as many
+  of the 8 real on-disk slots as it needs, then lazily discovers "orphan" empires (reachable only
+  via a Kingdom's own `State` dictionary, `Empire.DefeatedBy`, a `NewsItem`'s `OtherEmpire`/
+  `Defender`, or — a real gap this writer's own first real-Pascal run caught, not a hypothetical
+  the design anticipated — a minefield's owner/scouted-by set, which `CombatOutcome.DestroyEmpire`
+  never clears) and gives each one a free slot so a Kingdom's fixed 9-entry `State` array still
+  round-trips correctly. News is written faithfully (cheap, and puts 7d's decode table under real
+  test); Messages and fleet order queues are not (no in-memory representation of either exists in
+  this port at all).
+
+  **Real, pre-existing landmine found and fixed, not introduced by this commit**: the very first
+  real-Pascal run of ANY `.SAV`-shaped record through `fpc` (`LoadGame` itself was never previously
+  exercised against a real file by this harness — 7a-7f's own tests only ever checked the C# port's
+  understanding against itself) crashed with a runtime 216, then desynced with IOResult 100 once
+  that first crash was fixed. Root cause, confirmed by direct `SizeOf()` probes, not guessed:
+  `PlanetRecord` etc. have **no inter-field padding on real Turbo Pascal** (`docs/SAV_FILE_FORMAT.md`
+  already documented this empirically), but `fpc`'s default record alignment under `-Mtp` still
+  pads certain fields (a `Word` after an odd byte offset, a pointer after a short run of bytes) —
+  the same category of "fpc doesn't actually honor a real TP assumption" as the already-documented
+  `GlobalSets` `ABSOLUTE`-overlay landmine, just for record packing instead of a `VAR` alias. Fixed
+  with `{$PACKRECORDS 1}`, added to the seven pristine units that declare an on-disk record type
+  reachable from `LoadGame` (`DATASTRC.PAS`, `GALAXY.PAS`, `MESS.PAS`, `NEWS.PAS`, `NPETYPES.PAS`,
+  `ORDERS.PAS`, `TEXTSTRC.PAS` — `LOADSAVE.PAS` itself needed no change) — each confirmed with a
+  direct `SizeOf()` probe against `docs/SAV_FILE_FORMAT.md`'s own already-empirically-verified byte
+  counts before trusting a real save through it. `build-all-units.ps1`'s full 67-unit smoke test
+  and the entire existing `dotnet test` suite both still pass unchanged after the patch. One side
+  effect, fully root-caused: `scenario.golden`'s `Awaken` case shows a different `sumstarbaseeff`
+  (89 → 143). This is **not** an RNG-stream-position shift, despite that being the first guess —
+  a direct A/B experiment (same seed, same `.SCN` file, `DATASTRC.PAS`'s `{$PACKRECORDS 1}` toggled
+  on/off, tracing `RandSeed` plus each starbase's own `Pop`/`Eff` right after `LoadScenario` returns)
+  showed `RandSeed` and both starbases' `Pop` byte-identical either way, and Starbase 1's `Eff`
+  identical too (85 both times) — only Starbase 2's `Eff` moves (58 packed vs. 4 unpacked). A real
+  RNG-position shift would perturb every downstream draw, not one field on one of two otherwise
+  -identical starbases.
+
+  Tracing further (a watchpoint on Starbase 2's own `Eff`/`Pop`, checked once per scenario command)
+  found the real cause: **`AWAKEN.SCN` creates 212 planets against `TYPES.PAS`'s own hardcoded
+  `MaxNoOfPlanets = 200`.** Its last `CreateRandomWorlds 16 1` command writes planet indices 197-212
+  — 12 slots past the end of the `Planet` array — and Turbo Pascal has no array-bounds checking by
+  default (confirmed, not assumed: grepped the entire pristine `reference/DOSAnacreonSource131/` tree
+  for `{$R+}` — zero matches, nothing re-enables it), so that overrun silently writes past
+  `UniverseRecord`'s `Planet` field straight into `Starbase` (the very next field declared in
+  `DATASTRC.PAS`) — 12 overrun records × ~89-90 bytes each (~1068-1080 bytes) lands entirely inside
+  `StarbaseArray` (`TYPES.PAS`'s own `MaxNoOfStarbases = 100`, `StarbaseRecord` ~91 bytes, so the
+  spill blankets roughly the first 12 starbase slots and never reaches `Fleet`), corrupting whichever
+  of those slots this scenario actually populates — here, slots 1 and 2, the only two `AWAKEN.SCN`
+  ever creates. `Eff:=100` (Starbase 1's own
+  real, literal `.SCN` value, confirmed by tracing `CreateBase` itself) becomes 85 either way;
+  `Eff:=90` (Starbase 2's) becomes 58 or 4 depending on packing, and Starbase 2's `Pop` moves too
+  (103 → 470) — not an `RndVar` jitter, the same overrun. Both `PlanetRecord`'s size (89 vs. 90
+  bytes, changing the overrun's stride) and `StarbaseRecord`'s own layout (also declared in
+  `DATASTRC.PAS`, also repacked) shift under `{$PACKRECORDS 1}`, together changing exactly which
+  bytes of the 12-planet spillover land where in `Starbase`'s first two slots. This is a real bug in
+  the reference `.SCN` file itself, not in this port, this harness, or `SavGameWriter` — and since
+  Turbo Pascal ships with range checking off, the genuine pristine DOS 1.31 binary would corrupt
+  these same two starbases via the same mechanism loading this exact file (not necessarily the same
+  *values* — real play reseeds `RandSeed` from the file's own `Seed` field rather than this harness's
+  fixed 12345, so whatever ends up adjacent in memory differs). The same category of finding as
+  `ScenarioCases.cs`'s own documented `PRINCES.SCN` note ("real 1.31 chokes on this file too") — a
+  real reference-fixture defect, not a gap in the reconstruction — except this one corrupts silently
+  instead of erroring, which is why `PACKRECORDS` (an unrelated, correctness-motivated fix) was able
+  to change its exact symptom. Confirmed the only one affected: `scenario.golden`'s other 10 cases
+  all have `planetcount` ≤ 200 (`Arronax`/`Imperium` sit exactly at the ceiling, not over it).
+
+  The overrun's real reach is wider than `sumstarbaseeff` alone — `RunScenarioCase`'s own planet-sum
+  loop (`FOR i:=1 TO LastFirstWorld-1`) runs to 212, so indices 201-212 read `Starbase`'s raw bytes
+  back out reinterpreted as `PlanetRecord` (the overrun stays entirely inside `StarbaseArray`, per
+  the byte-math above — it never reaches `Fleet`), meaning every one of Awaken's planet sums
+  (`sumpop`, `sumeff`, `sumtri`, `sumclass`, `sumtech`, `sumships`, `sumcargo`, `sumdefns`,
+  `sumplanetx`, `sumplanety`) includes 12 phantom records, and its own `planetcount=212` counts slots
+  that were never a real `PlanetRecord` at all. This is the actual reason
+  `ScenarioLoaderGoldenTests.MatchesGoldenFile` stays green for Awaken despite all this: every one of
+  those contaminated fields was already excluded from exact-match for unrelated reasons (RNG
+  -derived), and the fields that *are* asserted (`year`, `planetcount`, `starbasecount`,
+  `stargatecount`, `empirecount`, `sumempiretech`, `sumrevfactor`, `sumcentralmodifier`) either come
+  from plain counters incremented once per successful command on both sides — identical regardless
+  of what garbage sits in the over-run memory, since neither side re-reads it — or from
+  `EmpireData`, a `UniverseRecord` field the 12-record overrun never reaches. Checkable, not just
+  narrow: none of the fields this test actually compares touch the corrupted memory at all.
+
+  Verification is **differential, not golden-file**: a new `reference/verify/runload.pas` driver
+  (deliberately its own driver, not a new `runworld.pas` domain, since `LOADSAVE.PAS`'s own unit
+  chain isn't in `runworld`'s `USES` and folding it in would re-run all 20 existing domains' unit
+  -initialization sections needlessly) calls the real, unmodified `LoadGame` and emits a structural
+  checksum (per-empire planet/starbase/fleet/construction-site counts, tech/revolution/founding/
+  news-count, sorted by empire name rather than on-disk slot ordinal since this writer's own slot
+  compaction doesn't preserve a real save's ordinal gaps; also fleet count plus aggregate
+  `sumfleetx`/`sumfleety`/`sumdestx`/`sumdesty`, and a galaxy-wide `minedcellcount` — added
+  specifically to keep `WriteFleets`' null-`Destination`-becomes-`XY` convention and `WriteSector`'s
+  mine-owner-nibble sentinel actually covered by this test, not just reasoned about at design time;
+  both mutation-tested by deliberately reintroducing each bug and confirming the acceptance test
+  fails on exactly that field before reverting) — run once against each reference `.SAV`
+  unmodified, once against `SavGameWriter`'s rewrite of what `SavGameLoader` loaded from it, and
+  diffed directly. Same real Pascal code both sides, no `Rnd()` anywhere in `LoadGame`, so an exact
+  match is safe in a way it wasn't for the `scenario` domain's own golden file. Passes for all 13
+  reference saves plus a smoke check (`error=0` only, no original file to diff against) for one
+  freshly built `ScenarioLoader` game.
+- ✅ **7h, roadmap wrap-up.** Phase flipped to done above. Re-read every gap 7a-7g flagged along the
+  way and confirmed each is still accurately described in place, nothing silently closed or
+  forgotten: order queues (`CommandRecord`/fleet `DestCOM` et al.) are read-and-discarded in 7c,
+  explicitly called out there as "Phase 8's job once a human turn handler needs one" — Messages
+  (7d) carry the identical status for the same reason (no in-memory concept exists; a human-UI
+  feature). UI/session Environment fields (`EmpiresToMove`/`TimePerTurn`/`AutoSave`/`AsyncTurns`/
+  `PauseActive`/`ReEnterGame`) are read-and-discarded in 7b — `AsyncTurns` specifically belongs to
+  Phase 9 (async/hotseat) rather than Phase 8, the rest to Phase 8's UI once a session actually has
+  settings to hold. `.SAV` write's scope (`SavGameWriter`, test-only, no fidelity effort beyond
+  "real Pascal accepts it") is stated up front in this section's own intro and reaffirmed in 7g;
+  nothing calls it a maintained feature anywhere. One more open item surfaced along the way, not
+  previously listed here: 7d's `DefeatedBy` decode branch (a conquered human empire) has no
+  exercising reference save among the 13 captured so far — implemented and reasoned through
+  directly from `ConquerEmpire`, but untested against a real file; worth a note for whoever next
+  captures or hand-builds one, not a blocker for Phase 8.
 
 ## 8. Human interactive turn handler + Terminal.Gui UI
 

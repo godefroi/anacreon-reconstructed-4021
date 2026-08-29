@@ -17,10 +17,24 @@ public sealed class Starbase : IMovable, IEconomicWorld
     public bool IsAddictedToAmbrosia { get; set; }
 
     public int Population { get; set; }
-    public ShipCounts Ships { get; } = new();
-    public CargoHold Cargo { get; } = new();
-    public DefenseCounts Defenses { get; } = new();
-    public IndustryLevels Industry { get; } = new();
+
+    /// <summary>
+    /// <c>init</c> (not a plain getter): <see cref="SaveFormat.GameJson"/> deserializes
+    /// <see cref="Starbase"/> via ordinary reflection (it has no forward-reference problem of its
+    /// own, see that class's own doc comment), which needs a way to assign the freshly-deserialized
+    /// instance back since there's no setter. Every other caller still mutates this object's own
+    /// properties in place; nothing reassigns the property itself.
+    /// </summary>
+    public ShipCounts Ships { get; init; } = new();
+
+    /// <summary>See <see cref="Ships"/>'s remarks.</summary>
+    public CargoHold Cargo { get; init; } = new();
+
+    /// <summary>See <see cref="Ships"/>'s remarks.</summary>
+    public DefenseCounts Defenses { get; init; } = new();
+
+    /// <summary>See <see cref="Ships"/>'s remarks.</summary>
+    public IndustryLevels Industry { get; init; } = new();
 
     public Coordinate? Destination { get; set; }
     public FleetStatus Status { get; set; } = FleetStatus.Ready;

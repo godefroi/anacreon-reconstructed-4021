@@ -30,6 +30,13 @@ covers.
   the file's own header comment for the exact field list of every domain. One driver, not one per
   domain, so `PatchHarness.CompileAndRun` only has to copy/patch/compile the whole tree once per
   `dotnet test` run regardless of how many domains use it.
+- `runload.pas` — a second, deliberately separate driver (Phase 7g): calls the real, unmodified
+  `LOADSAVE.PAS` `LoadGame` against a `.SAV` file on disk and emits a structural checksum of what
+  it loaded. Not folded into `runworld.pas` as a new `case <domain>` — `LOADSAVE.PAS`'s own unit
+  chain (`Mess`/`News`/`NPETypes`/`NPE`/`Orders`) isn't in `runworld`'s `USES` clause, and adding it
+  would run every one of those units' initialization sections before all 20 existing domains too,
+  several of which depend on exact `RandSeed`/other global state at startup. See the file's own
+  header comment for the checksum's exact field list and why it's sorted by empire name.
 - `build.ps1` — deletes and regenerates `patched/` from pristine source + `patches/` + `shims/`,
   then compiles `runworld.pas`. Run it, then run `.\patched\runworld.exe case ...` for manual
   iteration. The C# test suite doesn't shell out to this script — `PatchHarness.cs` (in
@@ -137,9 +144,12 @@ read carefully:
      instead of only through their real (UI-laden or whole-galaxy-loop) callers. Not really a
      "hook," but the same spirit: real behavior, made reachable.
 5. **A confirmed real Turbo-Pascal-runtime assumption `fpc` doesn't honor — behavior genuinely
-   changes, rare, always investigated empirically first.** So far exactly one: `DATASTRC.PAS`'s
-   `GlobalSets: GlobalSetsRecord ABSOLUTE SetOfActiveFleets` overlay. See "Landmines and gotchas"
-   below for the full story — this is the one class of patch where "what changed and why" matters
+   changes, rare, always investigated empirically first.** Two so far: `DATASTRC.PAS`'s
+   `GlobalSets: GlobalSetsRecord ABSOLUTE SetOfActiveFleets` overlay, and `fpc`'s default record
+   packing not matching Turbo Pascal's byte-packed layout even under `-Mtp` (`{$PACKRECORDS 1}`,
+   added to `DATASTRC.PAS`/`GALAXY.PAS`/`MESS.PAS`/`NEWS.PAS`/`NPETYPES.PAS`/`ORDERS.PAS`/
+   `TEXTSTRC.PAS`, Phase 7g). See "Landmines and gotchas" below for the full story — this is the
+   one class of patch where "what changed and why" matters
    enough that skimming this list isn't a substitute for reading that section.
 
 ## Adding or changing a patch
@@ -194,6 +204,42 @@ Cross-cutting lessons, not specific to one domain — read before touching *any*
   declarations, treat it as guilty until proven innocent the same way — same-unit/same-variable
   overlays (a few exist: `DOS2.PAS`, `PROLOG.PAS`, `QSORT.PAS`) are a fundamentally safer category
   since they don't depend on cross-unit link-order layout.
+- **`fpc`'s default record packing doesn't match real Turbo Pascal's byte-packed layout, even
+  under `-Mtp`.** `docs/SAV_FILE_FORMAT.md` already confirmed empirically (against real `.SAV`
+  bytes, independent of this harness) that Turbo Pascal packs `PlanetRecord` etc. with zero
+  inter-field padding. Phase 7g's `.SAV` write-back was the first thing in this harness to ever run
+  a real file through the unmodified `LOADSAVE.PAS`'s `LoadGame` (every earlier domain either
+  builds `Universe^` in memory directly or, for `scenario`, loads a `.SCN` — never a `.SAV`), and
+  it crashed (runtime 216) on the very first real save it tried, then desynced (IOResult 100) once
+  that was fixed. `SizeOf(PlanetRecord)` measured 90, not the real 89 — `fpc` was inserting a
+  padding byte to word-align a field despite `-Mtp`. Same root cause as the `GlobalSets` overlay
+  landmine above (a real TP assumption `fpc` doesn't honor), different mechanism (packing, not
+  `ABSOLUTE` aliasing). **Fixed with `{$PACKRECORDS 1}`**, added to every pristine unit that
+  declares a record type `LoadGame` reads/writes as a raw byte block (`DATASTRC.PAS`, `GALAXY.PAS`,
+  `MESS.PAS`, `NEWS.PAS`, `NPETYPES.PAS`, `ORDERS.PAS`, `TEXTSTRC.PAS`) — confirmed one file at a
+  time with a direct `SizeOf()` probe against `docs/SAV_FILE_FORMAT.md`'s own already-verified byte
+  counts, not assumed to be fixed just because the crash went away. If a future domain starts
+  reading/writing a record type by raw `SizeOf()` block instead of field-by-field, check its actual
+  compiled size the same way before trusting it — this class of mismatch produces no compile
+  warning and can silently succeed with wrong values instead of erroring, depending on what garbage
+  happens to sit in the extra padding. One real, if narrow, side effect of this fix:
+  `scenario.golden`'s `Awaken` case's `sumstarbaseeff` changed (89 → 143) — root-caused, not just an
+  RNG-stream-position shift (ruled out via a packed-vs-unpacked A/B: same `RandSeed`, same final
+  `Pop` on both starbases either way, only one starbase's final `Eff` differs between the two
+  builds). The real cause: `AWAKEN.SCN` creates 212 planets against `TYPES.PAS`'s own
+  `MaxNoOfPlanets = 200` (confirmed the only golden case that does — the other 10 all sit at or
+  under the ceiling) — its last `CreateRandomWorlds` writes 12 planet indices past the end of the
+  `Planet` array, and with range checking off (confirmed by grep: no `{$R+}` anywhere in the
+  pristine tree) that overrun silently spills into `Starbase` (the very next field in
+  `DATASTRC.PAS`'s `UniverseRecord`), corrupting Starbase 1 and 2's leading bytes — both starbases'
+  literal `.SCN` `Eff`/`Pop` values are overwritten by the spillover, not just `Eff`. Both
+  `PlanetRecord`'s size (89 vs. 90 bytes) and `StarbaseRecord`'s own layout — declared in the same
+  file, also repacked — shift under `{$PACKRECORDS 1}`, together changing exactly which spillover
+  bytes land where in `Starbase`'s first two slots. Same category of finding as `ScenarioCases.cs`'s
+  own `PRINCES.SCN` note (a real reference-scenario defect, not a reconstruction gap) — see
+  `docs/ROADMAP.md`'s Phase 7g entry for the full trace, including why
+  `ScenarioLoaderGoldenTests.MatchesGoldenFile` stays green for Awaken despite the overrun reaching
+  12 of its planet records too.
 - **A hand-assembled `Universe^` is only as faithful as the fields it remembers to set.** Two
   early harness bugs were both "field defaults to zero instead of what `CreateEmpire`/settlement
   actually initializes it to" (an empty `TechnologySet`, an unset `ImpExp` dial) — worth a
