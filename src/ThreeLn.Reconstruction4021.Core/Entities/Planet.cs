@@ -10,7 +10,15 @@ public sealed class Planet : IEconomicWorld
 
     public WorldClass Class { get; set; }
     public WorldType Type { get; set; }
-    public SelfSufficiencySettings SelfSufficiency { get; } = new();
+
+    /// <summary>
+    /// <c>init</c> (not a plain getter): <see cref="SaveFormat.GameJson"/> deserializes
+    /// <see cref="Planet"/> via ordinary reflection (it has no forward-reference problem of its
+    /// own, see that class's own doc comment), which needs a way to assign the freshly-deserialized
+    /// instance back since there's no setter. Every other caller still mutates this object's own
+    /// properties in place; nothing reassigns the property itself.
+    /// </summary>
+    public SelfSufficiencySettings SelfSufficiency { get; init; } = new();
     public TechLevel TechLevel { get; set; }
     public int Efficiency { get; set; }
     public int RevolutionIndex { get; set; }
@@ -23,10 +31,18 @@ public sealed class Planet : IEconomicWorld
     public bool IsAddictedToAmbrosia { get; set; }
 
     public int Population { get; set; }
-    public ShipCounts Ships { get; } = new();
-    public CargoHold Cargo { get; } = new();
-    public DefenseCounts Defenses { get; } = new();
-    public IndustryLevels Industry { get; } = new();
+
+    /// <summary>See <see cref="SelfSufficiency"/>'s remarks.</summary>
+    public ShipCounts Ships { get; init; } = new();
+
+    /// <summary>See <see cref="SelfSufficiency"/>'s remarks.</summary>
+    public CargoHold Cargo { get; init; } = new();
+
+    /// <summary>See <see cref="SelfSufficiency"/>'s remarks.</summary>
+    public DefenseCounts Defenses { get; init; } = new();
+
+    /// <summary>See <see cref="SelfSufficiency"/>'s remarks.</summary>
+    public IndustryLevels Industry { get; init; } = new();
     public int TrillumReserve { get; set; }
 
     // Explicit IEconomicWorld implementation, deliberately: these three exist only for

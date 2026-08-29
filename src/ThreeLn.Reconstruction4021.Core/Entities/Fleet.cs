@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ThreeLn.Reconstruction4021.Core.Galaxy;
 using ThreeLn.Reconstruction4021.Core.Types;
 
@@ -8,8 +9,11 @@ public sealed class Fleet : IMovable, ISectorObject, IShipCargoHolder
     public required Coordinate Location { get; set; }
     public Empire Owner { get; set; } = Empire.Independent;
 
-    public ShipCounts Ships { get; } = new();
-    public CargoHold Cargo { get; } = new();
+    // init (not a plain getter): GameJson deserializes Fleet via ordinary reflection (it has no
+    // forward-reference problem of its own, see GameJson's class doc comment), which needs a way
+    // to assign the freshly-deserialized ShipCounts/CargoHold back since neither has a setter.
+    public ShipCounts Ships { get; init; } = new();
+    public CargoHold Cargo { get; init; } = new();
 
     /// <summary>
     /// Pascal splits this across FuelHigh/Fuel to dodge 16-bit Integer overflow
@@ -30,6 +34,8 @@ public sealed class Fleet : IMovable, ISectorObject, IShipCargoHolder
     /// computes this (TypeOfFleet, PRIMINTR.PAS:808-833) rather than keeping a type field, so a
     /// fleet's type can never drift out of sync with the ships actually present.
     /// </summary>
+    /// <summary>Derived from <see cref="Ships"/>, never stored — see this property's own remarks. Excluded from the native JSON format for the same reason.</summary>
+    [JsonIgnore]
     public FleetType Type
     {
         get {

@@ -530,10 +530,38 @@ feature.
   well-formedness, since a gap there throws during real NPE decision logic, not silently),
   `GAUNTLET_1.SAV` (Pirate blob alongside Kingdom2 empires), `Confront_1.SAV` (Guardian + Berserker
   blobs, correct byte lengths).
-- **7f, native JSON save format.** `Game ↔ JSON`, `System.Text.Json` with `ReferenceHandler.
-  Preserve` for the port's real reference cycles and a pragmatic concrete-type switch (not a
-  general polymorphic contract) for `IEconomicWorld`/`ISectorObject`/`Game.TurnHandlers` — only
-  the types that exist today, not speculative support for handler types not yet built.
+- ✅ **7f, native JSON save format.** `Core/SaveFormat/GameJson.cs`: `Serialize(Game) → string` /
+  `Deserialize(string) → Game`. The plan called for `ReferenceHandler.Preserve` on the real
+  reference cycles (`Owner`, `Empire`'s `EntityVisibility` sets, `NewsItem`) — dropped after hitting
+  four separate hard `System.Text.Json` incompatibilities, each confirmed by a real failing test,
+  not by reading docs: `JsonObjectCreationHandling.Populate` flatly rejects any `ReferenceHandler`
+  (global or per-property, same exception either way); a converter that delegates via a nested
+  `JsonSerializer.Serialize(writer, ...)` call starts a *fresh* `WriteStack` that doesn't share the
+  outer reference-tracking session, so a real cycle blows through the 64-level depth guard instead
+  of resolving via `$ref`; `Preserve`'s metadata wrapping is unsupported on constructor-bound
+  parameters, which both `Game`'s and `NewsItem`'s constructors are. All four trace to the same
+  root cause — `ReferenceHandler` doesn't compose with the rest of STJ's object model — and fixing
+  it by reshaping `Game`'s constructor or `NewsItem`'s positional shape would've inverted the
+  dependency this phase is supposed to respect. Replaced with the same fix `.SAV`'s own format
+  already uses: every entity reference is a stable per-kind integer id, resolved through a
+  write-side `EntityIndex`/read-side `EntityLookup` pair (mirroring `.SAV`'s `IDNumber`). `Empire`
+  is the one type that never goes through automatic reflection at all — it's referenced before its
+  own data is known, so `WriteEmpires`/`FillEmpireFields` hand-write every field, reusing
+  `SavGameLoader`'s own placeholder-Empire-slots trick for the forward reference.
+  **Real domain finding, not a bug**: `CombatOutcome.DestroyEmpire` drops a defeated empire from
+  `Game.Empires` but never clears references to it elsewhere (that method's own doc comment:
+  `CleanUpNPE isn't ported`) — so a Kingdom handler's own `State` diplomacy dictionary can hold a
+  live `Empire` no longer listed anywhere. `EntityIndex` auto-registers such "orphan" empires the
+  first time anything asks for their id, and a `realEmpireCount` field tells `Deserialize` how many
+  of the reconstructed placeholder `Empire`s to actually add to `Game.Empires` — the rest stay
+  alive, referenced only through the lookup, matching original state exactly. Verified with
+  `DeepGraphComparer` (new test-only exhaustive reflection-walk structural comparer, matching
+  entities across the two independently-built graphs by list position rather than reference
+  equality) round-tripping every reference `.SAV` plus one freshly-built `ScenarioLoader` game.
+  Confirmed the orphan path is actually exercised (`INTRO_1.SAV` has 3) and, after extending the
+  comparer to also walk `KingdomTurnHandler`'s `internal` `Persona`/`State`/`FleetStates` (it's
+  invisible to public-only reflection — the first pass over this silently checked nothing), that
+  Kingdom's saved diplomacy/mission state genuinely survives the round trip, not just its presence.
 - **7g, minimal `.SAV` write-back + real-Pascal acceptance check.** Just enough write-side to
   produce a structurally valid file real Pascal `LoadGame` accepts — no fidelity effort beyond
   that. Verified through `reference/verify/`'s harness (`LOADSAVE.PAS` already compiles cleanly

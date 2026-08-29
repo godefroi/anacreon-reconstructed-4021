@@ -87,4 +87,21 @@ public sealed class Galaxy(int size)
         found ??= ConstructionSites.FirstOrDefault(c => c.Location == location);
         return found;
     }
+
+    /// <summary>
+    /// Read-back seam for the native-JSON serializer (<see cref="SaveFormat.GameJson"/>) — same
+    /// precedent as <see cref="Turns.KingdomTurnHandler"/>'s internal accessors: these 3 sparse
+    /// dictionaries have no public enumerator (only per-coordinate Get/Set), so nothing outside this
+    /// class could otherwise walk "every nebula/minefield/mine-scout entry" to serialize it. Plain
+    /// internal properties, not reflection-visible to System.Text.Json — GameJson reads/writes them
+    /// directly (see its own notes on why entities generally aren't routed through automatic
+    /// reflection where a forward-reference or ref-vs-inline distinction is involved).
+    /// </summary>
+    internal Dictionary<Coordinate, NebulaType> NebulaData => _nebulae;
+
+    /// <summary>See <see cref="NebulaData"/>.</summary>
+    internal Dictionary<Coordinate, Empire> MinefieldData => _minefields;
+
+    /// <summary>See <see cref="NebulaData"/>.</summary>
+    internal Dictionary<Coordinate, HashSet<Empire>> MineScoutedByData => _mineScoutedBy;
 }

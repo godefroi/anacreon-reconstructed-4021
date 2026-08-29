@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ThreeLn.Reconstruction4021.Core.Entities;
 using ThreeLn.Reconstruction4021.Core.Turns;
 using ThreeLn.Reconstruction4021.Core.Types;
@@ -12,13 +13,33 @@ namespace ThreeLn.Reconstruction4021.Core;
 public sealed class Game(Galaxy.Galaxy galaxy)
 {
     public Galaxy.Galaxy Galaxy { get; } = galaxy;
+
+    /// <summary>
+    /// Not reflection-serializable as-is: <see cref="Empire"/> itself needs pre-allocated
+    /// placeholder identity (its own <c>Capital</c>/<c>DefeatedBy</c>/visibility-set fields can
+    /// forward-reference entities, and every entity's <c>Owner</c> back-references an
+    /// <see cref="Empire"/>) — <see cref="SaveFormat.GameJson"/> reads/writes this list by hand
+    /// instead of through the generic pass. See that file's own notes.
+    /// </summary>
+    [JsonIgnore]
     public List<Empire> Empires { get; } = [];
+
+    /// <summary>
+    /// Not reflection-serializable as-is (Empire-keyed, ITurnHandler has one real implementor) —
+    /// <see cref="SaveFormat.GameJson"/> reads/writes this dictionary by hand instead of through the
+    /// generic pass. See that file's own notes.
+    /// </summary>
+    [JsonIgnore]
     public Dictionary<Empire, ITurnHandler> TurnHandlers { get; } = new();
 
     /// <summary>
     /// Null until whoever assembles the game sets it to Empires[0] — Empires is populated after
     /// construction, not passed in up front, so the constructor can't default this itself.
+    /// Same reason as <see cref="TurnHandlers"/>'s <c>[JsonIgnore]</c>: an <see cref="Empire"/>
+    /// reference, and <see cref="SaveFormat.GameJson"/> hand-writes every one of those (alongside
+    /// <see cref="Empires"/> itself) rather than routing them through automatic reflection.
     /// </summary>
+    [JsonIgnore]
     public Empire? CurrentEmpire { get; set; }
 
     public int Year { get; set; }
@@ -38,8 +59,11 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     /// scenarios routinely mix these with Kingdom empires (`docs/ROADMAP.md`'s Phase 6
     /// reachability table), so their state must round-trip opaquely rather than being silently
     /// dropped on `.SAV` write-back. Populated by <see cref="SaveFormat.SavGameLoader"/>; nothing
-    /// reads the bytes themselves — this port has no representation of what's inside them.
+    /// reads the bytes themselves — this port has no representation of what's inside them. Same
+    /// reason as <see cref="TurnHandlers"/>'s <c>[JsonIgnore]</c>: <see cref="SaveFormat.GameJson"/>
+    /// handles this by hand.
     /// </summary>
+    [JsonIgnore]
     public Dictionary<Empire, byte[]> UnimplementedNpeBlobs { get; } = new();
 
     public Empire NextEmpire(Empire current)
@@ -53,6 +77,13 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     public bool IsFirstEmpire(Empire empire) =>
         Empires.Count > 0 && ReferenceEquals(Empires[0], empire);
 
+    /// <summary>
+    /// Computed from <see cref="TurnHandlers"/>, which is itself <c>[JsonIgnore]</c>d (see its own
+    /// remarks) — GameJson must not try to serialize this too, both because it's derived (nothing to
+    /// persist) and because evaluating it requires every empire to already have a
+    /// <see cref="TurnHandlers"/> entry, which isn't true for e.g. a freshly-constructed <see cref="Game"/>.
+    /// </summary>
+    [JsonIgnore]
     public bool AnyHumanPlayersRemain => Empires.Any(e => TurnHandlers[e].IsHuman && e.DefeatedBy is null);
 
     /// <summary>
