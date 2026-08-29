@@ -187,20 +187,40 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
 
     /// <summary>
     /// NEWGAME.PAS:1491-1505 (ScenarioIntroduction's own ReadPage loop) -- the intro narrative text
-    /// between BEGINTEXT and ENDTEXT. NEWPAGE markers are real, author-intended page breaks (confirmed
-    /// from AFTERMAT.SCN: three NEWPAGEs, one after each of its three decorative boxes) -- dropping them
-    /// and paginating by a blind fixed line count instead (an earlier version of this method did that)
-    /// split a box's own border across two screens, confirmed from real testing. Pages are joined with
-    /// '\f' (a form feed can't appear in real scenario prose) for IntroTextWindow.Paginate to split back
-    /// apart and, only if any single one of these real pages is still too long for one screen, further
-    /// chunk by a fixed line count as a fallback.
+    /// between BEGINTEXT and ENDTEXT, already split into ready-to-display pages so a caller (e.g.
+    /// IntroTextWindow) does no text processing of its own, only rendering. NEWPAGE markers are the
+    /// *only* page breaks, matching real Pascal exactly: ReadPage's own read loop (<c>Line: ARRAY
+    /// [1..25] OF LineStr; REPEAT Inc(LineNo); ReadLn(SF,Line[LineNo]) UNTIL Pos('ENDTEXT',...)&lt;&gt;0
+    /// OR Pos('NEWPAGE',...)&lt;&gt;0</c>) has no line-count check at all -- it just keeps appending
+    /// lines until it hits a literal marker token. The 25-element array is a hard crash boundary for a
+    /// scenario author who writes too many lines before their next marker, not a graceful auto-page-
+    /// break; a real page can be any length up to that. An earlier version of this method invented a
+    /// fixed-line-count fallback chunker for "a real page still too long for one screen" -- confirmed
+    /// wrong against real Pascal (EASTWEST.SCN's real single 22-line page shows as one screen, not two)
+    /// and removed; there is no such case in real Pascal because there's no such enforcement to begin
+    /// with. Each real NEWPAGE-delimited page has its own trailing blank lines trimmed and is dropped
+    /// entirely if that leaves it empty (FENCES.SCN's trailing NEWPAGE immediately before ENDTEXT does
+    /// this -- see CollectIntroTextPages' own doc comment on why that's correct, not a bug). Returns an
+    /// empty list for a scenario with no real content between BEGINTEXT/ENDTEXT (a caller decides
+    /// whether to skip showing an intro screen at all in that case).
     /// </summary>
-    public static string ReadIntroText(string scenarioText)
+    public static IReadOnlyList<string> ReadIntroPages(string scenarioText)
     {
         var tokenizer = new ScenarioTokenizer(scenarioText);
         tokenizer.ReadLine(); // version line
         ReadHeaderTokens(tokenizer);
-        return string.Join('\f', CollectIntroTextPages(tokenizer).Select(page => string.Join('\n', page)));
+
+        var pages = new List<string>();
+        foreach (var pageLines in CollectIntroTextPages(tokenizer)) {
+            var lines = pageLines;
+            while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[^1]))
+                lines.RemoveAt(lines.Count - 1);
+
+            if (lines.Count > 0)
+                pages.Add(string.Join('\n', lines));
+        }
+
+        return pages;
     }
 
     /// <summary>DFA.PAS's DFA1NextToken, wrapped to throw the same way a malformed token would report through ScenaError.</summary>
@@ -228,7 +248,7 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
     private static void SkipIntroText(ScenarioTokenizer tokenizer) => CollectIntroTextPages(tokenizer);
 
     /// <summary>
-    /// Shared by <see cref="SkipIntroText"/> and <see cref="ReadIntroText"/> — scans for BEGINTEXT, then
+    /// Shared by <see cref="SkipIntroText"/> and <see cref="ReadIntroPages"/> — scans for BEGINTEXT, then
     /// reads lines until one that's ENDTEXT (trimmed) or EoF, splitting into a new page on each line
     /// that's NEWPAGE. Matched as a whole trimmed line, not real Pascal's own Pos('NEWPAGE',Line)&lt;&gt;0
     /// substring-anywhere check (ScenarioIntroduction's ReadPage) -- that quirk has no RNG/parse-stream
@@ -239,8 +259,8 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
     /// any of them. A trailing NEWPAGE immediately followed by ENDTEXT (FENCES.SCN does this) produces a
     /// genuinely empty final page here, matching real Pascal exactly: its own ReadPage would hit ENDTEXT
     /// on the very next call with LineNo still at 1, so its "FOR i:=1 TO LineNo-1" print loop runs zero
-    /// times and PressAnyKey never fires -- IntroTextWindow.Paginate drops empty pages for the same
-    /// reason, not by coincidence.
+    /// times and PressAnyKey never fires -- ReadIntroPages drops empty pages for the same reason, not by
+    /// coincidence.
     /// </summary>
     private static List<List<string>> CollectIntroTextPages(ScenarioTokenizer tokenizer)
     {

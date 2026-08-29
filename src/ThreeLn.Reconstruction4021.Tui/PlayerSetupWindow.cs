@@ -9,9 +9,9 @@ using TgAttribute = Terminal.Gui.Drawing.Attribute;
 namespace ThreeLn.Reconstruction4021.Tui;
 
 /// <summary>
-/// NEWGAME.PAS:1517-1632 (InputEmpireName), inside the same full-screen backdrop PlayerCountWindow opens
-/// (see its own doc comment) -- name is plain WriteString/InputString straight onto that blue
-/// background, matching source. Gender is real Pascal's own separate popup
+/// NEWGAME.PAS:1517-1632 (InputEmpireName), inside the same 80x24 NewGameWindow box the whole New Game
+/// flow runs in (see its own doc comment) -- name is plain WriteString/InputString straight onto that
+/// blue background, matching source. Gender is real Pascal's own separate popup
 /// (<c>OpenWindow(20,12,50,7,ThinBRD,'',C.CommWind,C.SYSWBorder,...)</c> -- CommWind=15 decodes to
 /// white-on-black), reproduced here as a small bordered box revealed over the blue background rather
 /// than a second nested Terminal.Gui Window/Application.Run (this codebase always runs one screen at a
@@ -21,26 +21,20 @@ namespace ThreeLn.Reconstruction4021.Tui;
 /// turn yet (GameShell always plays Empires[0]), so collecting one now would have no consumer. Add it
 /// back alongside real hot-seat turn-taking.
 /// </summary>
-internal sealed class PlayerSetupWindow : Window
+internal sealed class PlayerSetupWindow : NewGameWindow
 {
     private enum Gender { Male, Female }
 
-    // COLORS.INC's ColorScrColor: SYSDispWind=23 -> LightGray on Blue; CommWind=15 -> White on Black.
-    private static readonly TgAttribute SysDispWindAttribute = new(StandardColor.LightGray, StandardColor.Blue);
+    // COLORS.INC's ColorScrColor: CommWind=15 -> White on Black.
     private static readonly TgAttribute CommWindAttribute = new(StandardColor.White, StandardColor.Black);
 
     public ScenarioLoader.PlayerInfo? PlayerInfo { get; private set; }
 
-    public PlayerSetupWindow(string scenarioTitle, int playerNumber, string suggestedName)
+    public PlayerSetupWindow(string scenarioTitle, int playerNumber, string suggestedName) : base(scenarioTitle)
     {
-        Title = scenarioTitle;
-        Width = Dim.Fill();
-        Height = Dim.Fill();
-        SetScheme(new Scheme(SysDispWindAttribute));
-
         var nameField = new TextField { X = 1, Y = 2, Width = 32, Text = suggestedName };
-        Add(new Label { X = 1, Y = 1, Text = $"Name of player empire #{playerNumber} : " });
-        Add(nameField);
+        Content.Add(new Label { X = 1, Y = 1, Text = $"Name of player empire #{playerNumber} : " });
+        Content.Add(nameField);
 
         // CanFocus = true, not false: this container not being part of the focus chain is what blocked
         // genderSelector.SetFocus() below from actually landing there, confirmed from real testing --
@@ -62,16 +56,23 @@ internal sealed class PlayerSetupWindow : Window
         // "Setting Values directly is not allowed", confirmed from a real crash here.
         var genderSelector = new OptionSelector<Gender> { X = 1, Y = 1, Value = Gender.Male };
 
-        genderBox.Add(new Label { X = 1, Y = 0, Text = "Are you male or female?" });
+        genderBox.Add(new Label { X = 1, Y = 0, Text = "Are you male or female? (M/F)" });
         genderBox.Add(genderSelector);
-        Add(genderBox);
+        Content.Add(genderBox);
 
-        Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "Enter: confirm name   Click/arrows+Enter: pick gender   Esc: back" });
+        Content.Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "Enter: confirm name   M/F, click, or arrows+Enter: pick gender   Esc: back" });
 
         void ConfirmName()
         {
             genderBox.Visible = true;
             genderSelector.SetFocus();
+        }
+
+        void ConfirmGender(Gender gender)
+        {
+            var name = string.IsNullOrWhiteSpace(nameField.Text) ? suggestedName : nameField.Text.Trim();
+            PlayerInfo = new ScenarioLoader.PlayerInfo(name, Password: null, gender == Gender.Female);
+            Dismiss();
         }
 
         // ValueChanged instead of a KeyDown-based "confirm" step: OptionSelector's own child CheckBoxes
@@ -81,12 +82,9 @@ internal sealed class PlayerSetupWindow : Window
         // fires regardless of which internal child raised it, from either a click or an arrow+Enter
         // pick, so picking a gender is itself "confirm" -- no separate step needed.
         genderSelector.ValueChanged += (_, args) => {
-            if (args.Value is not { } gender)
-                return;
-
-            var name = string.IsNullOrWhiteSpace(nameField.Text) ? suggestedName : nameField.Text.Trim();
-            PlayerInfo = new ScenarioLoader.PlayerInfo(name, Password: null, gender == Gender.Female);
-            App?.RequestStop();
+            if (args.Value is { } gender) {
+                ConfirmGender(gender);
+            }
         };
 
         // Attached directly to the field, not a bubbled Window-level Accepting/Command.Accept handler
@@ -100,11 +98,35 @@ internal sealed class PlayerSetupWindow : Window
         };
 
         KeyDown += (_, key) => {
+            // M/F hotkeys: OptionSelector<TEnum>'s whole API surface is Value/Values/ValueChanged -- no
+            // per-item HotKey concept like the plain Views elsewhere in this project (e.g.
+            // AnacreonTitleWindow's menu buttons), confirmed from its type definition. Its internal child
+            // CheckBoxes are what actually hold focus, so a plain letter key only reaches here once
+            // nothing under genderBox handles it itself -- the same bubbling this Window already relies
+            // on for Esc below. Matched by character (key.AsRune), not KeyCode: KeyCode.M/F name the
+            // physical key regardless of case (there's no separate lowercase enum member, and a
+            // ShiftMask bit tracks case separately) -- comparing the actual typed character is what
+            // guarantees both "m" and "M" work, which is what was actually asked for.
+            if (genderBox.Visible && !key.IsCtrl && !key.IsAlt) {
+                var ch = char.ToUpperInvariant((char)key.AsRune.Value);
+                if (ch == 'M') {
+                    ConfirmGender(Gender.Male);
+                    key.Handled = true;
+                    return;
+                }
+
+                if (ch == 'F') {
+                    ConfirmGender(Gender.Female);
+                    key.Handled = true;
+                    return;
+                }
+            }
+
             if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Esc) {
                 return;
             }
 
-            App?.RequestStop();
+            Dismiss();
             key.Handled = true;
         };
 

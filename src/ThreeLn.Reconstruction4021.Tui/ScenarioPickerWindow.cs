@@ -12,7 +12,7 @@ namespace ThreeLn.Reconstruction4021.Tui;
 /// just prompts for a hardcoded filename, no directory scan or title list -- this is a TUI-only
 /// convenience over the same reference/scenarios/dos_131/*.SCN files.
 /// </summary>
-internal sealed class ScenarioPickerWindow : Window
+internal sealed class ScenarioPickerWindow : NewGameWindow
 {
     public sealed record ScenarioChoice(string Path, ScenarioLoader.ScenarioHeader Header)
     {
@@ -22,12 +22,8 @@ internal sealed class ScenarioPickerWindow : Window
 
     public ScenarioChoice? Selected { get; private set; }
 
-    public ScenarioPickerWindow(IReadOnlyList<ScenarioChoice> scenarios)
+    public ScenarioPickerWindow(IReadOnlyList<ScenarioChoice> scenarios) : base("New Game -- Choose a Scenario")
     {
-        Title = "New Game -- Choose a Scenario";
-        Width = Dim.Fill();
-        Height = Dim.Fill();
-
         var listView = new ListView<ScenarioChoice> {
             X = 0,
             Y = 0,
@@ -35,19 +31,19 @@ internal sealed class ScenarioPickerWindow : Window
             Height = Dim.Fill(1),
         };
         listView.SetSource(new ObservableCollection<ScenarioChoice>(scenarios));
-        Add(listView);
+        Content.Add(listView);
 
-        Add(new Label { X = 0, Y = Pos.AnchorEnd(1), Text = "Enter: choose   Esc: back to main menu" });
+        Content.Add(new Label { X = 0, Y = Pos.AnchorEnd(1), Text = "Enter: choose   Esc: back to main menu" });
 
         KeyDown += (_, key) => {
             switch (key.NoAlt.NoCtrl.NoShift.KeyCode) {
                 case KeyCode.Enter:
                     Selected = listView.Value;
-                    App?.RequestStop();
+                    Dismiss();
                     key.Handled = true;
                     break;
                 case KeyCode.Esc:
-                    App?.RequestStop();
+                    Dismiss();
                     key.Handled = true;
                     break;
             }

@@ -79,9 +79,9 @@ try {
         var header = pickerWindow.Selected.Header;
         var scenarioText = ScenarioLoader.ReadScenarioFile(pickerWindow.Selected.Path);
 
-        var introText = ScenarioLoader.ReadIntroText(scenarioText);
-        if (!string.IsNullOrWhiteSpace(introText)) {
-            var introWindow = new IntroTextWindow(header.Title, introText);
+        var introPages = ScenarioLoader.ReadIntroPages(scenarioText);
+        if (introPages.Count > 0) {
+            var introWindow = new IntroTextWindow(header.Title, introPages);
             app.Run(introWindow, null);
             if (introWindow.Cancelled) {
                 continue; // Esc -- back to the main menu
