@@ -12,7 +12,16 @@
  {$IFDEF Overlay}
  {$F+}
  {$ENDIF}
-@@ -323,7 +328,15 @@ PROCEDURE SetFleetNextStatement(FltID: IDNumber; Com: Word);
+@@ -28,6 +33,8 @@ CONST
+    BadResourceOER = 3;
+    BadTransferOER = 4;
+ 
++{$PACKRECORDS 1}
++
+ TYPE
+    OrderStructure = RECORD
+       Len: Word;
+@@ -323,7 +330,15 @@ PROCEDURE SetFleetNextStatement(FltID: IDNumber; Com: Word);
  
  PROCEDURE GetFleetCode(FltID: IDNumber; VAR Code: OrderStructure);
     BEGIN

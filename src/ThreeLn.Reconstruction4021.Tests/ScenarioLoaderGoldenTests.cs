@@ -15,10 +15,10 @@ namespace ThreeLn.Reconstruction4021.Tests;
 /// Only asserts fields that never depend on Rnd()/RndVar() at all: pure counts and per-empire summary
 /// fields that come straight from the scenario file's own explicit data, with no random draw anywhere
 /// in their computation. Every field derived from a randomized formula — planet coordinates,
-/// population, trillum, ships/cargo/defenses, class/tech, nebula cell count, AND starbase
-/// population/efficiency (CreateBase's own RndVar(Pp,15) jitter, NEWGAME.PAS:1090) — is deliberately
-/// NOT asserted here, even where the value happens to still be a plain count or an explicit-command
-/// field, because RndVar's underlying Rnd(Min,Max) skips drawing entirely when Max&lt;=Min (INT.PAS)
+/// population, trillum, ships/cargo/defenses, class/tech, nebula cell count, AND starbase population
+/// (CreateBase's own RndVar(Pp,15) jitter, NEWGAME.PAS:1090) — is deliberately NOT asserted here, even
+/// where the value happens to still be a plain count or an explicit-command field, because RndVar's
+/// underlying Rnd(Min,Max) skips drawing entirely when Max&lt;=Min (INT.PAS)
 /// — so any single Trunc/Round anywhere upstream landing on a different side of an exact-integer
 /// boundary (confirmed via direct investigation: fpc's default x87 80-bit intermediate precision vs.
 /// C#'s IEEE754 double can each round the same borderline Real expression differently, and even two
@@ -38,6 +38,26 @@ namespace ThreeLn.Reconstruction4021.Tests;
 /// something) fit this same exclusion by the rule above but sat in the exact-match block by
 /// oversight until the fullbuild-lane retarget's switch to the real LoadScenario (rather than a
 /// hand-reimplemented parser) shifted the RNG stream enough to expose the mismatch.
+///
+/// Starbase efficiency (`sumstarbaseeff`) is excluded too, but not by the rule above — at the point
+/// `CreateBase` assigns it, `Eff` isn't RNG-derived at all (passed straight through from the `.SCN`
+/// file's own literal, `NEWGAME.PAS:1054`/`1090`, unlike population's real `RndVar(Pp,15)` jitter at
+/// `NEWGAME.PAS:1090`). It's excluded because AWAKEN.SCN itself creates 212 planets against
+/// `TYPES.PAS`'s own `MaxNoOfPlanets = 200` — its last `CreateRandomWorlds` writes 12 planet indices
+/// past the array's end, and with Turbo Pascal's default range checking off (confirmed: no `{$R+}`
+/// anywhere in the pristine tree) that overrun silently corrupts the start of the
+/// immediately-following `Starbase` array — both starbases' literal `Eff` *and* their already-jittered
+/// `Pop` end up overwritten by the same spillover, not just `Eff`. Real, unmodified DOS Turbo Pascal
+/// 1.31 would corrupt these same two starbases via the same mechanism loading this exact file (not
+/// necessarily the same values — real play reseeds `RandSeed` from the file's own `Seed` field, not
+/// this harness's fixed 12345) — a genuine reference-scenario defect, same category as
+/// `ScenarioCases`' own `PRINCES.SCN` note, not a gap in this port. Confirmed the only golden case
+/// affected: the other 10 all have `planetcount` at or under 200. Phase 7g's `{$PACKRECORDS 1}`
+/// harness fix (see `docs/ROADMAP.md`'s Phase 7g entry) repacked both `PlanetRecord` and
+/// `StarbaseRecord` (same file, same directive), changing exactly where the spillover bytes land and
+/// so changing AWAKEN's own golden value for this one field — an unrelated, correctness-motivated fix
+/// exposing a pre-existing bug in the fixture, not introducing one. Left excluded rather than
+/// asserted, since the "correct" value for a corrupted field isn't a meaningful thing to pin down.
 /// </summary>
 public class ScenarioLoaderGoldenTests
 {

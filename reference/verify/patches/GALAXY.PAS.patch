@@ -1,0 +1,11 @@
+--- a/GALAXY.PAS
++++ b/GALAXY.PAS
+@@ -16,6 +16,8 @@ USES
+ CONST
+    MaxSizeOfGalaxy = 100;     { in sectors }
+ 
++{$PACKRECORDS 1}
++
+ TYPE
+    Coordinate = 0..MaxSizeOfGalaxy;
+ 

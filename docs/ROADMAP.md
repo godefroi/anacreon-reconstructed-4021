@@ -562,11 +562,105 @@ feature.
   comparer to also walk `KingdomTurnHandler`'s `internal` `Persona`/`State`/`FleetStates` (it's
   invisible to public-only reflection — the first pass over this silently checked nothing), that
   Kingdom's saved diplomacy/mission state genuinely survives the round trip, not just its presence.
-- **7g, minimal `.SAV` write-back + real-Pascal acceptance check.** Just enough write-side to
-  produce a structurally valid file real Pascal `LoadGame` accepts — no fidelity effort beyond
-  that. Verified through `reference/verify/`'s harness (`LOADSAVE.PAS` already compiles cleanly
-  there, Tier 11) against every reference save — the strongest available proof 7b-7e's `LoadGame`
-  is correct, not just internally self-consistent.
+- ✅ **7g, minimal `.SAV` write-back + real-Pascal acceptance check.** `Core/SaveFormat/
+  SavGameWriter.cs`: `WriteGame(Game) → byte[]`, the exact section-by-section mirror of
+  `SavGameLoader`'s own `Load*` methods. `EmpireSlotIndex` compacts `Game.Empires` down to as many
+  of the 8 real on-disk slots as it needs, then lazily discovers "orphan" empires (reachable only
+  via a Kingdom's own `State` dictionary, `Empire.DefeatedBy`, a `NewsItem`'s `OtherEmpire`/
+  `Defender`, or — a real gap this writer's own first real-Pascal run caught, not a hypothetical
+  the design anticipated — a minefield's owner/scouted-by set, which `CombatOutcome.DestroyEmpire`
+  never clears) and gives each one a free slot so a Kingdom's fixed 9-entry `State` array still
+  round-trips correctly. News is written faithfully (cheap, and puts 7d's decode table under real
+  test); Messages and fleet order queues are not (no in-memory representation of either exists in
+  this port at all).
+
+  **Real, pre-existing landmine found and fixed, not introduced by this commit**: the very first
+  real-Pascal run of ANY `.SAV`-shaped record through `fpc` (`LoadGame` itself was never previously
+  exercised against a real file by this harness — 7a-7f's own tests only ever checked the C# port's
+  understanding against itself) crashed with a runtime 216, then desynced with IOResult 100 once
+  that first crash was fixed. Root cause, confirmed by direct `SizeOf()` probes, not guessed:
+  `PlanetRecord` etc. have **no inter-field padding on real Turbo Pascal** (`docs/SAV_FILE_FORMAT.md`
+  already documented this empirically), but `fpc`'s default record alignment under `-Mtp` still
+  pads certain fields (a `Word` after an odd byte offset, a pointer after a short run of bytes) —
+  the same category of "fpc doesn't actually honor a real TP assumption" as the already-documented
+  `GlobalSets` `ABSOLUTE`-overlay landmine, just for record packing instead of a `VAR` alias. Fixed
+  with `{$PACKRECORDS 1}`, added to the seven pristine units that declare an on-disk record type
+  reachable from `LoadGame` (`DATASTRC.PAS`, `GALAXY.PAS`, `MESS.PAS`, `NEWS.PAS`, `NPETYPES.PAS`,
+  `ORDERS.PAS`, `TEXTSTRC.PAS` — `LOADSAVE.PAS` itself needed no change) — each confirmed with a
+  direct `SizeOf()` probe against `docs/SAV_FILE_FORMAT.md`'s own already-empirically-verified byte
+  counts before trusting a real save through it. `build-all-units.ps1`'s full 67-unit smoke test
+  and the entire existing `dotnet test` suite both still pass unchanged after the patch. One side
+  effect, fully root-caused: `scenario.golden`'s `Awaken` case shows a different `sumstarbaseeff`
+  (89 → 143). This is **not** an RNG-stream-position shift, despite that being the first guess —
+  a direct A/B experiment (same seed, same `.SCN` file, `DATASTRC.PAS`'s `{$PACKRECORDS 1}` toggled
+  on/off, tracing `RandSeed` plus each starbase's own `Pop`/`Eff` right after `LoadScenario` returns)
+  showed `RandSeed` and both starbases' `Pop` byte-identical either way, and Starbase 1's `Eff`
+  identical too (85 both times) — only Starbase 2's `Eff` moves (58 packed vs. 4 unpacked). A real
+  RNG-position shift would perturb every downstream draw, not one field on one of two otherwise
+  -identical starbases.
+
+  Tracing further (a watchpoint on Starbase 2's own `Eff`/`Pop`, checked once per scenario command)
+  found the real cause: **`AWAKEN.SCN` creates 212 planets against `TYPES.PAS`'s own hardcoded
+  `MaxNoOfPlanets = 200`.** Its last `CreateRandomWorlds 16 1` command writes planet indices 197-212
+  — 12 slots past the end of the `Planet` array — and Turbo Pascal has no array-bounds checking by
+  default (confirmed, not assumed: grepped the entire pristine `reference/DOSAnacreonSource131/` tree
+  for `{$R+}` — zero matches, nothing re-enables it), so that overrun silently writes past
+  `UniverseRecord`'s `Planet` field straight into `Starbase` (the very next field declared in
+  `DATASTRC.PAS`) — 12 overrun records × ~89-90 bytes each (~1068-1080 bytes) lands entirely inside
+  `StarbaseArray` (`TYPES.PAS`'s own `MaxNoOfStarbases = 100`, `StarbaseRecord` ~91 bytes, so the
+  spill blankets roughly the first 12 starbase slots and never reaches `Fleet`), corrupting whichever
+  of those slots this scenario actually populates — here, slots 1 and 2, the only two `AWAKEN.SCN`
+  ever creates. `Eff:=100` (Starbase 1's own
+  real, literal `.SCN` value, confirmed by tracing `CreateBase` itself) becomes 85 either way;
+  `Eff:=90` (Starbase 2's) becomes 58 or 4 depending on packing, and Starbase 2's `Pop` moves too
+  (103 → 470) — not an `RndVar` jitter, the same overrun. Both `PlanetRecord`'s size (89 vs. 90
+  bytes, changing the overrun's stride) and `StarbaseRecord`'s own layout (also declared in
+  `DATASTRC.PAS`, also repacked) shift under `{$PACKRECORDS 1}`, together changing exactly which
+  bytes of the 12-planet spillover land where in `Starbase`'s first two slots. This is a real bug in
+  the reference `.SCN` file itself, not in this port, this harness, or `SavGameWriter` — and since
+  Turbo Pascal ships with range checking off, the genuine pristine DOS 1.31 binary would corrupt
+  these same two starbases via the same mechanism loading this exact file (not necessarily the same
+  *values* — real play reseeds `RandSeed` from the file's own `Seed` field rather than this harness's
+  fixed 12345, so whatever ends up adjacent in memory differs). The same category of finding as
+  `ScenarioCases.cs`'s own documented `PRINCES.SCN` note ("real 1.31 chokes on this file too") — a
+  real reference-fixture defect, not a gap in the reconstruction — except this one corrupts silently
+  instead of erroring, which is why `PACKRECORDS` (an unrelated, correctness-motivated fix) was able
+  to change its exact symptom. Confirmed the only one affected: `scenario.golden`'s other 10 cases
+  all have `planetcount` ≤ 200 (`Arronax`/`Imperium` sit exactly at the ceiling, not over it).
+
+  The overrun's real reach is wider than `sumstarbaseeff` alone — `RunScenarioCase`'s own planet-sum
+  loop (`FOR i:=1 TO LastFirstWorld-1`) runs to 212, so indices 201-212 read `Starbase`'s raw bytes
+  back out reinterpreted as `PlanetRecord` (the overrun stays entirely inside `StarbaseArray`, per
+  the byte-math above — it never reaches `Fleet`), meaning every one of Awaken's planet sums
+  (`sumpop`, `sumeff`, `sumtri`, `sumclass`, `sumtech`, `sumships`, `sumcargo`, `sumdefns`,
+  `sumplanetx`, `sumplanety`) includes 12 phantom records, and its own `planetcount=212` counts slots
+  that were never a real `PlanetRecord` at all. This is the actual reason
+  `ScenarioLoaderGoldenTests.MatchesGoldenFile` stays green for Awaken despite all this: every one of
+  those contaminated fields was already excluded from exact-match for unrelated reasons (RNG
+  -derived), and the fields that *are* asserted (`year`, `planetcount`, `starbasecount`,
+  `stargatecount`, `empirecount`, `sumempiretech`, `sumrevfactor`, `sumcentralmodifier`) either come
+  from plain counters incremented once per successful command on both sides — identical regardless
+  of what garbage sits in the over-run memory, since neither side re-reads it — or from
+  `EmpireData`, a `UniverseRecord` field the 12-record overrun never reaches. Checkable, not just
+  narrow: none of the fields this test actually compares touch the corrupted memory at all.
+
+  Verification is **differential, not golden-file**: a new `reference/verify/runload.pas` driver
+  (deliberately its own driver, not a new `runworld.pas` domain, since `LOADSAVE.PAS`'s own unit
+  chain isn't in `runworld`'s `USES` and folding it in would re-run all 20 existing domains' unit
+  -initialization sections needlessly) calls the real, unmodified `LoadGame` and emits a structural
+  checksum (per-empire planet/starbase/fleet/construction-site counts, tech/revolution/founding/
+  news-count, sorted by empire name rather than on-disk slot ordinal since this writer's own slot
+  compaction doesn't preserve a real save's ordinal gaps; also fleet count plus aggregate
+  `sumfleetx`/`sumfleety`/`sumdestx`/`sumdesty`, and a galaxy-wide `minedcellcount` — added
+  specifically to keep `WriteFleets`' null-`Destination`-becomes-`XY` convention and `WriteSector`'s
+  mine-owner-nibble sentinel actually covered by this test, not just reasoned about at design time;
+  both mutation-tested by deliberately reintroducing each bug and confirming the acceptance test
+  fails on exactly that field before reverting) — run once against each reference `.SAV`
+  unmodified, once against `SavGameWriter`'s rewrite of what `SavGameLoader` loaded from it, and
+  diffed directly. Same real Pascal code both sides, no `Rnd()` anywhere in `LoadGame`, so an exact
+  match is safe in a way it wasn't for the `scenario` domain's own golden file. Passes for all 13
+  reference saves plus a smoke check (`error=0` only, no original file to diff against) for one
+  freshly built `ScenarioLoader` game.
 - **7h, roadmap wrap-up.** Flip this phase to done; confirm the tracked gaps (order queues,
   UI/session Environment fields, `.SAV` write not being a maintained feature) are described
   accurately for Phase 8.

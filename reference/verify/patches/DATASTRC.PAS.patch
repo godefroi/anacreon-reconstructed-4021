@@ -1,6 +1,15 @@
 --- a/DATASTRC.PAS
 +++ b/DATASTRC.PAS
-@@ -205,20 +205,6 @@ TYPE
+@@ -16,6 +16,8 @@ USES
+    Types,
+    Galaxy;
+ 
++{$PACKRECORDS 1}
++
+ TYPE
+    { PLANETS
+       This is a record of all the information stored for each planet. }
+@@ -205,20 +207,6 @@ TYPE
  
     EmpireDataArray = ARRAY [Empire] OF EmpireDataRecord;
  
@@ -21,7 +30,7 @@
     { THE UNIVERSE }
  
     UniverseRecord = RECORD
-@@ -232,7 +218,6 @@ TYPE
+@@ -232,7 +220,6 @@ TYPE
  
  VAR
     Universe: ^UniverseRecord;

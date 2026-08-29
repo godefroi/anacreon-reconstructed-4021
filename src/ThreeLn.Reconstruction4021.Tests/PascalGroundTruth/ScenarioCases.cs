@@ -23,6 +23,11 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// suspicion already raised, but not resolved, during Phase 2 commit 2c's own investigation — see
 /// <c>reference/verify/README.md</c>.) Not a coverage gap: a file the real game itself can't load
 /// isn't a meaningful ground-truth fixture for a port that mirrors that same loader's behavior.
+/// <c>AWAKEN.SCN</c>, still included below, carries a milder version of the same category of defect
+/// — it creates more planets than <c>TYPES.PAS</c>'s <c>MaxNoOfPlanets</c> allows, silently
+/// corrupting two starbases' stats via an out-of-bounds array write real DOS Turbo Pascal would
+/// reproduce too (range checking is off by default) — see <c>ScenarioLoaderGoldenTests</c>' own doc
+/// comment on <c>sumstarbaseeff</c> for the full trace.
 ///
 /// Player identity is a fixed "PlayerN"/"pwN"/not-an-empress convention on both sides — RunScenarioCase
 /// hard-codes the identical scheme (a name string can't round-trip through this domain's otherwise

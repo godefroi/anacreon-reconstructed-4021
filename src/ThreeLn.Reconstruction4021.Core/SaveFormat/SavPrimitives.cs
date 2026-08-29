@@ -42,9 +42,8 @@ public readonly record struct SavIdNumber(SavObjectType ObjectType, byte Index)
 /// <c>docs/SAV_FILE_FORMAT.md</c>'s Conventions section documents: fixed-width ints in the exact
 /// declared byte size (Turbo Pascal picks the smallest type that fits a declared range, so this is
 /// <em>not</em> always the type's C#-idiomatic width — <c>XYCoord</c> is 2 bytes, not 4), length
-/// -prefixed <c>STRING[N]</c> buffers, and bitset-shaped <c>SET OF T</c> values. Read-only: this
-/// port's save/load starts as `.SAV` import (see `docs/ROADMAP.md` Phase 7's scope note) —
-/// write-side primitives land alongside the minimal `.SAV` write-back tool.
+/// -prefixed <c>STRING[N]</c> buffers, and bitset-shaped <c>SET OF T</c> values. See
+/// <see cref="SavWriter"/> for the write-side counterpart (Phase 7g).
 ///
 /// Deliberately does not preserve opaque bytes (pointer fields, `Reserved` arrays, unused string
 /// buffer tails) the way `scripts/savtool.py`/`.ps1` do — those tools exist for a byte-identical
@@ -145,5 +144,103 @@ public sealed class SavReader(byte[] data)
         }
 
         return set;
+    }
+}
+
+/// <summary>
+/// Sequential little-endian writer, the exact mirror of <see cref="SavReader"/> — same primitive
+/// shapes, same deliberate non-goal of byte-faithful reproduction (a `Reserved`/pointer-field byte
+/// is always written as zero, never round-tripped, since nothing in <see cref="Game.cs"/> has one to
+/// preserve). Built for Phase 7g's minimal `.SAV` write-back verification tool
+/// (<see cref="SavGameWriter"/>): the bar is "real Pascal `LoadGame` accepts the result," not a
+/// byte-identical file — see `docs/ROADMAP.md` Phase 7's scope note.
+/// </summary>
+public sealed class SavWriter
+{
+    private readonly List<byte> _data = [];
+
+    public byte[] ToArray() => [.. _data];
+
+    public void WriteByte(byte value) => _data.Add(value);
+
+    public void WriteBoolean(bool value) => WriteByte((byte)(value ? 1 : 0));
+
+    /// Turbo Pascal `Word` — unsigned 16-bit.
+    public void WriteWord(ushort value)
+    {
+        Span<byte> buffer = stackalloc byte[2];
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer, value);
+        _data.AddRange(buffer.ToArray());
+    }
+
+    /// Turbo Pascal `Integer` — signed 16-bit (not 32; that's `LongInt`).
+    public void WriteInteger(short value)
+    {
+        Span<byte> buffer = stackalloc byte[2];
+        BinaryPrimitives.WriteInt16LittleEndian(buffer, value);
+        _data.AddRange(buffer.ToArray());
+    }
+
+    /// Turbo Pascal `LongInt` — signed 32-bit.
+    public void WriteLongInt(int value)
+    {
+        Span<byte> buffer = stackalloc byte[4];
+        BinaryPrimitives.WriteInt32LittleEndian(buffer, value);
+        _data.AddRange(buffer.ToArray());
+    }
+
+    public void WriteZeros(int count) => _data.AddRange(new byte[count]);
+
+    /// Raw byte passthrough — for an opaque blob (<see cref="Game.UnimplementedNpeBlobs"/>) this
+    /// port has no interpretation of and must reproduce verbatim.
+    public void WriteBytes(byte[] bytes) => _data.AddRange(bytes);
+
+    /// <summary>
+    /// `STRING[bufferSize]`: 1 length byte + `bufferSize` character slots. <paramref name="value"/>
+    /// is truncated to <paramref name="bufferSize"/> if too long (a real `.SAV`-format string field
+    /// is a fixed buffer — Pascal itself silently truncates an over-length assignment, the same trap
+    /// `docs/SAV_FILE_FORMAT.md`'s own Conventions section notes for `.SCN` paths); unused buffer
+    /// slots beyond the written length are zero, never garbage (this port has no stack/heap leftover
+    /// to reproduce there).
+    /// </summary>
+    public void WritePascalString(string value, int bufferSize)
+    {
+        var bytes = Encoding.ASCII.GetBytes(value);
+        var length = Math.Min(bytes.Length, bufferSize);
+
+        WriteByte((byte)length);
+        _data.AddRange(bytes.AsSpan(0, length).ToArray());
+        WriteZeros(bufferSize - length);
+    }
+
+    /// The header signature — written without a length byte, matching <see cref="SavReader.ReadRawString"/>.
+    public void WriteRawString(string value, int length)
+    {
+        var bytes = Encoding.ASCII.GetBytes(value);
+        var written = Math.Min(bytes.Length, length);
+        _data.AddRange(bytes.AsSpan(0, written).ToArray());
+        WriteZeros(length - written);
+    }
+
+    public void WriteCoordinate(Galaxy.Coordinate coordinate)
+    {
+        WriteByte((byte)coordinate.X);
+        WriteByte((byte)coordinate.Y);
+    }
+
+    public void WriteIdNumber(SavIdNumber id)
+    {
+        WriteByte((byte)id.ObjectType);
+        WriteByte(id.Index);
+    }
+
+    /// <summary>See <see cref="SavReader.ReadBitSet"/> — same `ceil(byteCount*8/8)`-byte bitset shape, ordinals relative to the set's own base type.</summary>
+    public void WriteBitSet(IEnumerable<int> ordinals, int byteCount)
+    {
+        var bytes = new byte[byteCount];
+        foreach (var ordinal in ordinals) {
+            bytes[ordinal / 8] |= (byte)(1 << (ordinal % 8));
+        }
+        _data.AddRange(bytes);
     }
 }
