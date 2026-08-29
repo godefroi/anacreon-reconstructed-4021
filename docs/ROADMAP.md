@@ -420,7 +420,7 @@ original developers shipped incomplete, not a port gap.
   - `LoadNPE`/`SaveNPE` (binary `.SAV` serialization, including the `Version<12` legacy-format
     branches) — Phase 7, not this phase, regardless of which personalities exist by then.
 
-## 7. Save/load — in progress, 7a landed
+## 7. Save/load — ✅ done, all 8 commits landed
 
 `docs/SAV_FILE_FORMAT.md` documents the real on-disk `.SAV` byte layout in full (every section,
 file:line cited into `reference/DOSAnacreonSource131/`, checked against 13 real save files in
@@ -661,9 +661,21 @@ feature.
   match is safe in a way it wasn't for the `scenario` domain's own golden file. Passes for all 13
   reference saves plus a smoke check (`error=0` only, no original file to diff against) for one
   freshly built `ScenarioLoader` game.
-- **7h, roadmap wrap-up.** Flip this phase to done; confirm the tracked gaps (order queues,
-  UI/session Environment fields, `.SAV` write not being a maintained feature) are described
-  accurately for Phase 8.
+- ✅ **7h, roadmap wrap-up.** Phase flipped to done above. Re-read every gap 7a-7g flagged along the
+  way and confirmed each is still accurately described in place, nothing silently closed or
+  forgotten: order queues (`CommandRecord`/fleet `DestCOM` et al.) are read-and-discarded in 7c,
+  explicitly called out there as "Phase 8's job once a human turn handler needs one" — Messages
+  (7d) carry the identical status for the same reason (no in-memory concept exists; a human-UI
+  feature). UI/session Environment fields (`EmpiresToMove`/`TimePerTurn`/`AutoSave`/`AsyncTurns`/
+  `PauseActive`/`ReEnterGame`) are read-and-discarded in 7b — `AsyncTurns` specifically belongs to
+  Phase 9 (async/hotseat) rather than Phase 8, the rest to Phase 8's UI once a session actually has
+  settings to hold. `.SAV` write's scope (`SavGameWriter`, test-only, no fidelity effort beyond
+  "real Pascal accepts it") is stated up front in this section's own intro and reaffirmed in 7g;
+  nothing calls it a maintained feature anywhere. One more open item surfaced along the way, not
+  previously listed here: 7d's `DefeatedBy` decode branch (a conquered human empire) has no
+  exercising reference save among the 13 captured so far — implemented and reasoned through
+  directly from `ConquerEmpire`, but untested against a real file; worth a note for whoever next
+  captures or hand-builds one, not a blocker for Phase 8.
 
 ## 8. Human interactive turn handler + Terminal.Gui UI
 
