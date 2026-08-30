@@ -163,10 +163,9 @@ public static class CombatOutcome
 
     /// <summary>
     /// RestoreCombatant (ATTACK.PAS:1141-1181). The Fleet branch's own FleetCargoSpace/BalanceFleet/
-    /// FuelCapacity clamp isn't ported: this port has no fleet cargo-space/fuel-capacity system (a
-    /// movement-fidelity gap in the same category as docs/ROADMAP.md's tracked stargate/starbase-movement
-    /// gaps), and it's structurally unreachable from here regardless: this method only ever subtracts
-    /// casualties (fewer ships/cargo), which can only free up space, never exceed it.
+    /// FuelCapacity clamp isn't called here, though all three exist in <see cref="FleetLogistics"/> —
+    /// structurally unreachable regardless: this method only ever subtracts casualties (fewer
+    /// ships/cargo), which can only free up space, never exceed it.
     /// </summary>
     public static void RestoreCombatant(object combatant, AttackTally casualties)
     {

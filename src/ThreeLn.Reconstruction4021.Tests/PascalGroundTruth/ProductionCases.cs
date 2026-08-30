@@ -16,7 +16,7 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// to), matching what any reachable game state actually has.
 ///
 /// Cargo.Chemicals/Metals stay outside this domain's own golden comparison for a real, still-open
-/// reason — see AnnualTickHandlerProductionTests's own doc comment and docs/PORT_GAPS_DRAFT.md.
+/// reason — see AnnualTickHandlerProductionTests's own doc comment and docs/OPEN_GAPS.md.
 ///
 /// Every case here has at most one developed industry within BioInd..SYTInd at a time; no case
 /// exercises two simultaneously-developed industries under scarce raw materials at once, which would

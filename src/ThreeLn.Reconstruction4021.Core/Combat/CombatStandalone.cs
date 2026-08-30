@@ -33,9 +33,9 @@ public static class CombatStandalone
     /// or an <see cref="IEconomicWorld"/> (planet or starbase) — LAMs are never launched at a
     /// construction site or stargate.
     ///
-    /// BalanceFleet's post-damage cargo rebalance isn't ported: this port has no fleet cargo-capacity
-    /// system (same gap as RestoreCombatant/AbortFleet's own doc comments). Cargo is untouched either
-    /// way here since LAMs only ever destroy ships/defenses, never cargo. FleetNameDestruction's
+    /// BalanceFleet's post-damage cargo rebalance isn't called here (it exists in
+    /// <see cref="FleetLogistics"/>) — moot regardless, since LAMs only ever destroy ships/defenses,
+    /// never cargo, so there's nothing to rebalance. FleetNameDestruction's
     /// naming-system call is dropped too (AbortFleet's own established gap): its only load-bearing
     /// effect was setting Pascal's Loc to the fleet itself, which this port's <paramref name="target"/>
     /// reference already is.

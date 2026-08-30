@@ -22,7 +22,7 @@ namespace ThreeLn.Reconstruction4021.Core.NewGame;
 /// must share the same underlying <see cref="Random"/> instance, mirroring Pascal's single implicit
 /// global RNG. A caller that wants a specific .SCN file's own nonzero <c>Seed</c> to actually drive
 /// reproducibility has no way to get it through this API — the value is consumed by the tokenizer
-/// and never exposed (see docs/PORT_GAPS_DRAFT.md).
+/// and never exposed (see docs/OPEN_GAPS.md).
 ///
 /// Any parse/format error throws immediately (FormatException) rather than reproducing Pascal's
 /// ScenaError flag (print a message, keep going until the *next* dispatch-loop check) — this port has

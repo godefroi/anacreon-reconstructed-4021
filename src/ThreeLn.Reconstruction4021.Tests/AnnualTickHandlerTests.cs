@@ -497,7 +497,7 @@ public class AnnualTickHandlerHostileLifeTests
 /// that comparison — each is mutated by a real UpdateWorld step this tick that runs on different
 /// (post-growth) state: UseUpFood/UseUpAmbrosia/UpdateMilitary all act on post-growth Population
 /// (and, for Legions, world Type). Cargo.Chemicals/Metals stay excluded for a real, still-open reason
-/// (docs/PORT_GAPS_DRAFT.md): a small residual mismatch remains even though UpdateDefenses is fully
+/// (docs/OPEN_GAPS.md): a small residual mismatch remains even though UpdateDefenses is fully
 /// ported and runs here via RunAnnualTick. See NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction
 /// for the one case that actually exercises the Ambrosia gap. None of ProductionCases's cases exercise
 /// a defense type that would touch Cargo.Trillum the same way (UpdateDefenses's raw-material loop
