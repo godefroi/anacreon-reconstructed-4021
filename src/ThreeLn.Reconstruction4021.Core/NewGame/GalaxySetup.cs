@@ -11,8 +11,8 @@ namespace ThreeLn.Reconstruction4021.Core.NewGame;
 /// 885-922, CreateWorld 953-1025, CreateBase 1027-1098, CreateGate 1100-1120, CreateSRMs 1351-1370,
 /// CreateNebula 1315-1331, plus RndShips/RndCargo/RndDefns 822-883 and RandomTrillumReserves 813-820
 /// that SetUpWorld/CreateWorld themselves call). Randomized-*coordinate* placement
-/// (GetRandomXY/CreateRndPlanet/CreateRandomWorlds) is a separate concern (Phase 2 commit 2d) built
-/// on top of this one.
+/// (<see cref="GetRandomXY"/>/<see cref="CreateRndPlanet"/>/<see cref="CreateRandomWorlds"/>) is a
+/// separate concern built on top of this one.
 ///
 /// Scouting (Pascal's Scout(Emp,XY) call inside SetUpWorld) is deliberately not replicated here —
 /// VisibilityHandler.RefreshVisibility already recomputes an empire's fog-of-war from scratch each
@@ -83,7 +83,7 @@ public sealed class GalaxySetup(Random random)
     /// WorldTypes(T) straight from the scenario). Every real IndustrialComplex case in
     /// reference/scenarios/dos_131 happens to specify WorldType.Base too, but the mechanism itself is
     /// real, not hypothetical — don't hardcode Base for IndustrialComplex the way
-    /// AnnualTickHandler.Construction.cs's own CreateStarbase does for a *completed construction site*
+    /// <see cref="Turns.AnnualTickHandler.CreateStarbase"/> does for a *completed construction site*
     /// (a different Pascal procedure, ConstructStarbase, with its own distinct, hardcoded logic).
     /// </summary>
     public Starbase CreateBase(Galaxy.Galaxy galaxy, Coordinate location, StarbaseKind kind, WorldType? explicitType, TechLevel tech, Empire owner,
@@ -346,8 +346,8 @@ public sealed class GalaxySetup(Random random)
 
     /// <summary>
     /// MISC.PAS:111-117 (InGalaxy), adapted to this port's already-established 0-based [0,Size) bounds
-    /// convention (e.g. AnnualTickHandler.Production.cs's neighbor-offset check) rather than Pascal's
-    /// 1-based [1,SizeOfGalaxy].
+    /// convention (e.g. <see cref="Turns.AnnualTickHandler._eightNeighborOffsets"/>'s own bounds
+    /// check) rather than Pascal's 1-based [1,SizeOfGalaxy].
     /// </summary>
     private static bool IsInGalaxy(Galaxy.Galaxy galaxy, Coordinate c) =>
         c.X >= 0 && c.X < galaxy.Size && c.Y >= 0 && c.Y < galaxy.Size;

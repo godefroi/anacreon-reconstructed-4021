@@ -6,12 +6,22 @@ namespace ThreeLn.Reconstruction4021.Core.NewGame;
 /// <summary>
 /// Empire creation (PRIMINTR.PAS:982-1016's CreateEmpire, wrapped by NEWGAME.PAS:1186-1259's
 /// CreatePlayerEmpire/CreateNPEmpire — the starting-tech-set computation those two add on top of the
-/// otherwise-identical CreateEmpire call). No randomness involved here: a scenario's player-vs-NPE
-/// sex coin flip (Pascal's Boolean(Rnd(0,1)) for NPE, NEWGAME.PAS:1255) is the caller's concern, not
-/// this factory's — pass whatever <paramref name="isEmpress"/> the caller already decided.
+/// otherwise-identical CreateEmpire call).
 /// </summary>
 public static class EmpireFactory
 {
+    /// <summary>See this class's own doc comment.</summary>
+    /// <param name="name">The empire's chosen name.</param>
+    /// <param name="password">Login password, or null for an NPE empire.</param>
+    /// <param name="isEmpress">
+    /// No randomness involved here: a scenario's player-vs-NPE sex coin flip (Pascal's
+    /// Boolean(Rnd(0,1)) for NPE, NEWGAME.PAS:1255) is the caller's concern, not this factory's —
+    /// pass whatever the caller already decided.
+    /// </param>
+    /// <param name="techLevel">Starting tech level (Pascal's own <c>Tech</c> field).</param>
+    /// <param name="restlessness">Starting <see cref="Empire.RevolutionFactor"/>.</param>
+    /// <param name="centralModifier">See <see cref="Empire.LosesIfCapitalConquered"/>'s own doc comment.</param>
+    /// <param name="foundingYear">The empire's <see cref="Empire.FoundingYear"/>.</param>
     /// <param name="extraTechs">
     /// Scenario-specified techs beyond the starting level's own set (NEWGAME.PAS's
     /// TechnologyTypes(NextInteger(SF)) list, e.g. TechCatalog.Grant(ShipType.HunterKiller)) —

@@ -54,10 +54,10 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     public string? ScenarioFilename { get; set; }
 
     /// <summary>
-    /// Raw `.SAV` NPE-Data blobs for empires whose personality this port doesn't implement a
-    /// <see cref="ITurnHandler"/> for yet (Pirate/Berserker/Guardian/Trader/unrecognized) — real
-    /// scenarios routinely mix these with Kingdom empires (`docs/ROADMAP.md`'s Phase 6
-    /// reachability table), so their state must round-trip opaquely rather than being silently
+    /// Raw `.SAV` NPE-Data blobs for empires whose personality this port doesn't implement an
+    /// <see cref="ITurnHandler"/> for (Pirate/Berserker/Guardian/Trader/unrecognized) — real
+    /// scenarios routinely mix these with Kingdom empires (see `docs/ROADMAP.md`'s NPE reachability
+    /// notes), so their state must round-trip opaquely rather than being silently
     /// dropped on `.SAV` write-back. Populated by <see cref="SaveFormat.SavGameLoader"/>; nothing
     /// reads the bytes themselves — this port has no representation of what's inside them. Same
     /// reason as <see cref="TurnHandlers"/>'s <c>[JsonIgnore]</c>: <see cref="SaveFormat.GameJson"/>
@@ -115,8 +115,8 @@ public sealed class Game(Galaxy.Galaxy galaxy)
 
     /// <summary>
     /// Scouted(Emp,Source) (PRIMINTR.PAS) — the stronger "currently sees" tier, as opposed to
-    /// <see cref="Known"/>'s "has ever seen." Public: Npe/NpeToolkit.cs's DestroyAllFleetsInSector
-    /// (Phase 6c-2) reads this the same way <see cref="Known"/> already reads publicly, rather than
+    /// <see cref="Known"/>'s "has ever seen." Public: <see cref="Npe.NpeToolkit.DestroyAllFleetsInSector"/>
+    /// reads this the same way <see cref="Known"/> already reads publicly, rather than
     /// hand-dispatching across the five <see cref="ISectorObject"/> kinds itself.
     /// </summary>
     public static bool Scouted(Empire empire, ISectorObject source) => source switch {
@@ -130,8 +130,8 @@ public sealed class Game(Galaxy.Galaxy galaxy)
 
     /// <summary>
     /// Known(Emp,ID) (PRIMINTR.PAS) — the weaker "has ever seen" tier, as opposed to
-    /// <see cref="Scouted"/>'s "currently sees." Public: Npe/NpeToolkit.cs's targeting logic
-    /// (Phase 6c) reads this the same way <see cref="AddGlobalNews"/> already reads
+    /// <see cref="Scouted"/>'s "currently sees." Public: <see cref="Npe.NpeToolkit"/>'s targeting
+    /// logic reads this the same way <see cref="AddGlobalNews"/> already reads
     /// <see cref="Scouted"/>, rather than every caller hand-dispatching across the five
     /// <see cref="ISectorObject"/> kinds itself.
     /// </summary>

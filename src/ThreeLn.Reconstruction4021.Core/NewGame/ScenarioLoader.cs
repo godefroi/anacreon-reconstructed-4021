@@ -8,13 +8,21 @@ namespace ThreeLn.Reconstruction4021.Core.NewGame;
 /// <summary>
 /// NEWGAME.PAS:1650-1812 (LoadScenario) — the .SCN command tokenizer/dispatch loop, minus its DOS UI:
 /// no OpenWindow/ClrScr/CloseWindow (only cosmetic), and no ScenarioIntroduction/InputEmpireName (the
-/// player-count prompt and per-player name/password/sex input) — <paramref name="players"/> is that
-/// same information as an explicit input parameter instead, matching every other Phase 2 commit's
-/// "drop the DOS UI" precedent. The <c>Seed</c> field in a real .SCN file is read and discarded, same
-/// reason: this loader takes its <see cref="Random"/> from the caller (already the case for <see
-/// cref="GalaxySetup"/>) rather than reading a file field and internally calling Pascal's
-/// Randomize/RandSeed — <paramref name="galaxySetup"/> and <paramref name="random"/> must share the
-/// same underlying <see cref="Random"/> instance, mirroring Pascal's single implicit global RNG.
+/// player-count prompt and per-player name/password/sex input): <c>players</c> is that same
+/// information as an explicit input parameter instead.
+///
+/// The <c>Seed</c> field in a real .SCN file is read and discarded here, which is not quite
+/// equivalent to real Pascal: <c>IF Seed=0 THEN Randomize ELSE RandSeed:=Seed</c>
+/// (NEWGAME.PAS:1735-1738) lets a scenario file opt into a fixed, reproducible RNG seed, and all 12
+/// real shipped scenario files use <c>Seed=0</c> (confirmed: every one is commented "random
+/// scenario" in its own header), so that branch is never exercised by real content — but the
+/// mechanism is real. This loader always takes its <see cref="Random"/> from the caller instead
+/// (already the case for <see cref="GalaxySetup"/>) rather than reading the field and calling
+/// Pascal's Randomize/RandSeed itself; <paramref name="galaxySetup"/> and <paramref name="random"/>
+/// must share the same underlying <see cref="Random"/> instance, mirroring Pascal's single implicit
+/// global RNG. A caller that wants a specific .SCN file's own nonzero <c>Seed</c> to actually drive
+/// reproducibility has no way to get it through this API — the value is consumed by the tokenizer
+/// and never exposed (see docs/PORT_GAPS_DRAFT.md).
 ///
 /// Any parse/format error throws immediately (FormatException) rather than reproducing Pascal's
 /// ScenaError flag (print a message, keep going until the *next* dispatch-loop check) — this port has
@@ -450,9 +458,9 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
     /// registered in Game.TurnHandlers — its constructor is real Pascal's own InitializeNPE call
     /// (NEWGAME.PAS:1250, right after CreateEmpire), seeding persona/diplomacy state from this same
     /// <c>random</c> instance so those draws land in the exact position they do in the real
-    /// scenario-load RNG stream (Phase 6d). Other NPE types (Pirate/Berserker/Guardian/Trader) get
-    /// NpeType recorded but no handler, matching the existing "ai has no entry in TurnHandlers"
-    /// precedent (TurnEngineTests.cs) for AI not implemented yet.
+    /// scenario-load RNG stream. Other NPE types (Pirate/Berserker/Guardian/Trader) get NpeType
+    /// recorded but no handler: this port doesn't model those personalities, matching the existing
+    /// "ai has no entry in TurnHandlers" behavior (see <c>TurnEngineTests</c>).
     /// </summary>
     private void RunCreateNPEmpire(ScenarioTokenizer tokenizer, Game game)
     {

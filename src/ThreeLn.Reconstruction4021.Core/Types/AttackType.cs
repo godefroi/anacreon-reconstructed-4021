@@ -5,16 +5,18 @@ namespace ThreeLn.Reconstruction4021.Core.Types;
 /// <c>AttackTypes = NoRes..nnj</c> (ATTACK.PAS/TYPES.PAS), minus the leading <c>NoRes</c> sentinel —
 /// that value only exists in Pascal because <c>AttackTypes</c> is a subrange starting at the first
 /// member of the wider <c>TechnologyTypes</c> enum, not because "no attack type" is ever a real
-/// lookup key; <see cref="CombatTable"/>'s own NUL row/column are correspondingly all zero and never
-/// read. A real "no target yet" case (e.g. an unset <c>GroupRecord.Trg</c>) is represented as
-/// <c>AttackType?</c> at the call site instead of porting that sentinel.
+/// lookup key; <see cref="Combat.CombatConstants.CombatTable"/>'s own NUL row/column are
+/// correspondingly all zero and never read. A real "no target yet" case (e.g. an unset
+/// <c>GroupRecord.Trg</c>) is represented as <c>AttackType?</c> at the call site instead of porting
+/// that sentinel.
 ///
 /// Spans <see cref="DefenseType"/> ∪ <see cref="ShipType"/> ∪ { Legion, NinjaLegion } — a genuine
 /// single cross-product axis for <c>CombatTable[Attacker,Defender]</c>, unlike
-/// <see cref="TechCatalog.TechGrantIdentity"/>'s four independent identity spaces (Phase 4).
+/// <see cref="Entities.TechCatalog.TechGrantIdentity"/>'s four independent identity spaces.
 /// <see cref="DefenseType"/>/<see cref="ShipType"/> stay exactly as they are — real per-type stored
-/// state lives on <see cref="DefenseCounts"/>/<see cref="ShipCounts"/> — this enum is purely a
-/// combat-engine indexing concern, with <see cref="AttackTypeExtensions"/> mapping at the boundary.
+/// state lives on <see cref="Entities.DefenseCounts"/>/<see cref="Entities.ShipCounts"/> — this enum
+/// is purely a combat-engine indexing concern, with <see cref="AttackTypeExtensions"/> mapping at
+/// the boundary.
 /// Declared in the same order Pascal's <c>AttackTypes</c> does (LAM..nnj) so every combat constant
 /// table below reads directly off the source comments without a reordering step.
 /// </summary>

@@ -32,11 +32,8 @@ public static class PascalMath
     /// Pascal's Round: nearest integer, with exact halves rounded to the nearest even integer
     /// (confirmed directly against the ground-truth harness's own FreePascal compiler:
     /// <c>Round(2.5)=2</c>, <c>Round(3.5)=4</c>, <c>Round(-2.5)=-2</c> — banker's rounding, not
-    /// half-away-from-zero as this method previously assumed and documented. That assumption went
-    /// unnoticed through every earlier phase's golden-file coverage because none of their formulas
-    /// happened to land exactly on a .5 boundary; Phase 5's combat GetEnemy split (clean 5%/10%/15%
-    /// percentages against round ship counts) was the first to actually hit one. <see cref="Math.Round(double)"/>
-    /// with <see cref="MidpointRounding.ToEven"/> is this exact behavior, not an approximation.
+    /// half-away-from-zero). <see cref="Math.Round(double)"/> with
+    /// <see cref="MidpointRounding.ToEven"/> is this exact behavior, not an approximation.
     /// </summary>
     public static int PascalRound(double x) => (int)Math.Round(x, MidpointRounding.ToEven);
 

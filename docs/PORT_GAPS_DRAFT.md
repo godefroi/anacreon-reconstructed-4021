@@ -37,3 +37,21 @@ this file once that happens.
 ## Turns/NPE pass
 
 (none found beyond the naming system above, which also surfaced here)
+
+## NewGame/Types pass
+
+- **`ScenarioLoader` can't reproduce a .SCN file's own explicit-seed determinism.** Real Pascal's
+  `LoadScenario` reads the file's `Seed` field and branches: `Seed=0` calls `Randomize` (system
+  clock, non-deterministic — real play, different every time); `Seed<>0` sets `RandSeed:=Seed`
+  directly, making that exact file deterministically reproducible (NEWGAME.PAS:1735-1738). Checked
+  all 12 real shipped `.SCN` files: every one uses `Seed=0` ("random scenario" in its own header
+  comment), so the deterministic branch is never exercised by real content, but it's a real,
+  intentional feature of the file format. This port's `ScenarioLoader` tokenizes and discards
+  `Seed` unconditionally (`ScenarioLoader.cs`'s own `Load`: `NextToken(tokenizer); // Seed --
+  consumed, discarded`) and always takes its `Random` from the caller instead. Mechanically, a
+  caller *can* get full reproducibility today by constructing its own `Random` from the same seed
+  value twice (.NET's `Random` is itself fully deterministic given a fixed seed) — but only if it
+  independently parses `Seed` out of the raw `.SCN` text itself first, since `ScenarioLoader`
+  exposes no way to read the file's own recorded value. No real (non-test) caller exists anywhere
+  in this port yet to have hit this gap in practice — confirmed by checking: every
+  `new ScenarioLoader(...)` in the whole codebase is in a test file.
