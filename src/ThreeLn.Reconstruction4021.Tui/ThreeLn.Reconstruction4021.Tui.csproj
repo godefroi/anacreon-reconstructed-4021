@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ThreeLn.Reconstruction4021.Core\ThreeLn.Reconstruction4021.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tried 2.4.18-develop.53 (upstream #5602/#5633, tracking tui-cs/Terminal.Gui#5323) for the
+         Home/End tearing: confirmed by diffing both commits that neither touches the per-dirty-row
+         Write() call in OutputBase.Write that causes it (#5602 is inline-mode-only; #5633 only
+         helps sparse per-row diffs, not our mostly-dirty-row case). No measured improvement, so
+         reverted to stable; see SingleFlushAnsiOutput for the workaround instead. -->
+    <PackageReference Include="Terminal.Gui" Version="2.4.17" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

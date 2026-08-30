@@ -33,6 +33,16 @@ themselves automatically (with a clear reason) when either tool isn't available,
 still runs cleanly without them. See [`reference/verify/README.md`](reference/verify/README.md)
 for how that comparison works and what it takes to add to it.
 
+## Known issues
+
+**TUI feels laggy on Windows (keystrokes/redraws take 100ms+ to show up):** this has been traced
+to Windows Terminal's own rendering pipeline, not the app -- Terminal.Gui tracks it upstream as
+[tui-cs/Terminal.Gui#4588](https://github.com/tui-cs/Terminal.Gui/issues/4588) (open; the one fix
+attempt, [#4589](https://github.com/tui-cs/Terminal.Gui/pull/4589), was closed unmerged). Switching
+Windows Terminal's text renderer from its default to Direct2D (Settings -> Rendering) has resolved
+it in practice. See also `src/ThreeLn.Reconstruction4021.Tui/Program.cs`'s own notes on a related
+ConPTY tearing issue ([#5323](https://github.com/tui-cs/Terminal.Gui/issues/5323)).
+
 ## Repository layout
 
 - **`src/`** — the C# port. `ThreeLn.Reconstruction4021.Core` is the simulation itself;
