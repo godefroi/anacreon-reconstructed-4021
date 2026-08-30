@@ -67,7 +67,7 @@ public sealed class KingdomTurnHandler : ITurnHandler
     }
 
     /// <summary>
-    /// `.SAV`/native-JSON import (`SaveFormat.SavGameLoader`/the Phase 7f JSON serializer):
+    /// `.SAV`/native-JSON import (<see cref="SaveFormat.SavGameLoader"/>/<see cref="SaveFormat.GameJson"/>):
     /// reconstructs a handler from state a save file already recorded, rather than freshly
     /// rolling a new persona — real Pascal's own `LoadNPEData` reads a `Kingdom1DataRecord`
     /// wholesale into memory, it doesn't re-run `InitializeKingdom1NPE`/`2NPE`. No

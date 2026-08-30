@@ -25,3 +25,15 @@ this file once that happens.
   empire, which is the actual mechanism behind the SaveFormat layer's "orphan empire" handling
   (`EntityIndex` in `GameJson.cs`/`SavGameWriter.cs`). Worth a real tracked entry since it has a
   concrete, already-observed consequence elsewhere in the port.
+- **No naming system exists anywhere in this port** (Pascal's `Location2Index`/`GetDefinedName`/
+  `DeleteName`/`AddName`/`FleetNameDestruction`). Real Pascal lets a player assign a custom name to
+  a location; this port has no equivalent concept at all, so every real call site that would
+  touch it just skips that step and says so in its own comment: `CombatOutcome.AbortFleet`,
+  `CombatOutcome.RestoreCombatant`, `CombatOutcome.DestroyEmpire` (`DeleteAllNames`),
+  `CombatStandalone.LAMAttack`/`DestroyConstructionOrGate`, `FleetMovementHandler`'s starbase
+  movement, and `AnnualTickHandler.UpdateConstruction`. One real, cross-cutting gap noted
+  independently at (at least) seven call sites, not seven separate gaps.
+
+## Turns/NPE pass
+
+(none found beyond the naming system above, which also surfaced here)

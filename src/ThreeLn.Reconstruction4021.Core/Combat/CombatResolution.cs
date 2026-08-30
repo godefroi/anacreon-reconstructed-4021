@@ -17,7 +17,7 @@ public sealed record CombatEngagementResult(AttackResultType Result, AttackTally
 /// branch, matching Pascal's own <c>Target.ObjTyp IN [Con,Gate]</c> check, which entirely bypasses
 /// CalculateCombatData/GetEnemy/the group-engage loop (see <see cref="CombatStandalone"/>).
 ///
-/// <see cref="RetrIndex"/> (Pascal's <c>RetrIndex</c>/<c>RetreatIndex</c> parameter, threaded through
+/// <c>RetrIndex</c> (Pascal's <c>RetrIndex</c>/<c>RetreatIndex</c> parameter, threaded through
 /// NPEAttack/FleetEngage/WorldEngage/FleetRetreats in real Pascal) is dropped entirely — confirmed by
 /// reading every one of those bodies, none of them ever reads it; FleetRetreats' own retreat rule is a
 /// hardcoded 30-round timeout, not parametrized by it. A real, if incomplete, feature in 1.31 itself,

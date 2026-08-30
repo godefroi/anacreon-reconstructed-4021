@@ -32,7 +32,7 @@ public sealed partial class AnnualTickHandler
 
     /// <summary>
     /// RawM[LAM..ion,CargoTypes] (DATACNST.PAS:429-432) — units of raw material per 100 units built.
-    /// Same table shape as <see cref="_rawMaterialForShips"/> (Production.cs); defenses get their own
+    /// Same table shape as <see cref="_rawMaterialForShips"/>; defenses get their own
     /// dictionary rather than a shared one spanning ships+defenses, matching how this port already
     /// keeps ships/cargo-products/construction each in their own table instead of one array indexed
     /// by Pascal's single flat ResourceTypes.
@@ -119,8 +119,8 @@ public sealed partial class AnnualTickHandler
 
     /// <summary>
     /// UPDATE.PAS:1367-1369's "Technology:=Technology*TechDev[Tech]" intersection, applied to
-    /// defenses specifically — same per-world tech-level gate as <see cref="ShipTechAvailable"/>
-    /// (Production.cs), reusing its own <see cref="EffectiveTechnologyLevel"/> helper: an owned world
+    /// defenses specifically — same per-world tech-level gate as <see cref="ShipTechAvailable"/>,
+    /// reusing its own <see cref="EffectiveTechnologyLevel"/> helper: an owned world
     /// needs both the empire's research (<see cref="UnlockedTechnology.Defenses"/>) and its own
     /// TechLevel to have reached <see cref="TechCatalog.MinTechForDefense"/>; an independent world has
     /// no empire research to check, only the tech-level gate (at one level below its own, per

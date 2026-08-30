@@ -58,7 +58,7 @@ public sealed partial class AnnualTickHandler
 
     /// <summary>
     /// % of industry that is effective, by world class and industry: ClassIndAdj (DATACNST.PAS:321-343).
-    /// Internal, not private: Npe/NpeToolkit.cs's GetNewDesignation (Phase 6c) reads the same table
+    /// Internal, not private: <see cref="Npe.NpeToolkit.GetNewDesignation"/> reads the same table
     /// rather than re-transcribing 21 rows of balance data.
     /// </summary>
     internal static readonly FrozenDictionary<(WorldClass, IndustryType), int> ClassIndustryAdjustment =
@@ -277,8 +277,8 @@ public sealed partial class AnnualTickHandler
 
     /// <summary>
     /// ConsCargoNeeded[ConstrTypes,CargoTypes] (DATACNST.PAS:539-548) — raw material needed per year
-    /// to build each construction type. Used by UpdateConstruction (AnnualTickHandler.Construction.cs,
-    /// Commit 5b), not production — kept here alongside the other RawM/ConsCargoNeeded-shaped tables.
+    /// to build each construction type. Used by <see cref="UpdateConstruction"/>, not production —
+    /// kept here alongside the other RawM/ConsCargoNeeded-shaped tables.
     /// </summary>
     private static readonly FrozenDictionary<ConstructionType, FrozenDictionary<CargoType, int>> _constructionCargoNeeded = new Dictionary<ConstructionType, FrozenDictionary<CargoType, int>> {
         [ConstructionType.Minefield] = RawMaterialRow((CargoType.Chemicals, 110), (CargoType.Metals, 500), (CargoType.Trillum, 80)),
@@ -323,7 +323,7 @@ public sealed partial class AnnualTickHandler
     /// UPDATE.PAS:1371-1379 (planet) / :1403-1414 (starbase, STyp=cmp only, bracketed by
     /// beforeProduce/afterProduce). Pascal stages this through a wider-range TempCargo buffer and
     /// writes it back via PutTotalCargo's ThgLmt clamp at the end (UPDATE.PAS:436-456); operating
-    /// directly on <see cref="IEconomicWorld.Cargo"/> (a plain unclamped int per field, unlike
+    /// directly on <see cref="IShipCargoHolder.Cargo"/> (a plain unclamped int per field, unlike
     /// Pascal's clamped 0..9999 CargoArray subrange) and clamping once at the end reproduces the same
     /// semantics without a redundant temporary — including for a starbase's <see cref="SurplusLink"/>,
     /// which specifically depends on Cargo holding values above MaxResources mid-pipeline, before that

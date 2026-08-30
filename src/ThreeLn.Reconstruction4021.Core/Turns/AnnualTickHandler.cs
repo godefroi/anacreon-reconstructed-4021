@@ -19,9 +19,6 @@ namespace ThreeLn.Reconstruction4021.Core.Turns;
 /// <item>AnnualTickHandler.Construction.cs — construction-site countdown/completion (UpdateConstruction),
 /// creating Starbases/Stargates/minefields on completion.</item>
 /// </list>
-/// Covers planets (Commits 1-3: population/efficiency/revolution, production, tech level),
-/// industrial-complex starbases (Commit 4: SupplyLink/SurplusLink, the rest of the pipeline gated on
-/// Kind==IndustrialComplex), per-empire tech research (Commit 5a), and construction (Commit 5b).
 /// </summary>
 public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandler
 {
@@ -132,7 +129,7 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
 
     /// <summary>
     /// Clamps a world's revolution index to [0,100] (PRIMINTR.PAS:ChangeRevIndex). Internal, not
-    /// private: Combat/CombatOutcome.cs's ConquerWorld/ConquerEmpire (Phase 5 commit 5f) need this same
+    /// private: <see cref="Combat.CombatOutcome"/>'s ConquerWorld/ConquerEmpire need this same
     /// primitive — PRIMINTR.PAS is itself a shared unit both ATTACK.PAS and UPDATE.PAS USES, so this
     /// mirrors that shape rather than duplicating the clamp a second place.
     /// </summary>

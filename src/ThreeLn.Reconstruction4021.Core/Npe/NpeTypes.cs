@@ -4,11 +4,11 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Core.Npe;
 
 /// <summary>
-/// A fleet mission an NPE empire has assigned (NPETYPES.PAS's MissionTypes) — real Pascal ordinal
-/// order preserved even though only a handful of these are read/written by anything ported so far
-/// (Phase 6c's NpeToolkit); the rest are set up by NpeToolkit's Deploy*/Implement*MSN procedures,
-/// which land later (Phase 6c-2/6d, once fleet-creation primitives exist — see NpeToolkit.cs's own
-/// doc comment).
+/// A fleet mission an NPE empire has assigned (NPETYPES.PAS's MissionTypes): real Pascal ordinal
+/// order preserved even though <see cref="NpeToolkit"/>'s Kingdom-only procedures read/write only a
+/// subset of these. The Berserker/Pirate-specific values (<see cref="HunterKiller"/>/
+/// <see cref="WaitForTransports"/>/<see cref="AttackTransports"/>/<see cref="AttackWorld"/>/
+/// <see cref="BerserkerAttack"/>/<see cref="BerserkerReturn"/>) have no Kingdom caller.
 /// </summary>
 public enum NpeMissionType
 {
@@ -32,13 +32,10 @@ public enum NpeMissionType
 }
 
 /// <summary>
-/// One NPE empire's personality knobs (NPETYPES.PAS's NPECharacterRecord) — a Kingdom1/Kingdom2
+/// One NPE empire's personality knobs (NPETYPES.PAS's NPECharacterRecord): a Kingdom1/Kingdom2
 /// empire's persona, seeded once at creation (NPE02.PAS's InitializeKingdom1NPE/
-/// InitializeKingdom2NPE, Phase 6d) and read by NpeToolkit's targeting/designation logic. Ported in
-/// full even though Phase 6c's own toolkit methods only read <see cref="Defensive"/> and
-/// <see cref="WorldPower"/> — the rest (diplomacy's <see cref="Offensive"/>, and the gene/evolution
-/// fields NPE00.PAS's per-turn character drift reads/writes) are real fields the same record needs
-/// once 6d/6e land, not speculative additions.
+/// InitializeKingdom2NPE) and read by <see cref="NpeToolkit"/>'s targeting/designation logic,
+/// diplomacy, and NPE00.PAS's per-turn character drift.
 /// </summary>
 public sealed class NpeCharacter
 {
@@ -79,8 +76,8 @@ public enum PolicyType
 /// see <see cref="Turns.KingdomTurnHandler"/>'s own doc comment on why that slot needs an entry even
 /// though real Pascal's own seeding loop, <c>FOR EmpI:=Empire1 TO Empire8</c>, never touches it).
 /// <see cref="TotalMilitary"/>/<see cref="Worlds"/>/<see cref="ThreatAssess"/> are written only by
-/// StateDeptReport (Phase 6e) — real fields on the same record, kept here rather than split out,
-/// since splitting would just be Phase 6e re-adding what Phase 6d removed.
+/// <see cref="NpeToolkit.StateDeptReport"/> — real fields on the same record, kept here rather than
+/// split out, since a split would just have to re-add them.
 /// </summary>
 public sealed class StateDeptRecord
 {
@@ -95,7 +92,7 @@ public sealed class StateDeptRecord
 
 /// <summary>
 /// One Kingdom fleet's AI mission state — the survivors of NPETYPES.PAS's FleetDataRecord field
-/// audit (Phase 6c). Homed in a <c>Dictionary&lt;Fleet, KingdomFleetState&gt;</c> owned by
+/// audit. Homed in a <c>Dictionary&lt;Fleet, KingdomFleetState&gt;</c> owned by
 /// <see cref="Turns.KingdomTurnHandler"/> (one dictionary per Kingdom empire), not on <see cref="Fleet"/>
 /// itself — this is AI bookkeeping only Kingdom-type fleets have, matching the precedent set by
 /// keeping Galaxy's own mine-scouting state off Coordinate/Planet (docs/PORT_DESIGN.md).
@@ -115,7 +112,7 @@ public sealed class StateDeptRecord
 /// same category as <c>TraderNPE</c> (see docs/PASCAL_ARCHITECTURE_NOTES.md).</item>
 /// <item><c>BlockX</c>/<c>BlockY</c> — Pirate-only (grepped: all six hits are in NPE01.PAS, the
 /// Pirate personality's own hunting-ground grid; NPEINTR.PAS's shared toolkit never touches them).
-/// Not ported now — this phase builds Kingdom only; add when Pirate lands.</item>
+/// Not ported: this port models Kingdom only; add when Pirate is implemented.</item>
 /// <item><c>Index</c> — dissolves into the owning Dictionary's key.</item>
 /// </list>
 /// </summary>
@@ -127,7 +124,8 @@ public sealed class KingdomFleetState
     /// TargetID — the fleet's final destination or attack target. Pascal's IDNumber union: an
     /// <see cref="IEconomicWorld"/> (planet/starbase), a <see cref="ConstructionSite"/>, a
     /// <see cref="Stargate"/>, or a <see cref="Fleet"/>, matching every other IDNumber-typed
-    /// reference already in this port (see Combat/CombatOutcome.cs's own target-dispatch precedent).
+    /// reference already in this port (see <see cref="Combat.CombatOutcome"/>'s own target-dispatch
+    /// precedent).
     /// </summary>
     public object? Target { get; set; }
 

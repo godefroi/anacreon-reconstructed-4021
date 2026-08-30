@@ -13,10 +13,10 @@ public sealed partial class AnnualTickHandler
     /// <summary>
     /// UPDATE.PAS:103-220 (UpdateConstruction, nested UseUpRawMaterial) plus ConstructStarbase/
     /// ConstructStargate (UPDATE.PAS:58-100) for the completion branch. Skips the naming system
-    /// (Location2Index/GetDefinedName/DeleteName/AddName) — it doesn't exist in this port yet, and
+    /// (Location2Index/GetDefinedName/DeleteName/AddName): this port has no naming system, and
     /// nothing here depends on it. Sector-occupancy clearing (Sector[XY.x]^[XY.y].Obj:=EmptyQuadrant)
     /// has no C# equivalent to update — Galaxy defers sector-occupancy indexing to the movement phase.
-    /// <c>ConsDone</c> fires with the raw <see cref="Coordinate"/>, not the new starbase/stargate, as
+    /// <c>ConsDone</c> fires with the raw <see cref="Galaxy.Coordinate"/>, not the new starbase/stargate, as
     /// its subject — matching Pascal's own <c>Loc.ID:=EmptyQuadrant; Loc.XY:=XY</c> at UPDATE.PAS:215,
     /// which discards the newly-created object's ID rather than using it.
     /// </summary>

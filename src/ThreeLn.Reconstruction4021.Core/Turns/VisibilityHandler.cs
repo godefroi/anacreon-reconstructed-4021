@@ -8,7 +8,7 @@ namespace ThreeLn.Reconstruction4021.Core.Turns;
 /// Refreshes an empire's fog-of-war each turn, matching INTRFACE.PAS:Scout/ScoutFleets/ScoutObjects/DetermineIfScouted.
 /// - Fleet visibility is ephemeral: cleared and rebuilt each turn (ScoutFleets).
 /// - Planet/starbase/stargate/construction visibility is accumulated: Known persists, Scouted is updated.
-/// - Scouting radius: adjacent cells (Chebyshev), plus capital/starbase/planet scans at distance < 6 or <= 5.
+/// - Scouting radius: adjacent cells (Chebyshev), plus capital/starbase/planet scans at distance &lt; 6 or &lt;= 5.
 /// </summary>
 public sealed class VisibilityHandler(Random random) : IVisibilityHandler
 {
@@ -223,8 +223,8 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
 
     /// <summary>
     /// ScoutAdjacent doubles as PRIMINTR.PAS's own <c>Scout(Emp,XY)</c> primitive — internal, not
-    /// private, so Combat/CombatOutcome.cs's ConquerWorld (Phase 5 commit 5f) can call it directly for
-    /// its own <c>Scout(Emp,XY)</c> call rather than reimplementing a second, inevitably-diverging copy.
+    /// private, so <see cref="Combat.CombatOutcome"/>'s ConquerWorld can call it directly for its own
+    /// <c>Scout(Emp,XY)</c> call rather than reimplementing a second, inevitably-diverging copy.
     /// The gaps already noted below (no POk news on first contact, no dark-nebula early exit) apply
     /// equally to that caller — real Pascal's Scout has both; this port's stand-in has neither yet,
     /// tracked here, not duplicated as a second gap description at the new call site.

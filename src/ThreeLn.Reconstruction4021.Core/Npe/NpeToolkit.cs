@@ -8,28 +8,20 @@ using static ThreeLn.Reconstruction4021.Core.PascalMath;
 namespace ThreeLn.Reconstruction4021.Core.Npe;
 
 /// <summary>
-/// The shared toolkit multiple NPE personalities call in real Pascal (NPEINTR.PAS, 1,732 lines) —
-/// fleet-composition planning, targeting, regional bookkeeping, and world (re)designation. Ported as
-/// its own service <see cref="KingdomTurnHandler"/> depends on rather than folded into Kingdom's own
-/// class, since Pirate/Berserker/Guardian call the same real Pascal procedures (see docs/PORT_DESIGN.md).
+/// The shared toolkit multiple NPE personalities call in real Pascal (NPEINTR.PAS, 1,732 lines):
+/// fleet-composition planning, targeting, regional bookkeeping, world (re)designation, fleet
+/// creation, and mission execution (the five <c>Deploy*Fleet</c> procedures and all eight
+/// <c>Implement*MSN</c> procedures, built on the fleet-lifecycle primitives in
+/// <see cref="Entities.FleetLifecycle"/>/<see cref="Entities.FleetLogistics"/>). Ported as its own service
+/// <see cref="KingdomTurnHandler"/> depends on rather than folded into Kingdom's own class, since
+/// Pirate/Berserker/Guardian call the same real Pascal procedures (see docs/PORT_DESIGN.md).
 ///
-/// <b>Scope, split from NPEINTR.PAS's full surface on a real dependency line, not an arbitrary cut:</b>
-/// everything here reads state and computes a value — nothing here creates, moves, or refuels a fleet.
-/// The other half of NPEINTR.PAS (the five <c>Deploy*Fleet</c> procedures and all eight
-/// <c>Implement*MSN</c> mission-execution procedures) needs real fleet-lifecycle primitives
-/// (<c>DeployFleet</c>, <c>ChangeCompositionOfFleet</c>, <c>EstimatedDateOfArrival</c>/
-/// <c>EstimatedRange</c>, <c>RefuelFleet</c>, <c>SetFleetDestination</c> — FLEET.PAS/PRIMINTR.PAS)
-/// that don't exist anywhere in this port yet; every prior phase only ever moved or destroyed fleets
-/// that scenario loading or human setup already created. That half lands as its own commit once those
-/// primitives exist, with <see cref="KingdomTurnHandler"/> as its first real caller — bundling it in
-/// here would make this whole file unverifiable until the very last line landed.
-///
-/// <b>Ground truth, deliberately hardcoded rather than golden-file this round:</b> every method below
-/// either has no <c>Rnd</c>/<c>Random</c> call at all, or draws inside a scan-every-planet-in-the-galaxy
+/// <b>Ground truth, deliberately hardcoded rather than golden-file:</b> every method below either
+/// has no <c>Rnd</c>/<c>Random</c> call at all, or draws inside a scan-every-planet-in-the-galaxy
 /// loop whose count depends on live galaxy shape — a golden case for the second group would need a
-/// full hand-assembled universe to mean anything close to what real play produces. Phase 7's save/load
-/// work is what makes building one of those cheap; see <c>NpeToolkitTests.cs</c> for the hand-derived
-/// cases used instead, and reference/verify/README.md's own ground-truth split guidance.
+/// full hand-assembled universe to mean anything close to what real play produces. This port's
+/// SaveFormat layer could make building one of those cheap; see <c>NpeToolkitTests</c> for the
+/// hand-derived cases used instead, and reference/verify/README.md's own ground-truth split guidance.
 /// </summary>
 public static class NpeToolkit
 {
@@ -55,13 +47,13 @@ public static class NpeToolkit
     /// <summary>
     /// GetFleetComposition (NPEINTR.PAS:237-322) — the ship/cargo bundle a Deploy*Fleet call would
     /// carry for a mission of the given power/troop budget, read from what's on hand at
-    /// <paramref name="source"/> without touching it (the actual subtraction happens in DeployFleet
-    /// itself, not ported here — see this class's own doc comment). SSeq (NPEINTR.PAS:247-248) is
+    /// <paramref name="source"/> without touching it (the actual subtraction happens in
+    /// <see cref="Entities.FleetLifecycle.DeployFleet"/> itself). SSeq (NPEINTR.PAS:247-248) is
     /// declared but never referenced by the real sequence-selection below — SlowAttackMSN falls
     /// through to the same default as every other unlisted mission, not to SSeq as its name suggests
     /// (see docs/PASCAL_ARCHITECTURE_NOTES.md). BSRKAttackMSN's extra-transports branch is real and
-    /// kept even though Berserker isn't implemented yet — it's free once <paramref name="mission"/>
-    /// can hold that value.
+    /// kept even though this port doesn't model Berserker — it's free once
+    /// <paramref name="mission"/> can hold that value.
     /// </summary>
     public static (ShipCounts Ships, CargoHold Cargo) GetFleetComposition(IEconomicWorld source, long power, long gat, NpeMissionType mission)
     {
@@ -403,8 +395,8 @@ public static class NpeToolkit
 
     /// <summary>
     /// GetNewDesignation (NPEINTR.PAS:917-1036) — what an owned world should be redesignated as, by a
-    /// weighted roll over every <see cref="WorldType"/>. <paramref name="persona"/> is real Pascal's
-    /// own parameter but confirmed unused: the whole procedure body never reads a single
+    /// weighted roll over every <see cref="WorldType"/>. <c>persona</c> is real Pascal's own
+    /// parameter but confirmed unused: the whole procedure body never reads a single
     /// <c>Persona.</c> field, so it's dropped here rather than threaded through unread.
     /// </summary>
     public static WorldType GetNewDesignation(IEconomicWorld world, IReadOnlyList<IEconomicWorld> regionCapitals, Game game, Random random)
@@ -527,9 +519,9 @@ public static class NpeToolkit
     /// NewType is never Capital here (Chance[CapTyp] never leaves 0 in GetNewDesignation, and
     /// ReDesignateEmpire's own caller already excludes the capital world from consideration), so the
     /// capital-swap/tech-reset branch (INTRFACE.PAS:195-214) is real Pascal but confirmed unreachable
-    /// from this call path — not ported under this name. A general-purpose DesignateWorld (a future
-    /// human "change world designation" command, Phase 8) would need that branch back. The efficiency
-    /// reduction below is NOT conditional on the capital branch, though — it fires for every call.
+    /// from this call path — not ported under this name. A general-purpose DesignateWorld (a human
+    /// "change world designation" command) would need that branch back. The efficiency reduction
+    /// below is NOT conditional on the capital branch, though — it fires for every call.
     /// </summary>
     private static void RedesignateWorldType(IEconomicWorld world, WorldType newType, Random random)
     {
@@ -541,7 +533,7 @@ public static class NpeToolkit
     /// EnforceNPEDataLinks (NPEINTR.PAS:1661-1689) — drops mission state for any fleet that's no
     /// longer alive. Real Pascal reconciles a slot-indexed array against SetOfActiveFleets; this
     /// port's Dictionary&lt;Fleet,...&gt; needs the same pruning, since a fleet destroyed elsewhere
-    /// (Combat/CombatOutcome.cs's DestroyFleet) would otherwise leave a dangling dictionary key.
+    /// (<see cref="CombatOutcome.DestroyFleet"/>) would otherwise leave a dangling dictionary key.
     /// </summary>
     public static void EnforceNpeDataLinks(Dictionary<Fleet, KingdomFleetState> fleetStates, Game game)
     {
@@ -553,8 +545,8 @@ public static class NpeToolkit
 
     /// <summary>
     /// MidCourseCorrection (NPEINTR.PAS:1542-1561) — a returning fleet whose home base has fallen to
-    /// someone else mid-flight gets redirected to the nearest remaining base instead. Missed by both
-    /// 6c and 6c-2's own NPEINTR.PAS passes — Phase 6d's UpdateFleets is the first real caller.
+    /// someone else mid-flight gets redirected to the nearest remaining base instead. Called by
+    /// <see cref="KingdomTurnHandler"/>'s own UpdateFleets.
     /// </summary>
     public static void MidCourseCorrection(Empire emp, Fleet fleet, KingdomFleetState state, IReadOnlyList<IEconomicWorld> regionCapitals)
     {
@@ -835,10 +827,8 @@ public static class NpeToolkit
 
     /// <summary>
     /// SetRaidingFleetNewTarget (NPEINTR.PAS:1081-1124) — a raiding fleet presses on to a fresh target
-    /// or heads home, biased by <see cref="NpeCharacter.Offensive"/>. No caller exists yet in this port
-    /// (NPE00/NPE02's per-turn driver, Phase 6d) — ported now since it's part of NPEINTR.PAS's own
-    /// declared surface, same "primitive ready for whoever needs it" precedent as Phase 5g's
-    /// SelfDestructObject.
+    /// or heads home, biased by <see cref="NpeCharacter.Offensive"/>. Called by
+    /// <see cref="KingdomTurnHandler"/>'s own per-turn fleet dispatch.
     /// </summary>
     public static void SetRaidingFleetNewTarget(
         Empire emp, Fleet fleet, IEconomicWorld target, IEconomicWorld homeBase,
@@ -1478,14 +1468,12 @@ public static class NpeToolkit
     }
 
     /// <summary>
-    /// ReviewNews (NPE00.PAS:71-196). NoFuel (<see cref="SendRescueFleet"/>) and IndLack
-    /// (<see cref="RNIndustryLack"/>) landed in Phase 6d; the enemy-attack case arm
-    /// (BattleL/BattleW1/BattleW2/ConDs/GteDs/LAMDm/LAMDs/LAMDef) lands here in 6e. Its own Balance
-    /// decrement only special-cases BattleL: real Pascal checks <c>Loc1.ID.ObjTyp IN [Pln,Base,Gate]</c>
-    /// against the conquered object's own type; this port's WorldConqueredByEnemy headline is only
-    /// ever raised with an <see cref="IEconomicWorld"/> subject (never a Fleet, Gate, or ConstructionSite
-    /// — confirmed by reading every AddNews call site for it in CombatOutcome.cs), so
-    /// <c>news.Subject is IEconomicWorld</c> is the exact same condition, not an approximation.
+    /// ReviewNews (NPE00.PAS:71-196). Its Balance decrement only special-cases BattleL: real Pascal
+    /// checks <c>Loc1.ID.ObjTyp IN [Pln,Base,Gate]</c> against the conquered object's own type; this
+    /// port's WorldConqueredByEnemy headline is only ever raised with an <see cref="IEconomicWorld"/>
+    /// subject (never a Fleet, Gate, or ConstructionSite — confirmed by reading every AddNews call
+    /// site for it in <see cref="CombatOutcome"/>), so <c>news.Subject is IEconomicWorld</c> is the
+    /// exact same condition, not an approximation.
     /// </summary>
     public static void ReviewNews(
         Empire emp, IReadOnlyList<IEconomicWorld> regionCapitals, Dictionary<Fleet, KingdomFleetState> fleetStates,
@@ -1535,8 +1523,8 @@ public static class NpeToolkit
     /// same rationale as <see cref="Turns.KingdomTurnHandler"/>'s own doc comment on why
     /// <see cref="Entities.Empire.Independent"/> needs a slot too. Shared here (not a
     /// KingdomTurnHandler-private method) since StateDepartment/StateDeptReport/WarCabinet/ReviewNews
-    /// all need the identical creation semantics KingdomTurnHandler.UpdateFleets already established
-    /// in Phase 6d for its own Conquer/JumpAttack Balance increments.
+    /// all need the identical creation semantics <see cref="KingdomTurnHandler"/>'s own UpdateFleets
+    /// already established for its own Conquer/JumpAttack Balance increments.
     /// </summary>
     internal static StateDeptRecord GetOrCreateState(Dictionary<Empire, StateDeptRecord> state, Empire emp, PolicyType defaultPolicy)
     {
@@ -1548,7 +1536,7 @@ public static class NpeToolkit
     }
 
     private static readonly IndustryType[] _shipyardIndustryTypes = [IndustryType.ShipyardGeneral, IndustryType.ShipyardJump, IndustryType.ShipyardStarship, IndustryType.ShipyardTransport];
-    private const double ShipyardIndustryK6 = 11000.0; // K6 (DATACNST.PAS) — same constant AnnualTickHandler.Production.cs's own IP formula uses, a single scalar not worth extracting alongside IndustryConstants' table.
+    private const double ShipyardIndustryK6 = 11000.0; // K6 (DATACNST.PAS) — same constant AnnualTickHandler's own IP formula uses, a single scalar not worth extracting alongside IndustryConstants' table.
 
     /// <summary>
     /// The SInd half of GetEmpireStatus (INTRFACE.PAS:654-719) — a world's shipyard industry

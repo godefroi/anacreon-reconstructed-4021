@@ -11,17 +11,16 @@ namespace ThreeLn.Reconstruction4021.Core.Turns;
 /// original game: current-empire jump fleets move first, then the next empire's warp fleets,
 /// each consuming fuel and stepping toward their destination until arrival.
 ///
-/// Phase 5 commit 5h added minefield damage and disrupter blocking (FLEET.PAS:705-746, 619-644) as a
-/// per-step check inside JumpFleet/HunterKillerFleet movement. Phase 6 commit 6a (this one) closes the
-/// remaining movement-fidelity gaps it found: dense-nebula blocking is now a real per-step check for
-/// every fleet type (not just Jump/HK), not only combat's minefield/disrupter pair; stargate
-/// teleportation and fortress pass-through jumps are real (FLEET.PAS:646-861's <c>UpdateFleet</c>);
-/// <c>UpdateAllFleets</c>'s dispatch (FLEET.PAS:861-905) now checks stargate occupancy the way real
-/// Pascal does (owner-blind — any gate, not just one owned by the fleet), via <see
-/// cref="Galaxy.Galaxy.GetObjectAt"/>; the fuel model (<see cref="FleetLogistics"/>) replaced an
-/// invented per-ship-type table with the real DATACNST.PAS constants; and starbase movement
-/// (<see cref="AdvanceStarbases"/>) is now the real obstacle-avoiding, fuel-costed
-/// <c>MovePlayerStarbases</c>/<c>GetNewBasePos</c> (SBASE.PAS), not a straight-line stepper.
+/// Minefield damage and disrupter blocking (FLEET.PAS:705-746, 619-644) are a per-step check inside
+/// JumpFleet/HunterKillerFleet movement. Dense-nebula blocking is a real per-step check for every
+/// fleet type (not just Jump/HK), not only combat's minefield/disrupter pair. Stargate teleportation
+/// and fortress pass-through jumps are real (FLEET.PAS:646-861's <c>UpdateFleet</c>);
+/// <c>UpdateAllFleets</c>'s dispatch (FLEET.PAS:861-905) checks stargate occupancy the way real
+/// Pascal does (owner-blind: any gate, not just one owned by the fleet), via
+/// <see cref="Galaxy.Galaxy.GetObjectAt"/>. The fuel model (<see cref="FleetLogistics"/>) uses the
+/// real DATACNST.PAS constants. Starbase movement (<see cref="AdvanceStarbases"/>) is the real
+/// obstacle-avoiding, fuel-costed <c>MovePlayerStarbases</c>/<c>GetNewBasePos</c> (SBASE.PAS), not a
+/// straight-line stepper.
 /// </summary>
 public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
 {

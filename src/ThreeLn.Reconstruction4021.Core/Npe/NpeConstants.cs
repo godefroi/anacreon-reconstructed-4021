@@ -5,9 +5,9 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Core.Npe;
 
 /// <summary>
-/// The pure balance data NpeToolkit's targeting/designation/defense-roll logic reads — transcribed
-/// directly from source since it's isolated, parameter-only data with no real-state dependency (this
-/// repo's own transcription-lane rule, same as Combat/CombatConstants.cs). <see cref="WorldType"/>
+/// The pure balance data <see cref="NpeToolkit"/>'s targeting/designation/defense-roll logic reads,
+/// transcribed directly from source since it's isolated, parameter-only data with no real-state
+/// dependency (same as <see cref="Combat.CombatConstants"/>). <see cref="WorldType"/>
 /// and <see cref="WorldClass"/>'s declaration order already matches Pascal's WorldTypes/WorldClass
 /// order 1:1 (verified directly against TYPES.PAS, not assumed from the name lists alone — WorldType
 /// in particular has non-obvious 0-valued gaps at every *Starbase variant that a naive reordering
