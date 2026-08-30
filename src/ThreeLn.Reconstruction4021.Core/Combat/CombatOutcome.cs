@@ -8,9 +8,10 @@ namespace ThreeLn.Reconstruction4021.Core.Combat;
 
 /// <summary>
 /// Outcome application (ATTACK.PAS's ConquerWorld/ConquerEmpire/RestoreCombatant/ResolveAttack, plus
-/// FLEET.PAS's DestroyFleet/AbortFleet and INTRFACE.PAS's DestroyEmpire — Phase 5 commit 5f). Called
+/// FLEET.PAS's DestroyFleet/AbortFleet and INTRFACE.PAS's DestroyEmpire). Called
 /// by <see cref="CombatResolution.NPEAttack"/> once a whole engagement's Result/Casualties/Killed are
-/// known; nothing in 5d/5e read those tallies for anything beyond returning them.
+/// known; neither <see cref="CombatEngine"/> nor <see cref="CombatResolution"/> reads those tallies
+/// for anything beyond returning them.
 ///
 /// Empire elimination is plain <c>Game.Empires.Remove</c>, not a ported <c>InUse</c> flag — see
 /// docs/PORT_DESIGN.md's "Empire elimination" section for why that self-heals <see cref="Game.NextEmpire"/>/
@@ -33,7 +34,7 @@ public static class CombatOutcome
         VisibilityHandler.ScoutAdjacent(world.Location, conqueror, game);
     }
 
-    /// <summary>ConquerWorld's nested ChangeRevolutionIndex (ATTACK.PAS:946-974) — a tier cascade by the world's *current* RevolutionIndex, genuinely separate from Phase 4's rebellion-warning cascade (different tiers, different draws).</summary>
+    /// <summary>ConquerWorld's nested ChangeRevolutionIndex (ATTACK.PAS:946-974): a tier cascade by the world's *current* RevolutionIndex, genuinely separate from <see cref="AnnualTickHandler"/>'s own rebellion-warning cascade (different tiers, different draws).</summary>
     private static void ChangeRevolutionIndexOnConquest(IEconomicWorld world, Random random)
     {
         var rev = world.RevolutionIndex;
@@ -162,11 +163,10 @@ public static class CombatOutcome
 
     /// <summary>
     /// RestoreCombatant (ATTACK.PAS:1141-1181). The Fleet branch's own FleetCargoSpace/BalanceFleet/
-    /// FuelCapacity clamp isn't ported — no fleet cargo-space/fuel-capacity system exists anywhere in
-    /// this port yet (a movement-fidelity gap in the same category as docs/ROADMAP.md's tracked
-    /// stargate/starbase-movement gaps), and it's structurally unreachable from here regardless: this
-    /// method only ever subtracts casualties (fewer ships/cargo), which can only free up space, never
-    /// exceed it.
+    /// FuelCapacity clamp isn't ported: this port has no fleet cargo-space/fuel-capacity system (a
+    /// movement-fidelity gap in the same category as docs/ROADMAP.md's tracked stargate/starbase-movement
+    /// gaps), and it's structurally unreachable from here regardless: this method only ever subtracts
+    /// casualties (fewer ships/cargo), which can only free up space, never exceed it.
     /// </summary>
     public static void RestoreCombatant(object combatant, AttackTally casualties)
     {
@@ -287,7 +287,7 @@ public static class CombatOutcome
         }
     }
 
-    /// <summary>DestroyFleet (FLEET.PAS:211-244) — "is it live" is just "is it in Galaxy.Fleets" (see Galaxy's own doc comment), so this is a plain removal; no SetOfActiveFleets/sector-flag/order bookkeeping to keep in sync. Internal (not private): 5g's CombatStandalone.cs reuses this exact primitive rather than duplicating it (LAMAttack/SelfDestructObject both destroy fleets outside the ResolveAttack pipeline).</summary>
+    /// <summary>DestroyFleet (FLEET.PAS:211-244) — "is it live" is just "is it in Galaxy.Fleets" (see Galaxy's own doc comment), so this is a plain removal; no SetOfActiveFleets/sector-flag/order bookkeeping to keep in sync. Internal (not private): <see cref="CombatStandalone"/> reuses this exact primitive rather than duplicating it (LAMAttack/SelfDestructObject both destroy fleets outside the ResolveAttack pipeline).</summary>
     internal static void DestroyFleet(Fleet fleet, Game game) => game.Galaxy.Fleets.Remove(fleet);
 
     /// <summary>
@@ -296,14 +296,11 @@ public static class CombatOutcome
     /// no-op for a construction-site/stargate ground (PRIMINTR.PAS:315-364,589-607, confirmed by
     /// reading) via <see cref="GetShipsAndCargo"/> returning null for anything that isn't an
     /// <see cref="IEconomicWorld"/> or <see cref="Fleet"/>. Fuel-to-trillum conversion and
-    /// FleetNameDestruction's naming-system call aren't ported — no fuel-capacity or naming system
-    /// existed anywhere in this port when this was written (see RestoreCombatant/ConquerWorld's own
-    /// doc comments for the same gaps). Phase 6a later added a real Fuel/FuelCapacity model
-    /// (Entities/FleetLogistics.cs) that this method still doesn't use — a real, known gap, deliberately
-    /// left for a dedicated follow-up commit rather than folded into Phase 6c-2 (see
-    /// docs/PASCAL_ARCHITECTURE_NOTES.md). Internal (not private): Npe/NpeToolkit.cs's
-    /// ImplementReturnMSN/ImplementRefuelMSN (Phase 6c-2) call this exact primitive rather than
-    /// duplicating it, same precedent as <see cref="DestroyFleet"/>.
+    /// FleetNameDestruction's naming-system call aren't ported (same gap as RestoreCombatant/
+    /// ConquerWorld's own doc comments). A real Fuel/FuelCapacity model exists
+    /// (<see cref="FleetLogistics"/>) that this method doesn't use: a known gap. Internal (not private):
+    /// <see cref="Npe.NpeToolkit.ImplementReturnMSN"/>/<see cref="Npe.NpeToolkit.ImplementRefuelMSN"/>
+    /// call this exact primitive rather than duplicating it, same precedent as <see cref="DestroyFleet"/>.
     /// </summary>
     internal static void AbortFleet(Fleet source, object ground, bool report)
     {
@@ -343,10 +340,12 @@ public static class CombatOutcome
     }
 
     /// <summary>
-    /// DestroyEmpire (INTRFACE.PAS:1612-1658). CleanUpNPE isn't ported — it's NPE-AI-decision state
-    /// (Phase 6) that doesn't exist anywhere in this port yet, and real Pascal only ever calls it for a
-    /// non-human empire, which is already this method's only real precondition (ConquerEmpire's own
-    /// ELSE branch never reaches here for a human — see the human branch just above its one call site).
+    /// DestroyEmpire (INTRFACE.PAS:1612-1658). CleanUpNPE isn't ported: this method doesn't clean up
+    /// NPE-AI-decision state when an empire dies (a Kingdom's own diplomacy dictionary can still
+    /// reference a destroyed empire, the mechanism behind the SaveFormat layer's "orphan empire"
+    /// handling), and real Pascal only ever calls CleanUpNPE for a non-human empire, which is already
+    /// this method's only real precondition (ConquerEmpire's own ELSE branch never reaches here for a
+    /// human — see the human branch just above its one call site).
     /// DeleteAllNames isn't ported either — no naming system exists in this port (matching AbortFleet's
     /// own established gap). EraseNews is <c>Empire.News.Clear()</c>.
     /// </summary>
@@ -393,7 +392,7 @@ public static class CombatOutcome
         _ => (null, null),
     };
 
-    /// <summary>ChangeTotalRevIndex (PRIMINTR.PAS:1085-1096) — a real-time mutator distinct from AnnualTickHandler's own NewTotalRevIndex scratch-accumulate-then-commit dictionary (Phase 1); the two never run simultaneously, only at different times within the same year. Internal (not private): 5g's CombatStandalone.cs reuses this exact primitive rather than duplicating it.</summary>
+    /// <summary>ChangeTotalRevIndex (PRIMINTR.PAS:1085-1096) — a real-time mutator distinct from AnnualTickHandler's own NewTotalRevIndex scratch-accumulate-then-commit dictionary; the two never run simultaneously, only at different times within the same year. Internal (not private): <see cref="CombatStandalone"/> reuses this exact primitive rather than duplicating it.</summary>
     internal static void ChangeTotalRevIndex(Empire emp, int change)
     {
         if (!emp.IsIndependent) {

@@ -11,8 +11,8 @@ namespace ThreeLn.Reconstruction4021.Core.Entities;
 /// TechnologySet resource span (men,nnj,amb,che,met,sup,tri) is exactly CargoType's 7 members in the
 /// same order. It exists because NewTechLevel's outer guard (UPDATE.PAS:386, "TechSet&lt;&gt;TechDev[Tech]")
 /// is a real set-equality check across every category including resources — production's own
-/// CargoTechAvailable (AnnualTickHandler.Production.cs) still gates purely on TechLevel via a
-/// derived min-tech-level table, not this set; the two are deliberately not wired together yet (see
+/// <see cref="Turns.AnnualTickHandler.CargoTechAvailable"/> still gates purely on TechLevel via a
+/// derived min-tech-level table, not this set; the two are deliberately not wired together (see
 /// docs/PORT_DESIGN.md's "Technology tracking" section).
 /// </summary>
 public sealed class UnlockedTechnology

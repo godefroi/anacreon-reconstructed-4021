@@ -4,11 +4,10 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Core.Entities;
 
 /// <summary>
-/// Production adjustment by tech level: TechAdj2 (DATACNST.PAS:231-233), used by the annual tick's
-/// own IP/Alpha production formulas (AnnualTickHandler.Production.cs) and by NpeToolkit's
+/// Production adjustment by tech level: TechAdj2 (DATACNST.PAS:231-233), used by
+/// <see cref="Turns.AnnualTickHandler"/>'s own IP/Alpha production formulas and by NpeToolkit's
 /// StateDeptReport port (NPEINTR.PAS's GetEmpireStatus reuses the same IP calculation for its
-/// per-world shipyard-industry sum) — shared here rather than duplicated once a second real reader
-/// needed the same table.
+/// per-world shipyard-industry sum): shared here rather than duplicated.
 /// </summary>
 public static class IndustryConstants
 {

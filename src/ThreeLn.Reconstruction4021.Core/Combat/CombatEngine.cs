@@ -5,16 +5,16 @@ using static ThreeLn.Reconstruction4021.Core.PascalMath;
 namespace ThreeLn.Reconstruction4021.Core.Combat;
 
 /// <summary>
-/// The group/shell combat engine core (ATTACK.PAS, Phase 5 commit 5d): the per-round damage math one
+/// The group/shell combat engine core (ATTACK.PAS): the per-round damage math one
 /// call to <see cref="Battle"/> resolves for a single orbital shell, plus the setup procedures that
 /// feed it (<see cref="CalculateCombatData"/>, <see cref="GetEnemy"/>, <see cref="DefaultDistribution"/>,
 /// <see cref="ForcesUnknown"/>) and the post-round check (<see cref="EnemySurrenders"/>). Deliberately
 /// does not include the multi-round/multi-shell driver (ATTNPE.PAS's GroupEngage and friends,
-/// including AdvanceGroups' shell-to-shell movement and its transport-to-troop swap) or outcome
-/// application (ResolveAttack/ConquerWorld/ConquerEmpire) — those are later commits (see
-/// docs/ROADMAP.md's Phase 5 checklist). A group's <see cref="GroupRecord.Trg"/> staying null (no
-/// target chosen) is real, expected Pascal behavior here, not a degenerate case — it's what every
-/// group starts at before a later commit's targeting logic assigns one.
+/// including AdvanceGroups' shell-to-shell movement and its transport-to-troop swap, in
+/// <see cref="CombatResolution"/>) or outcome application (ResolveAttack/ConquerWorld/ConquerEmpire,
+/// in <see cref="CombatOutcome"/>). A group's <see cref="GroupRecord.Trg"/> staying null (no target
+/// chosen) is real, expected Pascal behavior here, not a degenerate case: it's what every group
+/// starts at before <see cref="CombatResolution"/>'s targeting logic assigns one.
 ///
 /// Every method takes <see cref="Random"/> explicitly (this repo's <see cref="PascalMath"/> convention)
 /// rather than holding one as instance state — there is no per-combat instance to own it, and RNG call
@@ -70,8 +70,8 @@ public static class CombatEngine
     /// For a planet/starbase, an owned world's own ships are never tech-gated here — the gate
     /// (<c>(Status&lt;&gt;Indep) OR (ShpI IN TechDev[Tech])</c>) only restricts an *independent* world,
     /// by its own real <see cref="IEconomicWorld.TechLevel"/> (not decremented, unlike
-    /// AnnualTickHandler.Production.cs's EffectiveTechnologyLevel — a different gate for a different
-    /// purpose, not reused here). TechDev[Tech] membership is equivalent to
+    /// <see cref="Turns.AnnualTickHandler.EffectiveTechnologyLevel"/>, a different gate for a
+    /// different purpose, not reused here). TechDev[Tech] membership is equivalent to
     /// <c>TechCatalog.MinTechForShip[ship] &lt;= Tech</c>, per TechCatalog's own monotonic-superset doc
     /// comment.
     /// </summary>
@@ -421,7 +421,7 @@ public static class CombatEngine
             foreach (var g in groups) {
                 var gdmAtTarget = PascalRound((priority2[g].GetValueOrDefault(AttackType.Gdm) / 1000.0) * noOfGdm);
                 var ship = g.Typ.AsShipType()
-                    ?? throw new InvalidOperationException("BuildTargetArray: GDM interception against a troop-typed group needs AdvanceGroups' Typ<-GATTyp swap (Phase 5 commit 5e) — not reachable from this build.");
+                    ?? throw new InvalidOperationException("BuildTargetArray: GDM interception against a troop-typed group requires AdvanceGroups' Typ<-GATTyp swap to have already run.");
                 gdmAtTarget -= PascalRound(CombatConstants.GdmKill[ship] / 10.0 * g.Num);
                 if (gdmAtTarget < 0) {
                     gdmAtTarget = 0;

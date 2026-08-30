@@ -57,7 +57,7 @@ public sealed class GroupRecord
     public AttackType? GatTyp { get; set; }
 
     /// <summary>Temporary storage for a transport group's own ship type, written by AdvanceGroups when
-    /// it swaps Typ to the carried troop type on reaching the ground (Combat/CombatResolution.cs).</summary>
+    /// it swaps Typ to the carried troop type on reaching the ground (<see cref="CombatResolution"/>).</summary>
     public ShipType? TrnTyp { get; set; }
 
     /// <summary>Whether a hunter-killer group's cloak is off (it uncloaks the instant it attacks).</summary>

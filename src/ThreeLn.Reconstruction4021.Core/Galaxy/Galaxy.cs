@@ -48,13 +48,11 @@ public sealed class Galaxy(int size)
     public void ClearMine(Coordinate coordinate) => _minefields.Remove(coordinate);
 
     /// <summary>
-    /// Which empires know a minefield exists at this coordinate — a separate fact from
+    /// Which empires know a minefield exists at this coordinate: a separate fact from
     /// <see cref="GetMineOwner"/> (who owns it), matching Pascal's own two independent per-sector
     /// fields (GALAXY.PAS:35's <c>MineScout: ScoutSet</c> bitmask vs. PutMine/EnemyMine's Special-byte
     /// nibble). SetMineScout/ClrMineScout (GALAXY.PAS:57-73) are ported as MarkMineScouted/
-    /// ClearMineScouted below; no port-side reader exists yet beyond <see cref="IsMineScoutedBy"/>
-    /// itself (real Pascal's only reader is MAPWIND.PAS's map-rendering code, Phase 8) — same
-    /// "port the real write, leave it unread until its phase exists" precedent as Empire.DefeatedBy.
+    /// ClearMineScouted below; real Pascal's only reader is MAPWIND.PAS's map-rendering code.
     /// </summary>
     public void MarkMineScouted(Empire empire, Coordinate coordinate)
     {
@@ -72,12 +70,12 @@ public sealed class Galaxy(int size)
         _mineScoutedBy.TryGetValue(coordinate, out var scouts) && scouts.Contains(empire);
 
     /// <summary>
-    /// GetObject's real occupancy model (PRIMINTR.PAS: <c>Sector[x]^[y].Obj</c>) — one non-fleet object
+    /// GetObject's real occupancy model (PRIMINTR.PAS: <c>Sector[x]^[y].Obj</c>): one non-fleet object
     /// slot per sector (a planet, starbase, stargate, or construction site; never more than one, since
     /// placement always checks this first), owner-blind. Fleets are tracked separately (Pascal's own
     /// per-sector <c>Flts: FleetSet</c>, this port's <see cref="Fleets"/> list) and never occupy this
-    /// slot. Phase 6a's first real reader (stargate/fortress movement, starbase obstacle avoidance) —
-    /// see that phase's notes in docs/ROADMAP.md for why a combined index wasn't needed until now.
+    /// slot. Read by <see cref="Turns.FleetMovementHandler"/> (stargate/fortress movement, starbase
+    /// obstacle avoidance) and <see cref="Npe.NpeToolkit"/>.
     /// </summary>
     public ISectorObject? GetObjectAt(Coordinate location)
     {

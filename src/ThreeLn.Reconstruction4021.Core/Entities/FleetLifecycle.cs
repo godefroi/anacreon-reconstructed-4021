@@ -7,12 +7,13 @@ using static ThreeLn.Reconstruction4021.Core.PascalMath;
 namespace ThreeLn.Reconstruction4021.Core.Entities;
 
 /// <summary>
-/// Fleet creation, composition changes, refueling, and destination-setting (FLEET.PAS/INTRFACE.PAS) —
-/// the fleet-lifecycle primitives Phase 6c's NPEINTR.PAS toolkit needs but that FLEET.PAS/INTRFACE.PAS
-/// itself, not NPEINTR.PAS, actually owns (see Npe/NpeToolkit.cs's own doc comment on the 6c/6c-2
-/// split). Kept separate from FleetLogistics.cs (pure fuel/cargo formulas, no state mutation) and
-/// FleetMovementHandler.cs (the per-turn advancement stepper) since these are one-shot mutators an
-/// NPE's Deploy*/Implement*MSN procedures call mid-turn, not part of either of those.
+/// Fleet creation, composition changes, refueling, and destination-setting (FLEET.PAS/INTRFACE.PAS),
+/// the fleet-lifecycle primitives <see cref="Npe.NpeToolkit"/>'s NPEINTR.PAS toolkit needs but that
+/// FLEET.PAS/INTRFACE.PAS itself, not NPEINTR.PAS, actually owns (see <see cref="Npe.NpeToolkit"/>'s
+/// own doc comment for that split). Kept separate from <see cref="FleetLogistics"/> (pure fuel/cargo
+/// formulas, no state mutation) and <see cref="Turns.FleetMovementHandler"/> (the per-turn
+/// advancement stepper) since these are one-shot mutators an NPE's Deploy*/Implement*MSN procedures
+/// call mid-turn, not part of either of those.
 /// </summary>
 public static class FleetLifecycle
 {
@@ -148,15 +149,15 @@ public static class FleetLifecycle
     }
 
     /// <summary>
-    /// RefuelFleet (FLEET.PAS:452-490) — converts up to <paramref name="trillum"/> tons of
+    /// RefuelFleet (FLEET.PAS:452-490): converts up to <paramref name="trillum"/> tons of
     /// <paramref name="ground"/>'s trillum into fuel for <paramref name="target"/>, capped at
     /// capacity, then re-derives Ready/InTransit status if the result clears consumption. Real
     /// Pascal's GetFleetFuel/SetFleetFuel silently no-op for anything that isn't a <see cref="Fleet"/>
-    /// (PRIMINTR.PAS:853-880) — <paramref name="target"/> can be a <see cref="Starbase"/> at this
-    /// method's one real 6c-2 call site (ImplementRefuelMSN, whose TargetID's dynamic type depends on
-    /// 6d-level mission-assignment logic not built yet), in which case the whole fuel side of this
-    /// method is a no-op (the ground's trillum is still spent for nothing) — ported verbatim, not
-    /// "fixed," matching this port's existing GetFleetFuel/SetFleetFuel no-op precedent.
+    /// (PRIMINTR.PAS:853-880); <paramref name="target"/> can be a <see cref="Starbase"/> at this
+    /// method's one real call site (<see cref="Npe.NpeToolkit.ImplementRefuelMSN"/>, whose TargetID
+    /// resolves dynamically from the mission), in which case the whole fuel side of this method is a
+    /// no-op, and the ground's trillum is still spent for nothing. Ported verbatim, not "fixed,"
+    /// matching this port's existing GetFleetFuel/SetFleetFuel no-op precedent.
     /// </summary>
     public static void RefuelFleet(IShipCargoHolder target, IShipCargoHolder ground, int trillum)
     {
@@ -232,7 +233,7 @@ public static class FleetLifecycle
         _ => throw new ArgumentException($"EstimatedRange: expected a Fleet or Starbase, got {id.GetType()}.", nameof(id)),
     };
 
-    /// <summary>NoShips (MISC.PAS): whether every ship-type count is zero. Internal: Npe/NpeToolkit.cs's AttackEnemyFleets (Phase 6d) needs the same check DeployFleet/ChangeCompositionOfFleet already make.</summary>
+    /// <summary>NoShips (MISC.PAS): whether every ship-type count is zero. Internal: <see cref="Npe.NpeToolkit.AttackEnemyFleets"/> needs the same check DeployFleet/ChangeCompositionOfFleet already make.</summary>
     internal static bool NoShips(ShipCounts ships)
     {
         foreach (var t in Enum.GetValues<ShipType>()) {

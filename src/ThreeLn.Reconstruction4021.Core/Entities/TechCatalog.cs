@@ -53,7 +53,7 @@ public static class TechCatalog
         [ShipType.Starship] = TechLevel.Starship,
     }.ToFrozenDictionary();
 
-    /// <summary>See <see cref="MinTechForCargo"/>. Read by NewTechLevel (research rolls) and by AnnualTickHandler.Defenses.cs's DefenseTechAvailable (UpdateDefenses' own per-world TechDev[Tech] gate).</summary>
+    /// <summary>See <see cref="MinTechForCargo"/>. Read by NewTechLevel (research rolls) and by <see cref="Turns.AnnualTickHandler.DefenseTechAvailable"/> (UpdateDefenses' own per-world TechDev[Tech] gate).</summary>
     public static readonly FrozenDictionary<DefenseType, TechLevel> MinTechForDefense = new Dictionary<DefenseType, TechLevel> {
         [DefenseType.Gdm] = TechLevel.Atomic,
         [DefenseType.IonCannon] = TechLevel.Jump,
@@ -115,9 +115,9 @@ public static class TechCatalog
     /// <summary>
     /// A fresh, fully-unlocked-at-<paramref name="tech"/> set (Pascal's <c>TechDev[tech]</c> constant
     /// table, computed rather than stored — see EmpireFactory.SeedTechnology's own doc comment for why).
-    /// Shared by EmpireFactory (a new empire's starting set) and Combat/CombatOutcome.cs's ConquerEmpire
-    /// (a surviving empire's tech reset when it gets a new, differently-teched capital, Phase 5 commit
-    /// 5f) — both need the identical "everything TechDev grants by this level" answer.
+    /// Shared by EmpireFactory (a new empire's starting set) and <see cref="Combat.CombatOutcome.ConquerEmpire"/>
+    /// (a surviving empire's tech reset when it gets a new, differently-teched capital): both need the
+    /// identical "everything TechDev grants by this level" answer.
     /// </summary>
     public static UnlockedTechnology FullSetAt(TechLevel tech)
     {

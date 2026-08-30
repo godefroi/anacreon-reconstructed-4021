@@ -4,10 +4,10 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Core.Combat;
 
 /// <summary>
-/// The pure balance data ATTACK.PAS's group/shell combat engine reads (Commit 5c). No combat logic
-/// lives here yet — that's Commit 5d (<c>Battle</c>/<c>GroupAttack</c>/<c>EnemyAttack</c> and friends)
-/// — these are just the constant tables, transcribed directly from source since they're isolated,
-/// parameter-only data with no real-state dependency (this repo's own transcription-lane rule).
+/// The pure balance data ATTACK.PAS's group/shell combat engine reads. Combat logic itself
+/// (<c>Battle</c>/<c>GroupAttack</c>/<c>EnemyAttack</c> and friends) lives in <see cref="CombatEngine"/>;
+/// these are just the constant tables, transcribed directly from source since they're isolated,
+/// parameter-only data with no real-state dependency.
 /// Every table is keyed by a real C# enum whose declaration order already matches the Pascal source
 /// order 1:1 (verified against TYPES.PAS/DATACNST.PAS/ATTACK.PAS directly), so each row below reads
 /// off the cited source comment without any reordering step.

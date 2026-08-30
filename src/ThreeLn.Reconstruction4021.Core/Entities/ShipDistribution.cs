@@ -13,7 +13,7 @@ public sealed class ShipDistribution
     public int Starships { get; set; }
     public int Transports { get; set; }
 
-    /// <summary>Same indexing pattern as <see cref="ShipCounts"/> — lets GetEnemy (Combat/CombatEngine.cs) loop over ship types generically.</summary>
+    /// <summary>Same indexing pattern as <see cref="ShipCounts"/> — lets <see cref="Combat.CombatEngine.GetEnemy"/> loop over ship types generically.</summary>
     public int this[ShipType type]
     {
         get => type switch {

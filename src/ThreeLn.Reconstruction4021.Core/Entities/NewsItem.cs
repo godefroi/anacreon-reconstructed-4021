@@ -19,7 +19,7 @@ namespace ThreeLn.Reconstruction4021.Core.Entities;
 /// <c>GLBConq</c>/<c>GLBCapConq</c>/<c>GLBLAMStrk</c>) are <c>(Loc,Attacker,Defender)</c>-shaped, not
 /// <c>(Loc,Emp)</c> — Pascal packs both empires into <c>Parm1</c>/<c>Parm2</c> (<c>Ord(Emp),
 /// Ord(EnemyEmp)</c>) for exactly these four, the one place a single generic empire slot wasn't
-/// enough (ATTACK.PAS's ResolveAttack, Phase 5 commit 5f). <c>OtherEmpire</c> holds the attacker for
+/// enough (ATTACK.PAS's ResolveAttack). <c>OtherEmpire</c> holds the attacker for
 /// these; <c>Defender</c> is the second, added rather than reused because every other headline's
 /// single <c>OtherEmpire</c> already means "the empire this news item is about," a different role.
 /// </summary>

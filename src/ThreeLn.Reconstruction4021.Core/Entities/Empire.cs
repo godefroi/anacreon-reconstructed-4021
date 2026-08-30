@@ -29,25 +29,23 @@ public sealed class Empire
     /// <summary>
     /// Set once this empire's capital falls and it has no other world to fall back to. Pascal instead
     /// overloads Capital itself for this (ATTACK.PAS:1120-1131's ConquerEmpire: <c>NewCapID.ObjTyp:=Void;
-    /// NewCapID.Index:=Ord(Player); SetCapital(EnemyEmp,NewCapID)</c> — a type-tagged sentinel stuffed
-    /// into the one field that already means "no capital" via null here), the same shape of problem
-    /// NewsItem.Loc had before Phase 4 split it into Subject/Position — a second, unambiguous field for
-    /// the second fact instead of overloading the first. Only ever set for a human empire (an NPE empire
-    /// with no capital left is torn down outright via DestroyEmpire, never left defeated-in-place); no
-    /// human ITurnHandler exists yet (Phase 8) to read it, matching the "port the real write, leave it
-    /// unread until its phase exists" precedent from News.Clear() (Phase 4).
+    /// NewCapID.Index:=Ord(Player); SetCapital(EnemyEmp,NewCapID)</c>, a type-tagged sentinel stuffed into
+    /// the one field that already means "no capital" via null here). NewsItem's own Subject/Position
+    /// split solves the same problem with a second, unambiguous field for the second fact instead of
+    /// overloading the first. Only ever set for a human empire; an NPE empire with no capital left is
+    /// torn down outright via DestroyEmpire, never left defeated-in-place. No human ITurnHandler exists
+    /// yet to read it.
     /// </summary>
     public Empire? DefeatedBy { get; set; }
 
     /// <summary>
     /// Which NPE AI personality this empire runs (NEWGAME.PAS:1219-1259's CreateNPEmpire reads this
-    /// as a raw ordinal), or null for a human/player empire. Real, needed-now state, not
-    /// speculative: ScenarioLoader.RunCreateNPEmpire already parsed and discarded this ordinal
-    /// (Phase 2 scope), Phase 7's save/load needs it regardless of which personalities are
-    /// implemented, and it's what lets ScenarioLoader decide whether to construct a
-    /// KingdomTurnHandler for a given empire. An empire whose NpeType isn't implemented yet
-    /// (Pirate/Berserker/Guardian/Trader) still gets this field set but no Game.TurnHandlers entry —
-    /// matches the existing "ai has no entry in TurnHandlers" precedent (TurnEngineTests.cs).
+    /// as a raw ordinal), or null for a human/player empire. ScenarioLoader.RunCreateNPEmpire parses
+    /// and discards this ordinal; save/load needs it regardless of which personalities are implemented,
+    /// and it's what lets ScenarioLoader decide whether to construct a KingdomTurnHandler for a given
+    /// empire. An empire whose NpeType isn't implemented yet (Pirate/Berserker/Guardian/Trader) still
+    /// gets this field set but no Game.TurnHandlers entry, matching the existing "ai has no entry in
+    /// TurnHandlers" behavior (see <c>TurnEngineTests</c>).
     /// </summary>
     public NpeEmpireType? NpeType { get; set; }
 
@@ -101,9 +99,7 @@ public sealed class Empire
     /// GetNewsList/GetNewsItem (NEWS.PAS:139-205) collapse to this plain list once <see cref="NewsItem"/>
     /// is a real record: Pascal's hand-rolled singly-linked list plus its heap-availability guard
     /// (<c>MaxAvail&gt;20</c>) exist only because of DOS's 640KB heap, not a game rule, so neither is
-    /// ported. EraseNews (NEWS.PAS:245-264) is just <c>News.Clear()</c> — no wrapper method, since
-    /// nothing yet calls it (see docs/ROADMAP.md's Phase 4 notes on why the per-turn reset isn't wired
-    /// yet: no consumer exists to validate the timing against).
+    /// ported. EraseNews (NEWS.PAS:245-264) is just <c>News.Clear()</c>, not worth a dedicated method.
     /// </summary>
     public List<NewsItem> News { get; } = [];
 

@@ -11,7 +11,7 @@ public sealed class ShellDefensePlan
     public ShipDistribution SubOrbit { get; } = new();
     public ShipDistribution Ground { get; } = new();
 
-    /// <summary>Pascal's DefenseDistributionArray[ShellPos,...] indexing — lets GetEnemy (Combat/CombatEngine.cs) loop over shells generically.</summary>
+    /// <summary>Pascal's DefenseDistributionArray[ShellPos,...] indexing — lets <see cref="Combat.CombatEngine.GetEnemy"/> loop over shells generically.</summary>
     public ShipDistribution this[ShellPosition position] => position switch {
         ShellPosition.DeepSpace => DeepSpace,
         ShellPosition.HighOrbit => HighOrbit,

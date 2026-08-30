@@ -8,15 +8,14 @@ namespace ThreeLn.Reconstruction4021.Core.Combat;
 public sealed record CombatEngagementResult(AttackResultType Result, AttackTally Casualties, AttackTally Killed);
 
 /// <summary>
-/// The multi-round, multi-shell resolution loop (ATTNPE.PAS) plus outcome application (ATTACK.PAS,
-/// Phase 5 commit 5f): repeatedly runs CombatEngine.Battle across every shell, advances/retreats
-/// groups between rounds, decides when an engagement is over, then hands the result to
-/// Combat/CombatOutcome.cs to actually apply it — culminating in <see cref="NPEAttack"/>, the entry
-/// point Phase 6 (NPE AI) and Phase 8 (human auto-resolve) will both call. <see cref="NPEAttack"/>'s
-/// real Pascal body also calls DestroyConstructionOrGate for a construction-site/stargate target —
-/// wired in below as an early branch, matching Pascal's own <c>Target.ObjTyp IN [Con,Gate]</c> check,
-/// which entirely bypasses CalculateCombatData/GetEnemy/the group-engage loop (see
-/// Combat/CombatStandalone.cs, Phase 5 commit 5g).
+/// The multi-round, multi-shell resolution loop (ATTNPE.PAS) plus outcome application (ATTACK.PAS):
+/// repeatedly runs CombatEngine.Battle across every shell, advances/retreats groups between rounds,
+/// decides when an engagement is over, then hands the result to <see cref="CombatOutcome"/> to
+/// actually apply it, culminating in <see cref="NPEAttack"/>, the entry point
+/// <see cref="Npe.NpeToolkit"/>'s NPE AI calls. <see cref="NPEAttack"/>'s real Pascal body also calls
+/// DestroyConstructionOrGate for a construction-site/stargate target, wired in below as an early
+/// branch, matching Pascal's own <c>Target.ObjTyp IN [Con,Gate]</c> check, which entirely bypasses
+/// CalculateCombatData/GetEnemy/the group-engage loop (see <see cref="CombatStandalone"/>).
 ///
 /// <see cref="RetrIndex"/> (Pascal's <c>RetrIndex</c>/<c>RetreatIndex</c> parameter, threaded through
 /// NPEAttack/FleetEngage/WorldEngage/FleetRetreats in real Pascal) is dropped entirely — confirmed by

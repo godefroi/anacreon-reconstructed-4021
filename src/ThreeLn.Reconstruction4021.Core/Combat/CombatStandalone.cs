@@ -5,40 +5,40 @@ using static ThreeLn.Reconstruction4021.Core.PascalMath;
 namespace ThreeLn.Reconstruction4021.Core.Combat;
 
 /// <summary>
-/// Standalone attack mechanics (Phase 5 commit 5g) that share CombatOutcome/CombatEngine's own
-/// primitives but sit outside the ResolveAttack pipeline — each is its own separate Pascal entry
+/// Standalone attack mechanics that share <see cref="CombatOutcome"/>/<see cref="CombatEngine"/>'s
+/// own primitives but sit outside the ResolveAttack pipeline: each is its own separate Pascal entry
 /// point, not a branch NPEAttack's group/shell engine ever reaches on its own.
 ///
-/// HolocaustWorld/HolocaustEffectiveness (ATTACK.PAS) are deliberately NOT here: their only caller,
+/// HolocaustWorld/HolocaustEffectiveness (ATTACK.PAS) are deliberately not here: their only caller,
 /// MSCCOMM.PAS's HolocaustCommand, is wrapped in a Pascal comment block (<c>(* ... *)</c>) in both the
 /// 1.31 and 2.0 source trees, and PLAYTURN.PAS's own dispatch entry for it sits inside a separate
-/// commented-out <c>(*ARTIFACTS ... *)</c> block — even HolocaustCommand's own forward interface
-/// declaration is commented out, so the real game could not have called it. Confirmed genuinely dead
-/// code, not "no caller wired up yet" (that phrase means live Pascal with no port-side consumer built
-/// yet, e.g. <see cref="SelfDestructObject"/> below) — same treatment already given to
-/// BATTLE.PAS/BOMBER.PAS and ConquerEmpire's commented-out starbase-recapture loop.
+/// commented-out <c>(*ARTIFACTS ... *)</c> block; even HolocaustCommand's own forward interface
+/// declaration is commented out, so the real game could not have called it. That's genuinely dead
+/// Pascal code, distinct from a method like <see cref="SelfDestructObject"/> below, which real Pascal
+/// does call live: same treatment already given to BATTLE.PAS/BOMBER.PAS and ConquerEmpire's
+/// commented-out starbase-recapture loop.
 /// </summary>
 public static class CombatStandalone
 {
     /// <summary>
-    /// LAMAttack (ATTACK.PAS:1623-1704). Live callers: DESIGN.PAS's LaunchLAM (human command, Phase 8)
-    /// and NPE03/NPE00/NPEINTR's guardian/NPE strikes (Phase 6) — unlike Holocaust, genuinely reachable
-    /// in the shipped game, just with no consumer built yet in this port. Has no Rnd calls at all (pure
-    /// proportional-distribution arithmetic), unlike every other 5x commit's math.
+    /// LAMAttack (ATTACK.PAS:1623-1704). Mirrors DESIGN.PAS's LaunchLAM (a human command) and
+    /// NPE03/NPE00/NPEINTR's guardian/NPE strikes; unlike Holocaust, genuinely reachable in the shipped
+    /// game. Has no Rnd calls at all (pure proportional-distribution arithmetic), unlike the rest of
+    /// this port's combat math.
     ///
     /// Returns the per-type destroyed counts Pascal threads back through <c>ShipsDest</c>/<c>DefnsDest</c>
-    /// VAR params — real callers only use them for UI display text, which doesn't exist in this port yet,
-    /// but they're real computed output worth keeping (and are exactly what a future golden-file domain
-    /// would assert against). <see cref="Target"/> mirrors Pascal's IDNumber union: a <see cref="Fleet"/>
+    /// VAR params. Real Pascal callers only use them for UI display text; this port returns them as
+    /// the method's own real computed output instead.
+    /// <paramref name="target"/> mirrors Pascal's IDNumber union: a <see cref="Fleet"/>
     /// or an <see cref="IEconomicWorld"/> (planet or starbase) — LAMs are never launched at a
     /// construction site or stargate.
     ///
-    /// BalanceFleet's post-damage cargo rebalance isn't ported — no fleet cargo-capacity system exists
-    /// anywhere in this port yet (same gap as RestoreCombatant/AbortFleet's own doc comments). Cargo is
-    /// untouched either way here since LAMs only ever destroy ships/defenses, never cargo.
-    /// FleetNameDestruction's naming-system call is dropped too (AbortFleet's own established gap) —
-    /// its only load-bearing effect was setting Pascal's Loc to the fleet itself, which this port's
-    /// <paramref name="target"/> reference already is.
+    /// BalanceFleet's post-damage cargo rebalance isn't ported: this port has no fleet cargo-capacity
+    /// system (same gap as RestoreCombatant/AbortFleet's own doc comments). Cargo is untouched either
+    /// way here since LAMs only ever destroy ships/defenses, never cargo. FleetNameDestruction's
+    /// naming-system call is dropped too (AbortFleet's own established gap): its only load-bearing
+    /// effect was setting Pascal's Loc to the fleet itself, which this port's <paramref name="target"/>
+    /// reference already is.
     /// </summary>
     public static (ShipCounts ShipsDestroyed, DefenseCounts DefensesDestroyed) LAMAttack(
         Empire player, int lamToUse, IShipCargoHolder target, Game game)
@@ -105,11 +105,11 @@ public static class CombatStandalone
     }
 
     /// <summary>
-    /// DestroyConstructionOrGate (ATTACK.PAS:1706-1733) — live: called by ATTNPE.PAS's NPEAttack for a
+    /// DestroyConstructionOrGate (ATTACK.PAS:1706-1733): called by ATTNPE.PAS's NPEAttack for a
     /// construction-site/stargate target (wired into <see cref="CombatResolution.NPEAttack"/>'s own
-    /// Con/Gate branch) and by ATTCOMM.PAS's human command (Phase 8, no consumer yet). Reads
+    /// Con/Gate branch), and mirrors ATTCOMM.PAS's human command of the same name. Reads
     /// <c>position:</c>, not <c>subject:</c>, because the object itself is already gone by the time
-    /// AddNews fires — same "removed first, then position-only AddNews" shape as
+    /// AddNews fires: same "removed first, then position-only AddNews" shape as
     /// AnnualTickHandler.Construction's own ConstructionCompleted call.
     /// </summary>
     public static void DestroyConstructionOrGate(Empire attacker, bool hkSurprise, object target, Game game, Random random)
@@ -145,10 +145,9 @@ public static class CombatStandalone
     }
 
     /// <summary>
-    /// SelfDestructObject (SBASE.PAS:29-86) — live: MSCCOMM.PAS's SelfDestructCommand (Phase 8, no
-    /// consumer wired up yet, same precedent as Empire.News.Clear()). <paramref name="target"/> is
-    /// always a <see cref="Starbase"/> or <see cref="Stargate"/> — Pascal's own SelfDestructCommand
-    /// only ever offers "bases, and stargates" as targets.
+    /// SelfDestructObject (SBASE.PAS:29-86): mirrors MSCCOMM.PAS's SelfDestructCommand.
+    /// <paramref name="target"/> is always a <see cref="Starbase"/> or <see cref="Stargate"/> —
+    /// Pascal's own SelfDestructCommand only ever offers "bases, and stargates" as targets.
     ///
     /// The per-empire "who's scouted this and should be told" broadcast is exactly
     /// <see cref="Game.AddGlobalNews"/>'s own job (Pascal hand-rolls the identical

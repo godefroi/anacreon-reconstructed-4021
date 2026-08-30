@@ -5,18 +5,12 @@ using static ThreeLn.Reconstruction4021.Core.PascalMath;
 namespace ThreeLn.Reconstruction4021.Core.Entities;
 
 /// <summary>
-/// Fleet fuel/cargo formulas (MISC.PAS:168-222,394-401 &amp; DATACNST.PAS:382-401,556) — pure functions
+/// Fleet fuel/cargo formulas (MISC.PAS:168-222,394-401 &amp; DATACNST.PAS:382-401,556), pure functions
 /// over <see cref="ShipCounts"/>/<see cref="CargoHold"/>, shared by fleet movement
-/// (<see cref="Turns.FleetMovementHandler"/>) and, later, deployment/cargo-transfer (Phase 6c's
-/// <c>DeployFleet</c>/<c>ChangeCompositionOfFleet</c>), matching real Pascal's own single MISC.PAS
-/// grouping rather than duplicating the formulas per consumer.
-///
-/// Every table here is real per-ship/per-cargo-type data, not invented — a prior version of
-/// <c>FleetMovementHandler</c>'s fuel model used made-up constants (confirmed by comparing against
-/// this file's real <c>FuelCons</c>/<c>FuelCap</c> source values while scoping Phase 6's 6a: e.g. the
-/// old model made Jumpships cost more fuel than Starships per-ship, backwards from source, where
-/// Starships are by far the most expensive at 1.427/year against a Jumpship's 0.659). Fixed as part
-/// of 6a rather than left in place, since every later movement fix builds on this.
+/// (<see cref="Turns.FleetMovementHandler"/>) and deployment/cargo-transfer (<c>DeployFleet</c>/
+/// <c>ChangeCompositionOfFleet</c>), matching real Pascal's own single MISC.PAS grouping rather than
+/// duplicating the formulas per consumer. Every table here is transcribed directly from DATACNST.PAS:
+/// e.g. Starships are by far the most expensive to fuel at 1.427/year against a Jumpship's 0.659.
 /// </summary>
 public static class FleetLogistics
 {
@@ -42,9 +36,9 @@ public static class FleetLogistics
     }.ToFrozenDictionary();
 
     /// <summary>
-    /// Tons of transport-equivalent cargo space one unit of this cargo type takes up (DATACNST.PAS:382-384)
-    /// — Pascal's <c>CargoSpace</c> table. Internal, not private: Npe/NpeToolkit.cs's GetFleetComposition
-    /// (Phase 6c) reads the same table rather than re-transcribing it.
+    /// Tons of transport-equivalent cargo space one unit of this cargo type takes up (DATACNST.PAS:382-384),
+    /// Pascal's <c>CargoSpace</c> table. Internal, not private: <see cref="Npe.NpeToolkit.GetFleetComposition"/>
+    /// reads the same table rather than re-transcribing it.
     /// </summary>
     internal static readonly FrozenDictionary<CargoType, int> CargoSpacePerUnit = new Dictionary<CargoType, int> {
         [CargoType.Legion] = 5, [CargoType.NinjaLegion] = 5, [CargoType.Ambrosia] = 100, [CargoType.Chemicals] = 3,
@@ -65,10 +59,9 @@ public static class FleetLogistics
     ];
 
     /// <summary>
-    /// FltMovementRate (DATACNST.PAS) — sectors per year a fleet type steps. Moved here from
-    /// <see cref="Turns.FleetMovementHandler"/> (its original sole consumer, Phase 6a) once
-    /// Phase 6c-2's <c>EstimatedDateOfArrival</c> (Entities/FleetLifecycle.cs) became a second real
-    /// consumer — one transcribed table, not two copies of the same DATACNST.PAS data.
+    /// FltMovementRate (DATACNST.PAS) — sectors per year a fleet type steps. Shared by
+    /// <see cref="Turns.FleetMovementHandler"/> and <see cref="FleetLifecycle.EstimatedDateOfArrival"/>:
+    /// one transcribed table, not two copies of the same DATACNST.PAS data.
     /// </summary>
     private static readonly FrozenDictionary<FleetType, int> _movementRateByType = new Dictionary<FleetType, int>() {
         [FleetType.Standard] = 1,
