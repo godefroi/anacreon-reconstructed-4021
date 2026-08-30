@@ -43,6 +43,24 @@ deterministic given a fixed seed) — but only if it independently parses `Seed`
 value. No non-test caller exists anywhere in this port yet — every `new ScenarioLoader(...)` in the
 codebase is in a test file.
 
+## Save/load
+
+- **Fleet order queues aren't modeled.** `.SAV`'s `CommandRecord`/`DestCOM` order queues are
+  read-and-discarded on import (`SavGameLoader`) and always written empty on export
+  (`SavGameWriter`) — no in-memory representation of a fleet's pending orders exists anywhere in
+  this port.
+- **Messages aren't modeled.** Same treatment as order queues: no in-memory concept of a player
+  message exists, so `.SAV` messages are read-and-discarded on import and never written on export.
+- **UI/session Environment fields are discarded on import.** `EmpiresToMove`/`TimePerTurn`/
+  `AutoSave`/`AsyncTurns`/`PauseActive`/`ReEnterGame` have no effect anywhere in this port yet —
+  `EmpiresToMove` is redundant with `Game.CurrentEmpire`/`NextEmpire()` so there's nothing to store
+  regardless; the rest are read-and-discarded pending a UI session that has settings to hold them.
+- **`SavGameLoader`'s `DefeatedBy` decode branch (a conquered human empire) has no exercising
+  reference save.** None of the 13 captured `.SAV` files include a defeated human empire, so this
+  branch was implemented and reasoned through directly from `ConquerEmpire`'s on-disk sentinel
+  convention, not verified against a real file. Worth a note for whoever next captures or
+  hand-builds one.
+
 ## Production tick: unresolved Cargo.Chemicals/Metals mismatch
 
 `AnnualTickHandlerProductionTests.MatchesGoldenFile` excludes `Cargo.Chemicals`/`Cargo.Metals` from

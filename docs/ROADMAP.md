@@ -1,44 +1,45 @@
-# Port roadmap
+# Development log
 
-Bottom-up order: simulation core first, UI last. Tracks phase/commit status only — the "why does the
-C# port look like this" design decisions live in [`PORT_DESIGN.md`](PORT_DESIGN.md), and findings
-about the *original* Pascal source (dead code, quirks, bugs) live in
-[`PASCAL_ARCHITECTURE_NOTES.md`](PASCAL_ARCHITECTURE_NOTES.md). Each commit below links out to those
-where there's a real story; the git log is the record of exactly what changed. Each phase gets its own
-plan/design pass when it's picked up.
+How this port of Anacreon got built, bottom-up: simulation core first, UI last. This is a history,
+not a status tracker — everything below without a note to the contrary is built and tested. The
+"why does the C# port look like this" design decisions live in [`PORT_DESIGN.md`](PORT_DESIGN.md);
+findings about the *original* Pascal source (dead code, quirks, bugs) live in
+[`PASCAL_ARCHITECTURE_NOTES.md`](PASCAL_ARCHITECTURE_NOTES.md); known limitations in this port live
+in [`OPEN_GAPS.md`](OPEN_GAPS.md). This doc links out to those where there's a real story rather than
+duplicating it; the git log is the record of exactly what changed, commit by commit.
 
-## 1. Economy / annual tick — ✅ done, all 5 commits landed
+## 1. Economy / annual tick
 
 `IAnnualTickHandler`. `UpdateUniverse` (UPDATE.PAS:1440-1488): `Year++`, then `UpdateWorld` over every
 planet and starbase, then `UpdateConstruction`, then `UpdateEmpire`.
 
-1. ✅ **Population, efficiency, revolution** (planets only) — `UpdateEfficiency` → `UpdatePopulation`
+1. **Population, efficiency, revolution** (planets only) — `UpdateEfficiency` → `UpdatePopulation`
    → `UseUpFood` → `UpdateRevolution` (incl. `Rebellion`). `HostileLife` shipped with this commit too.
    `AnnualTickHandlerTests`/`AnnualTickHandlerRevolutionTests` (golden-file-backed for revolution).
-2. ✅ **Industry and production** (planets only) — `ProduceRawMaterial`, `GetIndustrialDistribution`,
+2. **Industry and production** (planets only) — `ProduceRawMaterial`, `GetIndustrialDistribution`,
    `UpdateIndustry`, `Production`. Golden-file-backed (`AnnualTickHandlerProductionTests`).
-   - ✅ **2b, ambrosia addiction** — `UseUpAmbrosia`. `IsAddictedToAmbrosia` becomes real state.
+   - **2b, ambrosia addiction** — `UseUpAmbrosia`. `IsAddictedToAmbrosia` becomes real state.
      Golden-file-backed (`AnnualTickHandlerAmbrosiaTests`).
-   - ✅ **Golden-file ground truth, all six domains migrated to the patch-based lane** (`techlevel`,
+   - **Golden-file ground truth, all six domains migrated to the patch-based lane** (`techlevel`,
      `military`, `starbase`, `ambrosia`, `revolution`, `production`) — see `PORT_DESIGN.md`'s
      ground-truth harness section for how the two lanes work and when to reach for each.
-   - ✅ **2c, military buildup** — `UpdateMilitary`. Golden-file-backed (`AnnualTickHandlerMilitaryTests`).
-3. ✅ **Tech advancement** (planets only) — `UpdateTechLevel`. Golden-file-backed
+   - **2c, military buildup** — `UpdateMilitary`. Golden-file-backed (`AnnualTickHandlerMilitaryTests`).
+3. **Tech advancement** (planets only) — `UpdateTechLevel`. Golden-file-backed
    (`AnnualTickHandlerTechLevelTests`) — the first domain moved to the patch-based lane.
-4. ✅ **Starbase economy** — `SupplyLink`/`SurplusLink` plus industrial-complex-only production/economy.
+4. **Starbase economy** — `SupplyLink`/`SurplusLink` plus industrial-complex-only production/economy.
    Introduced `IEconomicWorld` (see `PORT_DESIGN.md`). `AnnualTickHandlerStarbaseTests`, partly
    golden-file-backed (`runworld.pas`'s `starbase` domain).
 5. **Construction and empire-level updates** — `UpdateConstruction` and `UpdateEmpire`.
-   - ✅ **5a, empire-level tech research** — `NewTechLevel` (nested `GetChanceForNewTech`/`GetNewTech`).
+   - **5a, empire-level tech research** — `NewTechLevel` (nested `GetChanceForNewTech`/`GetNewTech`).
      `Empire.Technology` gained a 4th bucket (`Resources`) — see `PORT_DESIGN.md`. Golden-file-backed
      (`AnnualTickHandlerEmpireTests`).
-   - ✅ **5b, construction** — `UpdateConstruction` plus `ConstructStarbase`/`ConstructStargate` entity
+   - **5b, construction** — `UpdateConstruction` plus `ConstructStarbase`/`ConstructStargate` entity
      creation. Golden-file-backed (`AnnualTickHandlerConstructionTests`).
 
 **Constants to extract:** `MaxPop` array (UPDATE.PAS:1077-1098), `BasePop` lookup, `TechAdj[]`,
 `TechAdj2[]`, `K6`, `SuppliesPerBillion`, `DrugsPerBillion`, `ThgLmt()` clamp function.
 
-## 2. Galaxy / new-game setup — ✅ done, all 5 commits landed
+## 2. Galaxy / new-game setup
 
 `NEWGAME.PAS`'s `LoadScenario` reads a `.SCN` text scenario file and dispatches world/starbase/
 stargate/nebula/mine placement and empire-creation commands one at a time — the scenario script *is*
@@ -46,24 +47,24 @@ the generation pipeline. `dos_131` is the canonical scenario set for this phase 
 baseline this port targets); `dos_20`/`pack_1` (the 2.0 port's own sets) stay out of scope until an
 opt-in v2-parity pass.
 
-- ✅ **2a, shared helpers** — extracted `Rnd`/`Jitter`/`PascalRound`/`ClampResource`
+- **2a, shared helpers** — extracted `Rnd`/`Jitter`/`PascalRound`/`ClampResource`
   (`Core/PascalMath.cs`) and the tech-catalog (`Core/Entities/TechCatalog.cs`). Pure refactor.
-- ✅ **2b, empire creation** (`Core/NewGame/EmpireFactory.cs`) — `CreateEmpire`/`CreatePlayerEmpire`/
+- **2b, empire creation** (`Core/NewGame/EmpireFactory.cs`) — `CreateEmpire`/`CreatePlayerEmpire`/
   `CreateNPEmpire`'s starting tech-set formula, `DefenseSettings.Fleets` seeding. See `PORT_DESIGN.md`
   for the typed-enum "extra techs" design. Golden-file-backed (`empirecreate.golden`, 13 cases).
-- ✅ **2c, explicit-coordinate placement** (`Core/NewGame/GalaxySetup.cs`) — `SetUpWorld`/`CreateWorld`/
+- **2c, explicit-coordinate placement** (`Core/NewGame/GalaxySetup.cs`) — `SetUpWorld`/`CreateWorld`/
   `CreateBase`/`CreateGate`/`CreateSRMs`/`CreateNebula`. `Empire.Capital` widened to
   `IEconomicWorld?` — see `PORT_DESIGN.md`.
-- ✅ **2d, randomized placement** (`Core/NewGame/GalaxySetup.cs`, continued) — `GetRandomXY`,
+- **2d, randomized placement** (`Core/NewGame/GalaxySetup.cs`, continued) — `GetRandomXY`,
   `CreateRndPlanet`, `CreateRandomWorlds`, `NebulaeBand`/`NebulaePatches`. Golden-file-backed
   (`trillumreserves.golden`, `randomplanet.golden`, `nebula.golden`).
-- ✅ **2e, `.SCN` scenario file loading** (`Core/NewGame/ScenarioLoader.cs`) — the capstone integration
+- **2e, `.SCN` scenario file loading** (`Core/NewGame/ScenarioLoader.cs`) — the capstone integration
   test, golden-file-verified against 11 real `dos_131/*.SCN` files (`PRINCES.SCN` excluded — real
   1.31 itself can't load it either). Needed a from-scratch, empirically-verified port of fpc's actual
   `Random`/`RandSeed` algorithm (`PascalRandom.cs`) — see `PASCAL_ARCHITECTURE_NOTES.md`'s scenario
   golden-file section for why exact-match assertions are scoped to non-randomized fields only.
 
-## 3. Probe movement and visibility — ✅ done
+## 3. Probe movement and visibility
 
 `UpdateProbes` runs once per empire at the start of that empire's own turn, resolved as the last step
 of `VisibilityHandler.RefreshVisibility`. `Empire.ProbesInTransit: List<Coordinate>` replaces a
@@ -71,15 +72,16 @@ pre-existing 4-state `Probe`/`ProbeStatus` stub — see `PORT_DESIGN.md` and
 `PASCAL_ARCHITECTURE_NOTES.md`'s dead-code notes for why. Golden-file-backed (`probescout.golden`,
 `VisibilityHandlerProbeTests.MatchesGoldenFile`).
 
-## 4. News — ✅ done
+## 4. News
 
-Ported `NEWS.PAS`'s per-empire event log — a real data dependency for Phase 6 (NPE AI reads it as its
-"what happened to me this turn" signal), not just a UI nicety. `NewsItem`'s design (splitting Pascal's
-`Loc` union into typed fields, `ISectorObject`, `OtherEmpire`) is in `PORT_DESIGN.md`.
-`EraseNews`'s per-turn reset isn't wired into `TurnEngine` yet — no consumer exists to validate the
-timing against.
+Ported `NEWS.PAS`'s per-empire event log — a real data dependency for NPE AI (below), which reads it
+as its "what happened to me this turn" signal, not just a UI nicety. `NewsItem`'s design (splitting
+Pascal's `Loc` union into typed fields, `ISectorObject`, `OtherEmpire`) is in `PORT_DESIGN.md`.
+`EraseNews`'s per-turn reset wasn't wired into `TurnEngine` at the time — no consumer existed yet to
+validate the timing against; `TurnEngine.AdvanceOneTurn` picked this up later, once Kingdom's
+`ReviewNews` became that first real consumer (see §6d below).
 
-## 5. Combat — ✅ done, all 9 commits landed
+## 5. Combat
 
 Attack resolution, fleet/starbase destruction, capital loss and empire elimination, plus the
 standalone mechanics (LAM strikes, minefield/disrupter movement, self-destruct) that sit outside the
@@ -90,28 +92,28 @@ main group-combat round loop. Started with a scoping pass (5a) over `ATTACK.PAS`
 quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`, etc.) are in
 `PASCAL_ARCHITECTURE_NOTES.md`.
 
-- ✅ **5b, `UpdateDefenses` + `Defns` state** (`AnnualTickHandler.Defenses.cs`) — `DefenseType`-indexed
+- **5b, `UpdateDefenses` + `Defns` state** (`AnnualTickHandler.Defenses.cs`) — `DefenseType`-indexed
   growth on `IEconomicWorld`. Golden-file-backed (`defenses.golden`, `AnnualTickHandlerDefensesTests`).
-- ✅ **5c, combat constants + `AttackType`** (`Types/AttackType.cs`, `Combat/CombatConstants.cs`) — see
+- **5c, combat constants + `AttackType`** (`Types/AttackType.cs`, `Combat/CombatConstants.cs`) — see
   `PORT_DESIGN.md` for the unified-enum design. Tables: `CombatTable`, `WeapEff`, `ShipValue`,
   `CombatPower`, `ProtecOffered`/`ProtecNeeded`/`TrnAdj`/`GdmKill`, `CargoSpace`, `CombatTechAdj`,
   `CombatClassAdj`, `CombatBaseAdj`, `GdmLaunch`.
-- ✅ **5d, group/shell combat engine core** (`Combat/CombatState.cs`, `Combat/CombatEngine.cs`) —
+- **5d, group/shell combat engine core** (`Combat/CombatState.cs`, `Combat/CombatEngine.cs`) —
   `CalculateCombatData`, `GetEnemy`, `DefaultDistribution`/`DefaultGroup`, `ForcesUnknown`, `Battle`,
   `EnemySurrenders`. Needed `ATTACK.PAS.patch` (see `PORT_DESIGN.md`'s ground-truth section) to link.
   Golden-file-backed (`combat.golden`, `CombatEngineTests`). Found and fixed the `PascalRound`
   banker's-rounding bug here — see `PASCAL_ARCHITECTURE_NOTES.md`.
-- ✅ **5e, resolution loop + `NPEAttack` entry point** (`Combat/CombatResolution.cs`) — `AdvanceGroups`,
+- **5e, resolution loop + `NPEAttack` entry point** (`Combat/CombatResolution.cs`) — `AdvanceGroups`,
   `AllAdvance`/`TrnAdvance`, `FleetRetreats`, `TransportsLeft`, `GroupEngage`, `FleetEngage`/
   `WorldEngage`'s `Targetting`. Needed `ATTNPE.PAS.patch`. Golden-file-backed (`npeattack.golden`,
   `NpeAttackTests`).
-- ✅ **5f, outcome application + empire elimination** (`Combat/CombatOutcome.cs`) — `ConquerWorld`,
+- **5f, outcome application + empire elimination** (`Combat/CombatOutcome.cs`) — `ConquerWorld`,
   `ConquerEmpire`, `RestoreCombatant`, `ResolveAttack`, `DestroyEmpire`/`DestroyFleet`/`AbortFleet`.
   See `PORT_DESIGN.md` for the empire-elimination/`DefeatedBy` model and the `NewsItem.Defender`
   addition. Extended `npeattack.golden` with a second Empire2 world to exercise `ConquerEmpire`'s
   per-planet cascade directly; two hardcoded tests (`CombatOutcomeTests.cs`) cover the human-defeat
   branch the harness can't reach.
-- ✅ **5g, standalone mechanics** (`Combat/CombatStandalone.cs`) — `LAMAttack` and
+- **5g, standalone mechanics** (`Combat/CombatStandalone.cs`) — `LAMAttack` and
   `DestroyConstructionOrGate` are live Pascal (`ATTCOMM.PAS`/`DESIGN.PAS`/`NPE00`/`NPE03`/`NPEINTR`
   callers), ported and wired: `DestroyConstructionOrGate` is now `CombatResolution.NPEAttack`'s own
   Con/Gate branch, matching `ATTNPE.PAS`'s real dispatch (5e had deferred it — no `ConstructionSite`/
@@ -129,7 +131,7 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   (`CombatStandaloneTests.cs` — `DestroyConstruction`/`DestroyStargate` need `Intrface`, not linked
   into this harness's patched build; `SBASE.PAS` was never patched in at all). See
   `reference/verify/README.md`'s domain catalog for the full harness-coverage story.
-- ✅ **5h, minefield damage + disrupter blocking + minefield visibility** (`Turns/FleetMovementHandler.cs`,
+- **5h, minefield damage + disrupter blocking + minefield visibility** (`Turns/FleetMovementHandler.cs`,
   `Galaxy/Galaxy.cs`) — `MineFieldDamage`/`InRangeOfDisrupter` folded additively into
   `FleetMovementHandler.AdvanceFleet`'s step loop, now a real per-cell walk for `JumpFleet`/
   `HunterKillerFleet` (Pascal's own `FltTyp IN [JumpFleet,HKFleet]` gate) instead of the single bulk
@@ -145,7 +147,7 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   blocking (`GetNewPos`'s own `Pos:=Limbo` branch, `FLEET.PAS:437-450`) isn't ported either — found but
   not fixed here, since it's a terrain effect applying to every fleet type, not a combat mechanic; added
   to 6a's list below alongside the other two.
-- ✅ **5i, `HostileLife` news fix** (`Turns/AnnualTickHandler.Revolution.cs`) — `HostileLife`
+- **5i, `HostileLife` news fix** (`Turns/AnnualTickHandler.Revolution.cs`) — `HostileLife`
   (UPDATE.PAS:458-515, Phase 1) had the real population/troop/revolution-index arithmetic but called
   no `AddNews` at all, despite `HostileLifeKilledPopulation`/`HostileLifeAttackedTroops`/
   `HostileLifeJoinedTroops` already existing in `NewsType.cs` — a dropped call site Phase 4 should
@@ -157,14 +159,13 @@ quirk findings (`BATTLE.PAS`/`BOMBER.PAS`, `ATTNPE.PAS` naming, `HolocaustWorld`
   tests (`AnnualTickHandlerHostileLifeTests`) exploiting `FixedRandom(N)`'s `min+N` resolution to
   deterministically pick each of the three branches.
 
-## 6. NPE AI — ✅ done (Kingdom)
+## 6. NPE AI (Kingdom)
 
 Implement an `ITurnHandler` for computer empires. The roadmap's original one-line framing here
 ("start with one classic implementation") undersold this phase the way "8 known News sites"
 undersold Phase 4: six parallel research forks read every NPE-adjacent Pascal file in full
 (`NPE.PAS`/`NPETYPES.PAS`/`NPE00`-`NPE04.PAS`/`NPEINTR.PAS`, ~4,400 lines of real decision logic)
-before planning. Design rationale and the full commit breakdown are in `PORT_DESIGN.md`; this
-section tracks status only.
+before planning. Design rationale is in `PORT_DESIGN.md`; this section narrates the build.
 
 Moved after Probes/News/Combat (was Phase 3 originally): NPE decision-making is written against
 combat primitives from the start (`NPE01.PAS`'s `USES` clause pulls in `Attack`/`AttNPE`) and reads
@@ -200,7 +201,7 @@ not ported. `DeployHarassFleet` (`NPEINTR.PAS:777`) and `ImplementDefendBMS` (`N
 confirmed empty `BEGIN END` stubs in both the 1.31 and 2.0 source trees — intentional no-ops the
 original developers shipped incomplete, not a port gap.
 
-- ✅ **6a, fleet/starbase movement fidelity** (`Turns/FleetMovementHandler.cs`, `Entities/
+- **6a, fleet/starbase movement fidelity** (`Turns/FleetMovementHandler.cs`, `Entities/
   FleetLogistics.cs`) — `AdvanceFleet`/`AdvanceStarbases` (shipped pre-Phase-1, deliberately
   simplified straight-line steppers) are now the real thing. Fuel/cargo model: the prior
   `_fuelBurnPerShip` table was invented, not ported — compared against DATACNST.PAS's real
@@ -224,7 +225,7 @@ original developers shipped incomplete, not a port gap.
   real needs). `GetNewBasePos`/`XY2Dir` (`SBASE.PAS`, starbase obstacle-avoidance) have no golden
   domain yet — `SBase` isn't patched in — covered by hardcoded tests in `FleetMovementHandlerTests.cs`
   instead, same "harness can't reach it yet" precedent as 5g's `DestroyConstructionOrGate`.
-- ✅ **6b, core NPE dispatch + state** (`Types/NpeEmpireType.cs`, `Turns/KingdomTurnHandler.cs`) —
+- **6b, core NPE dispatch + state** (`Types/NpeEmpireType.cs`, `Turns/KingdomTurnHandler.cs`) —
   `Empire.NpeType: NpeEmpireType?`, wiring `ScenarioLoader.RunCreateNPEmpire` (previously read and
   discarded the ordinal) to record it and construct a `KingdomTurnHandler` for Kingdom1/Kingdom2
   empires only — other types stay unregistered in `Game.TurnHandlers`, matching the existing "ai
@@ -235,7 +236,7 @@ original developers shipped incomplete, not a port gap.
   rather than transcribed; no new method needed. `TraderNPE`'s dead-code finding and
   `DeployHarassFleet`/`ImplementDefendBMS`'s confirmed-no-op finding are in
   `PASCAL_ARCHITECTURE_NOTES.md`.
-- ✅ **6c, `NPEINTR.PAS` toolkit — read-and-compute half** (`Core/Npe/NpeToolkit.cs`,
+- **6c, `NPEINTR.PAS` toolkit — read-and-compute half** (`Core/Npe/NpeToolkit.cs`,
   `Core/Npe/NpeConstants.cs`, `Core/Npe/NpeTypes.cs`) — `MilitaryPower`, targeting
   (`GetBestTarget`/`GetBestRaiderTarget`/`GetBestBase`/`GetBestPlanetToProtect`/
   `MinimumDefense`/`AverageMilitaryPower`), regional bookkeeping (`CreateRegionArray`/
@@ -245,16 +246,17 @@ original developers shipped incomplete, not a port gap.
   the `FleetDataRecord` field audit (see `PORT_DESIGN.md`'s derive-don't-duplicate note — `Waiting`
   turned out real, not derivable as an earlier pass guessed; `Midway` confirmed dead;
   `BlockX`/`BlockY` Pirate-only). Hardcoded-tested (`NpeToolkitTests.cs`), not golden-file — see
-  `PORT_DESIGN.md`'s own note on why, revisit once Phase 7's save/load makes a real test universe
-  cheap. Split off from this commit, not bundled in: the five `Deploy*Fleet`/eight `Implement*MSN`
+  `PORT_DESIGN.md`'s own note on why (now that save/load exists, a real test universe built from a
+  saved game is cheap enough that this could be revisited, but hasn't been). Split off from this
+  commit, not bundled in: the five `Deploy*Fleet`/eight `Implement*MSN`
   procedures, which need fleet-lifecycle primitives (`DeployFleet`/`ChangeCompositionOfFleet`/
   `EstimatedDateOfArrival`/`EstimatedRange`/`RefuelFleet`/`SetFleetDestination`) that don't exist
   anywhere in this port yet — see 6c-2.
-- ✅ **6c-2, `NPEINTR.PAS` toolkit — fleet-lifecycle half.** Split into two landings: the six
+- **6c-2, `NPEINTR.PAS` toolkit — fleet-lifecycle half.** Split into two landings: the six
   fleet-lifecycle primitives first (independently verifiable), then the `Deploy*Fleet`/
   `Implement*MSN` layer on top (unverifiable until the primitives are right) — same reasoning that
   split 6c itself.
-  - ✅ **Primitives** (`Entities/FleetLifecycle.cs`) — `DeployFleet`/`ChangeCompositionOfFleet`/
+  - **Primitives** (`Entities/FleetLifecycle.cs`) — `DeployFleet`/`ChangeCompositionOfFleet`/
     `RefuelFleet`/`SetFleetDestination` (FLEET.PAS) and `EstimatedDateOfArrival`/`EstimatedRange`
     (INTRFACE.PAS, both `Fleet` and `Starbase` arms ported). Genuinely new primitives — every prior
     phase only ever moved or destroyed fleets scenario loading or human setup already created,
@@ -275,7 +277,7 @@ original developers shipped incomplete, not a port gap.
     vanishes instead of becoming trillum), deliberately left for its own follow-up commit rather than
     bundled here (see `PASCAL_ARCHITECTURE_NOTES.md`). Hardcoded-tested (`FleetLifecycleTests.cs`),
     same rationale as 6c.
-  - ✅ **`Deploy*Fleet`/`Implement*MSN` layer** (`Core/Npe/NpeToolkit.cs`, alongside 6c's
+  - **`Deploy*Fleet`/`Implement*MSN` layer** (`Core/Npe/NpeToolkit.cs`, alongside 6c's
     read-and-compute half) — the five `Deploy*Fleet` procedures (`DeployBattleFleet`/
     `DeployCargoFleet`/`DeployJumpAttack`/`DeployHKRaiders`/`DeploySlowAttack`; `DeployHarassFleet`
     is the confirmed no-op stub, not ported) and all eight `Implement*MSN` mission executors
@@ -299,7 +301,7 @@ original developers shipped incomplete, not a port gap.
     against the wrong enemy-ships value whenever the LAM branch fired — fixed by snapshotting
     `target.Ships` before the strike. Hardcoded-tested (`NpeToolkitDeployImplementTests.cs`), same
     rationale as 6c/6c-2's primitives.
-- ✅ **6d, Kingdom core loop** (`Core/Npe/NpeToolkit.cs`, `Core/Npe/NpeTypes.cs`,
+- **6d, Kingdom core loop** (`Core/Npe/NpeToolkit.cs`, `Core/Npe/NpeTypes.cs`,
   `Core/Turns/KingdomTurnHandler.cs`) — `NPE00.PAS`'s `DefendEmpire`/`ImperialExpansion`/
   `NPEConquest`/`CargoSupplyFleet`/`ExplorationAndProbing` (plus their own nested helpers —
   `AttackEnemyFleets`/`NoOfGuardsAtBase`/`GetBestBaseToProtect`/`ModifyPersona`/
@@ -359,7 +361,7 @@ original developers shipped incomplete, not a port gap.
     end, so unlike every prior 6x commit's per-procedure hardcoded tests, this exercises real
     cross-procedure dispatch a single method's own test can't reach (the `State[Independent]` case
     above, `UpdateFleets`' fleet-liveness guard, `ExplorationAndProbing`'s empty-list guard).
-- ✅ **6e, Kingdom diplomacy** (`Core/Npe/NpeToolkit.cs`, `Core/Turns/KingdomTurnHandler.cs`) —
+- **6e, Kingdom diplomacy** (`Core/Npe/NpeToolkit.cs`, `Core/Turns/KingdomTurnHandler.cs`) —
   `StateDepartment`/`StateDeptReport`/`WarCabinet`, and `ReviewNews`'s enemy-attack case arm
   (`AttackSeverity`/`RespondToEnemyAttack`, its own nested procedures). `KingdomTurnHandler.PlayTurn`
   now matches `ImplementKingdom1NPE`'s real sequence in full: `StateDeptReport` once at `Clock=0` →
@@ -405,8 +407,8 @@ original developers shipped incomplete, not a port gap.
     test confirms the severity scan stops at the next headline rather than reading into a second
     attacker's own `DestructionDetail` entries, the other confirms `NeutralPLT`'s arm always
     escalates (never stays `Neutral`). No new golden-file domain — `StateDeptReport` needs the same
-    full hand-assembled universe `NpeToolkit.cs`'s own doc comment already defers to Phase 7.
-- ✅ **6f, roadmap wrap-up.** Kingdom (both persona presets) is fully ported: dispatch/state (6b),
+    full hand-assembled universe as `NpeToolkit.cs`'s other methods above; see 6c's own note.
+- **6f, roadmap wrap-up.** Kingdom (both persona presets) is fully ported: dispatch/state (6b),
   the shared `NPEINTR.PAS` toolkit's read-and-compute half (6c) and fleet-lifecycle half (6c-2),
   the core per-turn loop (6d), and diplomacy (6e). Disposition of every other NPE personality, so
   picking this phase back up doesn't require re-deriving the reachability table above:
@@ -428,7 +430,7 @@ original developers shipped incomplete, not a port gap.
   - `LoadNPE`/`SaveNPE` (binary `.SAV` serialization, including the `Version<12` legacy-format
     branches) — Phase 7, not this phase, regardless of which personalities exist by then.
 
-## 7. Save/load — ✅ done, all 8 commits landed
+## 7. Save/load
 
 `docs/SAV_FILE_FORMAT.md` documents the real on-disk `.SAV` byte layout in full (every section,
 file:line cited into `reference/DOSAnacreonSource131/`, checked against 13 real save files in
@@ -445,12 +447,12 @@ moving). `SaveGame`-to-`.SAV` is downgraded to a minimal, test-only tool whose o
 confirming real Pascal `LoadGame` accepts this port's output — not a maintained, byte-faithful
 feature.
 
-- ✅ **7a, merge + scope + primitives.** Merged `main` (Phase 6 Kingdom AI, landed after this
+- **7a, merge + scope + primitives.** Merged `main` (Phase 6 Kingdom AI, landed after this
   branch split off `sav_file_format_doc` at `28afe88` — confirmed zero file overlap before
   merging, so a clean merge) so the NPE Data section has real `KingdomTurnHandler` state to read.
   Byte-level primitive readers for `SAV_FILE_FORMAT.md`'s documented conventions (fixed-width
   little-endian ints, `STRING[N]`, `SET OF T` bitsets, `IDNumber`, opaque-byte passthrough).
-- ✅ **7b, Header + Environment + Sector `LoadGame`** (`Core/SaveFormat/SavGameLoader.cs`). Eight
+- **7b, Header + Environment + Sector `LoadGame`** (`Core/SaveFormat/SavGameLoader.cs`). Eight
   placeholder `Empire` slots allocated up front resolve every empire ordinal read before Empire
   Data actually names/activates them (Environment's `Player`, Sector's mine owner/`MineScout`) —
   same object identity Empire Data (7d) later fills in with real fields, never added to
@@ -469,7 +471,7 @@ feature.
   discarded, `ScenaFilename` kept via the new `Game.ScenarioFilename`. Tested against real bytes
   from `INTRO_1.SAV`, ground truth cross-checked against `scripts/savtool.py`'s own JSON parse
   (year 4021, player ordinal 0, `INTRO.SCN`, `SizeOfGalaxy=21`, 90 nebula cells, zero minefields).
-- ✅ **7c, Planets/Starbases/Fleets/Stargates/Constructions `LoadGame`** (`SavGameLoader.cs`).
+- **7c, Planets/Starbases/Fleets/Stargates/Constructions `LoadGame`** (`SavGameLoader.cs`).
   Fleet's `FuelHigh`/`Fuel` split → single `double` (`FuelHigh*32767+Fuel`); `CommandRecord` order
   queues read and discarded (no in-memory representation exists — Phase 8's job once a human turn
   handler needs one), confirmed not to desync the byte cursor against `FLEET_ORDERS.SAV` (a real
@@ -489,7 +491,7 @@ feature.
   initializes `Dest:=XY`, the latter `Dest:=Limbo`). Tested against real bytes from `INTRO_2.SAV`
   (9 fleets, including one already-arrived), `GAUNTLET_1.SAV` (10 starbases), `FLEET_ORDERS.SAV`
   (13 fleets, one with a real discarded order queue), `STARGATE_DONE.SAV`, `Confront_2.SAV`.
-- ✅ **7d, Messages/Empire Data/News `LoadGame`.** Messages read and discarded — no in-memory
+- **7d, Messages/Empire Data/News `LoadGame`.** Messages read and discarded — no in-memory
   message concept exists anywhere in this port (a human-UI feature, same `ATTCOMM`/`FLTCOMM`
   -adjacent Phase 8 cluster). Empire Data fills the same 8 placeholder slots earlier sections
   already resolved references against; only `InUse` slots join `Game.Empires`.
@@ -517,7 +519,7 @@ feature.
   bytes). `DefeatedBy`'s decode branch has no exercising reference save (none of the 13 capture a
   defeated human empire) — implemented and reasoned through directly from `ConquerEmpire`, not
   covered by a ground-truth test; flagged for whoever next captures or hand-builds one.
-- ✅ **7e, NPE Data `LoadGame` + `KingdomTurnHandler` state seam.** New `internal` constructor on
+- **7e, NPE Data `LoadGame` + `KingdomTurnHandler` state seam.** New `internal` constructor on
   `KingdomTurnHandler` builds a handler straight from a saved persona/`State`/`FleetStates` (no
   fresh persona roll, no `SetEmpireDefenses` re-seed) plus matching internal read-back accessors
   (`Persona`/`State`/`FleetStates`/`DefaultPolicy`) for 7f's JSON serializer to reuse — kept
@@ -538,7 +540,7 @@ feature.
   well-formedness, since a gap there throws during real NPE decision logic, not silently),
   `GAUNTLET_1.SAV` (Pirate blob alongside Kingdom2 empires), `Confront_1.SAV` (Guardian + Berserker
   blobs, correct byte lengths).
-- ✅ **7f, native JSON save format.** `Core/SaveFormat/GameJson.cs`: `Serialize(Game) → string` /
+- **7f, native JSON save format.** `Core/SaveFormat/GameJson.cs`: `Serialize(Game) → string` /
   `Deserialize(string) → Game`. The plan called for `ReferenceHandler.Preserve` on the real
   reference cycles (`Owner`, `Empire`'s `EntityVisibility` sets, `NewsItem`) — dropped after hitting
   four separate hard `System.Text.Json` incompatibilities, each confirmed by a real failing test,
@@ -570,7 +572,7 @@ feature.
   comparer to also walk `KingdomTurnHandler`'s `internal` `Persona`/`State`/`FleetStates` (it's
   invisible to public-only reflection — the first pass over this silently checked nothing), that
   Kingdom's saved diplomacy/mission state genuinely survives the round trip, not just its presence.
-- ✅ **7g, minimal `.SAV` write-back + real-Pascal acceptance check.** `Core/SaveFormat/
+- **7g, minimal `.SAV` write-back + real-Pascal acceptance check.** `Core/SaveFormat/
   SavGameWriter.cs`: `WriteGame(Game) → byte[]`, the exact section-by-section mirror of
   `SavGameLoader`'s own `Load*` methods. `EmpireSlotIndex` compacts `Game.Empires` down to as many
   of the 8 real on-disk slots as it needs, then lazily discovers "orphan" empires (reachable only
@@ -586,71 +588,23 @@ feature.
   real-Pascal run of ANY `.SAV`-shaped record through `fpc` (`LoadGame` itself was never previously
   exercised against a real file by this harness — 7a-7f's own tests only ever checked the C# port's
   understanding against itself) crashed with a runtime 216, then desynced with IOResult 100 once
-  that first crash was fixed. Root cause, confirmed by direct `SizeOf()` probes, not guessed:
-  `PlanetRecord` etc. have **no inter-field padding on real Turbo Pascal** (`docs/SAV_FILE_FORMAT.md`
-  already documented this empirically), but `fpc`'s default record alignment under `-Mtp` still
-  pads certain fields (a `Word` after an odd byte offset, a pointer after a short run of bytes) —
-  the same category of "fpc doesn't actually honor a real TP assumption" as the already-documented
-  `GlobalSets` `ABSOLUTE`-overlay landmine, just for record packing instead of a `VAR` alias. Fixed
-  with `{$PACKRECORDS 1}`, added to the seven pristine units that declare an on-disk record type
-  reachable from `LoadGame` (`DATASTRC.PAS`, `GALAXY.PAS`, `MESS.PAS`, `NEWS.PAS`, `NPETYPES.PAS`,
-  `ORDERS.PAS`, `TEXTSTRC.PAS` — `LOADSAVE.PAS` itself needed no change) — each confirmed with a
-  direct `SizeOf()` probe against `docs/SAV_FILE_FORMAT.md`'s own already-empirically-verified byte
-  counts before trusting a real save through it. `build-all-units.ps1`'s full 67-unit smoke test
-  and the entire existing `dotnet test` suite both still pass unchanged after the patch. One side
-  effect, fully root-caused: `scenario.golden`'s `Awaken` case shows a different `sumstarbaseeff`
-  (89 → 143). This is **not** an RNG-stream-position shift, despite that being the first guess —
-  a direct A/B experiment (same seed, same `.SCN` file, `DATASTRC.PAS`'s `{$PACKRECORDS 1}` toggled
-  on/off, tracing `RandSeed` plus each starbase's own `Pop`/`Eff` right after `LoadScenario` returns)
-  showed `RandSeed` and both starbases' `Pop` byte-identical either way, and Starbase 1's `Eff`
-  identical too (85 both times) — only Starbase 2's `Eff` moves (58 packed vs. 4 unpacked). A real
-  RNG-position shift would perturb every downstream draw, not one field on one of two otherwise
-  -identical starbases.
+  that first crash was fixed. Root cause: `fpc`'s default record alignment doesn't match real Turbo
+  Pascal's lack of inter-field padding — see `PASCAL_ARCHITECTURE_NOTES.md`. Fixed with
+  `{$PACKRECORDS 1}` on the seven pristine units declaring an on-disk record type reachable from
+  `LoadGame`. `build-all-units.ps1`'s full 67-unit smoke test and the entire existing `dotnet test`
+  suite both still pass unchanged after the patch.
 
-  Tracing further (a watchpoint on Starbase 2's own `Eff`/`Pop`, checked once per scenario command)
-  found the real cause: **`AWAKEN.SCN` creates 212 planets against `TYPES.PAS`'s own hardcoded
-  `MaxNoOfPlanets = 200`.** Its last `CreateRandomWorlds 16 1` command writes planet indices 197-212
-  — 12 slots past the end of the `Planet` array — and Turbo Pascal has no array-bounds checking by
-  default (confirmed, not assumed: grepped the entire pristine `reference/DOSAnacreonSource131/` tree
-  for `{$R+}` — zero matches, nothing re-enables it), so that overrun silently writes past
-  `UniverseRecord`'s `Planet` field straight into `Starbase` (the very next field declared in
-  `DATASTRC.PAS`) — 12 overrun records × ~89-90 bytes each (~1068-1080 bytes) lands entirely inside
-  `StarbaseArray` (`TYPES.PAS`'s own `MaxNoOfStarbases = 100`, `StarbaseRecord` ~91 bytes, so the
-  spill blankets roughly the first 12 starbase slots and never reaches `Fleet`), corrupting whichever
-  of those slots this scenario actually populates — here, slots 1 and 2, the only two `AWAKEN.SCN`
-  ever creates. `Eff:=100` (Starbase 1's own
-  real, literal `.SCN` value, confirmed by tracing `CreateBase` itself) becomes 85 either way;
-  `Eff:=90` (Starbase 2's) becomes 58 or 4 depending on packing, and Starbase 2's `Pop` moves too
-  (103 → 470) — not an `RndVar` jitter, the same overrun. Both `PlanetRecord`'s size (89 vs. 90
-  bytes, changing the overrun's stride) and `StarbaseRecord`'s own layout (also declared in
-  `DATASTRC.PAS`, also repacked) shift under `{$PACKRECORDS 1}`, together changing exactly which
-  bytes of the 12-planet spillover land where in `Starbase`'s first two slots. This is a real bug in
-  the reference `.SCN` file itself, not in this port, this harness, or `SavGameWriter` — and since
-  Turbo Pascal ships with range checking off, the genuine pristine DOS 1.31 binary would corrupt
-  these same two starbases via the same mechanism loading this exact file (not necessarily the same
-  *values* — real play reseeds `RandSeed` from the file's own `Seed` field rather than this harness's
-  fixed 12345, so whatever ends up adjacent in memory differs). The same category of finding as
-  `ScenarioCases.cs`'s own documented `PRINCES.SCN` note ("real 1.31 chokes on this file too") — a
-  real reference-fixture defect, not a gap in the reconstruction — except this one corrupts silently
-  instead of erroring, which is why `PACKRECORDS` (an unrelated, correctness-motivated fix) was able
-  to change its exact symptom. Confirmed the only one affected: `scenario.golden`'s other 10 cases
-  all have `planetcount` ≤ 200 (`Arronax`/`Imperium` sit exactly at the ceiling, not over it).
-
-  The overrun's real reach is wider than `sumstarbaseeff` alone — `RunScenarioCase`'s own planet-sum
-  loop (`FOR i:=1 TO LastFirstWorld-1`) runs to 212, so indices 201-212 read `Starbase`'s raw bytes
-  back out reinterpreted as `PlanetRecord` (the overrun stays entirely inside `StarbaseArray`, per
-  the byte-math above — it never reaches `Fleet`), meaning every one of Awaken's planet sums
-  (`sumpop`, `sumeff`, `sumtri`, `sumclass`, `sumtech`, `sumships`, `sumcargo`, `sumdefns`,
-  `sumplanetx`, `sumplanety`) includes 12 phantom records, and its own `planetcount=212` counts slots
-  that were never a real `PlanetRecord` at all. This is the actual reason
-  `ScenarioLoaderGoldenTests.MatchesGoldenFile` stays green for Awaken despite all this: every one of
-  those contaminated fields was already excluded from exact-match for unrelated reasons (RNG
-  -derived), and the fields that *are* asserted (`year`, `planetcount`, `starbasecount`,
-  `stargatecount`, `empirecount`, `sumempiretech`, `sumrevfactor`, `sumcentralmodifier`) either come
-  from plain counters incremented once per successful command on both sides — identical regardless
-  of what garbage sits in the over-run memory, since neither side re-reads it — or from
-  `EmpireData`, a `UniverseRecord` field the 12-record overrun never reaches. Checkable, not just
-  narrow: none of the fields this test actually compares touch the corrupted memory at all.
+  One side effect, fully root-caused rather than left as an unexplained golden-file change:
+  `scenario.golden`'s `Awaken` case shows a different `sumstarbaseeff` (89 → 143) after the packing
+  fix. Not an RNG-stream-position shift (ruled out by a direct A/B trace); the real cause is a
+  genuine, pre-existing bug in `AWAKEN.SCN` itself — it creates 212 planets against `TYPES.PAS`'s
+  hardcoded ceiling of 200, and the overrun silently corrupts two starbase records since Turbo
+  Pascal ships with array-bounds checking off. Full trace in `PASCAL_ARCHITECTURE_NOTES.md`; the
+  short version is that the packing fix changed the overrun's exact byte alignment, which changed
+  which corrupted bytes landed where, surfacing a scenario-file bug that predates this port and
+  would corrupt the same two starbases in the genuine DOS 1.31 binary too.
+  `ScenarioLoaderGoldenTests.MatchesGoldenFile` stays green for Awaken regardless — every field the
+  overrun actually touches was already excluded from exact-match for unrelated reasons.
 
   Verification is **differential, not golden-file**: a new `reference/verify/runload.pas` driver
   (deliberately its own driver, not a new `runworld.pas` domain, since `LOADSAVE.PAS`'s own unit
@@ -669,21 +623,11 @@ feature.
   match is safe in a way it wasn't for the `scenario` domain's own golden file. Passes for all 13
   reference saves plus a smoke check (`error=0` only, no original file to diff against) for one
   freshly built `ScenarioLoader` game.
-- ✅ **7h, roadmap wrap-up.** Phase flipped to done above. Re-read every gap 7a-7g flagged along the
-  way and confirmed each is still accurately described in place, nothing silently closed or
-  forgotten: order queues (`CommandRecord`/fleet `DestCOM` et al.) are read-and-discarded in 7c,
-  explicitly called out there as "Phase 8's job once a human turn handler needs one" — Messages
-  (7d) carry the identical status for the same reason (no in-memory concept exists; a human-UI
-  feature). UI/session Environment fields (`EmpiresToMove`/`TimePerTurn`/`AutoSave`/`AsyncTurns`/
-  `PauseActive`/`ReEnterGame`) are read-and-discarded in 7b — `AsyncTurns` specifically belongs to
-  Phase 9 (async/hotseat) rather than Phase 8, the rest to Phase 8's UI once a session actually has
-  settings to hold. `.SAV` write's scope (`SavGameWriter`, test-only, no fidelity effort beyond
-  "real Pascal accepts it") is stated up front in this section's own intro and reaffirmed in 7g;
-  nothing calls it a maintained feature anywhere. One more open item surfaced along the way, not
-  previously listed here: 7d's `DefeatedBy` decode branch (a conquered human empire) has no
-  exercising reference save among the 13 captured so far — implemented and reasoned through
-  directly from `ConquerEmpire`, but untested against a real file; worth a note for whoever next
-  captures or hand-builds one, not a blocker for Phase 8.
+- **7h, wrap-up.** Re-read every gap 7a-7g flagged along the way and confirmed each is accurately
+  tracked, nothing silently closed or forgotten. `.SAV` write's scope (`SavGameWriter`, test-only,
+  no fidelity effort beyond "real Pascal accepts it") stays as stated in this section's own intro —
+  nothing calls it a maintained feature anywhere. Order queues, messages, UI/session Environment
+  fields, and the untested `DefeatedBy` decode branch are tracked in `OPEN_GAPS.md`.
 
 ## 8. Human interactive turn handler + Terminal.Gui UI
 

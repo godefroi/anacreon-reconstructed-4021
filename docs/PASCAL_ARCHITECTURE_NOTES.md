@@ -513,7 +513,7 @@ The shape is suggestive: a design where a probe might take multiple turns to arr
 destination (continuing to scout, or awaiting recall) before returning, would need exactly this
 four-state enum. Whether that was ever implemented, planned, or removed before either shipped source
 tree isn't something source alone can answer — this is inference from dead code's shape, not a
-confirmed history. Not ported (see `ROADMAP.md`'s Phase 3), and not planned unless it resurfaces as
+confirmed history. Not ported (see `ROADMAP.md`'s probe movement/visibility entry), and not planned unless it resurfaces as
 something worth reviving deliberately.
 
 ### `Consolidate` (`ATTNPE.PAS`) is confirmed dead code
@@ -550,8 +550,21 @@ about Turbo Pascal's own behavior); FreePascal's actual `Round` is half-to-even 
 boundaries — confirmed directly against the ground-truth compiler (`Round(2.5)=2`, `Round(3.5)=4`,
 `Round(-2.5)=-2`), not assumed. `GetEnemy`'s clean-percentage shell split (5%/10%/15% of a round ship
 count) was the first formula in the whole port to land exactly on a `.5` boundary, so the
-wrong assumption went undetected through every earlier phase's own golden-file coverage until then.
+wrong assumption went undetected through earlier golden-file coverage until then.
 See `PORT_DESIGN.md`'s randomness section for the fix and how the fallout was checked.
+
+### FreePascal's default record packing doesn't match real Turbo Pascal's either
+
+Real Turbo Pascal has no inter-field padding in a record (`docs/SAV_FILE_FORMAT.md` documents this
+empirically from real `.SAV` bytes), but `fpc`'s default record alignment under `-Mtp` still pads
+certain fields (a `Word` after an odd byte offset, a pointer after a short run of bytes) — the same
+category of "fpc doesn't actually honor a real TP assumption" as the `GlobalSets` `ABSOLUTE`-overlay
+landmine (§2.3), just for record packing instead of a `VAR` alias. Confirmed by direct `SizeOf()`
+probes against `SAV_FILE_FORMAT.md`'s already-verified byte counts, not guessed. Fixed with
+`{$PACKRECORDS 1}` on the seven pristine units declaring an on-disk record type reachable from
+`LoadGame` (`DATASTRC.PAS`, `GALAXY.PAS`, `MESS.PAS`, `NEWS.PAS`, `NPETYPES.PAS`, `ORDERS.PAS`,
+`TEXTSTRC.PAS`) — each confirmed with its own direct `SizeOf()` check before trusting a real save
+through it.
 
 ### Scenario golden-file testing can't be bit-exact, and why
 
@@ -645,6 +658,39 @@ might eliminate the ULP-level differences that flip boundary cases. This is a ta
 not a bounded fix: it would need doing per-formula, verifying term order against two different `Trunc`
 implementations, in a system where a single remaining mismatch anywhere still cascades through the
 entire shared RNG stream. Given the stated goals above, it isn't worth attempting.
+
+### `AWAKEN.SCN` overruns `TYPES.PAS`'s `MaxNoOfPlanets=200`, silently corrupting the `Starbase` array
+
+`AWAKEN.SCN` creates 212 planets against the hardcoded ceiling of 200 (`TYPES.PAS`). Its last
+`CreateRandomWorlds 16 1` command writes planet indices 197-212 — 12 slots past the end of the
+`Planet` array — and Turbo Pascal has no array-bounds checking by default (confirmed, not assumed:
+grepped the entire pristine source tree for `{$R+}` — zero matches, nothing re-enables it). The
+overrun silently writes past `UniverseRecord`'s `Planet` field straight into `Starbase` (the next
+field declared in `DATASTRC.PAS`) — roughly 1068-1080 bytes, landing entirely inside the first 12
+or so `StarbaseArray` slots — corrupting whichever of those slots this scenario actually populates
+(here, slots 1 and 2, the only two `AWAKEN.SCN` ever creates).
+
+This is a real bug in the reference `.SCN` file itself, not in this port or its harness: the genuine
+pristine DOS 1.31 binary would corrupt these same two starbases loading this exact file (not
+necessarily identical values, since real play reseeds `RandSeed` from the file's own `Seed` field
+rather than a fixed test value). Same category of finding as `PRINCES.SCN`'s own "real 1.31 chokes
+on this file too" — except this one corrupts silently instead of erroring, and can only be reached
+through the file's own hand-authored scenario content, not by anything the C# port does differently.
+
+`ScenarioLoaderGoldenTests.MatchesGoldenFile` stays green for Awaken despite this: the golden-file
+driver's own planet-sum loop runs to 212, so it reads `Starbase`'s corrupted bytes back out
+reinterpreted as 12 phantom planets too — but every one of Awaken's planet-sum fields (`sumpop`/
+`sumeff`/`sumtri`/etc., `planetcount` itself) was already excluded from exact-match for unrelated
+reasons (RNG-derived) or comes from a plain per-command counter/`EmpireData` field the overrun never
+reaches — checked field-by-field, not assumed safe.
+
+Found while adding the `{$PACKRECORDS 1}` fix above for `.SAV` compatibility: that change shifted
+`PlanetRecord`'s size, which changed the overrun's exact stride, which changed exactly which
+corrupted bytes landed in which starbase field. A resulting golden-file change (`Awaken`'s
+`sumstarbaseeff` moving from 89 to 143) was the packing fix perturbing this unrelated, pre-existing
+scenario-file bug, not a regression in the fix itself — confirmed by an A/B trace (same seed, same
+`.SCN`, packing toggled on/off) showing every other field byte-identical, only the corrupted
+starbase's value moving.
 
 ### `TraderNPE` (`NPETYPES.PAS`) is confirmed dead code
 
