@@ -289,8 +289,16 @@ original developers shipped incomplete, not a port gap.
     source), and `ImplementRaidTrnMSN`'s `TargetID` parameter is confirmed unused (overwritten by
     `GetObject` before ever being read). `SetRaidingFleetNewTarget` has no real caller yet (6d) —
     ported anyway, same "primitive ready for whoever needs it" precedent as Phase 5g's
-    `SelfDestructObject`. Hardcoded-tested (`NpeToolkitDeployImplementTests.cs`), same rationale as
-    6c/6c-2's primitives.
+    `SelfDestructObject`. Two genuine C# translation mistakes here, both caught by a pre-commit
+    review pass and fixed with regression tests that fail against the buggy code, not Pascal quirks:
+    `DeployBattleFleet`'s probe loop re-drew its RNG bound every iteration (`for (var i = 0; i <
+    Rnd(random, 1, 4); i++)` calls `Rnd` on every condition check, where Pascal's `FOR i:=1 TO
+    Rnd(1,4) DO` evaluates the bound once at loop entry — fixed by hoisting the draw out of the loop
+    header); and `ImplementJumpAttackMSN`'s post-LAM-strike power gate read live `target.Ships`
+    instead of the pre-strike snapshot Pascal actually compares against, so it compared the attacker
+    against the wrong enemy-ships value whenever the LAM branch fired — fixed by snapshotting
+    `target.Ships` before the strike. Hardcoded-tested (`NpeToolkitDeployImplementTests.cs`), same
+    rationale as 6c/6c-2's primitives.
 - ✅ **6d, Kingdom core loop** (`Core/Npe/NpeToolkit.cs`, `Core/Npe/NpeTypes.cs`,
   `Core/Turns/KingdomTurnHandler.cs`) — `NPE00.PAS`'s `DefendEmpire`/`ImperialExpansion`/
   `NPEConquest`/`CargoSupplyFleet`/`ExplorationAndProbing` (plus their own nested helpers —
