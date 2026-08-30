@@ -11,10 +11,11 @@ plausible-sounding guess.
 
 ## Status
 
-Core simulation (economy, galaxy/scenario setup, probes, news, combat) is done. NPE AI (computer
-opponents) is in progress. Save/load and a playable UI haven't started — the current `dotnet run`
-entry point is a placeholder, not a playable game yet. See
-[`docs/ROADMAP.md`](docs/ROADMAP.md) for the up-to-date phase-by-phase breakdown.
+Core simulation (economy, galaxy/scenario setup, probes, news, combat), Kingdom NPE AI, and save/load
+(DOS `.SAV` import plus a native JSON format) are done. A playable UI hasn't started — the current
+`dotnet run` entry point is a placeholder, not a playable game yet. See
+[`docs/ROADMAP.md`](docs/ROADMAP.md) for how this was built, and [`docs/OPEN_GAPS.md`](docs/OPEN_GAPS.md)
+for known limitations in what exists so far.
 
 ## Building and testing
 
@@ -51,14 +52,16 @@ for how that comparison works and what it takes to add to it.
 
 ## Documentation map
 
-- **[`docs/ROADMAP.md`](docs/ROADMAP.md)** — phase/commit status: what's done, what's in progress,
-  what's next.
+- **[`docs/ROADMAP.md`](docs/ROADMAP.md)** — a development log: how this port was built, bottom-up,
+  simulation core first.
 - **[`docs/PORT_DESIGN.md`](docs/PORT_DESIGN.md)** — this port's own cross-cutting design decisions:
   how Pascal's data/behavior gets modeled in C# and why (RNG strategy, entity/interface shapes, the
   empire-elimination model, ground-truth harness methodology).
 - **[`docs/PASCAL_ARCHITECTURE_NOTES.md`](docs/PASCAL_ARCHITECTURE_NOTES.md)** — a map of the
   *original* Pascal source (file-by-file, subsystem-by-subsystem), plus findings turned up while
   porting: dead code, quirks, real bugs, and the scenario golden-file investigation.
+- **[`docs/OPEN_GAPS.md`](docs/OPEN_GAPS.md)** — known limitations in this port: places where the C#
+  doesn't yet do everything the original Pascal did.
 - **[`reference/verify/README.md`](reference/verify/README.md)** — how ground-truth (real, compiled
   Pascal output) is used to verify the port: what gets patched and why, the ground-truth domain
   catalog, known landmines. Read this before touching the harness itself.

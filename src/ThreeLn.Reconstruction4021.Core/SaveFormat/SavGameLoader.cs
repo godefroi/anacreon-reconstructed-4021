@@ -370,7 +370,7 @@ public sealed class SavGameLoader
     /// `LoadFleets` (`LOADSAVE.PAS:227-263`). Reproduces the real load-time quirk verbatim
     /// (`LOADSAVE.PAS:250-256`): if any single axis of `XY`/`Dest` is exactly 0, both coordinates
     /// reset to `(1,1)` — confirmed to fire on a per-component basis, not "both coordinates are
-    /// (0,0)". `CommandRecord` order queues are read and discarded (`docs/ROADMAP.md`'s own tracked
+    /// (0,0)". `CommandRecord` order queues are read and discarded (`docs/OPEN_GAPS.md`'s own tracked
     /// gap: no in-memory representation exists). `NextOrder`/`OrderData` are Pascal's
     /// own legacy/superseded fields, already dead before this file was even written.
     /// </summary>
@@ -487,9 +487,9 @@ public sealed class SavGameLoader
     /// <summary>
     /// `LoadMessageData` (`MESS.PAS:252-367`). No in-memory message concept exists anywhere in this
     /// port — in-game player-to-player messages are a human-UI feature (the same
-    /// `ATTCOMM`/`FLTCOMM`/`ORDERS`-adjacent DOS-UI cluster `docs/ROADMAP.md` already scopes to the
-    /// human UI), so every message is read and discarded, same "no home" treatment as the Fleet
-    /// order queue.
+    /// `ATTCOMM`/`FLTCOMM`/`ORDERS`-adjacent DOS-UI cluster `docs/PASCAL_ARCHITECTURE_NOTES.md`
+    /// already identifies), so every message is read and discarded, same "no home" treatment as the
+    /// Fleet order queue (both tracked in `docs/OPEN_GAPS.md`).
     /// </summary>
     private static void LoadMessages(SavReader reader)
     {

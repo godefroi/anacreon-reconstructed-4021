@@ -53,7 +53,7 @@ namespace ThreeLn.Reconstruction4021.Tests;
 /// this harness's fixed 12345) — a genuine reference-scenario defect, same category as
 /// `ScenarioCases`' own `PRINCES.SCN` note, not a gap in this port. Confirmed the only golden case
 /// affected: the other 10 all have `planetcount` at or under 200. The harness's `{$PACKRECORDS 1}`
-/// fix (see `docs/ROADMAP.md`'s save/load notes) repacked both `PlanetRecord` and
+/// fix (see `docs/PASCAL_ARCHITECTURE_NOTES.md`) repacked both `PlanetRecord` and
 /// `StarbaseRecord` (same file, same directive), changing exactly where the spillover bytes land and
 /// so changing AWAKEN's own golden value for this one field — an unrelated, correctness-motivated fix
 /// exposing a pre-existing bug in the fixture, not introducing one. Left excluded rather than

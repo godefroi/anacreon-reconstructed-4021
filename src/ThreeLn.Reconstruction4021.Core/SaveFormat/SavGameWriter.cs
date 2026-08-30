@@ -238,7 +238,7 @@ public static class SavGameWriter
 
     /// <summary>
     /// `SaveFleets` (`LOADSAVE.PAS:188-225`). Always writes an empty order queue (`NoOfComs=0`) --
-    /// no in-memory order-queue representation exists in this port (`docs/ROADMAP.md`'s tracked
+    /// no in-memory order-queue representation exists in this port (`docs/OPEN_GAPS.md`'s tracked
     /// gap). <see cref="Fleet.Destination"/> null must become `Dest:=XY`, never `(0,0)`:
     /// `LoadFleets`' own per-axis quirk (`LOADSAVE.PAS:250-256`) resets <em>both</em> `XY` and `Dest`
     /// to `(1,1)` the instant either coordinate has a zero component on either field, so writing a

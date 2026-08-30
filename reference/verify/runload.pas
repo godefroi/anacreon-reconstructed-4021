@@ -42,8 +42,8 @@
    is not). Fuel/order-queue/message content are deliberately absent: Fleet.Fuel is a
    double on the C# side (fractional for a played/scenario game, integral only for a
    fresh file-load-file-write round trip) and the order queue/message text have no
-   in-memory representation on the C# side at all (docs/ROADMAP.md's tracked Phase 7
-   gaps) -- neither is meaningful to checksum here. --------------------------------- *)
+   in-memory representation on the C# side at all (docs/OPEN_GAPS.md's tracked
+   gaps) -- neither is meaningful to checksum here. ---------------------------------- *)
 
 PROGRAM RunLoad;
 

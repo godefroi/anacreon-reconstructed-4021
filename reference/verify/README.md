@@ -237,7 +237,7 @@ Cross-cutting lessons, not specific to one domain — read before touching *any*
   file, also repacked — shift under `{$PACKRECORDS 1}`, together changing exactly which spillover
   bytes land where in `Starbase`'s first two slots. Same category of finding as `ScenarioCases.cs`'s
   own `PRINCES.SCN` note (a real reference-scenario defect, not a reconstruction gap) — see
-  `docs/ROADMAP.md`'s Phase 7g entry for the full trace, including why
+  `docs/PASCAL_ARCHITECTURE_NOTES.md` for the full trace, including why
   `ScenarioLoaderGoldenTests.MatchesGoldenFile` stays green for Awaken despite the overrun reaching
   12 of its planet records too.
 - **A hand-assembled `Universe^` is only as faithful as the fields it remembers to set.** Two
