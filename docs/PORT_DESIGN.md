@@ -2,10 +2,10 @@
 
 Cross-cutting decisions about how *this C# port* models Pascal's data and behavior — the "why does
 the port's own code look like this" reference. Distinct from
-[`docs/ROADMAP.md`](ROADMAP.md), which tracks phase/commit status, and
+[`docs/ROADMAP.md`](ROADMAP.md), which narrates how the port came together, and
 [`docs/PASCAL_ARCHITECTURE_NOTES.md`](PASCAL_ARCHITECTURE_NOTES.md), which maps and records findings
-about the *original* Pascal source. Each entry below cites the `ROADMAP.md` phase/commit it landed in
-for the full "what shipped" story; this doc only covers the *why this shape*.
+about the *original* Pascal source. This doc covers the *why this shape*, not the history of how it
+got there.
 
 ## Randomness
 
@@ -15,9 +15,9 @@ never a held/default instance. Tests use a `Random` subclass (`FixedRandom`) tha
 return value for deterministic branches, and assert bounds/invariants (e.g. "efficiency never
 exceeds 100") for genuinely-random magnitudes.
 
-Translation trap, worth restating since it recurs in every phase: Pascal's `Rnd(lo,hi)` is inclusive
+Translation trap, worth restating since it recurs constantly: Pascal's `Rnd(lo,hi)` is inclusive
 on both ends — `Rnd(2,5)` is `random.Next(2, 6)` in C#, not `random.Next(2, 5)`. `PascalMath.Rnd`
-wraps this once (`Core/PascalMath.cs`, Phase 1/2a) so no call site re-derives it. `PascalMath.Rnd`
+wraps this once (`Core/PascalMath.cs`) so no call site re-derives it. `PascalMath.Rnd`
 also reproduces `Rnd`'s own degenerate-range clamp (`max<=min` returns `min` **without drawing**) —
 this matters for RNG-stream parity: a call that doesn't draw doesn't consume a slot in the shared
 PRNG stream either, and getting this wrong desyncs every later draw (see
@@ -26,38 +26,38 @@ this exact class of bug).
 
 `PascalMath.PascalRound` is FreePascal's actual `Round`: banker's rounding (half-to-even at exact
 `.5` boundaries), not Turbo Pascal-style half-away-from-zero — confirmed directly against the ground-
-truth compiler (`Round(2.5)=2`, `Round(3.5)=4`, `Round(-2.5)=-2`), fixed in Phase 5d after going
-undetected through every earlier phase's golden-file coverage (no earlier formula happened to land
-exactly on a `.5` boundary).
+truth compiler (`Round(2.5)=2`, `Round(3.5)=4`, `Round(-2.5)=-2`), fixed after going undetected
+through earlier golden-file coverage (no earlier formula happened to land exactly on a `.5`
+boundary).
 
 ## Economic worlds: `IEconomicWorld`
 
 `Planet` and `Starbase` share most of the annual-tick economy pipeline (an industrial-complex
-starbase runs almost the same `UpdateWorld` sequence a planet does) but not all of it — introduced in
-Phase 1 commit 4 once the real overlap (smaller than "one shared procedure" suggested from a single
-call site) was visible from actually building starbase support, not guessed at up front. Four members
+starbase runs almost the same `UpdateWorld` sequence a planet does) but not all of it — introduced
+once the real overlap (smaller than "one shared procedure" suggested from a single call site) was
+visible from actually building starbase support, not guessed at up front. Four members
 are explicit-interface-only, each encoding one `PRIMINTR.PAS` accessor's Base-case behavior a shared
 property can't express: `EffectiveClass` (`ArtCls`, a starbase has no world-class field),
 `SelfSufficiencyIndex` (always index 0, no `ImpExp` field), `TrillumReserve` (`MaxResources`, writes
 discarded, no `TriReserve` field), `InitializeSelfSufficiency` (`InitializeISSP`'s `CASE` has no Base
 branch).
 
-`Empire.Capital` widened from `Planet?` to `IEconomicWorld?` in Phase 2c once `CreateBase`
+`Empire.Capital` widened from `Planet?` to `IEconomicWorld?` once `CreateBase`
 (`NEWGAME.PAS:1095-1096`) turned out to be able to make a *starbase* an empire's capital — a real
 type-modeling gap the narrower type would have silently dropped rather than surfaced.
 
 ## Technology tracking
 
 `Empire.Technology` (`UnlockedTechnology`) has four buckets — `Ships`/`Defenses`/`Constructions`/
-`Resources` — not three. `Resources` (`HashSet<CargoType>`) was added in Phase 1 commit 5a once
+`Resources` — not three. `Resources` (`HashSet<CargoType>`) was added once
 `NewTechLevel`'s outer guard turned out to be a real equality check against Pascal's `TechSet`, which
 spans resource types too; without it the guard could never detect "still missing a resource-type
-unlock." `TechCatalog.FullSetAt(TechLevel)` (Phase 5f) computes `TechDev[level]` on demand from the
+unlock." `TechCatalog.FullSetAt(TechLevel)` computes `TechDev[level]` on demand from the
 same per-category min-tech tables rather than storing all 11 raw Pascal sets — valid because `TechDev`
 is genuinely monotonic in `TechLevel` (verified by expanding all 11 rows to explicit enum-position
 membership, not assumed).
 
-"Extra techs" at empire creation (`EmpireFactory`, Phase 2b) are typed against this port's own enums
+"Extra techs" at empire creation (`EmpireFactory`) are typed against this port's own enums
 (`TechCatalog.Grant(ShipType.HunterKiller)`, etc.), not any file format's raw ordinal — a scenario-
 file parser decodes into these, not the other way around, so the domain model never couples to the
 legacy `.SCN` numbering.
@@ -67,7 +67,7 @@ legacy `.SCN` numbering.
 Pascal's `ReportPlanetLack` (`UPDATE.PAS:39-56`) bumps `RevolutionIndex` by 1 the first time a given
 resource type is reported short in a tick — a real state mutation, not just a skipped `AddNews` call,
 and easy to under-model as "just fire the news" (which is what this port originally did, until
-migrating `revolution.golden` to the patch-based lane surfaced the gap, Phase 1). `Report
+migrating `revolution.golden` to the patch-based lane surfaced the gap). `Report
 ResourceShortfall` (`AnnualTickHandler.Production.cs`) fixes this with a per-tick `HashSet<CargoType>`
 mirroring Pascal's own `OtherReports` scratch set, threaded through `UpdateIndustry` (fires for both
 planets and starbases) and `ApplyRawMaterialConstraint`/`Production` (planets only, per
@@ -76,39 +76,38 @@ resource type only bumps `RevolutionIndex` once per world per tick, matching Pas
 
 ## Revolution index: two different mutation patterns, on purpose
 
-`Empire.TotalRevolutionIndex` is genuine stored state (Phase 1), updated two different ways that
-never run simultaneously:
+`Empire.TotalRevolutionIndex` is genuine stored state, updated two different ways that never run
+simultaneously:
 
 - **Annual-tick commit** (`AnnualTickHandler.RunAnnualTick`): a per-tick scratch accumulator
   (`newTotalRevIndex: Dictionary<Empire,int>`) that only `Rebellion` writes to, committed (replacing,
   not adding to, the prior value) once at the end of the tick — a snapshot/accumulate/commit pattern,
   not something a live sum could reproduce (reading a "current total" partway through would be
   order-dependent on which worlds had already been processed).
-- **Real-time mutator** (`CombatOutcome`'s private `ChangeTotalRevIndex`, Phase 5f): combat resolution
+- **Real-time mutator** (`CombatOutcome`'s private `ChangeTotalRevIndex`): combat resolution
   mutates the field directly and immediately, mid-turn, matching Pascal's own `ChangeTotalRevIndex`
   (`PRIMINTR.PAS:1085-1096` — no clamp, unlike the per-world `[0,100]` `ChangeRevIndex`).
 
 A per-world `RevolutionIndex` clamp (`AnnualTickHandler.ChangeRevIndex`, `[0,100]`) is shared between
 the annual tick and `CombatOutcome`'s `ConquerWorld`/`NewCapital` — promoted from `private` to
-`internal` in Phase 5f rather than duplicated, the same way `VisibilityHandler.ScoutAdjacent` (which
+`internal` rather than duplicated, the same way `VisibilityHandler.ScoutAdjacent` (which
 already *is* Pascal's `Scout(Emp,XY)` primitive, gaps and all) was promoted for `ConquerWorld`'s own
 `Scout` call. Real Pascal keeps both in `PRIMINTR.PAS`, a shared primitives unit multiple other units
 `USE` — this mirrors that shape instead of introducing a new file for two one-line callers.
 
 ## News: from a Pascal union to real typed fields
 
-`NewsItem` (Phase 4) replaces Pascal's `NewsRecord.Loc: Location` union (an entity reference almost
+`NewsItem` replaces Pascal's `NewsRecord.Loc: Location` union (an entity reference almost
 always, but a bare `Coordinate` for `ConstructionCompleted` specifically) with two real nullable
 fields — `Subject: ISectorObject?` / `Position: Coordinate?` — typed via a new `ISectorObject`
 interface (`Coordinate Location`, `Empire Owner`) rather than `object`. Earned by a genuine
-third/fourth occurrence, not invented for this occasion: `VisibilityHandler.FindProbeTarget` (Phase 3)
-already dispatched across the same concrete types by hand. `Fleet` joined `ISectorObject` in Phase 5f,
-once `ResolveAttack`'s fleet-target branch needed to fire a Global news item with a fleet as its
-subject.
+third/fourth occurrence, not invented for this occasion: `VisibilityHandler.FindProbeTarget`
+already dispatched across the same concrete types by hand. `Fleet` joined `ISectorObject` once
+`ResolveAttack`'s fleet-target branch needed to fire a Global news item with a fleet as its subject.
 
 The recurring Pascal `(Loc,Emp)` shape (most combat/interaction headlines carry a second empire via
 `Ord(Emp)`, since `Parm1..3` were its only generic slots) became a real `Empire? OtherEmpire` field.
-Four headlines (`GLBDest`/`GLBConq`/`GLBCapConq`/`GLBLAMStrk`, Phase 5f) turned out to need *two*
+Four headlines (`GLBDest`/`GLBConq`/`GLBCapConq`/`GLBLAMStrk`) turned out to need *two*
 empire references — `(Loc,Attacker,Defender)`, not `(Loc,Emp)` — so `NewsItem`/`Empire.AddNews`/
 `Game.AddGlobalNews` gained a second real `Defender: Empire?` field rather than falling back to
 Pascal's own raw-`Parm1`/`Parm2` packing, the exact pattern `OtherEmpire` was added to avoid in the
@@ -120,12 +119,12 @@ first place.
 own ordinal) alongside its unlock delegate.
 
 `Game.AddGlobalNews` broadcasts to every empire that's scouted the source, excluding a caller-supplied
-set — built from scratch in Phase 4 (`Rebellion`'s "world goes independent" branch was the first real
-caller) since nothing needed a broadcast-style news call before then.
+set — built from scratch (`Rebellion`'s "world goes independent" branch was the first real caller)
+since nothing needed a broadcast-style news call before then.
 
 ## Combat: a unified `AttackType` axis
 
-`AttackType` (`Types/AttackType.cs`, Phase 5c) mirrors Pascal's `AttackTypes = NoRes..nnj` — spanning
+`AttackType` (`Types/AttackType.cs`) mirrors Pascal's `AttackTypes = NoRes..nnj` — spanning
 `DefenseType ∪ ShipType ∪ {Legion, NinjaLegion}`, a genuine single cross-product axis for
 `CombatTable[Attacker,Defender]`. `DefenseType`/`ShipType` stay exactly as they are (real per-type
 stored state lives on `DefenseCounts`/`ShipCounts`); `AttackType` is purely a combat-engine indexing
@@ -138,8 +137,8 @@ rather than ported — its row/column in every combat table is all zero and neve
 Real Pascal marks a fixed array slot `InUse:=False` (`INTRFACE.PAS:1657`) because it has no real list
 to remove an eliminated empire from. This port does have one (`Game.Empires: List<Empire>`), and
 `Game.NextEmpire`/`Game.IsFirstEmpire` already re-derive everything live (`Empires.IndexOf(current)`,
-`Empires[0]`) rather than caching a position — hand-traced before committing to this (Phase 5a) that
-plain `Empires.Remove(eliminated)` self-heals the "one annual tick per lap" invariant regardless of
+`Empires[0]`) rather than caching a position — hand-traced before committing to this that plain
+`Empires.Remove(eliminated)` self-heals the "one annual tick per lap" invariant regardless of
 *when* in a lap the removal happens: if the removed empire wasn't at position 0, nothing observable
 changes; if it was, whoever was at position 1 slides into position 0 and becomes the new lap anchor
 from then on, because both `Count` and `Empires[0]` are re-read live on every call, never stored. No
@@ -148,29 +147,29 @@ new `IsEliminated` field, no guards needed anywhere `Game.Empires` is already it
 isn't in the list any more, so there's nothing to filter.
 
 Only a human empire is exempt from removal, matching Pascal's own `EmpirePlayer` branch in
-`ConquerEmpire`: `Empire.DefeatedBy: Empire?` (Phase 5f) replaces Pascal's capital-sentinel trick
+`ConquerEmpire`: `Empire.DefeatedBy: Empire?` replaces Pascal's capital-sentinel trick
 (`ConquerEmpire`, `ATTACK.PAS:1120-1131`, overloads `Capital: IDNumber` with `ObjTyp:=Void;
-Index:=Ord(Player)` to record the winner) — the same shape of problem `NewsItem.Loc` had before Phase
-4's split, fixed the same way: `Capital = null` (already means "no capital" unambiguously) plus a
-real second field for the second fact. The write is real Pascal behavior `ConquerEmpire`'s port needs
-regardless of a reader; nothing reads `DefeatedBy` yet (no human `ITurnHandler` exists — Phase 8's
-job), matching the "port the real branch, leave it unread until its phase exists" precedent already
-set by `Empire.News.Clear()` (Phase 4).
+Index:=Ord(Player)` to record the winner) — the same shape of problem `NewsItem.Loc` had before the
+`Subject`/`Position` split above, fixed the same way: `Capital = null` (already means "no capital"
+unambiguously) plus a real second field for the second fact. The write is real Pascal behavior
+`ConquerEmpire`'s port needs regardless of a reader. This port has no code path that reads
+`DefeatedBy` today — matching the same precedent as `Empire.News.Clear()`: port the branch Pascal
+actually takes, independent of whether something already consumes the result.
 
 ## Standalone attack mechanics: port what's live, skip what's dead
 
-`Combat/CombatStandalone.cs` (Phase 5g) covers four ATTACK.PAS/SBASE.PAS procedures that sit outside
+`Combat/CombatStandalone.cs` covers four ATTACK.PAS/SBASE.PAS procedures that sit outside
 `CombatResolution.NPEAttack`'s own group/shell round loop — each its own separate Pascal entry point,
 not a branch that loop reaches on its own:
 
 - **`LAMAttack` and `DestroyConstructionOrGate` are ported.** Both are live in the shipped 1.31 game
-  (confirmed by tracing every caller, not assumed) — `LAMAttack` from `DESIGN.PAS`'s `LaunchLAM` (human
-  command, Phase 8) and `NPE00`/`NPE03`/`NPEINTR`'s guardian/NPE strikes (Phase 6); `ATTNPE.PAS`'s own
+  (confirmed by tracing every caller, not assumed) — `LAMAttack` from `DESIGN.PAS`'s `LaunchLAM` (a
+  human command) and `NPE00`/`NPE03`/`NPEINTR`'s guardian/NPE strikes; `ATTNPE.PAS`'s own
   `NPEAttack` calls `DestroyConstructionOrGate` directly for a construction-site/stargate target — a
   real branch of *already-ported* code (`CombatResolution.NPEAttack`), not a future consumer, so it's
   wired in now rather than left for later. `LAMAttack`'s `Random` parameter is dropped entirely (not
   threaded through unused) — confirmed by reading, it has no `Rnd` call anywhere in its body, the only
-  Phase 5 procedure with that property.
+  one of these four procedures with that property.
 - **`HolocaustWorld`/`HolocaustEffectiveness` are NOT ported — confirmed dead code, not deferred.**
   Their only caller (`MSCCOMM.PAS`'s `HolocaustCommand`) is wrapped in a Pascal comment, along with its
   own forward interface declaration and its `PLAYTURN.PAS` dispatch entry — the real game could not
@@ -178,8 +177,8 @@ not a branch that loop reaches on its own:
   `Consolidate` (see `PASCAL_ARCHITECTURE_NOTES.md`'s "Findings from porting" section) — a different
   category from "live Pascal, no port-side caller yet" (`SelfDestructObject`, below), and important not
   to conflate: the first is never worth porting, the second is a real primitive waiting on a phase.
-- **`SelfDestructObject` is ported with no port-side caller yet** (Phase 8's `SelfDestructCommand`
-  doesn't exist), same `Empire.News.Clear()` precedent as `DefeatedBy` above — but *is* real, reachable
+- **`SelfDestructObject` is ported with no port-side caller** — no `SelfDestructCommand` exists in
+  this port — same `Empire.News.Clear()` precedent as `DefeatedBy` above — but *is* real, reachable
   Pascal (`MSCCOMM.PAS:519`, dispatched live from `PLAYTURN.PAS`, outside the `(*ARTIFACTS*)` block that
   disables Holocaust). An earlier research pass claimed otherwise; that claim was wrong and has been
   corrected (`PASCAL_ARCHITECTURE_NOTES.md` again) rather than left standing.
@@ -197,7 +196,7 @@ not a branch that loop reaches on its own:
 
 `Empire.Probes`/`Probe`/`ProbeStatus` (a pre-existing stub literally mirroring Pascal's 4-state
 `ProbeRecord`) simplified to `Empire.ProbesInTransit: List<Coordinate>` plus `TryLaunchProbe`/
-`MaxProbesInTransit` in Phase 3 — `ProbeRecord` (`DATASTRC.PAS:170-175`) has no position field, only a
+`MaxProbesInTransit` — `ProbeRecord` (`DATASTRC.PAS:170-175`) has no position field, only a
 destination and status, so a probe doesn't move incrementally at all; `UpdateProbes` resolves an
 in-transit probe in one call, so "in transit" reduces to just a list of destinations. `ProbeStatus`'s
 `AtDestination`/`Lost` states were dropped as confirmed dead code (see
@@ -209,8 +208,8 @@ in-transit probe in one call, so "in transit" reduces to just a list of destinat
 Two ways to get real-Pascal ground truth for a C# behavior, so a check can't silently agree with the
 same hand-derivation mistake on both sides.
 
-**Patch-based (`reference/verify/`) — the default**, used by every domain landed since Phase 2's
-`techlevel`. Small maintained patches (`reference/verify/patches/*.PAS.patch`) apply to a disposable
+**Patch-based (`reference/verify/`) — the default**, used by every domain since the harness's first
+one, `techlevel`. Small maintained patches (`reference/verify/patches/*.PAS.patch`) apply to a disposable
 copy of the real `reference/DOSAnacreonSource131/*.PAS` source (`reference/verify/patched/`,
 gitignored, rebuilt every run); `runworld.pas` then calls the real, only-minimally-touched Pascal
 procedure(s) directly against a hand-assembled `Universe^`. Full mechanics, layout, and the
@@ -230,14 +229,14 @@ call *ordering* across a real pipeline is what's being checked — transcription
 way once (`UpdateMilitary` mutating `Cargo.Legions` before `UpdateRevolution` reads it). Transcription
 only for a procedure with no such dependency. Don't gate the choice on authoring cost — lean into
 patch-based broadly. Dependency-blast-radius judgment still applies: each new subsystem's dependency
-web is its own investigation, not something the domains above generalize to automatically — Phase 6
-is the first to actually pull in `Intrface`'s `Fleet`/`Orders`/`NPE` web (patching `FLEET.PAS` as
-part of its 6a), decided when that phase was scoped, not assumed in advance.
+web is its own investigation, not something the domains above generalize to automatically — fleet
+movement fidelity was the first to actually pull in `Intrface`'s `Fleet`/`Orders`/`NPE` web (patching
+`FLEET.PAS`), decided when that work was scoped, not assumed in advance.
 
 ## NPE AI: personality dispatch, not one generic AI
 
-Phase 6's own scoping pass (six research forks reading every NPE-adjacent Pascal file in full)
-found real Pascal implements **four structurally distinct NPE personalities** — Pirate, Kingdom,
+A scoping pass (six research forks reading every NPE-adjacent Pascal file in full) found real
+Pascal implements **four structurally distinct NPE personalities** — Pirate, Kingdom,
 Berserker, Guardian, each its own file with its own private data record in `NPETYPES.PAS`
 (`PirateDataRecord`/`Kingdom1DataRecord`/`BerserkerDataRecord`/`GuardianDataRecord`) — dispatched
 from `NPE.PAS`'s `NPEData[Emp].Typ: NPEmpireTypes` via a classic Pascal variant-pointer union
@@ -251,11 +250,11 @@ case arms in any of `NPE.PAS`'s 5 dispatch procedures, no data record, and zero 
 
 **No `NPEDataRecord`-style tagged union in C#.** Pascal's variant pointer exists only because its
 dispatch array (`NPEData: ARRAY[Empire]`) needs one element type regardless of which AI runs. This
-port's `Game.TurnHandlers: Dictionary<Empire, ITurnHandler>` (pre-existing, Phase 1) already gets
+port's `Game.TurnHandlers: Dictionary<Empire, ITurnHandler>` (pre-existing) already gets
 that for free through ordinary polymorphism — a parallel tagged-union type would port Pascal's
 workaround into a codebase that doesn't have the problem it works around, the same call already
 made for empire elimination above. `KingdomTurnHandler : ITurnHandler` is the one implementation
-Phase 6 builds; `PirateTurnHandler`/`BerserkerTurnHandler`/`GuardianTurnHandler` slot in later as
+built so far; `PirateTurnHandler`/`BerserkerTurnHandler`/`GuardianTurnHandler` slot in later as
 their own classes when picked up — no shared AI base class invented ahead of a second real
 implementation to generalize from.
 
@@ -263,13 +262,12 @@ implementation to generalize from.
 `NPEINTR.PAS` (1,732 lines) is a real toolkit multiple personalities call in Pascal — fleet
 deployment, targeting, mission-dispatch, bookkeeping — not Kingdom-private code, so it's ported as
 its own service `KingdomTurnHandler` depends on rather than folded into Kingdom's own class; later
-personalities call the same methods. `Empire.NpeType: NpeEmpireType?` (recording which personality
-an empire is) is real, needed-now state regardless of how many personalities are implemented —
-Phase 7's save/load needs it, and (landed in 6b) `ScenarioLoader.RunCreateNPEmpire` now records it
-on every NPE empire and constructs a `KingdomTurnHandler` for `Kingdom1`/`Kingdom2` specifically;
-other types are recorded but left with no `Game.TurnHandlers` entry until their own personality
-lands. Per-fleet AI mission state (Pascal's `FleetDataRecord`) got a field-by-field audit before anything
-was ported (Phase 6c), not a verbatim mirror — every real read/write site checked directly rather
+personalities call the same methods. `Empire.NpeType: NpeEmpireType?` records which personality an
+empire is — read by save/load, and by `ScenarioLoader.RunCreateNPEmpire`, which records it on every
+NPE empire and constructs a `KingdomTurnHandler` for `Kingdom1`/`Kingdom2` specifically; other types
+are recorded but have no `Game.TurnHandlers` entry until their own personality is implemented.
+Per-fleet AI mission state (Pascal's `FleetDataRecord`) got a field-by-field audit before anything
+was ported, not a verbatim mirror — every real read/write site checked directly rather
 than guessed. Result: `Mission`/`TargetID`/`HomeBaseID`/`Waiting` are real and kept (as
 `Core/Npe/NpeTypes.cs`'s `KingdomFleetState.Mission`/`Target`/`HomeBase`/`Waiting`); `Index`
 dissolves into the owning `Dictionary<Fleet, KingdomFleetState>`'s key. `Midway` is confirmed
@@ -279,30 +277,30 @@ grid, not part of the shared toolkit) — neither ported for Kingdom. `Waiting` 
 out not to be derivable from `FleetStatus` as an earlier pass here guessed — it's a real 0-5
 raid-dwell counter `ImplementRaidTrnMSN` increments per turn, not a movement state.
 
-**`NPEINTR.PAS` itself splits into two commits along a real dependency line, not an arbitrary
+**`NPEINTR.PAS` itself splits into two pieces along a real dependency line, not an arbitrary
 cut.** Every one of its procedures either reads state and computes a value, or creates/moves/
 refuels a fleet. The read-and-compute half (`MilitaryPower`, targeting, regional bookkeeping,
-world (re)designation — `Core/Npe/NpeToolkit.cs`, 6c) needs nothing beyond what already exists in
+world (re)designation — `Core/Npe/NpeToolkit.cs`) needs nothing beyond what already exists in
 the port. The other half (the five `Deploy*Fleet` procedures, all eight `Implement*MSN` mission
 executors) needs real fleet-lifecycle primitives — `DeployFleet`, `ChangeCompositionOfFleet`,
 `EstimatedDateOfArrival`/`EstimatedRange`, `RefuelFleet`, `SetFleetDestination` (FLEET.PAS/
-PRIMINTR.PAS) — that don't exist anywhere in this port yet; every prior phase only ever moved or
-destroyed fleets that scenario loading or human setup already created, never made a new one from a
-world's own stock. That half is its own later commit (6c-2 or folded into 6d), with
-`KingdomTurnHandler` as its first real caller, rather than bundled into 6c where it would make the
-whole file unverifiable until the very last primitive landed.
+PRIMINTR.PAS) — that didn't exist anywhere in this port before; every earlier subsystem only ever
+moved or destroyed fleets that scenario loading or human setup already created, never made a new
+one from a world's own stock. That half is its own separate unit, with `KingdomTurnHandler` as its
+first real caller, kept apart from the read-and-compute half so the whole file wouldn't be
+unverifiable until the very last fleet-lifecycle primitive was in place.
 
-**Ground truth for 6c stayed hardcoded, not golden-file, on purpose.** By the time 6c was scoped
-the fuller Pascal tree (see "Ground-truth harness generation" above) was already the default build,
-so the "grows one grudging function at a time" cost that used to justify reaching for
-transcription over patching no longer applies — but 6c's own methods don't need a new patched
-domain either way: every one either has no `Rnd`/`Random` call, or draws inside a scan-every-planet
-loop whose count depends on live galaxy shape, and a golden case for the second group would need a
-full hand-assembled universe to mean anything close to real play. Phase 7's save/load work is what
-makes building one of those cheap — revisit then rather than investing in scaffolding now that a
-few phases' wait makes unnecessary.
+**Ground truth for the read-and-compute half stayed hardcoded, not golden-file, on purpose.** By
+the time this was scoped the fuller Pascal tree (see "Ground-truth harness generation" above) was
+already the default build, so the "grows one grudging function at a time" cost that used to justify
+reaching for transcription over patching no longer applies — but these methods don't need a new
+patched domain either way: every one either has no `Rnd`/`Random` call, or draws inside a
+scan-every-planet loop whose count depends on live galaxy shape, and a golden case for the second
+group would need a full hand-assembled universe to mean anything close to real play. Save/load,
+now that it exists, would make building one of those cheap — worth revisiting if this ever needs
+tighter verification, not worth scaffolding for preemptively.
 
-Full commit breakdown and reachability data: `docs/ROADMAP.md`'s Phase 6 section.
+Full breakdown and reachability data: see `docs/ROADMAP.md`'s Kingdom NPE AI entry.
 
 **Adding a new patch-based domain:**
 1. If the target procedure isn't already exported from its unit's `INTERFACE`, add/extend a patch —
@@ -348,5 +346,5 @@ Full commit breakdown and reachability data: `docs/ROADMAP.md`'s Phase 6 section
   sequence.** `ForcedRandomValue` (`FixedRandom` on the C# side) makes every `Rnd` call in a run
   return the same underlying draw, mapped into that call's own `[min,max]` range — with `RngFixedValue=0`,
   every `Rnd(min,max)` call returns exactly `min`. Hand-trace which branch that drives *before*
-  picking case parameters, the same way Phase 5f's `ConquerEmpire` cases were designed against the
+  picking case parameters, the same way `ConquerEmpire`'s own combat cases were designed against the
   exact `AND`-short-circuit/`Rnd` operand order in `ATTACK.PAS`, not just the intended outcome.
