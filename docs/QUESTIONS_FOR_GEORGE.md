@@ -106,7 +106,7 @@ quirk findings these questions are drawn from, with more detail on how each was 
   neither the 1.31 nor the 2.0 source's `CreateBase`.** Confirmed directly against both trees, and
   independently against the genuine pristine DOS 1.31 binary, which hits the identical "Unknown
   command 3500" failure this port's own harness produces, in the same place, right after empire
-  creation (`src/ThreeLn.Reconstruction4021.Tests/PascalGroundTruth/ScenarioCases.cs`'s own doc
+  creation (`src/Reconstructed4021.Tests/PascalGroundTruth/ScenarioCases.cs`'s own doc
   comment has the detail) — so this isn't a desync this port introduced, real 1.31 can't load this
   file either. Was `PRINCES.SCN` ever played successfully in some other build, or does this point
   at a bug in whatever tool originally authored/edited the `.SCN` file rather than in the game

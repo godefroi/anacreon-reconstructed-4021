@@ -1,6 +1,0 @@
-<Solution>
-  <Project Path="src/ThreeLn.Reconstruction4021/ThreeLn.Reconstruction4021.csproj" />
-  <Project Path="src/ThreeLn.Reconstruction4021.Core/ThreeLn.Reconstruction4021.Core.csproj" />
-  <Project Path="src/ThreeLn.Reconstruction4021.Tests/ThreeLn.Reconstruction4021.Tests.csproj" />
-  <Project Path="src/ThreeLn.Reconstruction4021.Tui/ThreeLn.Reconstruction4021.Tui.csproj" />
-</Solution>

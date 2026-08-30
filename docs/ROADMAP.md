@@ -638,7 +638,7 @@ to a Terminal.Gui primitive; this section narrates the build against that map, i
 screens' own real order (`ANACREON.PAS`'s `Introduction`, then `PROLOG.PAS`'s `MainTitle`/
 `SetUpPlayer`) before the map itself.
 
-- **8a, project scaffold + galaxy map viewport.** New `ThreeLn.Reconstruction4021.Tui` project.
+- **8a, project scaffold + galaxy map viewport.** New `Reconstructed4021.Tui` project.
   `GalaxyView` renders the scrollable galaxy map as a custom `View`: glyphs and colors come from
   `MAPWIND.PAS`'s `CellRecord` and `DATACNST.PAS`'s `TypeStr`/`BaseTypeData`/`GateTypeData`, not
   invented, and a cursor overlay matches `DrawMapCursor`'s corner-bracket style. Fleet indicators

@@ -40,7 +40,7 @@ covers.
 - `build.ps1` — deletes and regenerates `patched/` from pristine source + `patches/` + `shims/`,
   then compiles `runworld.pas`. Run it, then run `.\patched\runworld.exe case ...` for manual
   iteration. The C# test suite doesn't shell out to this script — `PatchHarness.cs` (in
-  `src/ThreeLn.Reconstruction4021.Tests/PascalGroundTruth/`) does the same copy/patch/compile/run
+  `src/Reconstructed4021.Tests/PascalGroundTruth/`) does the same copy/patch/compile/run
   steps directly, so `GoldenFileTests` can call it like any other harness.
 - `build-all-units.ps1` — a separate, broader smoke test: compiles every pristine unit standalone
   under `fpc`, one dependency tier at a time (see `uses-map.json` below), against this same
@@ -483,7 +483,7 @@ algorithms pulled from `fpc`'s own RTL source at matching tags settled it empiri
 reseed/tempering convention — matched exactly, including a mid-run reseed, a fresh-seed replay,
 and a draw crossing the generator's 624-word internal state refill.
 
-`src/ThreeLn.Reconstruction4021.Tests/PascalRandom.cs` is a from-scratch `System.Random` subclass
+`src/Reconstructed4021.Tests/PascalRandom.cs` is a from-scratch `System.Random` subclass
 porting that exact algorithm, test-only (production code has no need for Pascal-bit-exact
 randomness — only a golden-file comparison does). `rng.golden`/`RngCases.cs`/`PascalRandomTests.cs`
 are a standing regression fixture for it: `runworld.pas`'s `RunRngCase` sets a real `RandSeed` and

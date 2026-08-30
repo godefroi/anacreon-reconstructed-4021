@@ -1,4 +1,4 @@
-# AnacreonReconstruction4021
+# AnacreonReconstructed4021
 
 A from-scratch C# port of the DOS 4X game *Anacreon* (targeting the 1.31 release), reconstructed
 directly from its original Turbo Pascal source (`reference/DOSAnacreonSource131/`).
@@ -13,10 +13,10 @@ plausible-sounding guess.
 
 Core simulation (economy, galaxy/scenario setup, probes, news, combat), Kingdom NPE AI, and save/load
 (DOS `.SAV` import plus a native JSON format) are done. A Terminal.Gui interface
-(`src/ThreeLn.Reconstruction4021.Tui`) is under construction — the galaxy map, navigation shell,
+(`src/Reconstructed4021.Tui`) is under construction — the galaxy map, navigation shell,
 startup/title screens, and New Game flow work; the human `ITurnHandler` and most in-game command
 screens (fleet orders, combat, construction, etc.) don't exist yet, and `dotnet run` on the
-placeholder `ThreeLn.Reconstruction4021` entry point still isn't a playable game. See
+placeholder `Reconstructed4021` entry point still isn't a playable game. See
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for how this was built, and [`docs/OPEN_GAPS.md`](docs/OPEN_GAPS.md)
 for known limitations in what exists so far.
 
@@ -26,8 +26,8 @@ Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download). There's no so
 or test a specific project directly from the repo root:
 
 ```
-dotnet build src/ThreeLn.Reconstruction4021
-dotnet test src/ThreeLn.Reconstruction4021.Tests
+dotnet build src/Reconstructed4021
+dotnet test src/Reconstructed4021.Tests
 ```
 
 Most tests run against the C# port alone. A subset compares against real compiled Pascal output
@@ -43,14 +43,14 @@ to Windows Terminal's own rendering pipeline, not the app -- Terminal.Gui tracks
 [tui-cs/Terminal.Gui#4588](https://github.com/tui-cs/Terminal.Gui/issues/4588) (open; the one fix
 attempt, [#4589](https://github.com/tui-cs/Terminal.Gui/pull/4589), was closed unmerged). Switching
 Windows Terminal's text renderer from its default to Direct2D (Settings -> Rendering) has resolved
-it in practice. See also `src/ThreeLn.Reconstruction4021.Tui/Program.cs`'s own notes on a related
+it in practice. See also `src/Reconstructed4021.Tui/Program.cs`'s own notes on a related
 ConPTY tearing issue ([#5323](https://github.com/tui-cs/Terminal.Gui/issues/5323)).
 
 ## Repository layout
 
-- **`src/`** — the C# port. `ThreeLn.Reconstruction4021.Core` is the simulation itself;
-  `ThreeLn.Reconstruction4021.Tui` is the Terminal.Gui interface (in progress);
-  `ThreeLn.Reconstruction4021` is the (currently placeholder) entry point; `*.Tests` is everything
+- **`src/`** — the C# port. `Reconstructed4021.Core` is the simulation itself;
+  `Reconstructed4021.Tui` is the Terminal.Gui interface (in progress);
+  `Reconstructed4021` is the (currently placeholder) entry point; `*.Tests` is everything
   else, including the Pascal ground-truth harness.
 - **`reference/DOSAnacreonSource131/`** — the pristine, unmodified 1.31 Turbo Pascal source. Never
   edited directly — see `reference/verify/README.md` for how changes to it are made (as patches,
