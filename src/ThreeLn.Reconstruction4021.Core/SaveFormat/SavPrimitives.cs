@@ -43,13 +43,13 @@ public readonly record struct SavIdNumber(SavObjectType ObjectType, byte Index)
 /// declared byte size (Turbo Pascal picks the smallest type that fits a declared range, so this is
 /// <em>not</em> always the type's C#-idiomatic width — <c>XYCoord</c> is 2 bytes, not 4), length
 /// -prefixed <c>STRING[N]</c> buffers, and bitset-shaped <c>SET OF T</c> values. See
-/// <see cref="SavWriter"/> for the write-side counterpart (Phase 7g).
+/// <see cref="SavWriter"/> for the write-side counterpart.
 ///
 /// Deliberately does not preserve opaque bytes (pointer fields, `Reserved` arrays, unused string
 /// buffer tails) the way `scripts/savtool.py`/`.ps1` do — those tools exist for a byte-identical
-/// round trip; this reader feeds a live <see cref="Game.cs"/> object graph that has nowhere to put
-/// garbage bytes and no need to, since this phase's `.SAV` write-back is a correctness-verification
-/// tool, not a byte-faithful save format (see `docs/ROADMAP.md` Phase 7's scope note).
+/// round trip; this reader feeds a live <see cref="Game"/> object graph that has nowhere to put
+/// garbage bytes and no need to, since `.SAV` write-back in this port is a correctness-verification
+/// tool, not a byte-faithful save format (see `docs/ROADMAP.md`'s save/load notes).
 /// </summary>
 public sealed class SavReader(byte[] data)
 {
@@ -150,10 +150,10 @@ public sealed class SavReader(byte[] data)
 /// <summary>
 /// Sequential little-endian writer, the exact mirror of <see cref="SavReader"/> — same primitive
 /// shapes, same deliberate non-goal of byte-faithful reproduction (a `Reserved`/pointer-field byte
-/// is always written as zero, never round-tripped, since nothing in <see cref="Game.cs"/> has one to
-/// preserve). Built for Phase 7g's minimal `.SAV` write-back verification tool
-/// (<see cref="SavGameWriter"/>): the bar is "real Pascal `LoadGame` accepts the result," not a
-/// byte-identical file — see `docs/ROADMAP.md` Phase 7's scope note.
+/// is always written as zero, never round-tripped, since nothing in <see cref="Game"/> has one to
+/// preserve). Built for <see cref="SavGameWriter"/>, this port's minimal `.SAV` write-back
+/// verification tool: the bar is "real Pascal `LoadGame` accepts the result," not a byte-identical
+/// file — see `docs/ROADMAP.md`'s save/load notes.
 /// </summary>
 public sealed class SavWriter
 {

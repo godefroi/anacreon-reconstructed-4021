@@ -9,7 +9,7 @@ namespace ThreeLn.Reconstruction4021.Core.SaveFormat;
 /// <summary>
 /// `.SAV` file import (`LOADSAVE.PAS`'s `LoadGame`, `docs/SAV_FILE_FORMAT.md`). Builds this
 /// port's real <see cref="Game"/>/<see cref="Galaxy.Galaxy"/>/entity object graph directly from
-/// the on-disk bytes — see `docs/ROADMAP.md` Phase 7's scope note for why this is the priority
+/// the on-disk bytes — see `docs/ROADMAP.md`'s save/load notes for why this is the priority
 /// (real captured saves as ground truth/testing, user-facing import) versus the new native JSON
 /// format being the actual long-term save format.
 ///
@@ -125,9 +125,9 @@ public sealed class SavGameLoader
     }
 
     /// `LoadEnvironment` (`ENVIRON.PAS:127-138`). `EmpiresToMove` is read and discarded — genuinely
-    /// redundant with `Game.CurrentEmpire`/`NextEmpire()` (see `docs/ROADMAP.md` Phase 7's scope
-    /// note). `TimePerTurn`/`AutoSave`/`AsyncTurns`/`PauseActive`/`ReEnterGame` are UI/session
-    /// settings with no effect anywhere in this port yet — also read and discarded.
+    /// redundant with `Game.CurrentEmpire`/`NextEmpire()`. `TimePerTurn`/`AutoSave`/`AsyncTurns`/
+    /// `PauseActive`/`ReEnterGame` are UI/session settings with no effect anywhere in this port —
+    /// also read and discarded.
     private static (int Year, int PlayerOrdinal, string ScenarioFilename) LoadEnvironment(SavReader reader)
     {
         var year = reader.ReadWord();
@@ -370,8 +370,8 @@ public sealed class SavGameLoader
     /// `LoadFleets` (`LOADSAVE.PAS:227-263`). Reproduces the real load-time quirk verbatim
     /// (`LOADSAVE.PAS:250-256`): if any single axis of `XY`/`Dest` is exactly 0, both coordinates
     /// reset to `(1,1)` — confirmed to fire on a per-component basis, not "both coordinates are
-    /// (0,0)". `CommandRecord` order queues are read and discarded (`docs/ROADMAP.md` Phase 7's
-    /// tracked gap — no in-memory representation exists yet). `NextOrder`/`OrderData` are Pascal's
+    /// (0,0)". `CommandRecord` order queues are read and discarded (`docs/ROADMAP.md`'s own tracked
+    /// gap: no in-memory representation exists). `NextOrder`/`OrderData` are Pascal's
     /// own legacy/superseded fields, already dead before this file was even written.
     /// </summary>
     private void LoadFleets(SavReader reader, Galaxy.Galaxy galaxy)
@@ -395,7 +395,7 @@ public sealed class SavGameLoader
 
             reader.Skip(1); // NextOrder -- legacy, superseded by the CommandRecord queue below
             reader.Skip(6); // OrderData -- same legacy status
-            reader.Skip(1); // NPEDataIndex -- Phase 6's Kingdom AI keys fleet state by Fleet reference, not this index
+            reader.Skip(1); // NPEDataIndex -- Kingdom AI keys fleet state by Fleet reference, not this index
             reader.Skip(8); // Reserved
             reader.ReadIdNumber(); // NextID -- unused linked-list field
 
@@ -487,8 +487,8 @@ public sealed class SavGameLoader
     /// <summary>
     /// `LoadMessageData` (`MESS.PAS:252-367`). No in-memory message concept exists anywhere in this
     /// port — in-game player-to-player messages are a human-UI feature (the same
-    /// `ATTCOMM`/`FLTCOMM`/`ORDERS`-adjacent DOS-UI cluster `docs/ROADMAP.md` already scopes to
-    /// Phase 8), so every message is read and discarded, same "no home yet" treatment as the Fleet
+    /// `ATTCOMM`/`FLTCOMM`/`ORDERS`-adjacent DOS-UI cluster `docs/ROADMAP.md` already scopes to the
+    /// human UI), so every message is read and discarded, same "no home" treatment as the Fleet
     /// order queue.
     /// </summary>
     private static void LoadMessages(SavReader reader)
@@ -663,7 +663,7 @@ public sealed class SavGameLoader
             _empireIsPlayer[slot] = isAPlayer;
 
             if (!inUse) {
-                continue; // Placeholder stays inert -- never added to Game.Empires (Empire.cs's own doc comment).
+                continue; // Placeholder stays inert -- never added to Game.Empires (see this class's own doc comment on the 8 placeholder slots).
             }
 
             empire.Name = name;
@@ -722,8 +722,8 @@ public sealed class SavGameLoader
     /// not a per-headline one. `OtherEmpire`/`TechGrant` are the two exceptions with real,
     /// per-headline meaning beyond that, decoded via the two confirmed tables above; every other
     /// headline keeps `Parm1-3` as plain ints with no further interpretation, matching
-    /// <see cref="NewsItem"/>'s own shape for whatever this port hasn't wired a real call site for
-    /// yet (e.g. `MessageReceived`, since no in-memory message concept exists — see
+    /// <see cref="NewsItem"/>'s own shape for whatever this port has no real call site for (e.g.
+    /// `MessageReceived`, since no in-memory message concept exists — see
     /// <see cref="LoadMessages"/>).
     /// </summary>
     private void LoadNewsData(SavReader reader, Game game)

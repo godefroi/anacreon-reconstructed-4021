@@ -7,10 +7,10 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Core.SaveFormat;
 
 /// <summary>
-/// Phase 7g's minimal `.SAV` write-back: `WriteGame(Game) → byte[]`, the exact section-by-section
+/// This port's minimal `.SAV` write-back: `WriteGame(Game) → byte[]`, the exact section-by-section
 /// mirror of <see cref="SavGameLoader"/>'s own `Load*` methods, in the same on-disk order. Built
-/// purely to make `LoadGame` (`LOADSAVE.PAS`, unmodified) accept the result — see `docs/ROADMAP.md`
-/// Phase 7's scope note for why this is a test-only verification tool, not a byte-faithful or
+/// purely to make `LoadGame` (`LOADSAVE.PAS`, unmodified) accept the result — see `docs/ROADMAP.md`'s
+/// save/load notes for why this is a test-only verification tool, not a byte-faithful or
 /// maintained save format (the native JSON format, <see cref="GameJson"/>, is that): no order-queue
 /// reconstruction (none exists in this port), no message content (none exists either), no attempt to
 /// reproduce a `Reserved`/pointer field's original garbage bytes (always zero here).
@@ -28,9 +28,8 @@ namespace ThreeLn.Reconstruction4021.Core.SaveFormat;
 /// is reassigned to <see cref="Empire.Independent"/> and every fleet destroyed before the empire is
 /// removed) — but a minefield's owner and mine-scouted-by set (<see cref="Galaxy.Galaxy.MinefieldData"/>/
 /// <see cref="Galaxy.Galaxy.MineScoutedByData"/>) are a separate dictionary <c>DestroyEmpire</c> never
-/// touches at all, confirmed a real gap the same way: a real reference `.SAV`'s minefield owner threw
-/// a `KeyNotFoundException` the first time this writer ran against it, not a hypothetical this class's
-/// own design anticipated up front. So orphans are reachable through a Kingdom's own `State` keys,
+/// touches at all: a real reference `.SAV`'s minefield owner throws a `KeyNotFoundException` here if
+/// that empire isn't given a slot. So orphans are reachable through a Kingdom's own `State` keys,
 /// <see cref="Empire.DefeatedBy"/>, a <see cref="NewsItem"/>'s `OtherEmpire`/`Defender` fields, or a
 /// minefield's owner/scouts — <see cref="EmpireSlotIndex"/>'s constructor checks all four. An orphan's
 /// own Empire Data slot is written
@@ -240,14 +239,13 @@ public static class SavGameWriter
     /// <summary>
     /// `SaveFleets` (`LOADSAVE.PAS:188-225`). Always writes an empty order queue (`NoOfComs=0`) --
     /// no in-memory order-queue representation exists in this port (`docs/ROADMAP.md`'s tracked
-    /// Phase 7 gap). <see cref="Fleet.Destination"/> null must become `Dest:=XY`, never `(0,0)`:
+    /// gap). <see cref="Fleet.Destination"/> null must become `Dest:=XY`, never `(0,0)`:
     /// `LoadFleets`' own per-axis quirk (`LOADSAVE.PAS:250-256`) resets <em>both</em> `XY` and `Dest`
     /// to `(1,1)` the instant either coordinate has a zero component on either field, so writing a
     /// literal `(0,0)` "no destination" sentinel would silently relocate every stationary fleet on
-    /// the very next load -- confirmed as a real landmine before writing this method, not discovered
-    /// by a failing test after the fact. `runload.pas`'s own `sumfleetx`/`sumfleety` checksum fields
-    /// exist specifically to cover this path in the real-Pascal acceptance test too, not just at
-    /// design time -- see that driver's own doc comment.
+    /// the very next load. `runload.pas`'s own `sumfleetx`/`sumfleety` checksum fields exist
+    /// specifically to cover this path in the real-Pascal acceptance test -- see that driver's own
+    /// doc comment.
     /// </summary>
     private static void WriteFleets(SavWriter writer, Galaxy.Galaxy galaxy, EmpireSlotIndex slots, VisibilityIndex visibility)
     {

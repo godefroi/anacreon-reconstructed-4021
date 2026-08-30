@@ -55,3 +55,9 @@ this file once that happens.
   exposes no way to read the file's own recorded value. No real (non-test) caller exists anywhere
   in this port yet to have hit this gap in practice — confirmed by checking: every
   `new ScenarioLoader(...)` in the whole codebase is in a test file.
+
+## SaveFormat pass
+
+(none found beyond the order-queue/message/naming-system gaps already logged above, all
+cross-referenced from here too — `SavGameLoader`/`SavGameWriter` are exactly where the order-queue
+and message gaps are read-and-discarded/written-empty)

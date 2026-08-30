@@ -12,20 +12,20 @@ namespace ThreeLn.Reconstruction4021.Core.SaveFormat;
 
 /// <summary>
 /// This port's native, ongoing save format: object-graph serialization of <see cref="Game"/>.
-///
-/// Started as "one <c>JsonSerializer.Serialize(game, options)</c> call plus
-/// <c>ReferenceHandler.Preserve</c> for the real reference cycles" — that ran into four separate
-/// hard System.Text.Json incompatibilities in a row (<c>Populate</c> rejects any
-/// <c>ReferenceHandler</c>; a converter that delegates via a nested
+/// </summary>
+/// <remarks>
+/// <c>ReferenceHandler.Preserve</c> cannot handle the real reference cycles here, for four separate
+/// reasons that all trace to the same root cause. <c>JsonObjectCreationHandling.Populate</c> rejects
+/// any <c>ReferenceHandler</c> outright. A converter that delegates via a nested
 /// <c>JsonSerializer.Serialize(writer, ...)</c> call starts a *fresh* <c>WriteStack</c> that doesn't
 /// share the outer reference-tracking session, so real cycles blow through the depth guard instead
-/// of terminating via <c>$ref</c>; <c>Preserve</c>'s own metadata wrapping is flatly unsupported on
-/// constructor-bound parameters, which both <see cref="Game"/>'s and <see cref="NewsItem"/>'s
-/// constructors are). All four trace to the same thing: <c>ReferenceHandler</c> doesn't compose with
-/// the rest of System.Text.Json's object model, and reshaping load-bearing domain types
-/// (<see cref="Game"/>'s constructor, <see cref="NewsItem"/>'s positional shape — both cited in their
-/// own doc comments as deliberate) just to appease a serializer inverts the dependency this phase is
-/// supposed to respect.
+/// of terminating via <c>$ref</c>. And <c>Preserve</c>'s own metadata wrapping is flatly unsupported
+/// on constructor-bound parameters, which both <see cref="Game"/>'s and <see cref="NewsItem"/>'s
+/// constructors are. <c>ReferenceHandler</c> simply doesn't compose with the rest of
+/// System.Text.Json's object model, and reshaping load-bearing domain types (<see cref="Game"/>'s
+/// constructor, <see cref="NewsItem"/>'s positional shape — both cited in their own doc comments as
+/// deliberate) just to appease a serializer would invert the dependency this format is supposed to
+/// respect.
 ///
 /// So: no <c>ReferenceHandler</c> at all. Every entity reference (<see cref="ISectorObject.Owner"/>,
 /// <see cref="Empire.Capital"/>/<see cref="Empire.DefeatedBy"/>, <see cref="Game.CurrentEmpire"/>,
@@ -53,7 +53,7 @@ namespace ThreeLn.Reconstruction4021.Core.SaveFormat;
 /// Empire-keyed with <see cref="ITurnHandler"/> having exactly one real implementor
 /// (<see cref="KingdomTurnHandler"/>), and <see cref="Galaxy.Galaxy"/>'s nebula/minefield/mine-scout
 /// data has no public enumerator — both hand-written for the same reason.
-/// </summary>
+/// </remarks>
 public static class GameJson
 {
     /// <summary>For pure-value sub-objects with no entity references at all (<see cref="NpeCharacter"/>, <see cref="Npe.StateDeptRecord"/>, <c>List&lt;Coordinate&gt;</c>, <c>List&lt;LocationBookmark&gt;</c>) — safe to share statically since it carries no per-call state.</summary>
@@ -89,6 +89,8 @@ public static class GameJson
         return node.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
 
+    /// <summary>The inverse of <see cref="Serialize"/>.</summary>
+    /// <param name="json">A JSON document previously produced by <see cref="Serialize"/>.</param>
     /// <param name="random">
     /// Seeds any reconstructed <see cref="KingdomTurnHandler"/>'s ongoing RNG stream — a loaded
     /// empire's future turns, not its saved state, need this; same rationale as
