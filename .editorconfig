@@ -83,3 +83,13 @@ dotnet_style_qualification_for_field = false
 dotnet_style_qualification_for_property = false
 dotnet_style_qualification_for_method = false
 dotnet_style_qualification_for_event = false
+
+# Original-author reference material below is CP437-encoded and CRLF-native from its DOS
+# origin -- an editor applying [*]'s charset=utf-8/end_of_line=crlf above would corrupt it.
+[reference/{DOSAnacreonSource131,DOSAnacreonSource20,scenarios}/**]
+charset = unset
+end_of_line = unset
+
+[reference/verify/patches/**]
+charset = unset
+end_of_line = unset

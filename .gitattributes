@@ -1,0 +1,20 @@
+# This is a Windows/C# port; CRLF is the idiomatic and already-declared choice (see
+# .editorconfig's end_of_line=crlf) even though the repo's actual line endings had drifted
+# to a mix of LF and CRLF over time. Normalize text files to CRLF on checkin.
+* text=auto eol=crlf
+
+# Original-author reference material: pristine DOS Turbo Pascal 1.31/2.0 source, the
+# scenario files that shipped with them, and the fpc-compatibility patches diffed
+# byte-for-byte against that pristine source by reference/verify/build.ps1. All CP437-encoded
+# and CRLF-native from their DOS origin already -- never touch their bytes, line endings
+# included, no matter what normalization or tooling runs over the rest of the repo.
+reference/DOSAnacreonSource131/** -text
+reference/DOSAnacreonSource20/** -text
+reference/scenarios/** -text
+reference/verify/patches/*.patch -text
+
+# Real captured/authored .SAV files are binary game data, never text.
+reference/saves/*.SAV binary
+
+# Python keeps its own LF convention.
+*.py text eol=lf
