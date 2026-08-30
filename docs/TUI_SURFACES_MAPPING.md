@@ -1,6 +1,6 @@
 # TUI Surfaces Mapping
 
-Backlog for Phase 8 (`ROADMAP.md`). Every player-facing window, menu, dialog, prompt, and editor
+Backlog for the human interactive turn handler / Terminal.Gui UI (`ROADMAP.md`). Every player-facing window, menu, dialog, prompt, and editor
 in the original game, mapped to where it came from in the v1.31 Pascal source and which
 Terminal.Gui v2 primitive it should be built from. Pascal ground truth is
 `reference/DOSAnacreonSource131/` (not `DOSAnacreonSource20` — see `PASCAL_V1_VS_V2_DIFF.md`).
@@ -169,7 +169,7 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 ## Not applicable
 
 - **Artifact / Transaction / Holocaust commands** (`MSCCOMM.PAS`, `(* commented out *)`) — dead code in v1.31, not live features in this version. Revisit only if a later phase pulls features from v2 (`PASCAL_V1_VS_V2_DIFF.md`).
-- **Pre-game setup** (`PROLOG.PAS: Prologue`'s real menu bar — ~20 commands across ⌂/Game/Options/Configure: save-game slots, multi-empire setup, config toggles, time limits) — a structurally separate program phase from the in-turn player interface this doc scopes, and most of those commands have no backing feature yet. `AnacreonTitleWindow.cs` (Meta/one-off above) now covers just the two commands this project can actually do something with (New Game, Quit) as a small 4-button menu, not that real menu bar. Worth its own mapping pass, replacing that stand-in, when save/load (`ROADMAP.md` Phase 7) becomes real.
+- **Pre-game setup** (`PROLOG.PAS: Prologue`'s real menu bar — ~20 commands across ⌂/Game/Options/Configure: save-game slots, multi-empire setup, config toggles, time limits) — a structurally separate program phase from the in-turn player interface this doc scopes, and most of those commands have no backing feature yet. `AnacreonTitleWindow.cs` (Meta/one-off above) now covers just the two commands this project can actually do something with (New Game, Quit) as a small 4-button menu, not that real menu bar. Worth its own mapping pass, replacing that stand-in, now that save/load (`ROADMAP.md`) is real.
 
 ## Suggested build order
 

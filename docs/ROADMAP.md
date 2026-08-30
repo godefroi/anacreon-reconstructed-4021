@@ -632,7 +632,68 @@ feature.
 ## 8. Human interactive turn handler + Terminal.Gui UI
 
 The last `ITurnHandler` implementation, plus the actual windowed interface (map view, fleet orders,
-construction, etc.) per `TUI_LIBRARY_RECOMMENDATION.md`.
+construction, etc.), built on Terminal.Gui v2 per `TUI_LIBRARY_RECOMMENDATION.md`. `TUI_SURFACES_
+MAPPING.md` surveys every player-facing window/menu/dialog/editor in the real Pascal and maps each
+to a Terminal.Gui primitive; this section narrates the build against that map, in the pre-map
+screens' own real order (`ANACREON.PAS`'s `Introduction`, then `PROLOG.PAS`'s `MainTitle`/
+`SetUpPlayer`) before the map itself.
+
+- **8a, project scaffold + galaxy map viewport.** New `ThreeLn.Reconstruction4021.Tui` project.
+  `GalaxyView` renders the scrollable galaxy map as a custom `View`: glyphs and colors come from
+  `MAPWIND.PAS`'s `CellRecord` and `DATACNST.PAS`'s `TypeStr`/`BaseTypeData`/`GateTypeData`, not
+  invented, and a cursor overlay matches `DrawMapCursor`'s corner-bracket style. Fleet indicators
+  are the player-fleet/enemy-fleet columns flanking each world glyph, per the original's 3-column
+  sector layout.
+- **8b, navigation shell.** `GameShell` replaces the bare `GalaxyView` window with a `MenuBar`
+  (System/Game/Empire/Worlds/Fleet/Build/Ministry of War, every leaf item stubbed to a
+  `MessageBox`) and a `StatusBar` (F1/F3/F5/F7/F8/F9, also stubbed) around the permanent
+  `GalaxyView` base, per the shell design in `TUI_SURFACES_MAPPING.md`'s "Deliberate deviation"
+  section. Colors come from `COLORS.INC`'s `ColorScrColor` (`SYSMenuBar`/`SYSMenu`/`SYSHelpLine`);
+  the coordinate readout matches `PRIMINTR.PAS`'s `GetCoordName` (cursor position relative to the
+  player's capital). Esc toggles focus between the map and the menu bar rather than quitting
+  outright; Quit lives behind Game > Quit with its own confirm.
+- **8c, startup logo, title/orbit animation, and turn-start greeting.** Three pre-map screens.
+  `TmaLogoWindow` decodes `TMA.PAS`'s `TMALogo` splash byte-accurately from its CP437 source, with
+  a growing-suffix reveal matching the real prepend loop rather than a naive wipe.
+  `AnacreonTitleWindow` covers `PROLOG.PAS`'s `MainTitle`/`ZoomOutSFX` plus the ambient orbiting
+  stars (`InitStarArray`/`UpdateStarArray`); deliberately not a literal port of the animation
+  mechanics — replaces the original's 4-frame `BITPIC.INC` bitmap zoom and separate menu-loop-only
+  orbit with one continuous, formula-driven system, the same 12 stars orbiting from frame one,
+  radius easing out from 0 as the fly-in, reprojected as an obliquely-viewed vertical ring so it
+  passes convincingly behind/in front of the text. The white highlight band sweep is unchanged
+  from source. `TurnStartGreetingWindow` covers `PROLOG.PAS`'s `DisplayIntroScreen`, one of the 3
+  real greeting lines plus `PRIMINTR.PAS`'s `MyLord` title, independently randomized.
+- **8d, mouse-draggable map, interactive main menu, quit hotkeys.** `GalaxyView` gained
+  left-button drag panning. `AnacreonTitleWindow` became the actual main menu rather than a timed
+  splash: New Game/Load Game/Options/Quit as framed, arrow-navigable, hotkeyable buttons above the
+  still-running orbit animation, plus the version/copyright lines from `MainTitle`. Quit's
+  confirmation dialog takes Y/N as hotkeys on its Yes/No buttons.
+- **8e, New Game flow.** `ScenarioPickerWindow` scans `reference/scenarios/dos_131/*.SCN` and
+  lists every title (`ScenarioLoader.ReadHeader`), replacing the previous eager fixed-scenario load
+  at startup. `IntroTextWindow` shows each scenario's `BEGINTEXT`/`ENDTEXT` narrative;
+  `PlayerCountWindow`/`PlayerSetupWindow` collect player count (skipped when a scenario's
+  Min/MaxPlayers are equal) and per-player name/gender — all on `COLORS.INC`'s `SYSDispWind` blue
+  backdrop, matching `NEWGAME.PAS`'s own full-screen `OpenWindow` around this whole flow, with
+  gender collected in a small `CommWind`-colored popup box matching `InputEmpireName`'s own
+  separate window for that one prompt. `ScenarioLoader.ReadScenarioFile` detects CP437 vs. UTF-8
+  per file (strict UTF-8 first, falls back to CP437 on failure) since `AFTERMAT.SCN`'s box-drawing
+  banner is CP437 but most scenarios are plain ASCII. `GameShell`'s Quit now returns to the main
+  menu instead of exiting the app outright, matching `PLAYTURN.PAS`'s own `XXXCom`
+  (`ExitGame:=True` unwinds back to `Prologue`, not a full process exit); a separate "Exit to OS"
+  item covers the full exit as a TUI-only convenience.
+- **8f, intro pagination and New Game screen polish.** `ScenarioLoader.ReadIntroPages` splits
+  strictly on real `NEWPAGE` markers instead of a fixed-line-count chunker — falsified against
+  real Pascal (`EASTWEST.SCN`'s genuine 22-line page renders as one screen, not two) and against
+  `NEWGAME.PAS`'s own `ReadPage` loop, which has no line-count check at all. Every New Game screen
+  now renders inside a shared `NewGameWindow` base (a centered 80x24 box over a black backdrop with
+  a twinkling starfield, matching `NEWGAME.PAS`'s own fixed-size `OpenWindow`) instead of a
+  full-terminal blue fill. Gender selection also responds directly to M/F keypresses.
+
+TUI keystroke/redraw lag on Windows turned out to be Windows Terminal's own renderer
+([tui-cs/Terminal.Gui#4588](https://github.com/tui-cs/Terminal.Gui/issues/4588), still open
+upstream), not this project's draw code — ruled out via `Application.Iteration` timing (mean
+14ms/iteration, no busy-loop) before the actual fix (switching Windows Terminal's renderer to
+Direct2D) surfaced; see the README's Known Issues section.
 
 ## 9. Async/hotseat turn mode
 

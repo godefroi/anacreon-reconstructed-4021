@@ -12,8 +12,11 @@ plausible-sounding guess.
 ## Status
 
 Core simulation (economy, galaxy/scenario setup, probes, news, combat), Kingdom NPE AI, and save/load
-(DOS `.SAV` import plus a native JSON format) are done. A playable UI hasn't started — the current
-`dotnet run` entry point is a placeholder, not a playable game yet. See
+(DOS `.SAV` import plus a native JSON format) are done. A Terminal.Gui interface
+(`src/ThreeLn.Reconstruction4021.Tui`) is under construction — the galaxy map, navigation shell,
+startup/title screens, and New Game flow work; the human `ITurnHandler` and most in-game command
+screens (fleet orders, combat, construction, etc.) don't exist yet, and `dotnet run` on the
+placeholder `ThreeLn.Reconstruction4021` entry point still isn't a playable game. See
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for how this was built, and [`docs/OPEN_GAPS.md`](docs/OPEN_GAPS.md)
 for known limitations in what exists so far.
 
@@ -46,6 +49,7 @@ ConPTY tearing issue ([#5323](https://github.com/tui-cs/Terminal.Gui/issues/5323
 ## Repository layout
 
 - **`src/`** — the C# port. `ThreeLn.Reconstruction4021.Core` is the simulation itself;
+  `ThreeLn.Reconstruction4021.Tui` is the Terminal.Gui interface (in progress);
   `ThreeLn.Reconstruction4021` is the (currently placeholder) entry point; `*.Tests` is everything
   else, including the Pascal ground-truth harness.
 - **`reference/DOSAnacreonSource131/`** — the pristine, unmodified 1.31 Turbo Pascal source. Never
@@ -79,6 +83,9 @@ ConPTY tearing issue ([#5323](https://github.com/tui-cs/Terminal.Gui/issues/5323
   ambiguities in the source for the original author to weigh in on.
 - **[`docs/PASCAL_V1_VS_V2_DIFF.md`](docs/PASCAL_V1_VS_V2_DIFF.md)** — what changed between the 1.31
   and 2.0 Pascal source trees (bugfixes vs. opt-in gameplay/feature changes).
-- **[`docs/TUI_LIBRARY_RECOMMENDATION.md`](docs/TUI_LIBRARY_RECOMMENDATION.md)** — the Phase 8 UI
-  library choice.
+- **[`docs/TUI_LIBRARY_RECOMMENDATION.md`](docs/TUI_LIBRARY_RECOMMENDATION.md)** — why Terminal.Gui
+  v2 was chosen for the interactive UI.
+- **[`docs/TUI_SURFACES_MAPPING.md`](docs/TUI_SURFACES_MAPPING.md)** — every player-facing window,
+  menu, dialog, and editor in the original game, mapped to its Pascal source and the Terminal.Gui
+  primitive it's built (or to be built) from.
 - **[`docs/AnacreonManual.md`](docs/AnacreonManual.md)** — the original player-facing manual.

@@ -9,11 +9,11 @@ using TgAttribute = Terminal.Gui.Drawing.Attribute;
 namespace ThreeLn.Reconstruction4021.Tui;
 
 /// <summary>
-/// Phase 8 top-level shell (docs/TUI_SURFACES_MAPPING.md's "Deliberate deviation" section): unlike the
+/// Top-level shell (docs/TUI_SURFACES_MAPPING.md's "Deliberate deviation" section): unlike the
 /// original DOS game, where the galaxy map was just one of several swappable F-key panels, here the map
-/// is the permanent base view -- everything else (menu, status bar, future overlay windows) sits on top
-/// of it, never replaces it. Menu/status bar leaf items are stubbed to a "not yet implemented" MessageBox
-/// for now; each gets a real implementation as its own surface is built out.
+/// is the permanent base view -- everything else (menu, status bar, overlay windows) sits on top
+/// of it, never replaces it. Menu/status bar leaf items are stubbed to a "not yet implemented" MessageBox;
+/// each gets a real implementation as its own surface is built out.
 /// </summary>
 internal sealed class GameShell : Window
 {

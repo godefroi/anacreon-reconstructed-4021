@@ -13,8 +13,7 @@ using TgAttribute = Terminal.Gui.Drawing.Attribute;
 namespace ThreeLn.Reconstruction4021.Tui;
 
 /// <summary>
-/// Phase 8 prototype (docs/ROADMAP.md item 8, docs/TUI_LIBRARY_RECOMMENDATION.md's "map viewport" gap):
-/// renders the galaxy grid directly onto a custom View, scrolled via Viewport. Layout, glyphs, and
+/// Renders the galaxy grid directly onto a custom View, scrolled via Viewport. Layout, glyphs, and
 /// colors are taken from the real DOS map (reference/DOSAnacreonSource131/MAPWIND.PAS's CellRecord and
 /// DATACNST.PAS's TypeStr/BaseTypeData/GateTypeData), not invented: each sector is 3 screen columns
 /// (player-fleet indicator | world glyph | enemy-fleet indicator), and color is two-tier -- White for
