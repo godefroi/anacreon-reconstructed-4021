@@ -7,7 +7,7 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 5 commit 5g (Core/Combat/CombatStandalone.cs): DestroyConstructionOrGate and
+/// <see cref="Core.Combat.CombatStandalone"/>: DestroyConstructionOrGate and
 /// SelfDestructObject. Neither has a golden-file domain — DestroyConstruction/DestroyStargate need
 /// Intrface, which the patch-based harness doesn't link (see ATTACK.PAS.patch's own comment), and
 /// SelfDestructObject has no Pascal-side ground truth to run at all (SBASE.PAS was never patched in).

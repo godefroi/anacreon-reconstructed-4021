@@ -7,7 +7,7 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// Named inputs shared between the golden-file generator (GoldenFileTests) and the always-on
 /// NpeAttackTests.MatchesGoldenFile. Expected outputs live exclusively in
 /// reference/verify/golden/npeattack.golden, computed patch-based: a real run of ATTNPE.PAS's own
-/// NPEAttack (Phase 5 commit 5f: the full body, including RestoreCombatant/ResolveAttack — see
+/// NPEAttack (the full body, including RestoreCombatant/ResolveAttack — see
 /// ATTNPE.PAS.patch/ATTACK.PAS.patch) against a hand-assembled Universe^ (reference/verify/runworld.pas's
 /// npeattack domain).
 ///

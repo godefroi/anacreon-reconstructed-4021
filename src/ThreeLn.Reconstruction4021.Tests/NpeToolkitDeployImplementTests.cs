@@ -9,9 +9,9 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 6c-2's second half (Core/Npe/NpeToolkit.cs's Deploy*Fleet/Implement*MSN layer, on top of
-/// Entities/FleetLifecycle.cs's primitives). Hardcoded, same rationale as NpeToolkitTests.cs and
-/// FleetLifecycleTests.cs.
+/// <see cref="Core.Npe.NpeToolkit"/>'s Deploy*Fleet/Implement*MSN layer, on top of
+/// <see cref="Core.Entities.FleetLifecycle"/>'s primitives. Hardcoded, same rationale as
+/// <c>NpeToolkitTests</c> and <c>FleetLifecycleTests</c>.
 /// </summary>
 public class NpeToolkitDeployImplementTests
 {

@@ -8,8 +8,8 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 5 commits 5e (Core/Combat/CombatResolution.cs's round-robin loop) and 5f (outcome
-/// application, Core/Combat/CombatOutcome.cs): FleetEngage/WorldEngage/NPEAttack, now including
+/// <see cref="Core.Combat.CombatResolution"/>'s round-robin loop and <see cref="Core.Combat.CombatOutcome"/>'s
+/// outcome application: FleetEngage/WorldEngage/NPEAttack, now including
 /// RestoreCombatant/ResolveAttack/ConquerWorld/ConquerEmpire. MatchesGoldenFile checks the whole
 /// engagement end to end (not one round in isolation, already covered by CombatEngineTests) against
 /// reference/verify/golden/npeattack.golden, including the defender's (and, when a case drives

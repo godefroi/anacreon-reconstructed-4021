@@ -3,8 +3,8 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
 /// <summary>
-/// NEWGAME.PAS:924-951 (CreateRndPlanet), relocated verbatim into the patched UPDATE.PAS (Phase 2
-/// commit 2d) alongside its own SetUpWorld/RndShips/RndCargo/RndDefns dependencies (also relocated
+/// NEWGAME.PAS:924-951 (CreateRndPlanet), relocated verbatim into the patched UPDATE.PAS
+/// alongside its own SetUpWorld/RndShips/RndCargo/RndDefns dependencies (also relocated
 /// verbatim, from NEWGAME.PAS:822-922) and called directly at a fixed (5,5) — location never varies,
 /// CreateRndPlanet's own formula doesn't read it. TechLevel spans PreTech (heaviest checkTech
 /// zeroing, smallest RndMilTechAdj) through Gate (no zeroing, full RndMilTechAdj) to exercise both

@@ -5,7 +5,7 @@ using ThreeLn.Reconstruction4021.Core.SaveFormat;
 namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
 /// <summary>
-/// Phase 7g's real-Pascal acceptance check for <see cref="SavGameWriter"/>: does the unmodified
+/// The real-Pascal acceptance check for <see cref="SavGameWriter"/>: does the unmodified
 /// <c>LOADSAVE.PAS</c> <c>LoadGame</c> (via <c>reference/verify/runload.pas</c>, a driver dedicated to
 /// this — see its own header comment for why it isn't folded into <c>runworld.pas</c>) actually accept
 /// a file this writer produced.
@@ -64,7 +64,7 @@ public class SavGameWriterAcceptanceTests
     }
 
     /// <summary>
-    /// Smoke check only (per `docs/ROADMAP.md` Phase 7g's own scope note): a freshly built
+    /// Smoke check only (per `docs/ROADMAP.md`'s own save/load scope note): a freshly built
     /// <see cref="ScenarioLoader"/> game has no original `.SAV` file to diff against, so this just
     /// confirms real Pascal accepts the write-back at all (`error=0`) rather than differentially
     /// comparing a checksum.

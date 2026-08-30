@@ -7,10 +7,10 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 6c-2 (Entities/FleetLifecycle.cs) — the fleet-lifecycle primitives NPEINTR.PAS's
+/// <see cref="Core.Entities.FleetLifecycle"/> — the fleet-lifecycle primitives NPEINTR.PAS's
 /// Deploy*/Implement*MSN layer needs (FLEET.PAS/INTRFACE.PAS). Hardcoded, same rationale as
-/// NpeToolkitTests.cs: no golden-file domain exists for fleet-lifecycle mutation yet, and Phase 7's
-/// save/load work is what will make building one cheap.
+/// <c>NpeToolkitTests</c>: no golden-file domain exists for fleet-lifecycle mutation, though this
+/// port's SaveFormat layer could make building one cheap.
 /// </summary>
 public class FleetLifecycleTests
 {

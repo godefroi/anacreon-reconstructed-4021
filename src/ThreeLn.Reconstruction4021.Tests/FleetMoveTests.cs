@@ -7,7 +7,7 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 6 commit 6a (Core/Turns/FleetMovementHandler.cs): GetNewPos/IsPassingThroughGate/
+/// <see cref="Core.Turns.FleetMovementHandler"/>: GetNewPos/IsPassingThroughGate/
 /// IsAtFortress against reference/verify/golden/fleetmove.golden — real FLEET.PAS/INTRFACE.PAS
 /// arithmetic, no RNG. See FleetMoveCases' own doc comment for what each case exercises.
 /// </summary>

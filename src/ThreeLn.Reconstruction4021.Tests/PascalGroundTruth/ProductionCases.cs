@@ -7,29 +7,20 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// dynamically skipped otherwise) and the always-on AnnualTickHandlerProductionTests.MatchesGoldenFile.
 /// Only inputs live here — expected outputs live exclusively in reference/verify/golden/
 /// production.golden, computed by a real FreePascal run of the real, patched UpdateWorld (via
-/// reference/verify/runworld.pas's production domain), not the old isolated
-/// reference/verify/production.pas transcription (deleted — see
-/// reference/verify/README.md).
+/// reference/verify/runworld.pas's production domain).
 ///
-/// That migration caught two bugs in the harness itself (not the C# port): runworld.pas originally
-/// left the planet's owning empire with an empty Pascal TechnologySet, which — because UPDATE.PAS
-/// intersects it with TechDev[Tech] to decide what a world can produce (UPDATE.PAS:1367-1368) —
-/// silently gated off all raw-material production; and it left the planet's ISSP dial (ImpExp) at
-/// its FillChar-zeroed value instead of DefaultISSP ($5555, DATACNST.PAS:516), which every real
-/// planet gets at settlement (PRIMINTR.PAS:631) and which GetIndustrialDistribution's sqrt-based
-/// formulas are sensitive to. Both are now set unconditionally in runworld.pas, matching what any
-/// reachable game state actually has.
+/// runworld.pas sets the planet's owning empire's full Pascal TechnologySet unconditionally
+/// (UPDATE.PAS:1367-1368 intersects it with TechDev[Tech] to decide what a world can produce) and
+/// its ISSP dial (ImpExp) to DefaultISSP ($5555, DATACNST.PAS:516 — every real planet's value at
+/// settlement, PRIMINTR.PAS:631, which GetIndustrialDistribution's sqrt-based formulas are sensitive
+/// to), matching what any reachable game state actually has.
 ///
-/// It also surfaced a real, not-yet-ported gap: UpdateDefenses (UPDATE.PAS:1278-1351, called from
-/// UpdateWorld at :1387) draws down Cargo[che..tri] to build defenses toward a population-driven
-/// target — something the old isolated FullPipeline never modeled and RunAnnualTick doesn't call yet.
-/// See AnnualTickHandlerProductionTests's doc comment for how that widened the golden comparison's
-/// exclusion list.
+/// Cargo.Chemicals/Metals stay outside this domain's own golden comparison for a real, still-open
+/// reason — see AnnualTickHandlerProductionTests's own doc comment and docs/PORT_GAPS_DRAFT.md.
 ///
-/// Every case here has at most one developed industry within BioInd..SYTInd at a time — the old
-/// production.pas's KNOWN DEVIATION (split ProductionShips/ProductionCargo loops) only mattered when
-/// two were simultaneously developed AND raw materials were scarce; moot now that the real Production
-/// procedure's single loop is what runs, but the cases were never widened since nothing needed it.
+/// Every case here has at most one developed industry within BioInd..SYTInd at a time; no case
+/// exercises two simultaneously-developed industries under scarce raw materials at once, which would
+/// exercise Production's own single loop more thoroughly.
 ///
 /// AllShipsUnlocked doesn't reach the harness — it isn't a Pascal concept, it's the C# port's
 /// per-empire ship-research gate (ShipTechAvailable), needed only so Owner.Technology.Ships can be

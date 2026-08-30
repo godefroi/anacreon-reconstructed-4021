@@ -15,8 +15,8 @@ namespace ThreeLn.Reconstruction4021.Tests;
 /// seen, so a dropped field fails the same way a dropped field would fail in production.
 ///
 /// Entity references (<see cref="Planet"/>/<see cref="Starbase"/>/<see cref="Fleet"/>/
-/// <see cref="Stargate"/>/<see cref="Entities.ConstructionSite"/>/<see cref="Empire"/>) are matched
-/// across the two graphs by position in their owning list (<see cref="Galaxy.Galaxy"/>'s 5 lists,
+/// <see cref="Stargate"/>/<see cref="ConstructionSite"/>/<see cref="Empire"/>) are matched
+/// across the two graphs by position in their owning list (<see cref="Core.Galaxy.Galaxy"/>'s 5 lists,
 /// <see cref="Game.Empires"/>) rather than by reference — the two graphs are separate object
 /// instances by construction (one round-tripped through JSON), so reference equality never holds
 /// even when every field matches. This is the same "stable per-kind integer id" identity GameJson's
@@ -212,7 +212,7 @@ public static class DeepGraphComparer
 
         /// <summary>
         /// An Empire reachable only via e.g. a Kingdom handler's own <c>State</c> dictionary (see
-        /// GameJson.EntityIndex's own remarks -- <see cref="Combat.CombatOutcome.DestroyEmpire"/>
+        /// GameJson.EntityIndex's own remarks -- <c>CombatOutcome.DestroyEmpire</c>
         /// drops a defeated empire from <see cref="Game.Empires"/> but not from other references to
         /// it) isn't in either list above. Since <see cref="Compare"/> walks both graphs in lockstep
         /// (same reflection order, same dictionary insertion order on both sides of a round trip),

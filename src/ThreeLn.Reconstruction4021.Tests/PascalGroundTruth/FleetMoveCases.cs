@@ -3,7 +3,7 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// <summary>
 /// Named inputs for FleetMoveTests.MatchesGoldenFile — GetNewPos (FLEET.PAS:437-450) and
 /// PassingThroughGate/PassingThroughFortress (relocated into reference/verify/patched/INTRFACE.PAS's
-/// own trimmed copy, Phase 6 commit 6a), against one Empire1 fleet. GateKind/DestGateKind: 0=none,
+/// own trimmed copy), against one Empire1 fleet. GateKind/DestGateKind: 0=none,
 /// 1=public gate (gte), 2=private link (lnk). Gate owners are raw Empire ordinals (1=Empire1,
 /// 2=Empire2) matching runworld.pas's own Empire(parts[N]) cast.
 /// </summary>

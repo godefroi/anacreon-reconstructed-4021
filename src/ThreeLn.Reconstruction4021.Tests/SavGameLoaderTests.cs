@@ -7,7 +7,7 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 7b (Header + Environment + Sector). Ground truth for `INTRO_1.SAV` cross-checked
+/// Header + Environment + Sector loading. Ground truth for `INTRO_1.SAV` cross-checked
 /// against `scripts/savtool.py`'s own JSON parse of the same file (year 4021, player ordinal 0,
 /// scenario "INTRO.SCN", `SizeOfGalaxy=21`, 90 sector cells with `Special=129` — nebula type 1,
 /// no mine — and zero `MineScout` entries), not hand-derived from the format doc alone.
@@ -30,7 +30,7 @@ public class SavGameLoaderTests
     public async Task LoadGame_Intro1_CurrentEmpireIsPlayerOrdinalZero()
     {
         // Environment.Player=0 -- resolves to empire slot 0 (Empire1), the same object identity
-        // Empire Data will later populate with the real "Player_empire" name (Phase 7d).
+        // Empire Data populates with the real "Player_empire" name.
         var game = new SavGameLoader().LoadGame(LoadIntro1());
 
         await Assert.That(game.CurrentEmpire).IsNotNull();

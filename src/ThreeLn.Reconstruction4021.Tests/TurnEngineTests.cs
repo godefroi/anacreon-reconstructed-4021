@@ -5,8 +5,8 @@ using ThreeLn.Reconstruction4021.Core.Turns;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Verifies TurnEngine's call order and argument correctness against fakes — no real
-/// economy/AI/movement/scouting behavior exists yet, so these tests are entirely about
+/// Verifies TurnEngine's call order and argument correctness against fakes, deliberately isolated
+/// from the real economy/AI/movement/scouting implementations: these tests are entirely about
 /// sequencing, matching the verified Pascal control flow (ANACREON.PAS's UpdateTurn).
 /// </summary>
 public class TurnEngineTests

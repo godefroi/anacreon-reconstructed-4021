@@ -3,9 +3,9 @@ using ThreeLn.Reconstruction4021.Core.SaveFormat;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 7a's byte-cursor primitives, exercised directly against hand-built byte arrays — no
-/// `Game`/`Galaxy` dependency yet, matching Phase 5's `CombatConstantsTests` precedent of unit
-/// -testing pure data/format shapes before any real logic exists to exercise them.
+/// The byte-cursor primitives (`SavReader`/`SavWriter`), exercised directly against hand-built byte
+/// arrays — no `Game`/`Galaxy` dependency, matching `CombatConstantsTests`'s own precedent of
+/// unit-testing pure data/format shapes directly.
 /// </summary>
 public class SavReaderTests
 {

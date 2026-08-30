@@ -13,11 +13,11 @@ internal static class PatchHarness
 {
     /// <summary>
     /// Driver names already compiled in this process — GoldenFileTests.RegenerateAllGoldenFiles calls
-    /// CompileAndRun("runworld", ...) once per domain (14 domains as of Phase 2 commit 2e), and every
-    /// one of those calls used to rebuild the identical patched/ tree and driver from scratch: the
-    /// pristine source and patches/*.patch don't change between them, only the CLI args do. Rebuilding
-    /// from scratch each time (delete/copy/git apply/fpc compile) cost ~5s per call measured directly
-    /// — 14 redundant rebuilds of one unchanged binary, ~70s wasted in one test method. A set (not just
+    /// CompileAndRun("runworld", ...) once per domain, and every one of those calls used to rebuild
+    /// the identical patched/ tree and driver from scratch: the pristine source and patches/*.patch
+    /// don't change between them, only the CLI args do. Rebuilding from scratch each time
+    /// (delete/copy/git apply/fpc compile) cost ~5s per call measured directly — one redundant rebuild
+    /// of the same unchanged binary per domain, adding up across the whole domain matrix. A set (not just
     /// the last driver built) so alternating between two different driver names — nothing does today,
     /// but nothing rules it out — doesn't thrash: each name is rebuilt at most once per process, not
     /// re-evicted the moment a different name is requested. Caching is safe because nothing else calls

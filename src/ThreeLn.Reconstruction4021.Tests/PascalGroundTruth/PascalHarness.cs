@@ -76,10 +76,9 @@ internal static class PascalHarness
     /// blocks until the child closes that pipe (normally, by exiting), but a child that fills its
     /// *other* stream's OS pipe buffer first (nobody is draining it yet) blocks on that write and
     /// never reaches exit — so the never-touched stream's buffer filling is what wedges the
-    /// exits-eventually stream too. Real, not hypothetical: a since-removed debug WriteLn(StdErr,...)
-    /// added while investigating Phase 2 commit 2e's own golden-file test — one line per planet across
-    /// 11 real scenario files in one batched invocation — reproduced multi-minute hangs here before
-    /// being traced back to this exact pattern.
+    /// exits-eventually stream too. Real, not hypothetical: a debug WriteLn(StdErr,...) emitting one
+    /// line per planet across 11 real scenario files in one batched invocation reproduced
+    /// multi-minute hangs here before being traced back to this exact pattern.
     /// </summary>
     internal static string RunProcess(string fileName, IReadOnlyList<string> args, string workingDirectory)
     {

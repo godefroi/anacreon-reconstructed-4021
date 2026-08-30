@@ -11,9 +11,10 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 ///
 /// Every case attacks a Planet target (Empire2's own capital) with a fleet built from exactly five
 /// ship types (fgt/hkr/jmp/pen/ssp, deliberately no jtn/trn) so DefaultDistribution always produces
-/// five groups in the same fixed order — ground-troop groups only exist after the not-yet-ported
-/// AdvanceGroups swap (Phase 5 commit 5e), so this domain stays at the DpSpc shell and never reaches
-/// Ground. Empire2's DefenseSettings is always the same InitDefenseRecord distribution
+/// five groups in the same fixed order — ground-troop groups only exist after CombatResolution's own
+/// AdvanceGroups performs its transport-to-troop swap, which this domain (testing CombatEngine.Battle
+/// alone) never reaches, so it stays at the DpSpc shell and never reaches Ground. Empire2's
+/// DefenseSettings is always the same InitDefenseRecord distribution
 /// EmpireFactory.SeedDefenseSettings seeds on the C# side, so GetEnemy's per-shell ship split is
 /// directly comparable. FighterGroupTarget optionally aims group 1 (fighters) at a real AttackType
 /// (rather than leaving Trg unset, DefaultDistribution's own default) so GroupAttack's actual-damage

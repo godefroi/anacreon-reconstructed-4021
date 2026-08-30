@@ -4,10 +4,9 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
 /// <summary>
 /// NEWGAME.PAS:813-820 (RandomTrillumReserves), relocated verbatim into the patched UPDATE.PAS
-/// (Phase 2 commit 2d) and called directly — no Universe^ state needed beyond what the harness
-/// brackets for symmetry with every other domain. Deferred from Phase 2 commit 2c, which covered
-/// this formula with hand-derived hardcoded tests only (GalaxySetupTests.
-/// CreateWorld_ComputesTrillumReserveFromClassAndRegion) pending this relocation.
+/// and called directly — no Universe^ state needed beyond what the harness brackets for symmetry
+/// with every other domain. GalaxySetupTests.CreateWorld_ComputesTrillumReserveFromClassAndRegion
+/// also covers this formula, with hand-derived hardcoded tests instead.
 /// </summary>
 public sealed record TrillumReservesCase(string Name, WorldClass Class, int RegionReserves, int RngFixedValue) : INamedCase;
 

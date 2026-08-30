@@ -7,13 +7,10 @@ namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
 /// NEWGAME.PAS:885-1120,1315-1370 (SetUpWorld/CreateWorld/CreateBase/CreateGate/CreateSRMs/
-/// CreateNebula). Hardcoded, not golden-file-backed yet: SetUpWorld/RndShips/RndCargo/RndDefns/
-/// RandomTrillumReserves live in NEWGAME.PAS, which pulls in a much larger USES clause
-/// (Crt/Dos/DOS2/EIO/WND/Menu/DFA/LoadSave/NPE/NPETypes) than any patch so far has needed to reach
-/// into. Relocating just those five procedures (the same "small formula, not the whole unit"
-/// technique already used for GetIndustrialDistribution/empirecreate) is deferred to Phase 2 commit
-/// 2d, which needs the exact same relocation anyway — CreateRndPlanet, 2d's own subject, calls
-/// SetUpWorld too — so doing it once there covers both commits' cases instead of twice.
+/// CreateNebula), plus GetRandomXY/CreateRndPlanet/CreateRandomWorlds's randomized-coordinate
+/// placement. Most of this class is hardcoded (FixedRandom(0) traced by hand);
+/// RandomTrillumReserves/CreateRndPlanet/Nebula have their own golden-file-backed methods at the end
+/// instead, since those three formulas' sqrt/pow cascades are error-prone to hand-verify.
 ///
 /// FixedRandom(0) makes every Rnd(min,max) call return min (already established elsewhere in this
 /// codebase), so every jitter here resolves deterministically to its lower bound and can be

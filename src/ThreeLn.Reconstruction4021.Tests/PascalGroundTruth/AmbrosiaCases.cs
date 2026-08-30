@@ -10,12 +10,9 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// hand-assembled Universe^ (reference/verify/runworld.pas's ambrosia domain), not a
 /// per-procedure transcription.
 ///
-/// Previously (reference/verify/ambrosia.pas, since deleted) this fed a hand-derived post-
-/// UpdatePopulation value to an isolated transcription of UseUpAmbrosia alone — forcing every case to
-/// carry both a PlanetPop (pre-tick, fed to the C# Planet) and a hand-derived HarnessPop (post-
-/// UpdatePopulation, fed to the harness). Running the real UpdateWorld removes the need for that
-/// split: PlanetPop alone is enough, since the same real pipeline order (production, efficiency, tech
-/// level, population, food, ambrosia) now computes the equivalent of the old HarnessPop itself.
+/// PlanetPop alone is enough to drive every case: the real pipeline order (production, efficiency,
+/// tech level, population, food, ambrosia) computes everything UseUpAmbrosia needs without a
+/// separate hand-derived post-UpdatePopulation value.
 ///
 /// Every case uses PlanetPop=1000/Class=ClassM/Type=Capital/Tech=Warp/Efficiency=100 (hardcoded in the
 /// driver, matching every case here) — Type=Capital so Rebellion can never fire (UPDATE.PAS:751), and

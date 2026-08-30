@@ -8,7 +8,7 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 5 commit 5f: outcome application (Core/Combat/CombatOutcome.cs). NpeAttackTests.MatchesGoldenFile
+/// Outcome application (<see cref="Core.Combat.CombatOutcome"/>). NpeAttackTests.MatchesGoldenFile
 /// already covers ConquerWorld/ConquerEmpire/RestoreCombatant/ResolveAttack end to end against real
 /// Pascal output; the tests here cover the one real branch the ground-truth harness structurally can't
 /// reach — a human empire's defeat (ATTACK.PAS:1120-1131's <c>EmpirePlayer(EnemyEmp)</c> branch) — since

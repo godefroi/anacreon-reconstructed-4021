@@ -2,7 +2,7 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
 /// <summary>
 /// NEWGAME.PAS:1261-1313 (NebulaeBand/NebulaePatches), relocated verbatim into the patched UPDATE.PAS
-/// (Phase 2 commit 2d) and called directly. <see cref="Mode"/> 1 selects NebulaeBand (<see
+/// and called directly. <see cref="Mode"/> 1 selects NebulaeBand (<see
 /// cref="PatchCount"/> unused), 2 selects NebulaePatches. Sizes stay at or under 15 so the harness's
 /// SizeOfGalaxy*SizeOfGalaxy grid dump fits Pascal's 255-char String cap under -Mtp (see runworld.pas's
 /// own RunNebulaCase doc comment).

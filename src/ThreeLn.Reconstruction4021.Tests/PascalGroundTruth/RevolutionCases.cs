@@ -10,15 +10,9 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// hand-assembled Universe^ (reference/verify/runworld.pas's revolution domain), not a
 /// per-procedure transcription.
 ///
-/// Previously (reference/verify/revolution.pas, since deleted) this fed a hand-derived post-
-/// UpdatePopulation value to an isolated UpdateRevolutionScenario/RebellionScenario pair (chaining
-/// Common's UpdateMilitaryScenario first to match UpdateMilitary's real call order) — forcing every
-/// case to carry both a PlanetPop (pre-tick, fed to the C# Planet) and a hand-derived HarnessPop.
-/// Running the real UpdateWorld removes the need for that split, and also caught a real gap the
-/// isolated harness shared with the C# port: neither modeled UPDATE.PAS:905/971's ReportPlanetLack
-/// call (a +1 RevolutionIndex bump the first time a resource type is reported short in a tick) that
-/// UpdateIndustry/Production's real raw-material-shortfall checks trigger — see
-/// AnnualTickHandler.Production.cs's ReportResourceShortfall for the fix.
+/// UPDATE.PAS:905/971's ReportPlanetLack call (a +1 RevolutionIndex bump the first time a resource
+/// type is reported short in a tick, triggered by UpdateIndustry/Production's real
+/// raw-material-shortfall checks) is modeled here too — see <c>AnnualTickHandler.ReportResourceShortfall</c>.
 ///
 /// Every case uses Type=Agricultural/Ninja=0 (hardcoded in the driver, matching every case here) and
 /// is Owned with its own capital pointing at itself — CapitalTech always equals Tech, so

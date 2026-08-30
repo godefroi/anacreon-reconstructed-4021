@@ -9,12 +9,12 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 6c (Core/Npe/NpeToolkit.cs) — the read-and-compute half of NPEINTR.PAS's shared toolkit
-/// (see that file's own doc comment for the Group A/B split and why B isn't here yet). Hardcoded
-/// against real Game/Galaxy fixtures rather than golden-file, deliberately: every method here either
-/// has no Rnd/Random call, or draws inside a scan-every-planet loop whose count depends on live
-/// galaxy shape — building a golden case that means anything close to real play needs a full
-/// hand-assembled universe, which Phase 7's save/load work is what makes cheap. Revisit then.
+/// <see cref="Core.Npe.NpeToolkit"/>'s read-and-compute methods (targeting, regional bookkeeping,
+/// world designation). Hardcoded against real Game/Galaxy fixtures rather than golden-file,
+/// deliberately: every method here either has no Rnd/Random call, or draws inside a
+/// scan-every-planet loop whose count depends on live galaxy shape — building a golden case that
+/// means anything close to real play needs a full hand-assembled universe, and this port's
+/// SaveFormat layer could make that cheap.
 /// </summary>
 public class NpeToolkitTests
 {

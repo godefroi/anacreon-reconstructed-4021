@@ -61,3 +61,18 @@ this file once that happens.
 (none found beyond the order-queue/message/naming-system gaps already logged above, all
 cross-referenced from here too — `SavGameLoader`/`SavGameWriter` are exactly where the order-queue
 and message gaps are read-and-discarded/written-empty)
+
+## Tests pass
+
+- **A stale test-doc claim uncovered a real, unresolved numeric mismatch.**
+  `AnnualTickHandlerProductionTests.MatchesGoldenFile` excludes `Cargo.Chemicals`/`Cargo.Metals` from
+  its golden-file comparison, with the doc comment blaming it on `UpdateDefenses` "not yet ported."
+  That's false today — `UpdateDefenses` is fully ported and runs via `RunAnnualTick` in this exact
+  test. Checked empirically (temporarily asserting both fields, reverted after): they're still
+  genuinely divergent from real Pascal, off by a handful of units (4857 vs. 4863 on
+  `FullPipelineCapitalWorld`, 4996 vs. 4998 on `NinjaProductionThrottledByScarceAmbrosia`) — a small,
+  real, currently unexplained mismatch, not the missing-feature gap the old comment described. Not
+  root-caused: could be an RNG-stream-position difference in how `UpdateDefenses`' own jitter draw
+  lands relative to `FixedRandom(0)`'s "always return min" semantics vs. the harness's
+  `RngFixedValue`/`ForcedRandomValue` substitution, or a genuine small formula divergence — worth a
+  real investigation, not a doc fix.

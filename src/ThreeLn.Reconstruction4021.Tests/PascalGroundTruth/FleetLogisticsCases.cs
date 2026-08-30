@@ -3,9 +3,9 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// <summary>
 /// Named inputs for FleetLogisticsTests.MatchesGoldenFile — FuelCapacity/FuelConsumption/
 /// FleetCargoSpace/BalanceFleet (MISC.PAS:168-222, INTRFACE.PAS:431-465 as relocated into
-/// reference/verify/patched/INTRFACE.PAS's own trimmed copy, Phase 6 commit 6a). No RNG anywhere in
-/// these four — pure arithmetic over a ship/cargo distribution, the same class of formula that
-/// produced the PascalRound banker's-rounding bug in Phase 5's combat.golden (FleetCargoSpace's own
+/// reference/verify/patched/INTRFACE.PAS's own trimmed copy). No RNG anywhere in
+/// these four — pure arithmetic over a ship/cargo distribution, the same class of formula
+/// PascalRound's own banker's-rounding behavior matters for (FleetCargoSpace's own
 /// Round call is exactly that risk).
 /// </summary>
 public sealed record FleetLogisticsCase(

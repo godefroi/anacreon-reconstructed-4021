@@ -7,8 +7,8 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// computed patch-based: a real run of the actual, only-minimally-touched UpdateWorld against a
 /// hand-assembled Universe^ (reference/verify/runworld.pas's starbase domain), not a
 /// per-procedure transcription. Covers only SupplyLink/SurplusLink's arithmetic — the one part of
-/// Commit 4 with real Pascal-transcription risk (a formula this session read out of UPDATE.PAS itself,
-/// not something exercised elsewhere); the eligibility/gating logic (wrong empire, wrong world type,
+/// the starbase branch with real Pascal-transcription risk (a formula read directly out of
+/// UPDATE.PAS, not something exercised elsewhere); the eligibility/gating logic (wrong empire, wrong world type,
 /// distance, Kind-gating, Rebellion) is pure C#-side filtering with no separate Pascal arithmetic to
 /// cross-check, so it stays covered by AnnualTickHandlerStarbaseTests' other, hardcoded tests instead.
 ///

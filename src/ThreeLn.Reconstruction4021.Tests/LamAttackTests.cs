@@ -7,7 +7,7 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 5 commit 5g (Core/Combat/CombatStandalone.cs): LAMAttack against
+/// <see cref="Core.Combat.CombatStandalone"/>: LAMAttack against
 /// reference/verify/golden/lamattack.golden — real ATTACK.PAS LAM-strike arithmetic (Round/Trunc
 /// against ProtecNeeded/CombatTable) with no RNG involved, so every case is a pure deterministic
 /// check of the proportional-distribution formula. See LamAttackCases' own doc comment for what each

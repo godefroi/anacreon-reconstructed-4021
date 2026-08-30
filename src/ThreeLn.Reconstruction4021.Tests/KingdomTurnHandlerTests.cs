@@ -8,8 +8,8 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 6d's KingdomTurnHandler.PlayTurn — the first commit where a whole NPE turn runs end to end,
-/// so unlike NpeToolkit's/FleetLifecycle's own per-procedure hardcoded tests, this exercises the real
+/// <see cref="Core.Turns.KingdomTurnHandler.PlayTurn"/> — a whole NPE turn running end to end, so
+/// unlike NpeToolkit's/FleetLifecycle's own per-procedure hardcoded tests, this exercises the real
 /// dispatch wiring a single procedure's own test can't reach: StateDeptRecord entries created lazily
 /// for Empire.Independent (the overwhelmingly common ConquerMSN target), UpdateFleets' liveness guard
 /// across a mid-loop fleet destruction, and ExplorationAndProbing's empty-regionCapitals early return.

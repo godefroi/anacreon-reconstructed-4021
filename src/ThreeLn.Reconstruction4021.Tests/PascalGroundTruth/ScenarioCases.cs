@@ -1,7 +1,7 @@
 namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 
 /// <summary>
-/// Phase 2 commit 2e's capstone domain: loads a real committed <c>reference/scenarios/dos_131/*.SCN</c>
+/// Loads a real committed <c>reference/scenarios/dos_131/*.SCN</c>
 /// file through both the C# <c>ScenarioLoader</c> and the real, patched Pascal <c>RunScenarioCase</c>
 /// (NEWGAME.PAS's own header-parse + command-dispatch loop, reimplemented fresh since it's saturated
 /// with dead DOS UI — see UPDATE.PAS's own PATCH comment at the relocation), seeded with the same
@@ -20,8 +20,8 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// genuine pristine DOS 1.31 binary and hit the identical "Unknown command 3500" failure this port's
 /// own relocated Pascal harness produces, after empire creation, in the same place — this isn't a
 /// desync introduced by this port at all, real 1.31 chokes on this file too. (This lines up with a
-/// suspicion already raised, but not resolved, during Phase 2 commit 2c's own investigation — see
-/// <c>reference/verify/README.md</c>.) Not a coverage gap: a file the real game itself can't load
+/// suspicion <c>reference/verify/README.md</c> already raised, now confirmed.) Not a coverage gap: a
+/// file the real game itself can't load
 /// isn't a meaningful ground-truth fixture for a port that mirrors that same loader's behavior.
 /// <c>AWAKEN.SCN</c>, still included below, carries a milder version of the same category of defect
 /// — it creates more planets than <c>TYPES.PAS</c>'s <c>MaxNoOfPlanets</c> allows, silently

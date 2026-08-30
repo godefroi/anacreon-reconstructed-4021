@@ -6,7 +6,7 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 2 commit 2e's capstone: loads real committed dos_131/*.SCN files through the C# ScenarioLoader
+/// Loads real committed dos_131/*.SCN files through the C# ScenarioLoader
 /// and compares an aggregate checksum against the same real file loaded by the patched Pascal
 /// RunScenarioCase — see ScenarioCases' own doc comment for the full rationale (why an aggregate
 /// checksum rather than a per-entity dump, why PRINCES.SCN is excluded, why this domain needed
@@ -28,10 +28,10 @@ namespace ThreeLn.Reconstruction4021.Tests;
 /// explicit CreateWorld commands, well before any CreateRandomWorlds runs, so "explicit command, not
 /// randomized generation" does NOT make a field safe to assert here. This is not corruption and not
 /// fixable by matching floating-point precision (confirmed: forcing fpc's harness to -CfSSE2/strict
-/// double, see build.ps1 and PatchHarness.cs, still diverges — different boundary values flip instead
-/// of the same ones). Formula-level correctness for these randomized values is already covered by the
-/// dedicated 2d domain tests (randomplanet/nebula/trillumreserves), which use ForcedRandomValue and
-/// don't chain into a real collision-retry loop.
+/// double, see build.ps1 and <see cref="PascalGroundTruth.PatchHarness"/>, still diverges — different
+/// boundary values flip instead of the same ones). Formula-level correctness for these randomized
+/// values is already covered by the dedicated randomplanet/nebula/trillumreserves domain tests, which
+/// use ForcedRandomValue and don't chain into a real collision-retry loop.
 ///
 /// sumempress/minedcellcount (CreateNPEmpire's own Boolean(Rnd(0,1)) gender draw; CreateSRMs' own
 /// "only mine an empty cell" check against wherever upstream RNG-driven placement already put
@@ -52,8 +52,8 @@ namespace ThreeLn.Reconstruction4021.Tests;
 /// necessarily the same values — real play reseeds `RandSeed` from the file's own `Seed` field, not
 /// this harness's fixed 12345) — a genuine reference-scenario defect, same category as
 /// `ScenarioCases`' own `PRINCES.SCN` note, not a gap in this port. Confirmed the only golden case
-/// affected: the other 10 all have `planetcount` at or under 200. Phase 7g's `{$PACKRECORDS 1}`
-/// harness fix (see `docs/ROADMAP.md`'s Phase 7g entry) repacked both `PlanetRecord` and
+/// affected: the other 10 all have `planetcount` at or under 200. The harness's `{$PACKRECORDS 1}`
+/// fix (see `docs/ROADMAP.md`'s save/load notes) repacked both `PlanetRecord` and
 /// `StarbaseRecord` (same file, same directive), changing exactly where the spillover bytes land and
 /// so changing AWAKEN's own golden value for this one field — an unrelated, correctness-motivated fix
 /// exposing a pre-existing bug in the fixture, not introducing one. Left excluded rather than

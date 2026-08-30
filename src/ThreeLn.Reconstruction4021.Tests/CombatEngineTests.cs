@@ -7,7 +7,7 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 5 commit 5d: the group/shell combat engine core (Core/Combat/CombatEngine.cs). MatchesGoldenFile
+/// The group/shell combat engine core (<see cref="Core.Combat.CombatEngine"/>). MatchesGoldenFile
 /// checks CalculateCombatData/GetEnemy/DefaultDistribution/Battle/EnemySurrenders together against
 /// reference/verify/golden/combat.golden — see CombatCases' own doc comment for the fixed fleet/target
 /// shape every case shares. ShipsDestroyed/InRangeOfDefense's branch coverage (the advancing-group

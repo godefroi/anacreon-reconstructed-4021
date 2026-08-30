@@ -65,8 +65,8 @@ internal static class ConstructionCases
         // IndustrialComplex needs Che=590,Met=2600,Tri=150. RngFixedValue=0 makes
         // Efficiency=Rnd(10,20)=10 and Population=Rnd(400,700)=400 deterministic; the resulting
         // Industry levels (via GetOptimumIndustry -> GetIndustrialDistribution's sqrt/pow cascade for
-        // an Artificial-class, Base-type world) are exactly the kind of formula this session leans on
-        // the real Pascal harness for rather than hand-tracing.
+        // an Artificial-class, Base-type world) are exactly the kind of formula this test suite leans
+        // on the real Pascal harness for rather than hand-tracing.
         new(Name: "CompletionCreatesIndustrialComplexStarbase", Building: ConstructionType.IndustrialComplex,
             YearsToCompletion: 1, OwnerTechLevel: TechLevel.Starship, RngFixedValue: 0,
             Fleet1: new ConstructionFleet(Chemicals: 700, Metals: 2700, Trillum: 200), Fleet2: null),

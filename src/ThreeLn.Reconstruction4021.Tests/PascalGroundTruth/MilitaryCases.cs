@@ -10,16 +10,11 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// hand-assembled Universe^ (reference/verify/runworld.pas's military domain), not a
 /// per-procedure transcription.
 ///
-/// Previously (reference/verify/military.pas, since deleted) this fed a hand-derived post-
-/// UpdatePopulation value to an isolated transcription of UpdateMilitary alone, because that harness
-/// started exactly where UpdateMilitary starts rather than running the whole per-tick pipeline —
-/// forcing every case to carry both a PlanetPop (pre-tick, fed to the C# Planet) and a hand-derived
-/// HarnessPop (post-UpdatePopulation, fed to the harness), plus per-case reasoning about whether
-/// UpdateRevolution could still perturb Cargo.Legions afterward. Running the real UpdateWorld removes
-/// both: PlanetPop alone is enough, since the same real pipeline order (production, efficiency, tech
-/// level, population, food, ambrosia, military, revolution) now computes the equivalent of the old
-/// HarnessPop itself, and whatever UpdateRevolution/Rebellion actually do to Cargo.Legions is captured
-/// directly instead of argued by hand.
+/// PlanetPop alone is enough to drive every case: the real pipeline order (production, efficiency,
+/// tech level, population, food, ambrosia, military, revolution) computes everything UpdateMilitary
+/// needs without a separate hand-derived post-UpdatePopulation value, and whatever
+/// UpdateRevolution/Rebellion actually do to Cargo.Legions is captured directly rather than argued
+/// by hand.
 ///
 /// Every case still uses Class=ClassM and Efficiency=100 (hardcoded in the driver, matching every
 /// case here) and is Owned with its own capital pointing at itself — CapitalTech always equals Tech,

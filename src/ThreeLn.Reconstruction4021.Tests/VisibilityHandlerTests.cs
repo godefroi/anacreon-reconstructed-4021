@@ -9,7 +9,7 @@ namespace ThreeLn.Reconstruction4021.Tests;
 /// <summary>
 /// Verifies fog-of-war mechanics: fleet visibility is ephemeral (cleared each turn),
 /// planet/starbase/stargate/construction visibility is accumulated (Known persists).
-/// Scouting radii match INTRFACE.PAS: adjacent cells, capital/starbase radius < 6, planet <= 5.
+/// Scouting radii match INTRFACE.PAS: adjacent cells, capital/starbase radius &lt; 6, planet &lt;= 5.
 /// First discovery of a never-Known entity requires starbase range AND a 50% roll
 /// (INTRFACE.PAS:1445-1453); capital range only re-detects an already-Known entity
 /// (INTRFACE.PAS:1437-1440) — these are different rules, exercised separately below.

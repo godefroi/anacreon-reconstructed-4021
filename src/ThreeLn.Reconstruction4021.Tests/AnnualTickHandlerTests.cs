@@ -7,10 +7,10 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Verifies Commit 1 of the economy phase: population growth, efficiency, and food consumption for
-/// planets (UPDATE.PAS:UpdateWorld's planet branch, minus the production pipeline and tech
-/// advancement, which are later commits). Revolution/rebellion has its own class,
-/// AnnualTickHandlerRevolutionTests, since it's golden-file-backed rather than hand-traced. All
+/// Verifies population growth, efficiency, and food consumption for planets (UPDATE.PAS:UpdateWorld's
+/// planet branch, minus the production pipeline and tech advancement, which have their own test
+/// classes below). Revolution/rebellion has its own class, AnnualTickHandlerRevolutionTests, since
+/// it's golden-file-backed rather than hand-traced. All
 /// tests here use FixedRandom(0), which makes every Rnd(min,max) call resolve to exactly `min` —
 /// every value below is hand-computed against that fixed floor, not asserted against a range. This
 /// is safe to keep hardcoded (not golden-file-backed): none of UpdatePopulation/UpdateEfficiency/
@@ -132,14 +132,14 @@ public class AnnualTickHandlerTests
 }
 
 /// <summary>
-/// Verifies revolution/rebellion for planets (UPDATE.PAS's UpdateRevolution/Rebellion pair, economy
-/// phase Commit 1). MatchesGoldenFile checks the real Pascal arithmetic across a case matrix
+/// Verifies revolution/rebellion for planets (UPDATE.PAS's UpdateRevolution/Rebellion pair).
+/// MatchesGoldenFile checks the real Pascal arithmetic across a case matrix
 /// (including the previously-untested military-suppression branch, UPDATE.PAS:715-735) against
 /// reference/verify/golden/revolution.golden, computed patch-based (GoldenFileTests): the real,
 /// only-minimally-touched UpdateWorld run against a hand-assembled Universe^
 /// (reference/verify/runworld.pas's revolution domain), not a per-procedure transcription
-/// — see RevolutionCases's doc comment for what that replaced, including a real production-pipeline
-/// gap (ReportPlanetLack's RevolutionIndex bump) this migration caught. Every case uses Ninja=0
+/// — see RevolutionCases's doc comment for a real production-pipeline gap this approach caught
+/// (ReportPlanetLack's RevolutionIndex bump). Every case uses Ninja=0
 /// (hardcoded in the driver, matching every case here). The two tests below stay hardcoded: they
 /// assert cross-tick bookkeeping behavior (an accumulator resets each year; an inverted Rnd range
 /// from a prior tick's negative accumulator must not throw), not a single tick's Pascal arithmetic.
@@ -377,11 +377,9 @@ public class AnnualTickHandlerRevolutionTests
 }
 
 /// <summary>
-/// Verifies HostileLife's News reporting (UPDATE.PAS:458-515) — Phase 1 ported the real population/
-/// troop/revolution-index arithmetic, but no AddNews call at all, despite HostileLifeKilledPopulation/
-/// HostileLifeAttackedTroops/HostileLifeJoinedTroops already existing in NewsType.cs. Caught during
-/// Phase 5's scoping pass (it should have been a Phase 4 News catch, since it's in AnnualTickHandler.*)
-/// and fixed here as Phase 5 commit 5i. FixedRandom(N) makes every Rnd(min,max) call resolve to min+N
+/// Verifies HostileLife's News reporting (UPDATE.PAS:458-515): the HostileLifeKilledPopulation/
+/// HostileLifeAttackedTroops/HostileLifeJoinedTroops AddNews calls, alongside the population/troop/
+/// revolution-index arithmetic itself. FixedRandom(N) makes every Rnd(min,max) call resolve to min+N
 /// regardless of range (see AnnualTickHandlerRevolutionTests's own RevIndex76 comments for this same
 /// fact) — so the same roll value drives both the attack-trigger check and its own sub-branch
 /// threshold, which is how a single FixedRandom seed can deterministically pick each branch below.
@@ -486,7 +484,7 @@ public class AnnualTickHandlerHostileLifeTests
 }
 
 /// <summary>
-/// Verifies Commit 2 of the economy phase: raw material and ship/cargo production for planets
+/// Verifies raw material and ship/cargo production for planets
 /// (UPDATE.PAS's ProduceRawMaterial/GetIndustrialDistribution/UpdateIndustry/Production, called via
 /// AnnualTickHandler.RunProductionPipeline). MatchesGoldenFile checks the real Pascal arithmetic —
 /// Pop=1000, Class=EthCls, and Tech=Gate cases deliberately exercise the sqrt/pow cascade in
@@ -496,14 +494,14 @@ public class AnnualTickHandlerHostileLifeTests
 /// caught), not the old isolated FullPipeline transcription and not hand-typed.
 ///
 /// Cargo.Supplies, Cargo.Ambrosia, Cargo.Legions, Cargo.Chemicals, and Cargo.Metals are excluded from
-/// that comparison — each is mutated by a real UpdateWorld step this tick that RunAnnualTick either
-/// runs on different (post-growth) state or doesn't run at all: UseUpFood/UseUpAmbrosia/UpdateMilitary
-/// all act on post-growth Population (and, for Legions, world Type), and UpdateDefenses
-/// (UPDATE.PAS:1278-1351) — not yet ported — draws down Cargo.Chemicals/Metals building defenses
-/// toward a population-driven target. See NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction for
-/// the one case that actually exercises the Ambrosia gap. None of ProductionCases's cases exercise a
-/// defense type that would touch Cargo.Trillum the same way (UpdateDefenses's raw-material loop also
-/// covers tri), so Cargo.Trillum stays asserted — revisit this exclusion list if a future case does.
+/// that comparison — each is mutated by a real UpdateWorld step this tick that runs on different
+/// (post-growth) state: UseUpFood/UseUpAmbrosia/UpdateMilitary all act on post-growth Population
+/// (and, for Legions, world Type). Cargo.Chemicals/Metals stay excluded for a real, still-open reason
+/// (docs/PORT_GAPS_DRAFT.md): a small residual mismatch remains even though UpdateDefenses is fully
+/// ported and runs here via RunAnnualTick. See NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction
+/// for the one case that actually exercises the Ambrosia gap. None of ProductionCases's cases exercise
+/// a defense type that would touch Cargo.Trillum the same way (UpdateDefenses's raw-material loop
+/// also covers tri), so Cargo.Trillum stays asserted — revisit this exclusion list if a future case does.
 /// </summary>
 public class AnnualTickHandlerProductionTests
 {
@@ -610,7 +608,7 @@ public class AnnualTickHandlerProductionTests
 }
 
 /// <summary>
-/// Verifies Commit 2b of the economy phase: UseUpAmbrosia (UPDATE.PAS:1163-1276), addiction/
+/// Verifies UseUpAmbrosia (UPDATE.PAS:1163-1276), addiction/
 /// starvation-of-ambrosia effects on population, efficiency, tech level, and the addiction flag
 /// itself. All planets use Type=Capital (Rebellion can never fire for a capital, UPDATE.PAS:751) and
 /// Efficiency=100 (UpdateEfficiency's own switch has no bracket above 99, so it's a no-op regardless
@@ -623,7 +621,7 @@ public class AnnualTickHandlerProductionTests
 /// reference/verify/golden/ambrosia.golden, computed patch-based (GoldenFileTests): the real,
 /// only-minimally-touched UpdateWorld run against a hand-assembled Universe^
 /// (reference/verify/runworld.pas's ambrosia domain), not a per-procedure transcription —
-/// see AmbrosiaCases's doc comment for what that replaced. The two guard tests below stay hardcoded:
+/// see AmbrosiaCases's own doc comment for detail. The two guard tests below stay hardcoded:
 /// they assert control flow (a branch never taken, a value staying exactly at a boundary), not Pascal
 /// arithmetic, so there's nothing for a golden file to add.
 ///
@@ -739,12 +737,12 @@ public class AnnualTickHandlerAmbrosiaTests
 }
 
 /// <summary>
-/// Verifies Commit 2c of the economy phase: UpdateMilitary (UPDATE.PAS:606-617), the growth of a
+/// Verifies UpdateMilitary (UPDATE.PAS:606-617), the growth of a
 /// world's military (Cargo.Legions) toward the population/type-derived optimum. MatchesGoldenFile
 /// checks the real Pascal arithmetic against reference/verify/golden/military.golden, computed
 /// patch-based (GoldenFileTests): the real, only-minimally-touched UpdateWorld run against a
 /// hand-assembled Universe^ (reference/verify/runworld.pas's military domain), not a
-/// per-procedure transcription — see MilitaryCases's doc comment for what that replaced.
+/// per-procedure transcription — see MilitaryCases's own doc comment for detail.
 /// </summary>
 public class AnnualTickHandlerMilitaryTests
 {
@@ -786,16 +784,16 @@ public class AnnualTickHandlerMilitaryTests
 }
 
 /// <summary>
-/// Verifies Phase 5 Commit 5b: UpdateDefenses (UPDATE.PAS:1278-1351), growing
+/// Verifies UpdateDefenses (UPDATE.PAS:1278-1351), growing
 /// IEconomicWorld.Defenses toward a troop-strength-derived optimum, gated by
-/// AnnualTickHandler.Defenses.cs's DefenseTechAvailable (the empire-research/per-world-TechLevel
+/// <c>DefenseTechAvailable</c> (the empire-research/per-world-TechLevel
 /// intersection UPDATE.PAS:1367-1369 computes for every world every tick). MatchesGoldenFile covers
 /// the planet-only formula/tech-gate/raw-material-shortfall behavior against
 /// reference/verify/golden/defenses.golden — see DefensesCases' own doc comment for why. The
 /// starbase-specific Optimum/BuildRate multipliers (Outpost quarters and zeroes DefenseSatellite;
 /// CommandBase/Fortress quadruple both) and the independent-world tech gate are hardcoded instead:
 /// none of them involve a sqrt/pow cascade, and (Outpost/CommandBase cases) UpdateMilitary doesn't
-/// even run for a non-complex starbase — see AnnualTickHandler.cs's UpdateStarbase — so
+/// even run for a non-complex starbase — see <c>AnnualTickHandler.UpdateStarbase</c> — so
 /// TroopStrength is exactly the seeded Cargo.Legions with no RNG-dependent growth to account for.
 /// </summary>
 public class AnnualTickHandlerDefensesTests
@@ -985,7 +983,7 @@ public class AnnualTickHandlerDefensesTests
 }
 
 /// <summary>
-/// Verifies Commit 3 of the economy phase: UpdateTechLevel (UPDATE.PAS:1032-1072), tech-level
+/// Verifies UpdateTechLevel (UPDATE.PAS:1032-1072), tech-level
 /// advancement/regression toward an owned world's empire's capital (or a 1-in-50 independent drift
 /// for unowned worlds). MatchesGoldenFile checks the real Pascal arithmetic against
 /// reference/verify/golden/techlevel.golden, computed patch-based (GoldenFileTests): the real,
@@ -1067,14 +1065,14 @@ public class AnnualTickHandlerTechLevelTests
 }
 
 /// <summary>
-/// Verifies Commit 5a of the economy phase: empire-level tech research (UPDATE.PAS's
+/// Verifies empire-level tech research (UPDATE.PAS's
 /// UpdateEmpire/NewTechLevel/GetChanceForNewTech/GetNewTech, called via AnnualTickHandler's
 /// per-empire loop in RunAnnualTick). MatchesGoldenFile checks the real Pascal arithmetic — the
 /// Trunc(percent*eff/100) lab-chance formula and GetNewTech's TechDev-membership pick — against
 /// reference/verify/golden/empire.golden, computed by runworld.pas's empire domain calling
 /// UpdateEmpire directly (see EmpireCases's doc comment for the 26-bit Technology encoding). Every
-/// lab planet/starbase leaves Owner.Capital unset (null) — a defensive no-op for Commit 3's
-/// UpdateTechLevel (see AnnualTickHandlerTechLevelTests.OwnedWorldWithNoCapitalIsANoOp), which also
+/// lab planet/starbase leaves Owner.Capital unset (null) — a defensive no-op for UpdateTechLevel
+/// (see AnnualTickHandlerTechLevelTests.OwnedWorldWithNoCapitalIsANoOp), which also
 /// runs during the same RunAnnualTick call, before the per-empire loop reads these worlds'
 /// TechLevel; leaving it null is simpler than matching capital/lab TechLevel by hand and gives the
 /// same guarantee (no drift) since GetChanceForNewTech's own lab classification never reads
@@ -1105,7 +1103,7 @@ public class AnnualTickHandlerEmpireTests
     private static Starbase MakeStarbase(PascalGroundTruth.EmpireLab lab, Empire owner, int x) => new() {
         Location = new Coordinate(x, 0),
         Owner = owner,
-        Kind = StarbaseKind.CommandBase, // non-complex: only Efficiency/TechLevel run unconditionally (Commit 4)
+        Kind = StarbaseKind.CommandBase, // non-complex: only Efficiency/TechLevel run unconditionally
         Type = lab.Type,
         TechLevel = lab.Tech,
         Efficiency = lab.Efficiency,
@@ -1241,7 +1239,7 @@ public class AnnualTickHandlerEmpireTests
 }
 
 /// <summary>
-/// Verifies Commit 4 of the economy phase: the starbase branch of UpdateWorld (UPDATE.PAS:1392-1430)
+/// Verifies the starbase branch of UpdateWorld (UPDATE.PAS:1392-1430)
 /// — UpdateEfficiency/UpdateTechLevel running unconditionally, the rest of the pipeline (including
 /// SupplyLink/SurplusLink, UPDATE.PAS:517-604) gated on Kind == IndustrialComplex. All tests use
 /// FixedRandom(0) and Cargo.Chemicals (rather than Metals) as the SupplyLink/SurplusLink test
@@ -1426,7 +1424,7 @@ public class AnnualTickHandlerStarbaseTests
 }
 
 /// <summary>
-/// Verifies Commit 5b of the economy phase: construction-site countdown/completion (UPDATE.PAS's
+/// Verifies construction-site countdown/completion (UPDATE.PAS's
 /// UpdateConstruction, nested UseUpRawMaterial, called via AnnualTickHandler's construction loop in
 /// RunAnnualTick) and entity creation on completion (ConstructStarbase/ConstructStargate).
 /// MatchesGoldenFile checks the real Pascal arithmetic — UseUpRawMaterial's draw-down and, for the

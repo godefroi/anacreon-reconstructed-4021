@@ -4,11 +4,11 @@ namespace ThreeLn.Reconstruction4021.Tests.PascalGroundTruth;
 /// Named inputs shared between the golden-file generator (GoldenFileTests) and the always-on
 /// LamAttackTests.MatchesGoldenFile. Expected outputs live exclusively in
 /// reference/verify/golden/lamattack.golden, computed patch-based: a real run of ATTACK.PAS's own
-/// LAMAttack (Phase 5 commit 5g — see ATTACK.PAS.patch) against a hand-assembled Universe^
-/// (reference/verify/runworld.pas's lamattack domain). Unlike every other 5x combat domain, LAMAttack
+/// LAMAttack (see ATTACK.PAS.patch) against a hand-assembled Universe^
+/// (reference/verify/runworld.pas's lamattack domain). Unlike every other combat domain, LAMAttack
 /// has no Rnd calls at all — no RngFixedValue field here — so this is pure deterministic arithmetic
 /// verification of its proportional-distribution formula (Round/Trunc against ProtecNeeded/
-/// CombatTable), exactly the class of thing 5d's banker's-rounding bug came from.
+/// CombatTable), exactly the class of formula PascalRound's own banker's-rounding behavior matters for.
 ///
 /// The attacker is always Empire1 (Player); the target (Fleet or Planet, whichever TargetIsFleet
 /// selects) is always Empire2's.

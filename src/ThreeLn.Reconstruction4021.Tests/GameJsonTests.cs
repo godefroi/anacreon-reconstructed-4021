@@ -7,7 +7,7 @@ using ThreeLn.Reconstruction4021.Core.SaveFormat;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 7f (native JSON save format). Round-trip is checked via
+/// <see cref="Core.SaveFormat.GameJson"/>, this port's native JSON save format. Round-trip is checked via
 /// <see cref="DeepGraphComparer"/> -- an exhaustive reflection walk of every public property
 /// reachable from <see cref="Game"/> -- rather than hand-picked field assertions: this format's own
 /// job is "serialize whatever's there," so the test that matters is "did anything get lost or

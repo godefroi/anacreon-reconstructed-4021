@@ -8,8 +8,8 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 6e (Core/Npe/NpeToolkit.cs's ReviewNews enemy-attack case arm/StateDepartment/StateDeptReport/
-/// WarCabinet). Hardcoded, same rationale as NpeToolkitTests.cs/NpeToolkitDeployImplementTests.cs —
+/// <see cref="Core.Npe.NpeToolkit"/>'s ReviewNews enemy-attack case arm/StateDepartment/StateDeptReport/
+/// WarCabinet. Hardcoded, same rationale as <c>NpeToolkitTests</c>/<c>NpeToolkitDeployImplementTests</c> —
 /// exercised through ReviewNews's public entry point since AttackSeverity/RespondToEnemyAttack are
 /// private nested helpers in real Pascal too.
 /// </summary>

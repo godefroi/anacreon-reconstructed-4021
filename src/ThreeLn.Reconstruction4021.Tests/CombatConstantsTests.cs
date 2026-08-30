@@ -4,10 +4,9 @@ using ThreeLn.Reconstruction4021.Core.Types;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Shape/lookup sanity for the Commit 5c combat constant tables — no combat logic exists yet to
-/// exercise them against, so these just confirm every table is fully populated over its declared key
-/// space (a missing entry would silently look like 0 at a real call site later) and that a few known
-/// values transcribed from source read back correctly.
+/// Shape/lookup sanity for <see cref="CombatConstants"/>'s own tables — these confirm every table is
+/// fully populated over its declared key space (a missing entry would silently look like 0 at a real
+/// call site) and that a few known values transcribed from source read back correctly.
 /// </summary>
 public class CombatConstantsTests
 {

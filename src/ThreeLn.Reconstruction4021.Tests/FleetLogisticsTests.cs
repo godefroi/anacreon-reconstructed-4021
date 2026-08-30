@@ -3,7 +3,7 @@ using ThreeLn.Reconstruction4021.Core.Entities;
 namespace ThreeLn.Reconstruction4021.Tests;
 
 /// <summary>
-/// Phase 6 commit 6a (Core/Entities/FleetLogistics.cs): FuelCapacity/FuelConsumption/FleetCargoSpace/
+/// <see cref="Core.Entities.FleetLogistics"/>: FuelCapacity/FuelConsumption/FleetCargoSpace/
 /// BalanceFleet against reference/verify/golden/fleetlogistics.golden — real MISC.PAS/INTRFACE.PAS
 /// arithmetic, no RNG. See FleetLogisticsCases' own doc comment for what each case exercises.
 /// </summary>
