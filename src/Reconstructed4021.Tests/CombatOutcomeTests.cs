@@ -40,6 +40,7 @@ public class CombatOutcomeTests
         var game = new Core.Game(galaxy);
 
         var conqueror = EmpireFactory.CreateEmpire("Conqueror", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        conqueror.NpeType = NpeEmpireType.Pirate; // Registered with a NonHumanTurnHandler below -- NpeType is what AnyHumanPlayersRemain/ConquerEmpire now read to tell human from NPE.
         var conquerorCapital = new Planet { Location = new Coordinate(0, 0), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
         conqueror.Capital = conquerorCapital;
         galaxy.Planets.Add(conquerorCapital);
@@ -78,6 +79,7 @@ public class CombatOutcomeTests
         var game = new Core.Game(galaxy);
 
         var conqueror = EmpireFactory.CreateEmpire("Conqueror", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        conqueror.NpeType = NpeEmpireType.Pirate; // Registered with a NonHumanTurnHandler below -- NpeType is what AnyHumanPlayersRemain/ConquerEmpire now read to tell human from NPE.
         var conquerorCapital = new Planet { Location = new Coordinate(0, 0), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
         conqueror.Capital = conquerorCapital;
         galaxy.Planets.Add(conquerorCapital);
