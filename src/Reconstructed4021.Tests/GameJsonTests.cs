@@ -96,7 +96,12 @@ public class GameJsonTests
 
         var kingdom = EmpireFactory.CreateEmpire("Kingdom", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
         kingdom.NpeType = NpeEmpireType.Kingdom1;
-        kingdom.Capital = new Planet { Location = new Coordinate(50, 50), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Independent, TechLevel = TechLevel.Jump };
+        var kingdomCapital = new Planet { Location = new Coordinate(50, 50), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Independent, TechLevel = TechLevel.Jump };
+        kingdom.Capital = kingdomCapital;
+        // Game.Empires is now a permanent roster, so kingdom.Capital survives past DestroyEmpire and
+        // gets serialized by GameJson -- unlike before this redesign, the referenced Planet needs a
+        // real home in the galaxy's own list for EncodeObjectRef to resolve it.
+        galaxy.Planets.Add(kingdomCapital);
 
         game.Empires.Add(conqueror);
         game.Empires.Add(kingdom);
