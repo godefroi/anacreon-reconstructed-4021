@@ -92,5 +92,6 @@ public class CombatOutcomeTests
         CombatOutcome.ConquerEmpire(conqueror, npe, game, new FixedRandom(0));
 
         await Assert.That(game.Empires).DoesNotContain(npe);
+        await Assert.That(game.TurnHandlers).DoesNotContainKey(npe);
     }
 }

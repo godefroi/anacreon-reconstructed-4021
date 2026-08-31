@@ -339,12 +339,14 @@ public static class CombatOutcome
     }
 
     /// <summary>
-    /// DestroyEmpire (INTRFACE.PAS:1612-1658). CleanUpNPE isn't ported: this method doesn't clean up
-    /// NPE-AI-decision state when an empire dies (a Kingdom's own diplomacy dictionary can still
-    /// reference a destroyed empire, the mechanism behind the SaveFormat layer's "orphan empire"
-    /// handling), and real Pascal only ever calls CleanUpNPE for a non-human empire, which is already
-    /// this method's only real precondition (ConquerEmpire's own ELSE branch never reaches here for a
-    /// human — see the human branch just above its one call site).
+    /// DestroyEmpire (INTRFACE.PAS:1612-1658). <c>IF (NOT EmpirePlayer(Emp)) THEN CleanUpNPE(Emp)</c>
+    /// disposes that empire's own NPE data record — this method's own precondition already guarantees
+    /// non-human (ConquerEmpire's ELSE branch never reaches here for a human, see the branch just
+    /// above its one call site), so the port-side equivalent is unconditional: drop this empire's own
+    /// <see cref="Game.TurnHandlers"/> entry. This is distinct from, and doesn't touch, a *different*
+    /// Kingdom's own diplomacy dictionary still referencing this empire after it's gone — real
+    /// Pascal's fixed per-empire arrays never clear those either, which is why the SaveFormat layer's
+    /// "orphan empire" handling stays necessary regardless (see GameJson's EntityIndex remarks).
     /// DeleteAllNames isn't ported either — no naming system exists in this port (matching AbortFleet's
     /// own established gap). EraseNews is <c>Empire.News.Clear()</c>.
     /// </summary>
@@ -371,6 +373,7 @@ public static class CombatOutcome
 
         empire.News.Clear();
         game.Empires.Remove(empire);
+        game.TurnHandlers.Remove(empire);
     }
 
     /// <summary>

@@ -21,10 +21,6 @@ separate ones.
   model exists (`Entities/FleetLogistics.cs`) that this method doesn't use; a fleet that dissolves
   via `AbortFleet` silently loses whatever fuel it was carrying instead of it landing as trillum on
   the ground.
-- **`CombatOutcome.DestroyEmpire` doesn't port `CleanUpNPE`.** Doesn't clean up NPE-AI-decision
-  state when an empire dies. A Kingdom's own diplomacy dictionary can still reference a destroyed
-  empire, which is the actual mechanism behind the SaveFormat layer's "orphan empire" handling
-  (`EntityIndex` in `GameJson.cs`/`SavGameWriter.cs`).
 
 ## Scenario loading
 

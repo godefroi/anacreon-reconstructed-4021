@@ -21,8 +21,9 @@ namespace Reconstructed4021.Core.SaveFormat;
 /// structural limit of the on-disk format itself, not an arbitrary choice: a
 /// <see cref="Turns.KingdomTurnHandler"/>'s own `State` dictionary is keyed by every empire it has
 /// ever had diplomatic dealings with, including one <see cref="Combat.CombatOutcome.DestroyEmpire"/>
-/// has since removed from <see cref="Game.Empires"/> (that method's own doc comment: `CleanUpNPE
-/// isn't ported`, so nothing clears such a reference) — an "orphan" empire, same as
+/// has since removed from <see cref="Game.Empires"/> — real Pascal's own fixed per-empire array never
+/// clears such a reference either, so a *different*, still-living Kingdom's memory of it is expected
+/// to survive, not a gap — an "orphan" empire, same as
 /// <see cref="SavGameLoader"/>'s own doc comment describes for the read side. <c>DestroyEmpire</c>
 /// confirms no <see cref="ISectorObject.Owner"/> can ever be an orphan (every owned planet/starbase
 /// is reassigned to <see cref="Empire.Independent"/> and every fleet destroyed before the empire is

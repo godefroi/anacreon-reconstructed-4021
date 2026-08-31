@@ -1,8 +1,11 @@
 using Reconstructed4021.Core;
+using Reconstructed4021.Core.Combat;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.SaveFormat;
+using Reconstructed4021.Core.Turns;
+using Reconstructed4021.Core.Types;
 
 namespace Reconstructed4021.Tests;
 
@@ -72,6 +75,42 @@ public class GameJsonTests
         var writtenEmpireCount = node["empires"]!.AsArray().Count;
 
         await Assert.That(writtenEmpireCount).IsGreaterThan(realEmpireCount);
+    }
+
+    [Test]
+    public async Task DestroyedKingdom_HasNoTurnHandlerAfterRoundTrip()
+    {
+        // Counterpart to Intro1_ActuallyExercisesTheOrphanEmpirePath: that test pins a *different*,
+        // still-living Kingdom's own diplomacy dictionary correctly retaining a dead empire as a
+        // reference (expected, matches real Pascal's fixed per-empire array). This one is the case
+        // that actually was a bug before CombatOutcome.DestroyEmpire removed its own Game.TurnHandlers
+        // entry: a destroyed Kingdom's *own* handler used to linger in Game.TurnHandlers and got
+        // serialized (and, on read-back, resurrected) as if it were still a real, active empire.
+        var galaxy = new Galaxy(size: 100);
+        var game = new Core.Game(galaxy);
+
+        var conqueror = EmpireFactory.CreateEmpire("Conqueror", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var conquerorCapital = new Planet { Location = new Coordinate(0, 0), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        conqueror.Capital = conquerorCapital;
+        galaxy.Planets.Add(conquerorCapital);
+
+        var kingdom = EmpireFactory.CreateEmpire("Kingdom", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        kingdom.NpeType = NpeEmpireType.Kingdom1;
+        kingdom.Capital = new Planet { Location = new Coordinate(50, 50), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Independent, TechLevel = TechLevel.Jump };
+
+        game.Empires.Add(conqueror);
+        game.Empires.Add(kingdom);
+        game.TurnHandlers[kingdom] = new KingdomTurnHandler(kingdom, NpeEmpireType.Kingdom1, new FixedRandom(0));
+
+        CombatOutcome.ConquerEmpire(conqueror, kingdom, game, new FixedRandom(0));
+
+        await Assert.That(game.TurnHandlers).DoesNotContainKey(kingdom);
+
+        var json = GameJson.Serialize(game);
+        var roundTripped = GameJson.Deserialize(json, new Random(0));
+
+        await Assert.That(roundTripped.TurnHandlers.Keys.Select(e => e.Name)).DoesNotContain(kingdom.Name);
+        await Assert.That(roundTripped.Empires.Select(e => e.Name)).DoesNotContain(kingdom.Name);
     }
 
     [Test]

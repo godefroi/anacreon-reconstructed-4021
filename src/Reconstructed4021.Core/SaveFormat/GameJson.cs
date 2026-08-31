@@ -595,10 +595,12 @@ public static class GameJson
     ///
     /// Empires are the one kind assigned lazily rather than up front:
     /// <see cref="Combat.CombatOutcome.DestroyEmpire"/> removes a defeated empire from
-    /// <see cref="Game.Empires"/> (that method's own doc comment: <c>CleanUpNPE isn't ported</c>, so
-    /// nothing clears references to it elsewhere) — meaning a <see cref="Turns.KingdomTurnHandler"/>'s
-    /// own <c>State</c> dictionary (diplomatic memory, keyed per enemy ever encountered) can still
-    /// hold a real, live <see cref="Empire"/> object that <see cref="Game.Empires"/> no longer lists.
+    /// <see cref="Game.Empires"/> and from its own <see cref="Game.TurnHandlers"/> entry, but a
+    /// *different*, still-living <see cref="Turns.KingdomTurnHandler"/>'s own <c>State</c> dictionary
+    /// (diplomatic memory, keyed per enemy ever encountered) can still hold a real, live
+    /// <see cref="Empire"/> object that <see cref="Game.Empires"/> no longer lists — real Pascal's
+    /// fixed per-empire array never clears that entry either, so this isn't a bug to fix, just a
+    /// reference this format has to be able to round-trip.
     /// <see cref="EmpireId"/> auto-registers such "orphan" empires the first time anything asks for
     /// their id; <see cref="Serialize"/> writes the turnHandlers/blobs/minefield sections (the only
     /// places an orphan can surface) before <c>"empires"</c> so every orphan this call discovers is
