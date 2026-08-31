@@ -43,6 +43,14 @@ quirk findings these questions are drawn from, with more detail on how each was 
   own `CASE Result OF` has no branch for it at all. Was "captured" meant to be a distinct outcome
   from "conquered" (e.g. a fleet taken intact as a trophy rather than destroyed), and if so what
   stopped it from being finished?
+- **`PhenomenaTypes` (`BlkHl`/`Plsr`/`WrmHl`) and `Wndr`.** Declared in `ObjectTypes` (`TYPES.PAS:128`)
+  with real display-name strings (`'black hole'`/`'pulsar'`/`'worm hole'`/`'unknown'`), but no
+  creation routine for any of them exists anywhere in either the 1.31 or 2.0 source, and the in-game
+  map renderer (`MAPWIND.PAS`) never checks for one — only a standalone galaxy-print utility
+  (`PROLOG.PAS`) has one leftover `Plsr` check. Was this an early "space phenomena as galaxy terrain"
+  feature (fixed hazards/landmarks a fleet could encounter) that never got past the type enum, and if
+  so what was `Wndr` ("wonder") meant to be — a fifth phenomenon type, or something else entirely
+  given its "unknown" display name?
 - **`ATTNPE.PAS`'s debug combat window.** `{DEFINE Debug}` (line 7) is missing its leading `` $ ``,
   so it's an inert comment, not a real compiler directive — the `{$IFDEF Debug}`-gated `CRT`
   debug-window code (`ClrScr` calls scattered through the round loop) can never have compiled into

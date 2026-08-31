@@ -1,3 +1,4 @@
+using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.NewGame;
@@ -125,13 +126,69 @@ public class SavGameLoaderTests
     }
 
     [Test]
-    public async Task LoadGame_FleetOrders_DiscardsCommandQueueWithoutDesyncing()
+    public async Task LoadGame_FleetOrders_DecodesCommandQueueWithoutDesyncing()
     {
-        // Fleet 240 (savtool's own index) has 4 queued CommandRecords -- discarded per the tracked
-        // gap, but must not throw off the byte cursor for the rest of the file. 13 fleets total.
+        // Ground truth via scripts/savtool.py: fleet 240 (savtool's own index) has 4 queued
+        // CommandRecords -- DestCOM (variant_hex 000002bc), WaitCOM (garbage variant left over from
+        // the previous write), DestCOM (variant_hex 00000282), RepeatCOM (garbage again). Both
+        // DestCOM variants decode as XY=Limbo(0,0) + a Pln IDNumber (188, 130) -- confirmed by
+        // docs/SAV_FILE_FORMAT.md's own worked example -- resolving to the planets at (19,20) and
+        // (20,19) respectively (savtool ordinals 188/130 -> this port's 0-based Planets[187]/[129]).
+        // 13 fleets total; the queue must not throw off the byte cursor for the rest of the file.
         var game = new SavGameLoader().LoadGame(LoadSave("FLEET_ORDERS.SAV"));
 
         await Assert.That(game.Galaxy.Fleets.Count).IsEqualTo(13);
+
+        var fleet = game.Galaxy.Fleets.Single(f => f.Location == new Coordinate(18, 21) && f.Fuel == 1992.0);
+        await Assert.That(fleet.Orders).Count().IsEqualTo(4);
+
+        await Assert.That(fleet.Orders[0].Type).IsEqualTo(CommandType.Destination);
+        await Assert.That(fleet.Orders[0].DestinationPosition).IsNull();
+        await Assert.That(fleet.Orders[0].DestinationObject).IsNotNull();
+        await Assert.That(fleet.Orders[0].DestinationObject!.Location).IsEqualTo(new Coordinate(19, 20));
+
+        await Assert.That(fleet.Orders[1].Type).IsEqualTo(CommandType.Wait);
+        await Assert.That(fleet.Orders[1].DestinationObject).IsNull();
+        await Assert.That(fleet.Orders[1].DestinationPosition).IsNull();
+
+        await Assert.That(fleet.Orders[2].Type).IsEqualTo(CommandType.Destination);
+        await Assert.That(fleet.Orders[2].DestinationObject).IsNotNull();
+        await Assert.That(fleet.Orders[2].DestinationObject!.Location).IsEqualTo(new Coordinate(20, 19));
+
+        await Assert.That(fleet.Orders[3].Type).IsEqualTo(CommandType.Repeat);
+    }
+
+    [Test]
+    public async Task WriteThenLoad_DestinationOrder_ResolvesStargateDespiteLoadOrder()
+    {
+        // Regression test: on-disk section order is Planets/Starbases/Fleets/Stargates/
+        // ConstructionSites, so a DestCOM naming a Stargate (or ConstructionSite, or a
+        // later-in-the-same-section Fleet) is a real forward reference at the point LoadFleets
+        // reads it -- ReadCommandRecord must defer resolution (via _pendingOrderDestinations /
+        // ResolvePendingOrderDestinations) rather than resolve inline against _objectsById, or this
+        // silently decodes as no object at all (write-back would then emit Limbo/Void, ORDERS.PAS's
+        // own BadDestOER shape) instead of the real stargate reference.
+        var galaxy = new Galaxy(10);
+        var empire = new Empire { Name = "Test Empire" };
+
+        var stargate = new Stargate { Location = new Coordinate(3, 3), Owner = empire };
+        galaxy.Stargates.Add(stargate);
+
+        var fleet = new Fleet { Location = new Coordinate(1, 1), Owner = empire };
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationObject: stargate));
+        galaxy.Fleets.Add(fleet);
+
+        var game = new Game(galaxy);
+        game.Empires.Add(empire);
+        game.CurrentEmpire = empire;
+
+        var bytes = SavGameWriter.WriteGame(game);
+        var loaded = new SavGameLoader().LoadGame(bytes);
+
+        var loadedFleet = loaded.Galaxy.Fleets.Single();
+        await Assert.That(loadedFleet.Orders).Count().IsEqualTo(1);
+        await Assert.That(loadedFleet.Orders[0].DestinationObject).IsNotNull();
+        await Assert.That(loadedFleet.Orders[0].DestinationObject!.Location).IsEqualTo(new Coordinate(3, 3));
     }
 
     [Test]
@@ -247,6 +304,111 @@ public class SavGameLoaderTests
         await Assert.That(messageNews.Subject).IsNull();
         await Assert.That(messageNews.Position).IsEqualTo(new Coordinate(0, 0));
         await Assert.That(messageNews.OtherEmpire).IsNull();
+    }
+
+    [Test]
+    public async Task LoadGame_FleetOrders_DecodesRealMessage()
+    {
+        // Ground truth (savtool.py): one real message, sender ordinal 0 ("Cerberon"), recipient
+        // set {2} ("Hasarem"), Read/Intercepted both false, one line "yo, this is a message".
+        // All 8 empire slots are InUse in this file, so Game.Empires lists them in slot order.
+        var game = new SavGameLoader().LoadGame(LoadSave("FLEET_ORDERS.SAV"));
+
+        var message = game.Messages.Single();
+        await Assert.That(message.Sender.Name).IsEqualTo("Cerberon");
+        await Assert.That(message.Recipients.Select(e => e.Name)).IsEquivalentTo(["Hasarem"]);
+        await Assert.That(message.Read).IsFalse();
+        await Assert.That(message.Intercepted).IsFalse();
+        await Assert.That(message.Lines).IsEquivalentTo(["yo, this is a message"]);
+    }
+
+    [Test]
+    public async Task WriteThenLoad_Message_RoundTripsSenderRecipientsAndLines()
+    {
+        var galaxy = new Galaxy(10);
+        var sender = new Empire { Name = "Sender" };
+        var recipientA = new Empire { Name = "RecipientA" };
+        var recipientB = new Empire { Name = "RecipientB" };
+
+        var game = new Game(galaxy);
+        game.Empires.Add(sender);
+        game.Empires.Add(recipientA);
+        game.Empires.Add(recipientB);
+        game.CurrentEmpire = sender;
+
+        // Read:true with two live recipients is only reachable in real Pascal once both have read it
+        // (SetMessageRead's ReadBy<=Recipient check, MESS.PAS:242-250) -- asserted here purely as a
+        // plain stored field, not as evidence Read is independent of that per-recipient tracking.
+        game.Messages.Add(new Message(sender, new HashSet<Empire> { recipientA, recipientB }, Read: true, Intercepted: false, ["line one", "line two"]));
+
+        var bytes = SavGameWriter.WriteGame(game);
+        var loaded = new SavGameLoader().LoadGame(bytes);
+
+        var message = loaded.Messages.Single();
+        await Assert.That(message.Sender.Name).IsEqualTo("Sender");
+        await Assert.That(message.Recipients.Select(e => e.Name)).IsEquivalentTo(["RecipientA", "RecipientB"]);
+        await Assert.That(message.Read).IsTrue();
+        await Assert.That(message.Intercepted).IsFalse();
+        await Assert.That(message.Lines).IsEquivalentTo(["line one", "line two"]);
+    }
+
+    [Test]
+    public async Task WriteThenLoad_EnvironmentSettings_RoundTripInsteadOfResettingToDefaults()
+    {
+        var galaxy = new Galaxy(10);
+        var empire = new Empire { Name = "Solo" };
+
+        var game = new Game(galaxy) {
+            CurrentEmpire = empire,
+            TimePerTurn = 120,
+            AutoSave = false,
+            AsyncTurns = true,
+            PauseActive = false,
+            ReEnterGame = true,
+        };
+        game.Empires.Add(empire);
+
+        var bytes = SavGameWriter.WriteGame(game);
+        var loaded = new SavGameLoader().LoadGame(bytes);
+
+        await Assert.That(loaded.TimePerTurn).IsEqualTo(120);
+        await Assert.That(loaded.AutoSave).IsFalse();
+        await Assert.That(loaded.AsyncTurns).IsTrue();
+        await Assert.That(loaded.PauseActive).IsFalse();
+        await Assert.That(loaded.ReEnterGame).IsTrue();
+    }
+
+    [Test]
+    public async Task WriteThenLoad_MessageFromEliminatedEmpire_DoesNotThrowAndSenderComesBackUnnamed()
+    {
+        var galaxy = new Galaxy(10);
+        var recipient = new Empire { Name = "Recipient" };
+        var eliminatedSender = new Empire { Name = "FormerEmpire", Status = EmpireStatus.Eliminated };
+
+        var game = new Game(galaxy);
+        game.Empires.Add(recipient);
+        // Fill the remaining 7 on-disk slots (.SAV caps at 8) so EmpireSlotIndex.Assign for the
+        // eliminated sender below can't silently succeed only because slots happened to be free --
+        // this reproduces the tightest case Game.Empires being a permanent roster now allows.
+        for (var i = 0; i < 6; i++) {
+            game.Empires.Add(new Empire { Name = $"Filler{i}" });
+        }
+        game.Empires.Add(eliminatedSender);
+        game.CurrentEmpire = recipient;
+
+        game.Messages.Add(new Message(eliminatedSender, new HashSet<Empire> { recipient }, Read: false, Intercepted: false, ["farewell"]));
+
+        var bytes = SavGameWriter.WriteGame(game);
+        var loaded = new SavGameLoader().LoadGame(bytes);
+
+        // Eliminated empires write InUse=false (SavGameWriter's own EmpireSlotIndex doc comment), so
+        // the loader's placeholder gate never adds this slot to Game.Empires -- the message survives,
+        // but its sender comes back as an unnamed orphan, not the real "FormerEmpire" identity. That's
+        // real Pascal's own on-disk shape for a defeated-and-removed empire, not a bug in this port;
+        // GameJson is the lossless format for anything that needs Eliminated identity preserved.
+        var message = loaded.Messages.Single();
+        await Assert.That(message.Sender.Name).IsEqualTo("");
+        await Assert.That(loaded.Empires.Any(e => e.Name == "FormerEmpire")).IsFalse();
     }
 
     [Test]

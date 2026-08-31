@@ -19,7 +19,9 @@
    sumdesty=<v> (catches SavGameWriter.WriteFleets' own null-Destination convention actually
    round-tripping, not just its per-empire fleet count); minedcellcount=<v> (catches
    SavGameWriter.WriteSector's own mine-owner-nibble sentinel actually round-tripping);
-   empirecount=<v>;
+   messagecount=<v> (a real count of Mess unit's own MessageList -- proves Game.Messages
+   round-trips at the count level, same "content round-trips, order/identity doesn't get
+   independently checked here" bar as News below); empirecount=<v>;
    empire<N>name=<v>;empire<N>planets=<v>;empire<N>starbases=<v>;empire<N>fleets=<v>;
    empire<N>constr=<v>;empire<N>tech=<v>;empire<N>revfactor=<v>;empire<N>founding=<v>;
    empire<N>central=<0|1>;empire<N>empress=<0|1>;empire<N>news=<v> (for N=1..empirecount,
@@ -37,13 +39,19 @@
    LoadStarbases/LoadFleets/LoadConstr populate from each entity's own on-disk Emp field
    -- so a wrong owner-ordinal mapping in the C# writer shows up here directly, not just
    in Empire Data's own fields. News via NewsData[Emp].FirstItem walked to a count
-   (order/content-independent, just proves the section round-trips at all -- see
-   SavGameWriter's own doc comment for why full News fidelity is in scope while Messages
-   is not). Fuel/order-queue/message content are deliberately absent: Fleet.Fuel is a
-   double on the C# side (fractional for a played/scenario game, integral only for a
-   fresh file-load-file-write round trip) and the order queue/message text have no
-   in-memory representation on the C# side at all (docs/OPEN_GAPS.md's tracked
-   gaps) -- neither is meaningful to checksum here. ---------------------------------- *)
+   (order/content-independent, just proves the section round-trips at all). Fuel is
+   deliberately absent from the checksum: Fleet.Fuel is a double on the C# side (fractional
+   for a played/scenario game, integral only for a fresh file-load-file-write round trip),
+   so an exact-match checksum field for it would be a false positive waiting to happen.
+   The order queue and Messages both have real C# models now (Fleet.Orders, Game.Messages)
+   and are written back on round trip, but neither's *content* is summed above -- order-
+   queue correctness is instead proven by this driver's own LoadGame succeeding at all
+   (error=0) and every downstream section's fields still matching: a wrong CommandRecord
+   byte layout would desync LOADSAVE.PAS's own sequential reader and corrupt everything read
+   after it, not fail silently. Messages get the one cheap content-adjacent check
+   (messagecount) above that -- full text/Recipient-set fidelity is left to the C# test
+   suite's own SavGameLoaderTests/GameJsonTests, the same division of labor already used for
+   Fleet.Orders' own DestCOM object-reference decode. --------------------------------- *)
 
 PROGRAM RunLoad;
 
@@ -82,6 +90,23 @@ FUNCTION CountNews(Emp: Empire): Word;
       END;
    CountNews:=Count;
    END;  { CountNews }
+
+{ MessageList (Mess unit's own global) walked directly -- MESS.PAS has no per-count accessor of
+  its own, same reason CountNews walks GetNewsList's linked list by hand. }
+FUNCTION CountMessages: Word;
+   VAR
+      Item: MessageRecordPtr;
+      Count: Word;
+   BEGIN
+   Count:=0;
+   Item:=MessageList;
+   WHILE Item<>Nil DO
+      BEGIN
+      Inc(Count);
+      Item:=Item^.Next;
+      END;
+   CountMessages:=Count;
+   END;  { CountMessages }
 
 { No built-in Set cardinality function under -Mtp -- plain membership-counting loops instead. }
 FUNCTION CountPlanetsOf(Emp: Empire): Word;
@@ -175,6 +200,7 @@ VAR
    StargateCount,ConstrCount: LongInt;
    FleetCount,SumFleetX,SumFleetY,SumDestX,SumDestY: LongInt;
    MinedCellCount: LongInt;
+   MessageCount: LongInt;
    Cell: XYCoord;
    PlayerName: String32;
    ShpI: ShipTypes;
@@ -259,6 +285,8 @@ BEGIN
             Inc(MinedCellCount);
          END;
 
+   MessageCount:=CountMessages;
+
    PlayerName:=Universe^.EmpireData[Player].EmpireName;
 
    CollectEmpireSummaries;
@@ -277,6 +305,7 @@ BEGIN
          ';fleetcount=',FleetCount,';sumfleetx=',SumFleetX,';sumfleety=',SumFleetY,
          ';sumdestx=',SumDestX,';sumdesty=',SumDestY,
          ';minedcellcount=',MinedCellCount,
+         ';messagecount=',MessageCount,
          ';empirecount=',NoOfSummaries);
 
    FOR i:=1 TO NoOfSummaries DO

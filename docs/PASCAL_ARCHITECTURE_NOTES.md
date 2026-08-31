@@ -543,6 +543,32 @@ command procedures closely enough — and has since been corrected (`SelfDestruc
 directly, MSCCOMM.PAS:519). Worth remembering as a reminder that "grepped every caller, found none" is
 only as good as which files were actually searched.
 
+### `PhenomenaTypes` (`BlkHl`/`Plsr`/`WrmHl`) and `Wndr` are confirmed dead code, `ArtOBJ` shares the artifacts cut above
+
+`ObjectTypes` (`TYPES.PAS:128`) declares five map-entity kinds this port has no representation for:
+`BlkHl`/`Plsr`/`WrmHl` (the `PhenomenaTypes` subrange, `TYPES.PAS:129`), `Wndr`, and `ArtOBJ`.
+`ArtOBJ`'s dead status is already the Holocaust/Artifact/Transaction finding above — `CreateArtifact`'s
+only caller, the `Artifacts` scenario-command dispatch (`NEWGAME.PAS`), is itself wrapped in the same
+`(*ARTIFACTS ... *)` block, identical in both source trees.
+
+The other four are a separate, previously undocumented cut: grepped every occurrence of `BlkHl`,
+`Plsr`, `WrmHl`, and `Wndr` across both the 1.31 and 2.0 trees, and neither has a single creation
+routine for any of them — no `CreateBlackHole`/`CreatePulsar`/`CreateWormHole`/`CreateWonder`
+anywhere, scenario-command or otherwise. `DATACNST.PAS` has display-name strings for all four
+(`Wndr`'s is literally `'unknown'`), and `PROLOG.PAS`'s standalone galaxy-print utility has one
+leftover check (`IF Obj.ObjTyp=Plsr THEN Ch:=Chr(48+Obj.Index)`) — but the actual in-game map
+renderer (`MAPWIND.PAS`) has zero handling for any of the four, and nothing anywhere ever sets a
+`SectorRecord.Obj`/`IDNumber` to one of these tags. Reads like an early "space phenomena as galaxy
+terrain" feature (black holes, pulsars, wormholes as fixed hazards/landmarks, "wonders" as a fifth,
+unnamed category) that got as far as the type enum and one display string before being dropped —
+inference from dead code's shape, not confirmed history (see `QUESTIONS_FOR_GEORGE.md`).
+
+Not ported: `SavGameLoader`'s own `_objectsById` index already excludes these five object types on
+exactly this basis. This finding confirms that's not just "our 13 reference saves happen not to have
+one," but that the real engine can never produce one in the first place, from any scenario, in either
+source tree — so a `.SAV`-format `IDNumber` (including a fleet order's `DestCOM` target) never
+legitimately needs to resolve to one.
+
 ### FreePascal's `Round` is banker's rounding, not Turbo Pascal's
 
 `PascalMath.PascalRound` was originally implemented as half-away-from-zero (matching an assumption

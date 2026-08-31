@@ -21,18 +21,13 @@ deterministic given a fixed seed) — but only if it independently parses `Seed`
 value. No non-test caller exists anywhere in this port yet — every `new ScenarioLoader(...)` in the
 codebase is in a test file.
 
-## Save/load
+## Turn engine
 
-- **Fleet order queues aren't modeled.** `.SAV`'s `CommandRecord`/`DestCOM` order queues are
-  read-and-discarded on import (`SavGameLoader`) and always written empty on export
-  (`SavGameWriter`) — no in-memory representation of a fleet's pending orders exists anywhere in
-  this port.
-- **Messages aren't modeled.** Same treatment as order queues: no in-memory concept of a player
-  message exists, so `.SAV` messages are read-and-discarded on import and never written on export.
-- **UI/session Environment fields are discarded on import.** `EmpiresToMove`/`TimePerTurn`/
-  `AutoSave`/`AsyncTurns`/`PauseActive`/`ReEnterGame` have no effect anywhere in this port yet —
-  `EmpiresToMove` is redundant with `Game.CurrentEmpire`/`NextEmpire()` so there's nothing to store
-  regardless; the rest are read-and-discarded pending a UI session that has settings to hold them.
+- **No simultaneous-turns mode.** Real Pascal's `AsyncTurns` (`ANACREON.PAS:217-417`) lets every
+  empire act without waiting in strict rotation; `TurnEngine.AdvanceOneTurn` only implements the
+  synchronous mode (one `CurrentEmpire` at a time, `NextEmpire`'s fixed cyclic order). `Game.AsyncTurns`
+  round-trips through `.SAV` but nothing reads it — out of scope for now, but real multiplayer/hotseat
+  parity needs it eventually.
 
 ## Production tick: unresolved Cargo.Chemicals/Metals mismatch
 

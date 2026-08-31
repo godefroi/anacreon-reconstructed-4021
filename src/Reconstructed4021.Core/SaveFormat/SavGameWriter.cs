@@ -11,8 +11,7 @@ namespace Reconstructed4021.Core.SaveFormat;
 /// mirror of <see cref="SavGameLoader"/>'s own `Load*` methods, in the same on-disk order. Built
 /// purely to make `LoadGame` (`LOADSAVE.PAS`, unmodified) accept the result — see `docs/ROADMAP.md`'s
 /// save/load notes for why this is a test-only verification tool, not a byte-faithful or
-/// maintained save format (the native JSON format, <see cref="GameJson"/>, is that): no order-queue
-/// reconstruction (none exists in this port), no message content (none exists either), no attempt to
+/// maintained save format (the native JSON format, <see cref="GameJson"/>, is that): no attempt to
 /// reproduce a `Reserved`/pointer field's original garbage bytes (always zero here).
 ///
 /// <see cref="Game.Empires"/> is a permanent roster now (see <see cref="Types.EmpireStatus"/>):
@@ -21,11 +20,12 @@ namespace Reconstructed4021.Core.SaveFormat;
 /// was already not-InUse when the `.SAV` file being round-tripped was originally captured was never
 /// added to <see cref="Game.Empires"/> in the first place (<see cref="SavGameLoader"/>'s own
 /// placeholder gate, unrelated to and unchanged by this redesign), so a Kingdom's own `State` keys,
-/// <see cref="Empire.DefeatedBy"/>, a <see cref="NewsItem"/>'s `OtherEmpire`/`Defender`, or a
-/// minefield's owner/scouts can all still legitimately reference one — confirmed for real (not just
-/// theorized) by <c>SavGameWriterAcceptanceTests</c> failing against an actual reference save's
-/// minefield owner the one time the minefield loop was dropped on the assumption a permanent roster
-/// made it redundant. <see cref="EmpireSlotIndex"/> is this format's own version of
+/// <see cref="Empire.DefeatedBy"/>, a <see cref="NewsItem"/>'s `OtherEmpire`/`Defender`, a
+/// minefield's owner/scouts, or a <see cref="Entities.Message"/>'s `Sender`/`Recipients` can all
+/// still legitimately reference one — confirmed for real (not just theorized) by
+/// <c>SavGameWriterAcceptanceTests</c> failing against an actual reference save's minefield owner
+/// the one time the minefield loop was dropped on the assumption a permanent roster made it
+/// redundant. <see cref="EmpireSlotIndex"/> is this format's own version of
 /// <see cref="GameJson"/>'s `EntityIndex.EmpireId`, capped at exactly 8 slots (`Empire1..Empire8`;
 /// Independent is ordinal 8, never a slot) — a real structural limit of the on-disk format itself,
 /// matching the fact that real Pascal never has more than 8 empires exist in one game either. An
@@ -50,10 +50,10 @@ public static class SavGameWriter
         WriteSector(writer, game.Galaxy, slots);
         WritePlanets(writer, game.Galaxy, slots, visibility);
         WriteStarbases(writer, game.Galaxy, slots, visibility);
-        WriteFleets(writer, game.Galaxy, slots, visibility);
+        WriteFleets(writer, game.Galaxy, slots, visibility, objectIds);
         WriteStargates(writer, game.Galaxy, slots, visibility);
         WriteConstructionSites(writer, game.Galaxy, slots, visibility);
-        WriteMessages(writer);
+        WriteMessages(writer, game, slots);
         WriteEmpireData(writer, game, slots, objectIds, names);
         WriteNewsData(writer, game, slots, objectIds);
         WriteNpeData(writer, game, slots, objectIds);
@@ -68,10 +68,12 @@ public static class SavGameWriter
         writer.WriteWord(13);
     }
 
-    /// `SaveEnvironment` (`ENVIRON.PAS:143-159`). `EmpiresToMove`/`TimePerTurn`/`AutoSave`/
-    /// `AsyncTurns`/`PauseActive`/`ReEnterGame` have no home in this port (`SavGameLoader`'s own
-    /// doc comment) — written as real Pascal's own declared defaults (`ENVIRON.PAS`'s `CONST`
-    /// section), harmless either way since `LoadEnvironment` discards all of them right back.
+    /// `SaveEnvironment` (`ENVIRON.PAS:143-159`). `EmpiresToMove` is written empty — genuinely
+    /// redundant with `Game.CurrentEmpire`/`NextEmpire()`'s cyclic order plus `IsFirstEmpire`'s
+    /// wrap check (`TurnEngine.AdvanceOneTurn` derives the same "round is over" signal
+    /// structurally, from position, rather than from a shrinking set) — harmless since
+    /// `LoadEnvironment` discards it right back either way. `TimePerTurn`/`AutoSave`/`AsyncTurns`/
+    /// `PauseActive`/`ReEnterGame` round-trip from <see cref="Game"/>'s own like-named properties.
     /// `Player` has no "no one yet" sentinel in the real format (unlike every entity reference,
     /// which has `IDNumber`'s `Index=0`) -- a freshly built <see cref="NewGame.ScenarioLoader"/> game
     /// has real empires but hasn't picked whose turn it is yet, so <see cref="Game.CurrentEmpire"/>
@@ -89,11 +91,11 @@ public static class SavGameWriter
         writer.WriteByte((byte)slots.SlotOf(player));
         writer.WriteBitSet([], 2); // EmpiresToMove
         writer.WritePascalString(game.ScenarioFilename ?? "", 16);
-        writer.WriteWord(300); // TimePerTurn
-        writer.WriteBoolean(true); // AutoSave
-        writer.WriteBoolean(false); // AsyncTurns
-        writer.WriteBoolean(true); // PauseActive
-        writer.WriteBoolean(false); // ReEnterGame
+        writer.WriteWord((ushort)game.TimePerTurn);
+        writer.WriteBoolean(game.AutoSave);
+        writer.WriteBoolean(game.AsyncTurns);
+        writer.WriteBoolean(game.PauseActive);
+        writer.WriteBoolean(game.ReEnterGame);
     }
 
     /// <summary>
@@ -236,17 +238,16 @@ public static class SavGameWriter
     }
 
     /// <summary>
-    /// `SaveFleets` (`LOADSAVE.PAS:188-225`). Always writes an empty order queue (`NoOfComs=0`) --
-    /// no in-memory order-queue representation exists in this port (`docs/OPEN_GAPS.md`'s tracked
-    /// gap). <see cref="Fleet.Destination"/> null must become `Dest:=XY`, never `(0,0)`:
-    /// `LoadFleets`' own per-axis quirk (`LOADSAVE.PAS:250-256`) resets <em>both</em> `XY` and `Dest`
-    /// to `(1,1)` the instant either coordinate has a zero component on either field, so writing a
-    /// literal `(0,0)` "no destination" sentinel would silently relocate every stationary fleet on
-    /// the very next load. `runload.pas`'s own `sumfleetx`/`sumfleety` checksum fields exist
-    /// specifically to cover this path in the real-Pascal acceptance test -- see that driver's own
-    /// doc comment.
+    /// `SaveFleets` (`LOADSAVE.PAS:188-225`). Writes each fleet's real <see cref="Fleet.Orders"/>
+    /// queue (see <see cref="WriteCommandRecord"/>) instead of always emitting `NoOfComs=0`.
+    /// <see cref="Fleet.Destination"/> null must become `Dest:=XY`, never `(0,0)`: `LoadFleets`' own
+    /// per-axis quirk (`LOADSAVE.PAS:250-256`) resets <em>both</em> `XY` and `Dest` to `(1,1)` the
+    /// instant either coordinate has a zero component on either field, so writing a literal `(0,0)`
+    /// "no destination" sentinel would silently relocate every stationary fleet on the very next
+    /// load. `runload.pas`'s own `sumfleetx`/`sumfleety` checksum fields exist specifically to cover
+    /// this path in the real-Pascal acceptance test -- see that driver's own doc comment.
     /// </summary>
-    private static void WriteFleets(SavWriter writer, Galaxy.Galaxy galaxy, EmpireSlotIndex slots, VisibilityIndex visibility)
+    private static void WriteFleets(SavWriter writer, Galaxy.Galaxy galaxy, EmpireSlotIndex slots, VisibilityIndex visibility, ObjectIdIndex objectIds)
     {
         for (var i = 0; i < galaxy.Fleets.Count; i++) {
             var fleet = galaxy.Fleets[i];
@@ -272,11 +273,57 @@ public static class SavGameWriter
             writer.WriteZeros(8); // Reserved
             writer.WriteIdNumber(new SavIdNumber(SavObjectType.Void, 0)); // NextID
 
-            writer.WriteWord(0); // order-queue count -- always empty, see doc comment
+            writer.WriteWord((ushort)fleet.Orders.Count);
+            foreach (var order in fleet.Orders) {
+                WriteCommandRecord(writer, order, objectIds);
+            }
         }
 
         writer.WriteWord(0);
     }
+
+    /// <summary>
+    /// Inverse of `SavGameLoader.ReadCommandRecord` -- `Typ` plus its 4-byte variant, populated only
+    /// for <see cref="CommandType.Destination"/>/<see cref="CommandType.Transfer"/> (every other
+    /// command carries no payload, matching real Pascal's own unused/garbage variant for those).
+    /// </summary>
+    private static void WriteCommandRecord(SavWriter writer, FleetOrder order, ObjectIdIndex objectIds)
+    {
+        writer.WriteByte((byte)order.Type);
+
+        switch (order.Type) {
+            case CommandType.Destination:
+                if (order.DestinationObject is { } destinationObject) {
+                    writer.WriteCoordinate(default); // Limbo -- an object reference wins over a raw coordinate, matching GetLocation's own convention.
+                    writer.WriteIdNumber(objectIds.IdOf(destinationObject));
+                } else {
+                    writer.WriteCoordinate(order.DestinationPosition ?? default);
+                    writer.WriteIdNumber(new SavIdNumber(SavObjectType.Void, 0));
+                }
+                break;
+
+            case CommandType.Transfer:
+                writer.WriteByte((byte)EncodeTransferResource(order.TransferShip, order.TransferCargo));
+                writer.WriteInteger((short)order.TransferAmount);
+                writer.WriteByte(0); // Trailing unused byte of the 4-byte variant (Res+Trns is only 3 bytes).
+                break;
+
+            default:
+                writer.WriteZeros(4); // No payload for this command type.
+                break;
+        }
+    }
+
+    /// Inverse of `SavGameLoader.ResolveTransferResource` -- same `ShipType`(+5)/`CargoType`(+12)
+    /// offsets back into the shared `ResourceTypes` ordinal space. Neither set (a `Transfer` order
+    /// with no real resource, which nothing in this port constructs) writes `NoRes` (0).
+    private static int EncodeTransferResource(ShipType? ship, CargoType? cargo) => ship switch {
+        { } s => (int)s + 5,
+        null => cargo switch {
+            { } c => (int)c + 12,
+            null => 0,
+        },
+    };
 
     /// `SaveStargates` (`LOADSAVE.PAS:301-317`). `LinkedTo` null means "not yet linked" -- `Limbo`
     /// (0,0) on disk, the opposite convention from Fleet/Starbase's `Destination` (compare this
@@ -317,9 +364,34 @@ public static class SavGameWriter
         writer.WriteWord(0);
     }
 
-    /// `SaveMessageData` (`MESS.PAS`). No in-memory message concept exists in this port
-    /// (`SavGameLoader.LoadMessages`' own doc comment) -- nothing to write, ever.
-    private static void WriteMessages(SavWriter writer) => writer.WriteByte(0);
+    /// <summary>
+    /// `SaveMessageData` (`MESS.PAS:319-367`). `ReadBy` is always written empty -- real Pascal's own
+    /// `LoadMessageData` never restores it either (`Message`'s own doc comment), so there's nothing
+    /// to round-trip faithfully there; a fresh, empty `ReadBy` is exactly as faithful as whatever
+    /// uninitialized heap garbage a real load would have produced.
+    /// </summary>
+    private static void WriteMessages(SavWriter writer, Game game, EmpireSlotIndex slots)
+    {
+        writer.WriteByte((byte)game.Messages.Count);
+
+        foreach (var message in game.Messages) {
+            writer.WriteByte((byte)slots.SlotOf(message.Sender));
+            writer.WriteBitSet(message.Recipients.Select(slots.SlotOf), 1);
+            writer.WriteBitSet([], 1); // ReadBy -- always empty, see this method's own doc comment.
+            writer.WriteBoolean(message.Read);
+            writer.WriteBoolean(message.Intercepted);
+            writer.WriteWord((ushort)message.Lines.Count); // MesText.NoOfLines
+            writer.WriteZeros(4); // MesText.FirstLine
+            writer.WriteZeros(4); // MesText.LastLine
+            writer.WriteZeros(4); // Next
+            writer.WriteZeros(4); // Prev
+
+            writer.WriteByte((byte)message.Lines.Count);
+            foreach (var line in message.Lines) {
+                writer.WritePascalString(line, 80);
+            }
+        }
+    }
 
     private static void WriteShellDefensePlan(SavWriter writer, ShellDefensePlan plan)
     {
@@ -853,6 +925,15 @@ public static class SavGameWriter
             foreach (var scouts in game.Galaxy.MineScoutedByData.Values) {
                 foreach (var scout in scouts) {
                     Register(scout);
+                }
+            }
+
+            // A Message's Sender/Recipients are a fifth path to the same shape of dangling
+            // reference -- nothing prunes a Message when the empire it names is later destroyed.
+            foreach (var message in game.Messages) {
+                Register(message.Sender);
+                foreach (var recipient in message.Recipients) {
+                    Register(recipient);
                 }
             }
         }
