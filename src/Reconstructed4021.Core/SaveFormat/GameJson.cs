@@ -70,11 +70,12 @@ public static class GameJson
         var node = JsonSerializer.SerializeToNode(game, graphOptions)!.AsObject();
         node["currentEmpireId"] = EmpireIdOrNull(index, game.CurrentEmpire);
 
-        // TurnHandlers/blobs/minefields/mineScoutedBy first -- see EntityIndex's own remarks. Only
-        // WriteTurnHandlers can still discover a genuine orphan (a living Kingdom's diplomacy
-        // dictionary referencing an ordinal that was never a real empire in this game); blobs/
-        // minefields/mineScoutedBy references are always real Game.Empires members now, current or
-        // Eliminated. "empires" still needs to be written last regardless, for that one case.
+        // TurnHandlers/blobs/minefields/mineScoutedBy first -- see EntityIndex's own remarks on why
+        // an empire can still be discovered only here, never in game.Empires (a Kingdom's own State
+        // keys, or -- confirmed by SavGameWriter's own equivalent, see its remarks -- a minefield
+        // owner/scout referencing an empire that was already not-InUse when the .SAV this Game was
+        // originally loaded from was captured), and why "empires" must be written last so any such
+        // discovery is already reflected in it.
         var turnHandlersNode = WriteTurnHandlers(game, index);
         var blobsNode = WriteBlobs(game, index);
         var minefieldsNode = WriteMinefields(game.Galaxy, index);
@@ -599,16 +600,19 @@ public static class GameJson
     ///
     /// Empires are the one kind assigned lazily rather than up front. <see cref="Game.Empires"/> is a
     /// permanent roster (see <see cref="Types.EmpireStatus"/>) — a defeated empire, human or NPE,
-    /// stays a member forever, so it's never actually orphaned from it. The one real orphan case left
-    /// is a living <see cref="Turns.KingdomTurnHandler"/>'s own <c>State</c> dictionary (diplomatic
-    /// memory, keyed per raw ordinal) referencing a placeholder <see cref="Empire"/> object for an
-    /// ordinal that was never a real empire in this game — real Pascal's on-disk <c>State</c> array
-    /// is always 9 fixed slots regardless of how many empires actually exist, so this can happen even
-    /// though no elimination was ever involved.
+    /// stays a member forever, so a *defeated* empire is never orphaned from it. That alone doesn't
+    /// eliminate the orphan case, though: an empire that was already not-InUse when the `.SAV` file
+    /// this <see cref="Game"/> was originally loaded from was captured was never added to
+    /// <see cref="Game.Empires"/> in the first place (<see cref="SavGameLoader"/>'s own placeholder
+    /// gate, unrelated to and unchanged by <see cref="Types.EmpireStatus"/>), so a living
+    /// <see cref="Turns.KingdomTurnHandler"/>'s own <c>State</c> dictionary, or a minefield's
+    /// owner/scouts, can still reference one — confirmed for real (not just theorized) by
+    /// <see cref="SavGameWriter"/>'s own equivalent orphan-discovery code, whose otherwise-identical
+    /// simplification broke against a real reference save's minefield owner (see its remarks).
     /// <see cref="EmpireId"/> auto-registers such an orphan the first time anything asks for its id;
-    /// <see cref="Serialize"/> writes the turnHandlers section (the only place this can surface)
-    /// before <c>"empires"</c> so it's already known by the time <see cref="WriteEmpires"/> walks
-    /// <see cref="AllEmpires"/>.
+    /// <see cref="Serialize"/> writes the turnHandlers/blobs/minefield sections (the only places an
+    /// orphan can surface) before <c>"empires"</c> so every orphan this call discovers is already
+    /// known by the time <see cref="WriteEmpires"/> walks <see cref="AllEmpires"/>.
     /// </summary>
     private sealed class EntityIndex
     {

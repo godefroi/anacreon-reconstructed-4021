@@ -5,7 +5,7 @@ namespace Reconstructed4021.Core.Types;
 /// EmpireData[Emp].InUse; INTRFACE.PAS:1612-1658's DestroyEmpire sets InUse:=False) plus the
 /// intermediate window Pascal's own ConquerEmpire (ATTACK.PAS:985-1139) leaves a defeated human in
 /// before their own next turn-prologue (PROLOG.PAS:456-488's EmpireNews) finishes the teardown.
-/// See docs/EMPIRE_LIFECYCLE_DESIGN.md.
+/// See docs/PORT_DESIGN.md's "Empire elimination" section.
 /// </summary>
 public enum EmpireStatus
 {
@@ -16,9 +16,8 @@ public enum EmpireStatus
     /// A human whose capital just fell with no other world to fall back to (ConquerEmpire's human
     /// branch, ATTACK.PAS:1124-1128). EmpireActive stays true, Capital is null, Empire.DefeatedBy
     /// names the conqueror, but nothing else is torn down yet — fleets/starbases/other planets are
-    /// untouched, and diplomacy/AI treat this empire exactly like any other (see
-    /// docs/EMPIRE_LIFECYCLE_DESIGN.md's "nothing treats a PendingElimination empire specially").
-    /// Never set for an NPE — an NPE always goes straight to Eliminated.
+    /// untouched, and diplomacy/AI treat this empire exactly like any other. Never set for an NPE —
+    /// an NPE always goes straight to Eliminated.
     /// </summary>
     PendingElimination,
 

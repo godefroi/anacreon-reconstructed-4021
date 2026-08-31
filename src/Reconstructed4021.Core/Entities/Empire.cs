@@ -43,8 +43,9 @@ public sealed class Empire
     /// <summary>
     /// EmpireActive/InUse (PRIMINTR.PAS:962-965) plus the deferred-human-elimination window real
     /// Pascal's own ConquerEmpire leaves open. See <see cref="Types.EmpireStatus"/> and
-    /// docs/EMPIRE_LIFECYCLE_DESIGN.md for the full model. <see cref="Game.Empires"/> is a permanent
-    /// roster — this is the field that tracks whether an entry is still alive, not list membership.
+    /// docs/PORT_DESIGN.md's "Empire elimination" section for the full model. <see cref="Game.Empires"/>
+    /// is a permanent roster — this is the field that tracks whether an entry is still alive, not list
+    /// membership.
     /// </summary>
     public EmpireStatus Status { get; set; } = EmpireStatus.Active;
 
@@ -119,7 +120,8 @@ public sealed class Empire
     /// is a permanent roster (see <see cref="Status"/>), so <c>EmpireActive</c>'s <c>InUse</c> check can't
     /// be inferred from list membership anymore. <see cref="EmpireStatus.PendingElimination"/> is
     /// deliberately not excluded here: <c>EmpireActive</c> stays true through that window in Pascal, and
-    /// nothing treats a defeated-in-place empire specially (see docs/EMPIRE_LIFECYCLE_DESIGN.md).
+    /// nothing treats a defeated-in-place empire specially (see docs/PORT_DESIGN.md's "Empire
+    /// elimination" section).
     /// </summary>
     public void AddNews(
         NewsType headline,

@@ -8,9 +8,9 @@ namespace Reconstructed4021.Core.Turns;
 /// advance to the next empire, and run the annual tick exactly once per wrap back to the first
 /// empire. Human and AI turns go through the same dispatch (game.TurnHandlers), so there's no
 /// separate "auto-play the AI empires" path. Since <see cref="Entities.Empire.Status"/> is a
-/// permanent-roster field (see docs/EMPIRE_LIFECYCLE_DESIGN.md), this is also the one place
-/// dispatch is <see cref="EmpireStatus"/>-aware: an <see cref="EmpireStatus.Active"/> empire plays
-/// normally, an <see cref="EmpireStatus.Eliminated"/> one does nothing, and a
+/// permanent-roster field (see docs/PORT_DESIGN.md's "Empire elimination" section), this is also
+/// the one place dispatch is <see cref="EmpireStatus"/>-aware: an <see cref="EmpireStatus.Active"/>
+/// empire plays normally, an <see cref="EmpireStatus.Eliminated"/> one does nothing, and a
 /// <see cref="EmpireStatus.PendingElimination"/> one finishes its own deferred teardown here —
 /// matching PROLOG.PAS's <c>EmpireNews</c>, which runs at the very start of a defeated player's own
 /// next turn.

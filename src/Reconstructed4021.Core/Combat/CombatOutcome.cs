@@ -14,7 +14,8 @@ namespace Reconstructed4021.Core.Combat;
 /// for anything beyond returning them.
 ///
 /// Empire elimination is one unified lifecycle (see <see cref="Types.EmpireStatus"/> and
-/// docs/EMPIRE_LIFECYCLE_DESIGN.md), matching real Pascal's own permanent per-empire array: an NPE's
+/// docs/PORT_DESIGN.md's "Empire elimination" section), matching real Pascal's own permanent
+/// per-empire array: an NPE's
 /// loss transitions straight to <see cref="Types.EmpireStatus.Eliminated"/> synchronously, inside
 /// <see cref="DestroyEmpire"/>, right here; a human's loss instead parks at
 /// <see cref="Types.EmpireStatus.PendingElimination"/> until their own next turn-prologue
