@@ -15,13 +15,6 @@ skips that step and says so in its own comment: `CombatOutcome.AbortFleet`,
 movement, and `AnnualTickHandler.UpdateConstruction`. One real, cross-cutting gap, not seven
 separate ones.
 
-## Combat
-
-- **`CombatOutcome.AbortFleet` doesn't convert leftover fuel to trillum.** A real Fuel/FuelCapacity
-  model exists (`Entities/FleetLogistics.cs`) that this method doesn't use; a fleet that dissolves
-  via `AbortFleet` silently loses whatever fuel it was carrying instead of it landing as trillum on
-  the ground.
-
 ## Scenario loading
 
 **`ScenarioLoader` can't reproduce a `.SCN` file's own explicit-seed determinism.** Real Pascal's

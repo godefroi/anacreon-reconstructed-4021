@@ -300,11 +300,16 @@ public static class CombatOutcome
     /// <paramref name="ground"/> and reports the transfer, matching real Pascal's own GetShips/PutShips
     /// no-op for a construction-site/stargate ground (PRIMINTR.PAS:315-364,589-607, confirmed by
     /// reading) via <see cref="GetShipsAndCargo"/> returning null for anything that isn't an
-    /// <see cref="IEconomicWorld"/> or <see cref="Fleet"/>. Fuel-to-trillum conversion and
-    /// FleetNameDestruction's naming-system call aren't ported (same gap as RestoreCombatant/
-    /// ConquerWorld's own doc comments). A real Fuel/FuelCapacity model exists
-    /// (<see cref="FleetLogistics"/>) that this method doesn't use: a known gap. Internal (not private):
-    /// <see cref="Npe.NpeToolkit.ImplementReturnMSN"/>/<see cref="Npe.NpeToolkit.ImplementRefuelMSN"/>
+    /// <see cref="IEconomicWorld"/> or <see cref="Fleet"/>. Leftover fuel converts to trillum
+    /// (FLEET.PAS:169,176-183) before the report loop below reads <c>source.Cargo</c>, matching
+    /// Pascal's own ordering (<c>Cr2[Tri]</c> is folded in at line 177, before the Trns2 report loop at
+    /// 197-199 reads it) — <see cref="FleetLogistics"/>'s <see cref="FleetLogistics.FuelPerTon"/> is the
+    /// only piece of that model this method needs; no capacity clamp applies on either branch (Pascal
+    /// has none here). Every call site destroys <paramref name="source"/> immediately after calling
+    /// this (grep-confirmed), so mutating <paramref name="source"/>'s own fields in place rather than
+    /// working from a copy, unlike Pascal's Sh2/Cr2, is safe. FleetNameDestruction's naming-system call
+    /// isn't ported — see <c>docs/OPEN_GAPS.md</c>'s naming-system section for why. Internal (not
+    /// private): <see cref="Npe.NpeToolkit.ImplementReturnMSN"/>/<see cref="Npe.NpeToolkit.ImplementRefuelMSN"/>
     /// call this exact primitive rather than duplicating it, same precedent as <see cref="DestroyFleet"/>.
     /// </summary>
     internal static void AbortFleet(Fleet source, object ground, bool report)
@@ -312,6 +317,12 @@ public static class CombatOutcome
         var (ships, cargo) = GetShipsAndCargo(ground);
         if (ships is null) {
             return;
+        }
+
+        if (ground is Fleet groundFleet) {
+            groundFleet.Fuel += source.Fuel;
+        } else {
+            source.Cargo.Trillum = ClampResource(source.Cargo.Trillum + ClampResource(source.Fuel / FleetLogistics.FuelPerTon));
         }
 
         var groundOwner = ((ISectorObject)ground).Owner;

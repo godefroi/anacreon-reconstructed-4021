@@ -1,3 +1,4 @@
+using Reconstructed4021.Core;
 using Reconstructed4021.Core.Combat;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
@@ -100,5 +101,72 @@ public class CombatOutcomeTests
         await Assert.That(game.TurnHandlers).DoesNotContainKey(npe);
         await Assert.That(npe.Status).IsEqualTo(EmpireStatus.Eliminated);
         await Assert.That(npe.DefeatedBy).IsEqualTo(conqueror);
+    }
+
+    /// <summary>
+    /// AbortFleet (FLEET.PAS:150-209), reached via <see cref="CombatOutcome.DestroyEmpire"/> (itself
+    /// reached via <see cref="CombatOutcome.ConquerEmpire"/>'s NPE-destroyed branch — AbortFleet is
+    /// <c>internal</c>, so this test goes through the same public entry point a real conquest would):
+    /// leftover fuel converts to trillum and lands on the ground planet's own cargo, clamped via ThgLmt
+    /// (<see cref="PascalMath.ClampResource"/>) both on the ton conversion and on the add.
+    /// </summary>
+    [Test]
+    public async Task AbortFleet_ConvertsLeftoverFuelToTrillumOnWorldGround()
+    {
+        var galaxy = new Galaxy(size: 100);
+        var game = new Core.Game(galaxy);
+
+        var conqueror = EmpireFactory.CreateEmpire("Conqueror", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var conquerorCapital = new Planet { Location = new Coordinate(0, 0), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        conqueror.Capital = conquerorCapital;
+        galaxy.Planets.Add(conquerorCapital);
+
+        var npe = EmpireFactory.CreateEmpire("Npe", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        npe.NpeType = NpeEmpireType.Pirate;
+        var npeCapital = new Planet { Location = new Coordinate(50, 50), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Independent, TechLevel = TechLevel.Jump };
+        npe.Capital = npeCapital;
+
+        var fleet = new Fleet { Location = new Coordinate(10, 10), Owner = npe, Fuel = 530 }; // 530 / FuelPerTon(265) = 2 tons exactly
+        galaxy.Fleets.Add(fleet);
+        var ground = new Planet { Location = new Coordinate(10, 10), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Agricultural, TechLevel = TechLevel.Jump };
+        ground.Cargo.Trillum = 10;
+        galaxy.Planets.Add(ground);
+
+        game.Empires.Add(conqueror);
+        game.Empires.Add(npe);
+        game.TurnHandlers[conqueror] = new NonHumanTurnHandler();
+        game.TurnHandlers[npe] = new NonHumanTurnHandler();
+
+        CombatOutcome.ConquerEmpire(conqueror, npe, game, new FixedRandom(0));
+
+        await Assert.That(ground.Cargo.Trillum).IsEqualTo(12);
+    }
+
+    /// <summary>
+    /// AbortFleet's fleet-to-fleet branch (FLEET.PAS:178-183), reached via
+    /// <see cref="CombatOutcome.ResolveAttack"/>'s Fleet/DefenderConquered/capture path: fuel merges
+    /// directly into the ground fleet's own Fuel, no trillum/tons involved and no capacity clamp —
+    /// matching Pascal's own unclamped SetFleetFuel.
+    /// </summary>
+    [Test]
+    public async Task AbortFleet_MergesFuelDirectlyWhenGroundIsFleet()
+    {
+        var galaxy = new Galaxy(size: 100);
+        var game = new Core.Game(galaxy);
+
+        var attacker = EmpireFactory.CreateEmpire("Attacker", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var attackerFleet = new Fleet { Location = new Coordinate(0, 0), Owner = attacker, Fuel = 15 };
+        galaxy.Fleets.Add(attackerFleet);
+
+        var defender = EmpireFactory.CreateEmpire("Defender", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var targetFleet = new Fleet { Location = new Coordinate(0, 0), Owner = defender, Fuel = 40 };
+        galaxy.Fleets.Add(targetFleet);
+
+        CombatOutcome.ResolveAttack(
+            AttackResultType.DefenderConquered, attackerFleet, targetFleet,
+            hkAttack: false, capture: true, new AttackTally(), new AttackTally(), game, new FixedRandom(0));
+
+        await Assert.That(attackerFleet.Fuel).IsEqualTo(55);
+        await Assert.That(attackerFleet.Cargo.Trillum).IsEqualTo(0);
     }
 }
