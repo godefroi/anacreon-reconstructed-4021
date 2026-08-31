@@ -12,13 +12,23 @@ public sealed partial class AnnualTickHandler
 
     /// <summary>
     /// UPDATE.PAS:103-220 (UpdateConstruction, nested UseUpRawMaterial) plus ConstructStarbase/
-    /// ConstructStargate (UPDATE.PAS:58-100) for the completion branch. Skips the naming system
-    /// (Location2Index/GetDefinedName/DeleteName/AddName): this port has no naming system, and
-    /// nothing here depends on it. Sector-occupancy clearing (Sector[XY.x]^[XY.y].Obj:=EmptyQuadrant)
-    /// has no C# equivalent to update — Galaxy defers sector-occupancy indexing to the movement phase.
-    /// <c>ConsDone</c> fires with the raw <see cref="Galaxy.Coordinate"/>, not the new starbase/stargate, as
-    /// its subject — matching Pascal's own <c>Loc.ID:=EmptyQuadrant; Loc.XY:=XY</c> at UPDATE.PAS:215,
-    /// which discards the newly-created object's ID rather than using it.
+    /// ConstructStargate (UPDATE.PAS:58-100) for the completion branch. UPDATE.PAS:189-211's own
+    /// DeleteName+AddName (carry the site's name over to whatever it becomes) is deliberately
+    /// broadened here, not ported literally: real Pascal only preserves the *site owner's* own name
+    /// for the spot (<c>Location2Index(Emp,...)</c> where <c>Emp</c> is the site's owner), dropping
+    /// any other empire's own bookmark of that location. Every empire's own name for the site carries
+    /// forward here instead — a deliberate improvement over Pascal, not a gap, since a player who
+    /// named a spot would expect that name to survive whatever gets built there regardless of who
+    /// owns it (see <c>docs/PORT_DESIGN.md</c>'s "Naming system" section). A completed
+    /// <see cref="ConstructionType.Minefield"/> gets no such carry-forward, matching Pascal exactly —
+    /// its CASE has no AddName arm for the <c>SRM</c> branch, a genuine net deletion, not an
+    /// oversight (<see cref="ISectorObject.Names"/>'s own remarks on why nothing needs to explicitly
+    /// delete it: it's simply never copied anywhere once the finished site itself is discarded).
+    /// Sector-occupancy clearing (Sector[XY.x]^[XY.y].Obj:=EmptyQuadrant) has no C# equivalent to
+    /// update — Galaxy defers sector-occupancy indexing to the movement phase. <c>ConsDone</c> fires
+    /// with the raw <see cref="Galaxy.Coordinate"/>, not the new starbase/stargate, as its subject —
+    /// matching Pascal's own <c>Loc.ID:=EmptyQuadrant; Loc.XY:=XY</c> at UPDATE.PAS:215, which
+    /// discards the newly-created object's ID rather than using it.
     /// </summary>
     private void UpdateConstruction(ConstructionSite site, Game game)
     {
@@ -36,12 +46,22 @@ public sealed partial class AnnualTickHandler
             case ConstructionType.Minefield:
                 game.Galaxy.SetMine(site.Location, site.Owner);
                 break;
-            case ConstructionType.Gate or ConstructionType.WarpLink or ConstructionType.Disrupter:
-                game.Galaxy.Stargates.Add(CreateStargate(site));
+            case ConstructionType.Gate or ConstructionType.WarpLink or ConstructionType.Disrupter: {
+                var stargate = CreateStargate(site);
+                game.Galaxy.Stargates.Add(stargate);
+                foreach (var (namer, name) in site.Names) {
+                    stargate.Names[namer] = name;
+                }
                 break;
-            default: // CommandBase, Fortress, IndustrialComplex, Outpost
-                game.Galaxy.Starbases.Add(CreateStarbase(site));
+            }
+            default: { // CommandBase, Fortress, IndustrialComplex, Outpost
+                var starbase = CreateStarbase(site);
+                game.Galaxy.Starbases.Add(starbase);
+                foreach (var (namer, name) in site.Names) {
+                    starbase.Names[namer] = name;
+                }
                 break;
+            }
         }
 
         site.Owner.AddNews(NewsType.ConstructionCompleted, position: site.Location, p1: (int)site.Building);

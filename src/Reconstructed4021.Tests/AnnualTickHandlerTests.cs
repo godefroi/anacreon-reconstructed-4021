@@ -1560,4 +1560,62 @@ public class AnnualTickHandlerConstructionTests
         await Assert.That(wrongOwner.Cargo.Chemicals).IsEqualTo(500);
         await Assert.That(contributor.Cargo.Chemicals).IsEqualTo(500 - 110);
     }
+
+    /// <summary>
+    /// Every empire's own name for a completed construction site carries forward to the starbase/
+    /// stargate it becomes — deliberately broader than real Pascal, which only preserves the site
+    /// owner's own name (UPDATE.PAS:189-211's <c>Location2Index(Emp,...)</c> only ever looks up
+    /// <c>Emp</c>, the site's own owner); see this method's own doc comment for why. Hardcoded, not
+    /// golden-file-backed: this is a deliberate port-only feature with no real Pascal output to check
+    /// against.
+    /// </summary>
+    [Test]
+    public async Task Completion_CarriesEveryEmpiresNameForwardToTheNewStarbase()
+    {
+        var owner = new Empire { Name = "Owner" };
+        var watcher = new Empire { Name = "Watcher" };
+        var site = new ConstructionSite { Location = SiteLocation, Owner = owner, Building = ConstructionType.CommandBase, YearsToCompletion = 1 };
+        site.Names[owner] = "My Fortress";
+        site.Names[watcher] = "Enemy Base";
+
+        var fleet = new Fleet { Location = SiteLocation, Owner = owner };
+        fleet.Cargo.Chemicals = 460;
+        fleet.Cargo.Metals = 2300;
+        fleet.Cargo.Trillum = 180;
+
+        var game = BuildGame(owner, site, [fleet]);
+        game.Empires.Add(watcher);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(game.Galaxy.ConstructionSites).DoesNotContain(site);
+        var starbase = game.Galaxy.Starbases.Single();
+        await Assert.That(starbase.Names[owner]).IsEqualTo("My Fortress");
+        await Assert.That(starbase.Names[watcher]).IsEqualTo("Enemy Base");
+    }
+
+    /// <summary>A completed minefield creates no entity to carry a name onto — UPDATE.PAS's own CASE has no AddName arm for the SRM branch, a genuine net deletion, not an oversight (see UpdateConstruction's own doc comment).</summary>
+    [Test]
+    public async Task MinefieldCompletion_HasNothingToCarryTheSitesNamesOnto()
+    {
+        var owner = new Empire { Name = "Owner" };
+        var site = new ConstructionSite { Location = SiteLocation, Owner = owner, Building = ConstructionType.Minefield, YearsToCompletion = 1 };
+        site.Names[owner] = "My Minefield";
+
+        var fleet = new Fleet { Location = SiteLocation, Owner = owner };
+        fleet.Cargo.Chemicals = 110;
+        fleet.Cargo.Metals = 500;
+        fleet.Cargo.Trillum = 80;
+
+        var game = BuildGame(owner, site, [fleet]);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(game.Galaxy.ConstructionSites).DoesNotContain(site);
+        await Assert.That(game.Galaxy.Starbases).IsEmpty();
+        await Assert.That(game.Galaxy.Stargates).IsEmpty();
+        await Assert.That(game.Galaxy.GetMineOwner(SiteLocation)).IsEqualTo(owner);
+    }
 }

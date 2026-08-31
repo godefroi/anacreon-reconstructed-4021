@@ -8,6 +8,9 @@ public sealed class Planet : IEconomicWorld
     public required Coordinate Location { get; set; }
     public Empire Owner { get; set; } = Empire.Independent;
 
+    /// <summary>See <see cref="ISectorObject.Names"/>.</summary>
+    public Dictionary<Empire, string> Names { get; set; } = new();
+
     public WorldClass Class { get; set; }
     public WorldType Type { get; set; }
 

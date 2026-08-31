@@ -315,8 +315,9 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
     /// carry in the first place (<see cref="Fleet.Type"/>'s own derivation), so checking just those
     /// three for "anything left" is equivalent to Pascal's full <c>NoShips</c> scan here. BalanceFleet's
     /// post-damage cargo rebalance isn't ported on the survives branch — this method only ever removes
-    /// ships, never cargo, so nothing here could exceed a capacity anyway. FleetNameDestruction is
-    /// dropped too (AbortFleet's established gap).
+    /// ships, never cargo, so nothing here could exceed a capacity anyway. FleetNameDestruction needs
+    /// no equivalent here either, same reasoning as <see cref="Combat.CombatOutcome.AbortFleet"/>'s
+    /// own remarks.
     /// </summary>
     private bool ApplyMineFieldDamage(Fleet fleet, Empire minedBy, Game game)
     {

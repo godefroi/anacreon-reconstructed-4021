@@ -55,6 +55,57 @@ public class GameJsonTests
     }
 
     [Test]
+    public async Task RoundTrips_ObjectOwnedNamesAndCoordinateBookmark()
+    {
+        // Exercises NamesConverter directly: an object-owned name from an empire that doesn't own the
+        // named planet (matches Pascal's "name anything you can see" feature), plus a bare
+        // coordinate-only bookmark with no object at all. None of the real .SAV fixtures the other
+        // RoundTrips_* tests load carry any player-defined names, so this is the only coverage of
+        // that converter at all.
+        var galaxy = new Galaxy(10);
+        var owner = new Empire { Name = "Owner" };
+        var watcher = new Empire { Name = "Watcher" };
+        var planet = new Planet { Location = new Coordinate(1, 1), Owner = owner };
+        galaxy.Planets.Add(planet);
+        planet.Names[owner] = "Home";
+        planet.Names[watcher] = "Enemy Capital";
+        owner.Bookmarks.Add(new LocationBookmark { Name = "Empty Space", Location = new Coordinate(5, 5) });
+
+        var game = new Game(galaxy);
+        game.Empires.Add(owner);
+        game.Empires.Add(watcher);
+        game.CurrentEmpire = owner;
+
+        await AssertRoundTrips(game);
+    }
+
+    [Test]
+    public async Task RoundTrips_AfterNamedFleetIsDestroyed()
+    {
+        // Confirms the "cleanup is automatic" claim (ISectorObject.Names's own remarks) actually
+        // holds at the one place a live-but-orphaned reference could do real damage: this format's
+        // own entity-id tables, built fresh from what's currently in Galaxy.Fleets at serialize time.
+        // A destroyed fleet's own Names dictionary is simply never reached from anywhere once it's
+        // removed from that list -- nothing to explicitly clean up, nothing to crash on save.
+        var galaxy = new Galaxy(10);
+        var owner = new Empire { Name = "Owner" };
+        var watcher = new Empire { Name = "Watcher" };
+        var fleet = new Fleet { Location = new Coordinate(1, 1), Owner = owner };
+        fleet.Names[owner] = "My Fleet";
+        fleet.Names[watcher] = "Enemy Raiders";
+        galaxy.Fleets.Add(fleet);
+
+        var game = new Game(galaxy);
+        game.Empires.Add(owner);
+        game.Empires.Add(watcher);
+        game.CurrentEmpire = owner;
+
+        galaxy.Fleets.Remove(fleet); // CombatOutcome.DestroyFleet's own primitive, inlined -- internal, not reachable from this assembly.
+
+        await AssertRoundTrips(game);
+    }
+
+    [Test]
     public async Task RoundTrips_Intro1()
     {
         // Kingdom2 empires with real persona/state/fleetStates -- the richest TurnHandlers coverage.

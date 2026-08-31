@@ -8,6 +8,10 @@ public sealed class Starbase : IMovable, IEconomicWorld
 {
     public required Coordinate Location { get; set; }
     public Empire Owner { get; set; } = Empire.Independent;
+
+    /// <summary>See <see cref="ISectorObject.Names"/>.</summary>
+    public Dictionary<Empire, string> Names { get; set; } = new();
+
     public StarbaseKind Kind { get; set; }
     public WorldType Type { get; set; }
 

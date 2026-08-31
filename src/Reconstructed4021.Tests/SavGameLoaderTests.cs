@@ -384,4 +384,48 @@ public class SavGameLoaderTests
         await Assert.That(roundTrippedHuman.Status).IsEqualTo(EmpireStatus.PendingElimination);
         await Assert.That(roundTrippedHuman.DefeatedBy?.Name).IsEqualTo("Conqueror");
     }
+
+    /// <summary>
+    /// The naming system's two storage shapes (see <see cref="ISectorObject.Names"/>'s own remarks):
+    /// an object-owned name, from an empire that doesn't even own the named planet (matches Pascal's
+    /// real "name anything you can see" feature), and a bare coordinate-only bookmark with no object
+    /// at all. Both round-trip through the real on-disk `NameRecord` shape, not just the JSON format.
+    /// </summary>
+    [Test]
+    public async Task RoundTrips_ObjectOwnedNameAndCoordinateBookmark()
+    {
+        var galaxy = new Galaxy(size: 20);
+
+        var owner = EmpireFactory.CreateEmpire("Owner", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var ownerCapital = new Planet { Location = new Coordinate(1, 1), Owner = owner, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        owner.Capital = ownerCapital;
+        galaxy.Planets.Add(ownerCapital);
+
+        var watcher = EmpireFactory.CreateEmpire("Watcher", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var watcherCapital = new Planet { Location = new Coordinate(5, 5), Owner = watcher, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        watcher.Capital = watcherCapital;
+        galaxy.Planets.Add(watcherCapital);
+
+        ownerCapital.Names[owner] = "Home";
+        ownerCapital.Names[watcher] = "EnemyCap"; // NameRecord.Name is Pascal's String8 (DATASTRC.PAS:153) -- 8 chars is the real on-disk limit.
+        owner.Bookmarks.Add(new LocationBookmark { Name = "EmptySpc", Location = new Coordinate(10, 10) });
+
+        var game = new Core.Game(galaxy);
+        game.Empires.Add(owner);
+        game.Empires.Add(watcher);
+        game.CurrentEmpire = owner;
+
+        var bytes = SavGameWriter.WriteGame(game);
+        var roundTripped = new SavGameLoader().LoadGame(bytes);
+
+        var rtOwner = roundTripped.Empires.Single(e => e.Name == "Owner");
+        var rtWatcher = roundTripped.Empires.Single(e => e.Name == "Watcher");
+        var rtOwnerCapital = roundTripped.Galaxy.Planets.Single(p => p.Location == new Coordinate(1, 1));
+
+        await Assert.That(rtOwnerCapital.Names[rtOwner]).IsEqualTo("Home");
+        await Assert.That(rtOwnerCapital.Names[rtWatcher]).IsEqualTo("EnemyCap");
+        var bookmark = rtOwner.Bookmarks.Single();
+        await Assert.That(bookmark.Name).IsEqualTo("EmptySpc");
+        await Assert.That(bookmark.Location).IsEqualTo(new Coordinate(10, 10));
+    }
 }

@@ -606,20 +606,19 @@ public sealed class SavGameLoader
     /// `NameRecord` (`DATASTRC.PAS:152-157`) — `Coord` is a `Location` union exactly like
     /// `CommandRecord`'s `DestCOM` variant (see `docs/SAV_FILE_FORMAT.md`'s own worked example):
     /// a raw coordinate when nothing occupies that cell, or a resolved object reference when
-    /// something does. Resolved down to a plain <see cref="Coordinate"/> at load time (the
-    /// referenced object's current location) — matches <see cref="LocationBookmark"/>'s existing
-    /// shape with no type change needed, at the cost of which of the two on-disk forms the
-    /// original used (fine under this phase's semantic-round-trip bar).
+    /// something does. Parsed here without resolving `id` against a live object yet — the raw
+    /// tuple is stashed and resolved after this slot's own `InUse` gate is known (see
+    /// <see cref="LoadEmpireData"/>), same two-step shape as everything else that byte stream reads
+    /// unconditionally but only acts on for a real slot.
     /// </summary>
-    private LocationBookmark ReadNameRecord(SavReader reader)
+    private static (string Name, Coordinate Xy, SavIdNumber Id) ReadRawNameRecord(SavReader reader)
     {
         var name = reader.ReadPascalString(8);
         var xy = reader.ReadCoordinate();
         var id = reader.ReadIdNumber();
         reader.Skip(4); // Next -- pointer, discarded; read order already is list order
 
-        var location = id.IsEmpty ? xy : (ResolveObject(id)?.Location ?? xy);
-        return new LocationBookmark { Name = name, Location = location };
+        return (name, xy, id);
     }
 
     /// <summary>
@@ -629,7 +628,11 @@ public sealed class SavGameLoader
     /// <see cref="Game.Empires"/>. <c>TimeLeft</c> has no session/turn-clock concept in this port
     /// yet — read and discarded, same tracked-gap treatment as the Environment section's UI
     /// fields. <c>Names</c>/<c>LastName</c> are the linked list's head/tail pointers — garbage on
-    /// disk, discarded; the real list follows immediately as `NameRecord × NoOfNames`.
+    /// disk, discarded; the real list follows immediately as `NameRecord × NoOfNames`. Each raw
+    /// record resolving to a live object goes onto that object's own <see cref="ISectorObject.Names"/>
+    /// (this port's own storage shape — see that property's own remarks); one that doesn't (a bare
+    /// coordinate, or an on-disk reference nothing here can resolve) falls back to this empire's own
+    /// <see cref="Empire.Bookmarks"/>, same as a genuinely coordinate-only name always did.
     /// </summary>
     private void LoadEmpireData(SavReader reader, Game game)
     {
@@ -659,9 +662,9 @@ public sealed class SavGameLoader
             reader.Skip(14); // Reserved
 
             var nameCount = reader.ReadByte();
-            var bookmarks = new List<LocationBookmark>();
+            var rawNames = new List<(string Name, Coordinate Xy, SavIdNumber Id)>();
             for (var i = 0; i < nameCount; i++) {
-                bookmarks.Add(ReadNameRecord(reader));
+                rawNames.Add(ReadRawNameRecord(reader));
             }
 
             _empireInUse[slot] = inUse;
@@ -698,7 +701,14 @@ public sealed class SavGameLoader
             empire.RevolutionFactor = revFactor;
             empire.FoundingYear = founding;
             empire.LosesIfCapitalConquered = modifiers.Contains(0); // CentralEMD
-            empire.Bookmarks.AddRange(bookmarks);
+
+            foreach (var (rawName, xy, id) in rawNames) {
+                if (!id.IsEmpty && ResolveObject(id) is { } target) {
+                    target.Names[empire] = rawName;
+                } else {
+                    empire.Bookmarks.Add(new LocationBookmark { Name = rawName, Location = xy });
+                }
+            }
 
             game.Empires.Add(empire);
         }

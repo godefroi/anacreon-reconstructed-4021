@@ -9,6 +9,9 @@ public sealed class Fleet : IMovable, ISectorObject, IShipCargoHolder
     public required Coordinate Location { get; set; }
     public Empire Owner { get; set; } = Empire.Independent;
 
+    /// <summary>See <see cref="ISectorObject.Names"/>.</summary>
+    public Dictionary<Empire, string> Names { get; set; } = new();
+
     // init (not a plain getter): GameJson deserializes Fleet via ordinary reflection (it has no
     // forward-reference problem of its own, see GameJson's class doc comment), which needs a way
     // to assign the freshly-deserialized ShipCounts/CargoHold back since neither has a setter.

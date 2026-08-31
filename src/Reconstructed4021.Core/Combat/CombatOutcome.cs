@@ -307,8 +307,10 @@ public static class CombatOutcome
     /// only piece of that model this method needs; no capacity clamp applies on either branch (Pascal
     /// has none here). Every call site destroys <paramref name="source"/> immediately after calling
     /// this (grep-confirmed), so mutating <paramref name="source"/>'s own fields in place rather than
-    /// working from a copy, unlike Pascal's Sh2/Cr2, is safe. FleetNameDestruction's naming-system call
-    /// isn't ported — see <c>docs/OPEN_GAPS.md</c>'s naming-system section for why. Internal (not
+    /// working from a copy, unlike Pascal's Sh2/Cr2, is safe. FleetNameDestruction/DeleteName's own
+    /// naming-system call (FLEET.PAS:208) needs no equivalent here: <paramref name="source"/>'s own
+    /// <see cref="ISectorObject.Names"/> simply goes with it once every caller removes it from
+    /// <see cref="Galaxy.Galaxy.Fleets"/> — see that property's own remarks. Internal (not
     /// private): <see cref="Npe.NpeToolkit.ImplementReturnMSN"/>/<see cref="Npe.NpeToolkit.ImplementRefuelMSN"/>
     /// call this exact primitive rather than duplicating it, same precedent as <see cref="DestroyFleet"/>.
     /// </summary>
@@ -368,8 +370,13 @@ public static class CombatOutcome
     /// touch, a *different* Kingdom's own diplomacy dictionary still referencing this empire after
     /// it's gone — real Pascal's fixed per-empire arrays never clear those either, which is why the
     /// SaveFormat layer's narrower "orphan empire" handling stays necessary regardless (see
-    /// GameJson's EntityIndex remarks). DeleteAllNames isn't ported either — no naming system exists
-    /// in this port (matching AbortFleet's own established gap). EraseNews is <c>Empire.News.Clear()</c>.
+    /// GameJson's EntityIndex remarks). DeleteAllNames (INTRFACE.PAS:1653) is deliberately not
+    /// ported: real Pascal needs it to free <paramref name="empire"/>'s own bookmarks from its one
+    /// reused global <c>Universe</c> before the next game loads into the same memory; this port
+    /// rebuilds <see cref="Game"/> fresh every load, so there's nothing to leak, and leaving a dead
+    /// empire's own <see cref="Empire.Bookmarks"/>/<see cref="ISectorObject.Names"/> entries in place
+    /// has no gameplay-visible effect — see <c>docs/PORT_DESIGN.md</c>'s "Naming system" section.
+    /// EraseNews is <c>Empire.News.Clear()</c>.
     /// </summary>
     internal static void DestroyEmpire(Empire empire, Empire conqueror, Game game)
     {

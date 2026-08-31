@@ -4,17 +4,6 @@ Known limitations in this port: places where the C# doesn't yet do everything th
 did, distinct from `docs/PASCAL_ARCHITECTURE_NOTES.md`, which is about the 1988 game itself. An
 entry here means "this port is missing something," not "the original had a quirk."
 
-## Naming system
-
-No naming system exists anywhere in this port (Pascal's `Location2Index`/`GetDefinedName`/
-`DeleteName`/`AddName`/`FleetNameDestruction`). Real Pascal lets a player assign a custom name to a
-location; this port has no equivalent concept at all, so every call site that would touch it just
-skips that step and says so in its own comment: `CombatOutcome.AbortFleet`,
-`CombatOutcome.RestoreCombatant`, `CombatOutcome.DestroyEmpire` (`DeleteAllNames`),
-`CombatStandalone.LAMAttack`/`DestroyConstructionOrGate`, `FleetMovementHandler`'s starbase
-movement, and `AnnualTickHandler.UpdateConstruction`. One real, cross-cutting gap, not seven
-separate ones.
-
 ## Scenario loading
 
 **`ScenarioLoader` can't reproduce a `.SCN` file's own explicit-seed determinism.** Real Pascal's

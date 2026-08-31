@@ -7,6 +7,10 @@ public sealed class Stargate : ISectorObject
 {
     public required Coordinate Location { get; set; }
     public Empire Owner { get; set; } = Empire.Independent;
+
+    /// <summary>See <see cref="ISectorObject.Names"/>.</summary>
+    public Dictionary<Empire, string> Names { get; set; } = new();
+
     public StargateKind Kind { get; set; }
 
     /// <summary>

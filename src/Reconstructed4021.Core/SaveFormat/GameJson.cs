@@ -151,15 +151,18 @@ public static class GameJson
 
     /// <summary>
     /// Options for the part of the graph still reflection-driven (<see cref="Game"/>'s scalars,
-    /// <see cref="Galaxy.Galaxy"/> and its 5 entity lists): overrides just the <c>Owner</c> property
-    /// on each of the 5 <see cref="ISectorObject"/> implementors to go through
-    /// <see cref="EmpireRefConverter"/> instead of full inline serialization. Built fresh per call
-    /// (not cached) since the converter closes over this call's <paramref name="index"/>/
+    /// <see cref="Galaxy.Galaxy"/> and its 5 entity lists): overrides the <c>Owner</c> property on
+    /// each of the 5 <see cref="ISectorObject"/> implementors to go through
+    /// <see cref="EmpireRefConverter"/>, and their <c>Names</c> property (<see cref="ISectorObject.Names"/>
+    /// — an object-owned per-empire bookmark dictionary, see that property's own remarks) to go
+    /// through <see cref="NamesConverter"/>, instead of full inline serialization. Built fresh per
+    /// call (not cached) since both converters close over this call's <paramref name="index"/>/
     /// <paramref name="lookup"/>.
     /// </summary>
     private static JsonSerializerOptions BuildGraphOptions(EntityIndex? index, EntityLookup? lookup)
     {
         var empireRefConverter = new EmpireRefConverter(index, lookup);
+        var namesConverter = new NamesConverter(index, lookup);
         var resolver = new DefaultJsonTypeInfoResolver();
         resolver.Modifiers.Add(typeInfo => {
             if (typeInfo.Type != typeof(Planet) && typeInfo.Type != typeof(Starbase) && typeInfo.Type != typeof(Fleet) &&
@@ -169,6 +172,9 @@ public static class GameJson
 
             var owner = typeInfo.Properties.First(p => p.Name == "owner");
             owner.CustomConverter = empireRefConverter;
+
+            var names = typeInfo.Properties.First(p => p.Name == "names");
+            names.CustomConverter = namesConverter;
         });
 
         return new JsonSerializerOptions {
@@ -733,5 +739,38 @@ public static class GameJson
 
         public override void Write(Utf8JsonWriter writer, Empire value, JsonSerializerOptions options) =>
             writer.WriteNumberValue(index!.EmpireId(value));
+    }
+
+    /// <summary>
+    /// Per-property override for <c>Names</c> on each <see cref="ISectorObject"/> implementor — same
+    /// shape as <see cref="EmpireRefConverter"/>, but for a whole <c>Dictionary&lt;Empire,string&gt;</c>
+    /// rather than one <see cref="Empire"/> reference (a non-string key isn't natively JSON-safe, so
+    /// this writes/reads an array of <c>{empireId, name}</c> pairs, the same shape
+    /// <see cref="WriteState"/>/<see cref="ReadState"/> already use for
+    /// <c>Dictionary&lt;Empire,StateDeptRecord&gt;</c>).
+    /// </summary>
+    private sealed class NamesConverter(EntityIndex? index, EntityLookup? lookup) : JsonConverter<Dictionary<Empire, string>>
+    {
+        public override Dictionary<Empire, string> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            var result = new Dictionary<Empire, string>();
+            foreach (var entry in JsonElement.ParseValue(ref reader).EnumerateArray()) {
+                var empire = lookup!.Empire(entry.GetProperty("empireId").GetInt32());
+                result[empire] = entry.GetProperty("name").GetString()!;
+            }
+            return result;
+        }
+
+        public override void Write(Utf8JsonWriter writer, Dictionary<Empire, string> value, JsonSerializerOptions options)
+        {
+            writer.WriteStartArray();
+            foreach (var (empire, name) in value) {
+                writer.WriteStartObject();
+                writer.WriteNumber("empireId", index!.EmpireId(empire));
+                writer.WriteString("name", name);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+        }
     }
 }

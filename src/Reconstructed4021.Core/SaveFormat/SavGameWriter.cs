@@ -41,6 +41,7 @@ public static class SavGameWriter
     {
         var slots = new EmpireSlotIndex(game);
         var objectIds = new ObjectIdIndex(game.Galaxy);
+        var names = new NameRecordIndex(game, objectIds);
         var visibility = new VisibilityIndex(game);
         var writer = new SavWriter();
 
@@ -53,7 +54,7 @@ public static class SavGameWriter
         WriteStargates(writer, game.Galaxy, slots, visibility);
         WriteConstructionSites(writer, game.Galaxy, slots, visibility);
         WriteMessages(writer);
-        WriteEmpireData(writer, game, slots, objectIds);
+        WriteEmpireData(writer, game, slots, objectIds, names);
         WriteNewsData(writer, game, slots, objectIds);
         WriteNpeData(writer, game, slots, objectIds);
 
@@ -353,11 +354,11 @@ public static class SavGameWriter
         }
     }
 
-    private static void WriteNameRecord(SavWriter writer, LocationBookmark bookmark)
+    private static void WriteNameRecord(SavWriter writer, string name, Coordinate location, SavIdNumber id)
     {
-        writer.WritePascalString(bookmark.Name, 8);
-        writer.WriteCoordinate(bookmark.Location);
-        writer.WriteIdNumber(new SavIdNumber(SavObjectType.Void, 0)); // ID -- always the raw-XY form, see SavGameLoader.ReadNameRecord's own doc comment
+        writer.WritePascalString(name, 8);
+        writer.WriteCoordinate(location);
+        writer.WriteIdNumber(id);
         writer.WriteZeros(4); // Next
     }
 
@@ -431,7 +432,7 @@ public static class SavGameWriter
     /// file partway through NPE Data on a save with fewer than 8 real empires (a 5-empire file, so 3
     /// missing bytes).
     /// </summary>
-    private static void WriteEmpireData(SavWriter writer, Game game, EmpireSlotIndex slots, ObjectIdIndex objectIds)
+    private static void WriteEmpireData(SavWriter writer, Game game, EmpireSlotIndex slots, ObjectIdIndex objectIds, NameRecordIndex names)
     {
         for (var slot = 0; slot < 8; slot++) {
             var empire = slots.RealEmpireAt(slot);
@@ -471,9 +472,10 @@ public static class SavGameWriter
             writer.WriteBitSet(empire.LosesIfCapitalConquered ? [0] : [], 1); // CentralEMD
             writer.WriteZeros(14); // Reserved
 
-            writer.WriteByte((byte)empire.Bookmarks.Count);
-            foreach (var bookmark in empire.Bookmarks) {
-                WriteNameRecord(writer, bookmark);
+            var records = names.For(empire);
+            writer.WriteByte((byte)records.Count);
+            foreach (var (name, location, id) in records) {
+                WriteNameRecord(writer, name, location, id);
             }
         }
     }
@@ -686,6 +688,55 @@ public static class SavGameWriter
         }
 
         public SavIdNumber IdOf(ISectorObject obj) => _ids[obj];
+    }
+
+    /// <summary>
+    /// Every empire's own on-disk `NameRecord` list (`SaveEmpireData`, `LOADSAVE.PAS:412-449`),
+    /// gathered from this port's own storage shape rather than Pascal's single per-empire linked
+    /// list: an object-owned <see cref="ISectorObject.Names"/> dictionary per nameable entity, plus
+    /// each empire's own coordinate-only <see cref="Empire.Bookmarks"/> (see
+    /// <see cref="ISectorObject.Names"/>'s own remarks for why). Built in one pass over the 5 galaxy
+    /// lists rather than once per empire — every object encountered here is, by construction, in one
+    /// of those live lists, so <see cref="ObjectIdIndex.IdOf"/> can never miss.
+    /// </summary>
+    private sealed class NameRecordIndex
+    {
+        private readonly Dictionary<Empire, List<(string Name, Coordinate Location, SavIdNumber Id)>> _byEmpire = new();
+
+        public NameRecordIndex(Game game, ObjectIdIndex objectIds)
+        {
+            Add(game.Galaxy.Planets, objectIds);
+            Add(game.Galaxy.Starbases, objectIds);
+            Add(game.Galaxy.Fleets, objectIds);
+            Add(game.Galaxy.Stargates, objectIds);
+            Add(game.Galaxy.ConstructionSites, objectIds);
+
+            foreach (var empire in game.Empires) {
+                foreach (var bookmark in empire.Bookmarks) {
+                    Records(empire).Add((bookmark.Name, bookmark.Location, new SavIdNumber(SavObjectType.Void, 0)));
+                }
+            }
+        }
+
+        private void Add<T>(IReadOnlyList<T> list, ObjectIdIndex objectIds) where T : ISectorObject
+        {
+            foreach (var obj in list) {
+                foreach (var (namer, name) in obj.Names) {
+                    Records(namer).Add((name, obj.Location, objectIds.IdOf(obj)));
+                }
+            }
+        }
+
+        private List<(string Name, Coordinate Location, SavIdNumber Id)> Records(Empire empire)
+        {
+            if (!_byEmpire.TryGetValue(empire, out var list)) {
+                _byEmpire[empire] = list = [];
+            }
+            return list;
+        }
+
+        public IReadOnlyList<(string Name, Coordinate Location, SavIdNumber Id)> For(Empire empire) =>
+            _byEmpire.TryGetValue(empire, out var list) ? list : [];
     }
 
     /// <summary>

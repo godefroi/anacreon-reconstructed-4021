@@ -35,10 +35,10 @@ public static class CombatStandalone
     ///
     /// BalanceFleet's post-damage cargo rebalance isn't called here (it exists in
     /// <see cref="FleetLogistics"/>) — moot regardless, since LAMs only ever destroy ships/defenses,
-    /// never cargo, so there's nothing to rebalance. FleetNameDestruction's
-    /// naming-system call is dropped too (AbortFleet's own established gap): its only load-bearing
-    /// effect was setting Pascal's Loc to the fleet itself, which this port's <paramref name="target"/>
-    /// reference already is.
+    /// never cargo, so there's nothing to rebalance. FleetNameDestruction's naming-system call needs
+    /// no equivalent here, same reasoning as <see cref="CombatOutcome.AbortFleet"/>'s own remarks:
+    /// <paramref name="target"/>'s own <see cref="ISectorObject.Names"/> simply goes with it once
+    /// <see cref="CombatOutcome.DestroyFleet"/> removes it from the galaxy.
     /// </summary>
     public static (ShipCounts ShipsDestroyed, DefenseCounts DefensesDestroyed) LAMAttack(
         Empire player, int lamToUse, IShipCargoHolder target, Game game)
@@ -154,9 +154,9 @@ public static class CombatStandalone
     /// EmpireActive/Scouted loop here) — reused rather than duplicated. The fleet-destruction loop is
     /// separate: every fleet at the same location is destroyed regardless of owner, but only a
     /// *foreign* fleet's owner gets told (matching real Pascal's <c>OtherEmp&lt;&gt;Emp</c> guard), so
-    /// it's a plain per-fleet AddNews, not a broadcast. FleetNameDestruction's naming-system call is
-    /// dropped (AbortFleet's own established gap) — its only load-bearing effect was setting Pascal's
-    /// Loc to the fleet itself, which this port already has as a direct reference.
+    /// it's a plain per-fleet AddNews, not a broadcast. FleetNameDestruction's naming-system call
+    /// needs no equivalent here either, same reasoning as <see cref="CombatOutcome.AbortFleet"/>'s
+    /// own remarks.
     /// </summary>
     public static void SelfDestructObject(object target, Game game)
     {

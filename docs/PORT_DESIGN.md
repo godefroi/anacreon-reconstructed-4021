@@ -161,6 +161,61 @@ for why a skip-aware version would break annual-tick wrap detection.
 Full reasoning, including the direct Pascal source trace this was designed from, is in
 `docs/EMPIRE_LIFECYCLE_DESIGN.md`.
 
+## Naming system: object-owned dictionaries, not a per-empire list
+
+Real Pascal (`PRIMINTR.PAS`'s `AddName`/`DeleteName`/`Location2Index`/`GetDefinedName`,
+`NAMES.PAS`) lets a player assign a custom name to any coordinate or object they can see — not just
+their own; an empire can bookmark someone else's fleet purely as a personal note. Storage is one
+per-empire singly-linked list of `NameRecord{Name, Coord}`, `Coord` a `Location` union (a raw
+coordinate or a resolved `IDNumber`).
+
+This port inverts that storage direction: a bookmark tied to a specific object lives *on the
+object*, keyed by whichever empire named it — `ISectorObject.Names: Dictionary<Empire,string>` on
+each of the five nameable types (`Planet`/`Starbase`/`Fleet`/`Stargate`/`ConstructionSite`).
+`Empire.Bookmarks: List<LocationBookmark>` covers only the one case that can't live on an object: a
+bare coordinate with nothing there. This is a deliberate reshaping, not a structural port, because it
+makes cleanup free: once an object is removed from its owning `Galaxy` list, nothing can reach its
+`Names` dictionary again, so a destroyed object's names disappear along with it — no explicit
+cascading-delete call is needed at any of the destroy sites (`CombatOutcome.AbortFleet`/
+`ResolveAttack`'s fleet-destroyed branch, `CombatStandalone.LAMAttack`/`SelfDestructObject`,
+`FleetMovementHandler.ApplyMineFieldDamage`), each of which just says so in its own doc comment now
+instead of skipping the naming-system call outright.
+
+Two things deliberately not ported, because they trace to Pascal-specific plumbing rather than a
+player-visible feature:
+
+- **`DestFlt`, the array-slot-reuse workaround.** Pascal identifies every fleet by a slot number in a
+  fixed 15-slot array; a destroyed fleet's slot gets reused by the next fleet created, by any empire.
+  `FleetNameDestruction` exists to retag a bookmark/news reference under a `DestFlt` sentinel so it
+  isn't silently misread as whatever new fleet reused that slot. This port identifies fleets by direct
+  object reference, which is never reused for a different object — there's no slot-reuse hazard to
+  work around, so nothing needs to reproduce the workaround. (The real, un-worked-around Pascal
+  behavior this exposes — a bookmark of *another empire's* fleet is never cleaned up when it dies,
+  since `FleetNameDestruction`/`DeleteName` only ever touch the destroyed object's own owner's list —
+  *is* preserved: nothing here scans every empire's bookmarks on an object's destruction either. The
+  practical difference is what "not cleaned up" means: Pascal's stale reference can silently resolve
+  to a *different* live fleet after slot reuse; this port's stale reference just keeps pointing at the
+  same, specific, now-detached object — safe to read, never confusable with anything else. The one
+  place this does matter: neither `.SAV` nor this port's own JSON format can encode a reference to an
+  object that isn't in a live `Galaxy` list, so a *non-owner's* bookmark of something that's since died
+  simply isn't written back on the next save — a quiet precision loss across a save/load boundary, not
+  a crash, and not a case any real Pascal `.SAV` fixture exercises today.)
+- **`DeleteAllNames` on empire elimination (`INTRFACE.PAS:1653`).** Real Pascal needs this to free a
+  defeated empire's own bookmarks from its one, reused-across-games global `Universe` before the next
+  game loads into the same memory — pure memory hygiene, not a gameplay effect. This port rebuilds
+  `Game`/`Empire` fresh every load, so there's nothing to leak; leaving a dead empire's own
+  `Bookmarks`/`Names` entries in place has no visible effect on anything (`CombatOutcome.DestroyEmpire`
+  explains this at its own call site).
+
+One deliberate improvement over Pascal, not a gap: construction-site completion
+(`AnnualTickHandler.UpdateConstruction`, `UPDATE.PAS:189-211`) carries forward *every* empire's own
+name for the finished site to the starbase/stargate it becomes, not just the site owner's — real
+Pascal's `Location2Index(Emp,...)` only ever looks up the site's own owner. A player who named a spot
+would expect that name to survive whatever gets built there regardless of who owns it; nothing about
+matching Pascal's narrower behavior here was worth preserving. A completed minefield gets no such
+carry-forward either way — `SetMine` creates no object to carry a name onto, and real Pascal's own
+`CASE` has no `AddName` arm for that branch, a genuine net deletion in both versions.
+
 ## Standalone attack mechanics: port what's live, skip what's dead
 
 `Combat/CombatStandalone.cs` covers four ATTACK.PAS/SBASE.PAS procedures that sit outside
