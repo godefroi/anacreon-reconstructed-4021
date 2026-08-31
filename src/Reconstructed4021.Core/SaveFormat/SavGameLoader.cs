@@ -21,8 +21,13 @@ namespace Reconstructed4021.Core.SaveFormat;
 /// `EmpireDataRecord` array has, just realized as real objects instead of an array index —
 /// object identity is stable across the whole load, so an early reference to slot 3 still points
 /// at the exact object Empire Data later fills in with a real name/tech/etc. Never added to
-/// <see cref="Game.Empires"/> unless Empire Data marks that slot `InUse` (see <see cref="Empire"/>
-/// 's own doc comment: `Game.Empires` only ever holds real, in-use empires by construction).
+/// <see cref="Game.Empires"/> unless Empire Data marks that slot `InUse`: a not-`InUse` slot means
+/// this exact placeholder is what a stray reference (a Kingdom's own `State` keys, `DefeatedBy`, a
+/// `NewsItem`'s `OtherEmpire`/`Defender`, a minefield's owner/scouts) still resolves to — real
+/// Pascal's own on-disk shape for such an empire, current game or a prior one, looks identical
+/// either way, and this loader has no way to distinguish "genuinely never existed" from "existed,
+/// now torn down" from the bytes alone (see <see cref="SavGameWriter"/>'s own remarks on why
+/// <see cref="Types.EmpireStatus.Eliminated"/> is lossy through `.SAV` for the same reason).
 /// </summary>
 public sealed class SavGameLoader
 {
@@ -674,8 +679,12 @@ public sealed class SavGameLoader
             // meaningful value here, a different meaning of "0" than IDNumber's usual "no object"
             // convention (an InUse empire's Capital is never legitimately EmptyQuadrant
             // otherwise -- every active empire has a real capital until this exact defeat path).
+            // Always decodes to PendingElimination, never Eliminated: an Eliminated empire is
+            // not-InUse on disk and never reaches this branch at all (see this class's own remarks
+            // on the placeholder-slot doc comment above).
             if (capitalId.ObjectType == SavObjectType.Void) {
                 empire.Capital = null;
+                empire.Status = EmpireStatus.PendingElimination;
                 empire.DefeatedBy = ResolveEmpire(capitalId.Index);
             } else {
                 empire.Capital = ResolveObject(capitalId) as IEconomicWorld;
