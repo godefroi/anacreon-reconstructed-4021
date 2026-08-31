@@ -66,6 +66,17 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     [JsonIgnore]
     public Dictionary<Empire, byte[]> UnimplementedNpeBlobs { get; } = new();
 
+    /// <summary>
+    /// `MessageList` (`MESS.PAS`) -- a flat, global list, not per-empire: real Pascal's own
+    /// `GetMessages(Emp)` filters by <see cref="Message.Recipients"/> at call time rather than
+    /// storing messages under their recipient. Same reason as <see cref="Empires"/>'s own
+    /// <c>[JsonIgnore]</c>: <see cref="Message.Sender"/>/<see cref="Message.Recipients"/> are
+    /// <see cref="Empire"/> references, so <see cref="SaveFormat.GameJson"/> reads/writes this by
+    /// hand instead of through the generic pass.
+    /// </summary>
+    [JsonIgnore]
+    public List<Message> Messages { get; } = [];
+
     public Empire NextEmpire(Empire current)
     {
         var index = Empires.IndexOf(current);
@@ -76,6 +87,14 @@ public sealed class Game(Galaxy.Galaxy galaxy)
 
     public bool IsFirstEmpire(Empire empire) =>
         Empires.Count > 0 && ReferenceEquals(Empires[0], empire);
+
+    /// <summary>
+    /// `GetMessages(Emp)` (`MESS.PAS:57-75`) -- filters <see cref="Messages"/> by
+    /// <see cref="Message.Recipients"/> at call time, the same query real Pascal itself runs rather
+    /// than storing a message under its recipient(s): a message can name several empires at once
+    /// (or none of the caller), so there's no single owner to index by up front.
+    /// </summary>
+    public IEnumerable<Message> MessagesFor(Empire empire) => Messages.Where(m => m.Recipients.Contains(empire));
 
     /// <summary>
     /// Computed from <see cref="TurnHandlers"/>, which is itself <c>[JsonIgnore]</c>d (see its own

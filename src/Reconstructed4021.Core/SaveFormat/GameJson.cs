@@ -77,6 +77,7 @@ public static class GameJson
         var blobsNode = WriteBlobs(game, index);
         var minefieldsNode = WriteMinefields(game.Galaxy, index);
         var mineScoutedByNode = WriteMineScoutedBy(game.Galaxy, index);
+        var messagesNode = WriteMessages(game, index);
 
         node["realEmpireCount"] = game.Empires.Count;
         node["empires"] = WriteEmpires(index);
@@ -85,6 +86,7 @@ public static class GameJson
         node["mineScoutedBy"] = mineScoutedByNode;
         node["turnHandlers"] = turnHandlersNode;
         node["unimplementedNpeBlobs"] = blobsNode;
+        node["messages"] = messagesNode;
 
         return node.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
@@ -152,6 +154,7 @@ public static class GameJson
 
         ReadTurnHandlers(root["turnHandlers"], game, lookup, random ?? new Random());
         ReadBlobs(root["unimplementedNpeBlobs"], game, lookup);
+        ReadMessages(root["messages"], game, lookup);
 
         return game;
     }
@@ -498,7 +501,7 @@ public static class GameJson
         }
     }
 
-    // ---- Game.TurnHandlers / Game.UnimplementedNpeBlobs: hand-written (see class doc comment) ----
+    // ---- Game.TurnHandlers / Game.UnimplementedNpeBlobs / Game.Messages: hand-written (see class doc comment) ----
 
     private static JsonArray WriteTurnHandlers(Game game, EntityIndex index)
     {
@@ -629,6 +632,40 @@ public static class GameJson
             var entry = entryNode!.AsObject();
             var empire = lookup.Empire((int)entry["empireId"]!);
             game.UnimplementedNpeBlobs[empire] = Convert.FromBase64String((string)entry["data"]!);
+        }
+    }
+
+    /// <summary>Hand-written like <see cref="WriteBlobs"/> above -- <see cref="Message.Sender"/>/<see cref="Message.Recipients"/> are <see cref="Empire"/> references.</summary>
+    private static JsonArray WriteMessages(Game game, EntityIndex index)
+    {
+        var array = new JsonArray();
+
+        foreach (var message in game.Messages) {
+            array.Add(new JsonObject {
+                ["senderId"] = index.EmpireId(message.Sender),
+                ["recipientIds"] = new JsonArray([.. message.Recipients.Select(e => (JsonNode)index.EmpireId(e))]),
+                ["read"] = message.Read,
+                ["intercepted"] = message.Intercepted,
+                ["lines"] = new JsonArray([.. message.Lines.Select(l => (JsonNode)l)]),
+            });
+        }
+
+        return array;
+    }
+
+    private static void ReadMessages(JsonNode? node, Game game, EntityLookup lookup)
+    {
+        if (node is null) {
+            return;
+        }
+
+        foreach (var entryNode in node.AsArray()) {
+            var entry = entryNode!.AsObject();
+            var sender = lookup.Empire((int)entry["senderId"]!);
+            var recipients = entry["recipientIds"]!.AsArray().Select(n => lookup.Empire((int)n!)).ToHashSet();
+            var lines = entry["lines"]!.AsArray().Select(n => (string)n!).ToList();
+
+            game.Messages.Add(new Message(sender, recipients, (bool)entry["read"]!, (bool)entry["intercepted"]!, lines));
         }
     }
 

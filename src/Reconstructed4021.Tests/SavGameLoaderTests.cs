@@ -306,6 +306,22 @@ public class SavGameLoaderTests
     }
 
     [Test]
+    public async Task LoadGame_FleetOrders_DecodesRealMessage()
+    {
+        // Ground truth (savtool.py): one real message, sender ordinal 0 ("Cerberon"), recipient
+        // set {2} ("Hasarem"), Read/Intercepted both false, one line "yo, this is a message".
+        // All 8 empire slots are InUse in this file, so Game.Empires lists them in slot order.
+        var game = new SavGameLoader().LoadGame(LoadSave("FLEET_ORDERS.SAV"));
+
+        var message = game.Messages.Single();
+        await Assert.That(message.Sender.Name).IsEqualTo("Cerberon");
+        await Assert.That(message.Recipients.Select(e => e.Name)).IsEquivalentTo(["Hasarem"]);
+        await Assert.That(message.Read).IsFalse();
+        await Assert.That(message.Intercepted).IsFalse();
+        await Assert.That(message.Lines).IsEquivalentTo(["yo, this is a message"]);
+    }
+
+    [Test]
     public async Task LoadGame_Confront2_DecodesOtherEmpireFromConfirmedHeadlines()
     {
         // Ground truth (savtool.py, ATTACK.PAS:1664/1669/INTRFACE.PAS:1329 confirmed directly):

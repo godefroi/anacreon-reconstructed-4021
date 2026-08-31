@@ -11,9 +11,8 @@ namespace Reconstructed4021.Core.SaveFormat;
 /// mirror of <see cref="SavGameLoader"/>'s own `Load*` methods, in the same on-disk order. Built
 /// purely to make `LoadGame` (`LOADSAVE.PAS`, unmodified) accept the result — see `docs/ROADMAP.md`'s
 /// save/load notes for why this is a test-only verification tool, not a byte-faithful or
-/// maintained save format (the native JSON format, <see cref="GameJson"/>, is that): no message
-/// content (none exists in this port), no attempt to reproduce a `Reserved`/pointer field's original
-/// garbage bytes (always zero here).
+/// maintained save format (the native JSON format, <see cref="GameJson"/>, is that): no attempt to
+/// reproduce a `Reserved`/pointer field's original garbage bytes (always zero here).
 ///
 /// <see cref="EmpireSlotIndex"/> is this format's own version of <see cref="GameJson"/>'s
 /// `EntityIndex.EmpireId` — same "real empires first, discover orphans lazily" idea — but capped at
@@ -31,8 +30,9 @@ namespace Reconstructed4021.Core.SaveFormat;
 /// <see cref="Galaxy.Galaxy.MineScoutedByData"/>) are a separate dictionary <c>DestroyEmpire</c> never
 /// touches at all: a real reference `.SAV`'s minefield owner throws a `KeyNotFoundException` here if
 /// that empire isn't given a slot. So orphans are reachable through a Kingdom's own `State` keys,
-/// <see cref="Empire.DefeatedBy"/>, a <see cref="NewsItem"/>'s `OtherEmpire`/`Defender` fields, or a
-/// minefield's owner/scouts — <see cref="EmpireSlotIndex"/>'s constructor checks all four. An orphan's
+/// <see cref="Empire.DefeatedBy"/>, a <see cref="NewsItem"/>'s `OtherEmpire`/`Defender` fields, a
+/// minefield's owner/scouts, or a <see cref="Entities.Message"/>'s `Sender`/`Recipients` —
+/// <see cref="EmpireSlotIndex"/>'s constructor checks all five. An orphan's
 /// own Empire Data slot is written
 /// exactly like a genuinely unused slot (`InUse=false`, all zero) — real Pascal's own on-disk shape
 /// for a defeated-and-removed empire already looks like that (confirmed by <see cref="SavGameLoader"/>:
@@ -55,7 +55,7 @@ public static class SavGameWriter
         WriteFleets(writer, game.Galaxy, slots, visibility, objectIds);
         WriteStargates(writer, game.Galaxy, slots, visibility);
         WriteConstructionSites(writer, game.Galaxy, slots, visibility);
-        WriteMessages(writer);
+        WriteMessages(writer, game, slots);
         WriteEmpireData(writer, game, slots, objectIds);
         WriteNewsData(writer, game, slots, objectIds);
         WriteNpeData(writer, game, slots, objectIds);
@@ -364,9 +364,34 @@ public static class SavGameWriter
         writer.WriteWord(0);
     }
 
-    /// `SaveMessageData` (`MESS.PAS`). No in-memory message concept exists in this port
-    /// (`SavGameLoader.LoadMessages`' own doc comment) -- nothing to write, ever.
-    private static void WriteMessages(SavWriter writer) => writer.WriteByte(0);
+    /// <summary>
+    /// `SaveMessageData` (`MESS.PAS:319-367`). `ReadBy` is always written empty -- real Pascal's own
+    /// `LoadMessageData` never restores it either (`Message`'s own doc comment), so there's nothing
+    /// to round-trip faithfully there; a fresh, empty `ReadBy` is exactly as faithful as whatever
+    /// uninitialized heap garbage a real load would have produced.
+    /// </summary>
+    private static void WriteMessages(SavWriter writer, Game game, EmpireSlotIndex slots)
+    {
+        writer.WriteByte((byte)game.Messages.Count);
+
+        foreach (var message in game.Messages) {
+            writer.WriteByte((byte)slots.SlotOf(message.Sender));
+            writer.WriteBitSet(message.Recipients.Select(slots.SlotOf), 1);
+            writer.WriteBitSet([], 1); // ReadBy -- always empty, see this method's own doc comment.
+            writer.WriteBoolean(message.Read);
+            writer.WriteBoolean(message.Intercepted);
+            writer.WriteWord((ushort)message.Lines.Count); // MesText.NoOfLines
+            writer.WriteZeros(4); // MesText.FirstLine
+            writer.WriteZeros(4); // MesText.LastLine
+            writer.WriteZeros(4); // Next
+            writer.WriteZeros(4); // Prev
+
+            writer.WriteByte((byte)message.Lines.Count);
+            foreach (var line in message.Lines) {
+                writer.WritePascalString(line, 80);
+            }
+        }
+    }
 
     private static void WriteShellDefensePlan(SavWriter writer, ShellDefensePlan plan)
     {
@@ -843,6 +868,15 @@ public static class SavGameWriter
             foreach (var scouts in game.Galaxy.MineScoutedByData.Values) {
                 foreach (var scout in scouts) {
                     Register(scout);
+                }
+            }
+
+            // A Message's Sender/Recipients are a fifth path to the same shape of dangling
+            // reference -- nothing prunes a Message when the empire it names is later destroyed.
+            foreach (var message in game.Messages) {
+                Register(message.Sender);
+                foreach (var recipient in message.Recipients) {
+                    Register(recipient);
                 }
             }
         }

@@ -115,7 +115,7 @@ public sealed class SavGameLoader
         LoadStargates(reader, galaxy);
         LoadConstructionSites(reader, galaxy);
         ResolvePendingOrderDestinations();
-        LoadMessages(reader);
+        LoadMessages(reader, game);
         LoadEmpireData(reader, game);
         LoadNewsData(reader, game);
         LoadNpeData(reader, game);
@@ -574,20 +574,36 @@ public sealed class SavGameLoader
     }
 
     /// <summary>
-    /// `LoadMessageData` (`MESS.PAS:252-367`). No in-memory message concept exists anywhere in this
-    /// port — in-game player-to-player messages are a human-UI feature (the same
-    /// `ATTCOMM`/`FLTCOMM`/`ORDERS`-adjacent DOS-UI cluster `docs/PASCAL_ARCHITECTURE_NOTES.md`
-    /// already identifies), so every message is read and discarded, same "no home" treatment as the
-    /// Fleet order queue (both tracked in `docs/OPEN_GAPS.md`).
+    /// `LoadMessageData` (`MESS.PAS:252-317`). `ReadBy` is skipped, not resolved into anything --
+    /// see <see cref="Message"/>'s own doc comment for why real Pascal's own loader never restores
+    /// it either. Read before Empire Data (`LoadEmpireData`), same as every other early empire-
+    /// ordinal reference in this file (this class's own doc comment) -- `ResolveEmpire` returns the
+    /// same placeholder object identity regardless of load order.
     /// </summary>
-    private static void LoadMessages(SavReader reader)
+    private void LoadMessages(SavReader reader, Game game)
     {
         var messageCount = reader.ReadByte();
 
         for (var i = 0; i < messageCount; i++) {
-            reader.Skip(23); // MessageRecord
+            var senderOrdinal = reader.ReadByte();
+            var recipientOrdinals = reader.ReadBitSet(1);
+            reader.ReadBitSet(1); // ReadBy -- discarded, see Message's own doc comment.
+            var read = reader.ReadBoolean();
+            var intercepted = reader.ReadBoolean();
+            reader.Skip(2); // MesText.NoOfLines -- redundant with the NoOfLines byte read below.
+            reader.Skip(4); // MesText.FirstLine -- pointer, discarded.
+            reader.Skip(4); // MesText.LastLine -- pointer, discarded.
+            reader.Skip(4); // Next -- pointer, discarded; read order already is list order.
+            reader.Skip(4); // Prev -- pointer, discarded; read order alone still rebuilds the list.
+
             var lineCount = reader.ReadByte();
-            reader.Skip(lineCount * 81); // LineStr: 1 length byte + 80 chars
+            var lines = new List<string>(lineCount);
+            for (var j = 0; j < lineCount; j++) {
+                lines.Add(reader.ReadPascalString(80));
+            }
+
+            var recipients = recipientOrdinals.Select(ResolveEmpire).ToHashSet();
+            game.Messages.Add(new Message(ResolveEmpire(senderOrdinal), recipients, read, intercepted, lines));
         }
     }
 
