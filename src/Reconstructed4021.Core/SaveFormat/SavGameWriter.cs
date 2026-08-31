@@ -15,28 +15,25 @@ namespace Reconstructed4021.Core.SaveFormat;
 /// reconstruction (none exists in this port), no message content (none exists either), no attempt to
 /// reproduce a `Reserved`/pointer field's original garbage bytes (always zero here).
 ///
-/// <see cref="EmpireSlotIndex"/> is this format's own version of <see cref="GameJson"/>'s
-/// `EntityIndex.EmpireId` — same "real empires first, discover orphans lazily" idea — but capped at
-/// exactly 8 slots (`Empire1..Empire8`; Independent is ordinal 8, never a slot) since that's a real
-/// structural limit of the on-disk format itself, not an arbitrary choice: a
-/// <see cref="Turns.KingdomTurnHandler"/>'s own `State` dictionary is keyed by every empire it has
-/// ever had diplomatic dealings with, including one <see cref="Combat.CombatOutcome.DestroyEmpire"/>
-/// has since removed from <see cref="Game.Empires"/> — real Pascal's own fixed per-empire array never
-/// clears such a reference either, so a *different*, still-living Kingdom's memory of it is expected
-/// to survive, not a gap — an "orphan" empire, same as
-/// <see cref="SavGameLoader"/>'s own doc comment describes for the read side. <c>DestroyEmpire</c>
-/// confirms no <see cref="ISectorObject.Owner"/> can ever be an orphan (every owned planet/starbase
-/// is reassigned to <see cref="Empire.Independent"/> and every fleet destroyed before the empire is
-/// removed) — but a minefield's owner and mine-scouted-by set (<see cref="Galaxy.Galaxy.MinefieldData"/>/
-/// <see cref="Galaxy.Galaxy.MineScoutedByData"/>) are a separate dictionary <c>DestroyEmpire</c> never
-/// touches at all: a real reference `.SAV`'s minefield owner throws a `KeyNotFoundException` here if
-/// that empire isn't given a slot. So orphans are reachable through a Kingdom's own `State` keys,
-/// <see cref="Empire.DefeatedBy"/>, a <see cref="NewsItem"/>'s `OtherEmpire`/`Defender` fields, or a
-/// minefield's owner/scouts — <see cref="EmpireSlotIndex"/>'s constructor checks all four. An orphan's
-/// own Empire Data slot is written
-/// exactly like a genuinely unused slot (`InUse=false`, all zero) — real Pascal's own on-disk shape
-/// for a defeated-and-removed empire already looks like that (confirmed by <see cref="SavGameLoader"/>:
-/// an `!InUse` slot's other fields are never read into anything), so there is nothing to distinguish.
+/// <see cref="Game.Empires"/> is a permanent roster now (see <see cref="Types.EmpireStatus"/>):
+/// nothing this port's own elimination logic does ever removes an empire from it. That alone
+/// doesn't eliminate <see cref="EmpireSlotIndex"/>'s orphan-discovery job, though — an empire that
+/// was already not-InUse when the `.SAV` file being round-tripped was originally captured was never
+/// added to <see cref="Game.Empires"/> in the first place (<see cref="SavGameLoader"/>'s own
+/// placeholder gate, unrelated to and unchanged by this redesign), so a Kingdom's own `State` keys,
+/// <see cref="Empire.DefeatedBy"/>, a <see cref="NewsItem"/>'s `OtherEmpire`/`Defender`, or a
+/// minefield's owner/scouts can all still legitimately reference one — confirmed for real (not just
+/// theorized) by <c>SavGameWriterAcceptanceTests</c> failing against an actual reference save's
+/// minefield owner the one time the minefield loop was dropped on the assumption a permanent roster
+/// made it redundant. <see cref="EmpireSlotIndex"/> is this format's own version of
+/// <see cref="GameJson"/>'s `EntityIndex.EmpireId`, capped at exactly 8 slots (`Empire1..Empire8`;
+/// Independent is ordinal 8, never a slot) — a real structural limit of the on-disk format itself,
+/// matching the fact that real Pascal never has more than 8 empires exist in one game either. An
+/// <see cref="Types.EmpireStatus.Eliminated"/> empire's own Empire Data slot is written exactly like
+/// a genuinely unused or orphan-only slot (`InUse=false`, all zero) — real Pascal's own on-disk
+/// shape for a destroyed empire already looks like that (confirmed by <see cref="SavGameLoader"/>:
+/// an `!InUse` slot's other fields are never read into anything), so `.SAV` round-trip is
+/// deliberately lossy for that state; <see cref="GameJson"/> is this port's lossless format for it.
 /// </summary>
 public static class SavGameWriter
 {
@@ -417,23 +414,29 @@ public static class SavGameWriter
     }
 
     /// <summary>
-    /// `SaveEmpireData` (`LOADSAVE.PAS:412-449`). Always all 8 slots: a real <see cref="Game.Empires"/>
-    /// member gets its full record, every other slot (genuinely unused, or an orphan only
-    /// <see cref="EmpireSlotIndex"/> knows about) gets `InUse=false` and an otherwise all-zero record
-    /// -- exactly what real Pascal's own on-disk shape already looks like for either case (see this
-    /// class's own doc comment). The trailing `NoOfNames` byte is unconditional too -- real
+    /// `SaveEmpireData` (`LOADSAVE.PAS:412-449`). Always all 8 slots: an <see cref="EmpireStatus.Active"/>
+    /// or <see cref="EmpireStatus.PendingElimination"/> <see cref="Game.Empires"/> member gets its
+    /// full record; every other slot (genuinely unused, an orphan only <see cref="EmpireSlotIndex"/>
+    /// knows about, or an <see cref="EmpireStatus.Eliminated"/> member) gets `InUse=false` and an
+    /// otherwise all-zero record -- exactly what real Pascal's own on-disk shape already looks like,
+    /// since nothing there ever reads a slot's other fields once `InUse` goes false (see this class's
+    /// own doc comment). This makes `.SAV` round-trip deliberately lossy for
+    /// <see cref="EmpireStatus.Eliminated"/>: name/tech/capital/etc. don't survive a write-back,
+    /// matching Pascal exactly -- <see cref="SaveFormat.GameJson"/> is this port's lossless format for
+    /// that state, `.SAV` never was one. The trailing `NoOfNames` byte is unconditional too -- real
     /// `SaveEmpireData`'s own loop has no `InUse` gate anywhere, it always writes the 183-byte record
-    /// then a name count (0 for an empty/orphan slot, `Names` being `Nil`) for all 8 slots. Missing
-    /// that byte for an empty slot was a real, confirmed bug: it silently shifted every section after
-    /// Empire Data by one byte per empty slot, caught only once real Pascal ran out of file partway
-    /// through NPE Data on a save with fewer than 8 real empires (a 5-empire file, so 3 missing bytes).
+    /// then a name count (0 for an empty/orphan/eliminated slot, `Names` being `Nil`) for all 8 slots.
+    /// Missing that byte for an empty slot was a real, confirmed bug: it silently shifted every
+    /// section after Empire Data by one byte per empty slot, caught only once real Pascal ran out of
+    /// file partway through NPE Data on a save with fewer than 8 real empires (a 5-empire file, so 3
+    /// missing bytes).
     /// </summary>
     private static void WriteEmpireData(SavWriter writer, Game game, EmpireSlotIndex slots, ObjectIdIndex objectIds)
     {
         for (var slot = 0; slot < 8; slot++) {
             var empire = slots.RealEmpireAt(slot);
 
-            if (empire is null) {
+            if (empire is null or { Status: EmpireStatus.Eliminated }) {
                 writer.WriteZeros(183);
                 writer.WriteByte(0); // NoOfNames
                 continue;
@@ -547,7 +550,7 @@ public static class SavGameWriter
 
         for (var slot = 0; slot < 8; slot++) {
             var empire = slots.RealEmpireAt(slot);
-            if (empire is null || empire.NpeType is null) {
+            if (empire is null || empire.NpeType is null || empire.Status == EmpireStatus.Eliminated) {
                 continue; // Not EmpireActive AND NOT EmpirePlayer -- no blob at all, matching the read side.
             }
 
@@ -764,6 +767,14 @@ public static class SavGameWriter
                 _realBySlot[slot] = empire;
             }
 
+            // Game.Empires being a permanent roster now (see Types.EmpireStatus) only covers an empire
+            // eliminated during *this* port's own runtime -- it does nothing for an empire that was
+            // already not-InUse when the .SAV file being round-tripped was originally captured.
+            // SavGameLoader's own placeholder gate (LoadEmpireData's "if (!inUse) continue") is
+            // unrelated to and unchanged by this redesign: a not-InUse slot's placeholder Empire is
+            // never added to Game.Empires, so any of the four references below can still legitimately
+            // point at one -- confirmed for real by SavGameWriterAcceptanceTests failing against
+            // an actual reference save's minefield owner the one time this was tried without them.
             foreach (var handler in game.TurnHandlers.Values.OfType<KingdomTurnHandler>()) {
                 foreach (var empire in handler.State.Keys) {
                     Register(empire);
@@ -785,13 +796,6 @@ public static class SavGameWriter
                 }
             }
 
-            // Confirmed a real, not hypothetical, gap by a failing real-Pascal test run: unlike
-            // Planet/Starbase/Fleet Owner (Combat.CombatOutcome.DestroyEmpire reassigns every one of
-            // those to Independent before removing an empire), a minefield's owner and its
-            // mine-scouted-by set are untouched by DestroyEmpire -- Galaxy.MinefieldData/
-            // MineScoutedByData can hold the same kind of dangling Empire reference a Kingdom's own
-            // State dictionary does, just via a completely different path this class's own doc
-            // comment didn't originally account for.
             foreach (var owner in game.Galaxy.MinefieldData.Values) {
                 Register(owner);
             }
