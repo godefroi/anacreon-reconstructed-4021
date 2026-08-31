@@ -323,6 +323,69 @@ public class SavGameLoaderTests
     }
 
     [Test]
+    public async Task WriteThenLoad_Message_RoundTripsSenderRecipientsAndLines()
+    {
+        var galaxy = new Galaxy(10);
+        var sender = new Empire { Name = "Sender" };
+        var recipientA = new Empire { Name = "RecipientA" };
+        var recipientB = new Empire { Name = "RecipientB" };
+
+        var game = new Game(galaxy);
+        game.Empires.Add(sender);
+        game.Empires.Add(recipientA);
+        game.Empires.Add(recipientB);
+        game.CurrentEmpire = sender;
+
+        // Read:true with two live recipients is only reachable in real Pascal once both have read it
+        // (SetMessageRead's ReadBy<=Recipient check, MESS.PAS:242-250) -- asserted here purely as a
+        // plain stored field, not as evidence Read is independent of that per-recipient tracking.
+        game.Messages.Add(new Message(sender, new HashSet<Empire> { recipientA, recipientB }, Read: true, Intercepted: false, ["line one", "line two"]));
+
+        var bytes = SavGameWriter.WriteGame(game);
+        var loaded = new SavGameLoader().LoadGame(bytes);
+
+        var message = loaded.Messages.Single();
+        await Assert.That(message.Sender.Name).IsEqualTo("Sender");
+        await Assert.That(message.Recipients.Select(e => e.Name)).IsEquivalentTo(["RecipientA", "RecipientB"]);
+        await Assert.That(message.Read).IsTrue();
+        await Assert.That(message.Intercepted).IsFalse();
+        await Assert.That(message.Lines).IsEquivalentTo(["line one", "line two"]);
+    }
+
+    [Test]
+    public async Task WriteThenLoad_MessageFromEliminatedEmpire_DoesNotThrowAndSenderComesBackUnnamed()
+    {
+        var galaxy = new Galaxy(10);
+        var recipient = new Empire { Name = "Recipient" };
+        var eliminatedSender = new Empire { Name = "FormerEmpire", Status = EmpireStatus.Eliminated };
+
+        var game = new Game(galaxy);
+        game.Empires.Add(recipient);
+        // Fill the remaining 7 on-disk slots (.SAV caps at 8) so EmpireSlotIndex.Assign for the
+        // eliminated sender below can't silently succeed only because slots happened to be free --
+        // this reproduces the tightest case Game.Empires being a permanent roster now allows.
+        for (var i = 0; i < 6; i++) {
+            game.Empires.Add(new Empire { Name = $"Filler{i}" });
+        }
+        game.Empires.Add(eliminatedSender);
+        game.CurrentEmpire = recipient;
+
+        game.Messages.Add(new Message(eliminatedSender, new HashSet<Empire> { recipient }, Read: false, Intercepted: false, ["farewell"]));
+
+        var bytes = SavGameWriter.WriteGame(game);
+        var loaded = new SavGameLoader().LoadGame(bytes);
+
+        // Eliminated empires write InUse=false (SavGameWriter's own EmpireSlotIndex doc comment), so
+        // the loader's placeholder gate never adds this slot to Game.Empires -- the message survives,
+        // but its sender comes back as an unnamed orphan, not the real "FormerEmpire" identity. That's
+        // real Pascal's own on-disk shape for a defeated-and-removed empire, not a bug in this port;
+        // GameJson is the lossless format for anything that needs Eliminated identity preserved.
+        var message = loaded.Messages.Single();
+        await Assert.That(message.Sender.Name).IsEqualTo("");
+        await Assert.That(loaded.Empires.Any(e => e.Name == "FormerEmpire")).IsFalse();
+    }
+
+    [Test]
     public async Task LoadGame_Confront2_DecodesOtherEmpireFromConfirmedHeadlines()
     {
         // Ground truth (savtool.py, ATTACK.PAS:1664/1669/INTRFACE.PAS:1329 confirmed directly):

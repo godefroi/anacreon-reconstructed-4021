@@ -41,8 +41,6 @@ codebase is in a test file.
 
 ## Save/load
 
-- **Messages aren't modeled.** No in-memory concept of a player message exists, so `.SAV` messages
-  are read-and-discarded on import and never written on export.
 - **UI/session Environment fields are discarded on import.** `EmpiresToMove`/`TimePerTurn`/
   `AutoSave`/`AsyncTurns`/`PauseActive`/`ReEnterGame` have no effect anywhere in this port yet —
   `EmpiresToMove` is redundant with `Game.CurrentEmpire`/`NextEmpire()` so there's nothing to store
