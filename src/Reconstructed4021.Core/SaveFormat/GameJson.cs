@@ -154,6 +154,11 @@ public static class GameJson
         game.Year = (int)root["year"]!;
         game.ScenarioFilename = (string?)root["scenarioFilename"];
         game.CurrentEmpire = root["currentEmpireId"] is { } currentEmpireIdNode ? lookup.Empire((int)currentEmpireIdNode) : null;
+        game.TimePerTurn = (int)root["timePerTurn"]!;
+        game.AutoSave = (bool)root["autoSave"]!;
+        game.AsyncTurns = (bool)root["asyncTurns"]!;
+        game.PauseActive = (bool)root["pauseActive"]!;
+        game.ReEnterGame = (bool)root["reEnterGame"]!;
 
         ReadTurnHandlers(root["turnHandlers"], game, lookup, random ?? new Random());
         ReadBlobs(root["unimplementedNpeBlobs"], game, lookup);

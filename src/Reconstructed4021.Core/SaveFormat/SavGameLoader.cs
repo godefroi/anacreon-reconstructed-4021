@@ -105,13 +105,18 @@ public sealed class SavGameLoader
         var reader = new SavReader(data);
 
         LoadHeader(reader);
-        var (year, playerOrdinal, scenarioFilename) = LoadEnvironment(reader);
+        var (year, playerOrdinal, scenarioFilename, timePerTurn, autoSave, asyncTurns, pauseActive, reEnterGame) = LoadEnvironment(reader);
         var galaxy = LoadSector(reader);
 
         var game = new Game(galaxy) {
             Year = year,
             ScenarioFilename = scenarioFilename,
             CurrentEmpire = ResolveEmpire(playerOrdinal),
+            TimePerTurn = timePerTurn,
+            AutoSave = autoSave,
+            AsyncTurns = asyncTurns,
+            PauseActive = pauseActive,
+            ReEnterGame = reEnterGame,
         };
 
         LoadPlanets(reader, galaxy);
@@ -149,22 +154,21 @@ public sealed class SavGameLoader
     }
 
     /// `LoadEnvironment` (`ENVIRON.PAS:127-138`). `EmpiresToMove` is read and discarded — genuinely
-    /// redundant with `Game.CurrentEmpire`/`NextEmpire()`. `TimePerTurn`/`AutoSave`/`AsyncTurns`/
-    /// `PauseActive`/`ReEnterGame` are UI/session settings with no effect anywhere in this port —
-    /// also read and discarded.
-    private static (int Year, int PlayerOrdinal, string ScenarioFilename) LoadEnvironment(SavReader reader)
+    /// redundant with `Game.CurrentEmpire`/`NextEmpire()`, so there's nothing to store. The rest
+    /// round-trip onto <see cref="Game"/>'s own like-named properties (see their doc comment).
+    private static (int Year, int PlayerOrdinal, string ScenarioFilename, int TimePerTurn, bool AutoSave, bool AsyncTurns, bool PauseActive, bool ReEnterGame) LoadEnvironment(SavReader reader)
     {
         var year = reader.ReadWord();
         var playerOrdinal = reader.ReadByte();
         reader.ReadBitSet(2); // EmpiresToMove -- discarded, see doc comment above.
         var scenarioFilename = reader.ReadPascalString(16);
-        reader.Skip(2); // TimePerTurn
-        reader.Skip(1); // AutoSave
-        reader.Skip(1); // AsyncTurns
-        reader.Skip(1); // PauseActive
-        reader.Skip(1); // ReEnterGame
+        var timePerTurn = reader.ReadWord();
+        var autoSave = reader.ReadBoolean();
+        var asyncTurns = reader.ReadBoolean();
+        var pauseActive = reader.ReadBoolean();
+        var reEnterGame = reader.ReadBoolean();
 
-        return (year, playerOrdinal, scenarioFilename);
+        return (year, playerOrdinal, scenarioFilename, timePerTurn, autoSave, asyncTurns, pauseActive, reEnterGame);
     }
 
     /// <summary>

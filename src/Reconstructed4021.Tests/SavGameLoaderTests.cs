@@ -353,6 +353,32 @@ public class SavGameLoaderTests
     }
 
     [Test]
+    public async Task WriteThenLoad_EnvironmentSettings_RoundTripInsteadOfResettingToDefaults()
+    {
+        var galaxy = new Galaxy(10);
+        var empire = new Empire { Name = "Solo" };
+
+        var game = new Game(galaxy) {
+            CurrentEmpire = empire,
+            TimePerTurn = 120,
+            AutoSave = false,
+            AsyncTurns = true,
+            PauseActive = false,
+            ReEnterGame = true,
+        };
+        game.Empires.Add(empire);
+
+        var bytes = SavGameWriter.WriteGame(game);
+        var loaded = new SavGameLoader().LoadGame(bytes);
+
+        await Assert.That(loaded.TimePerTurn).IsEqualTo(120);
+        await Assert.That(loaded.AutoSave).IsFalse();
+        await Assert.That(loaded.AsyncTurns).IsTrue();
+        await Assert.That(loaded.PauseActive).IsFalse();
+        await Assert.That(loaded.ReEnterGame).IsTrue();
+    }
+
+    [Test]
     public async Task WriteThenLoad_MessageFromEliminatedEmpire_DoesNotThrowAndSenderComesBackUnnamed()
     {
         var galaxy = new Galaxy(10);

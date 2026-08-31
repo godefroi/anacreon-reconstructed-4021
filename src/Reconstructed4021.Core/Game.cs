@@ -54,6 +54,28 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     public string? ScenarioFilename { get; set; }
 
     /// <summary>
+    /// Environment section's TimePerTurn/AutoSave/AsyncTurns/PauseActive/ReEnterGame
+    /// (ENVIRON.PAS:38, 28-31) — real per-turn time-limit budget and UI/session settings that no
+    /// system in this port reads yet (no turn-timer, no autosave, no interactive re-entry loop).
+    /// Stored verbatim rather than discarded so a load-then-resave doesn't silently reset a real
+    /// file's own values back to Pascal's declared defaults; <see cref="SaveFormat.SavGameLoader"/>
+    /// populates these, <see cref="SaveFormat.SavGameWriter"/> writes them back out.
+    /// </summary>
+    public int TimePerTurn { get; set; } = 300;
+
+    /// <inheritdoc cref="TimePerTurn"/>
+    public bool AutoSave { get; set; } = true;
+
+    /// <inheritdoc cref="TimePerTurn"/>
+    public bool AsyncTurns { get; set; }
+
+    /// <inheritdoc cref="TimePerTurn"/>
+    public bool PauseActive { get; set; } = true;
+
+    /// <inheritdoc cref="TimePerTurn"/>
+    public bool ReEnterGame { get; set; }
+
+    /// <summary>
     /// Raw `.SAV` NPE-Data blobs for empires whose personality this port doesn't implement an
     /// <see cref="ITurnHandler"/> for (Pirate/Berserker/Guardian/Trader/unrecognized) — real
     /// scenarios routinely mix these with Kingdom empires (see `docs/ROADMAP.md`'s NPE reachability

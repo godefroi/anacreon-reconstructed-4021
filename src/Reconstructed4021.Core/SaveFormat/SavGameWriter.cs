@@ -67,10 +67,12 @@ public static class SavGameWriter
         writer.WriteWord(13);
     }
 
-    /// `SaveEnvironment` (`ENVIRON.PAS:143-159`). `EmpiresToMove`/`TimePerTurn`/`AutoSave`/
-    /// `AsyncTurns`/`PauseActive`/`ReEnterGame` have no home in this port (`SavGameLoader`'s own
-    /// doc comment) — written as real Pascal's own declared defaults (`ENVIRON.PAS`'s `CONST`
-    /// section), harmless either way since `LoadEnvironment` discards all of them right back.
+    /// `SaveEnvironment` (`ENVIRON.PAS:143-159`). `EmpiresToMove` is written empty — genuinely
+    /// redundant with `Game.CurrentEmpire`/`NextEmpire()`'s cyclic order plus `IsFirstEmpire`'s
+    /// wrap check (`TurnEngine.AdvanceOneTurn` derives the same "round is over" signal
+    /// structurally, from position, rather than from a shrinking set) — harmless since
+    /// `LoadEnvironment` discards it right back either way. `TimePerTurn`/`AutoSave`/`AsyncTurns`/
+    /// `PauseActive`/`ReEnterGame` round-trip from <see cref="Game"/>'s own like-named properties.
     /// `Player` has no "no one yet" sentinel in the real format (unlike every entity reference,
     /// which has `IDNumber`'s `Index=0`) -- a freshly built <see cref="NewGame.ScenarioLoader"/> game
     /// has real empires but hasn't picked whose turn it is yet, so <see cref="Game.CurrentEmpire"/>
@@ -88,11 +90,11 @@ public static class SavGameWriter
         writer.WriteByte((byte)slots.SlotOf(player));
         writer.WriteBitSet([], 2); // EmpiresToMove
         writer.WritePascalString(game.ScenarioFilename ?? "", 16);
-        writer.WriteWord(300); // TimePerTurn
-        writer.WriteBoolean(true); // AutoSave
-        writer.WriteBoolean(false); // AsyncTurns
-        writer.WriteBoolean(true); // PauseActive
-        writer.WriteBoolean(false); // ReEnterGame
+        writer.WriteWord((ushort)game.TimePerTurn);
+        writer.WriteBoolean(game.AutoSave);
+        writer.WriteBoolean(game.AsyncTurns);
+        writer.WriteBoolean(game.PauseActive);
+        writer.WriteBoolean(game.ReEnterGame);
     }
 
     /// <summary>
