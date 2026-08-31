@@ -11,9 +11,9 @@ namespace Reconstructed4021.Core.SaveFormat;
 /// mirror of <see cref="SavGameLoader"/>'s own `Load*` methods, in the same on-disk order. Built
 /// purely to make `LoadGame` (`LOADSAVE.PAS`, unmodified) accept the result — see `docs/ROADMAP.md`'s
 /// save/load notes for why this is a test-only verification tool, not a byte-faithful or
-/// maintained save format (the native JSON format, <see cref="GameJson"/>, is that): no order-queue
-/// reconstruction (none exists in this port), no message content (none exists either), no attempt to
-/// reproduce a `Reserved`/pointer field's original garbage bytes (always zero here).
+/// maintained save format (the native JSON format, <see cref="GameJson"/>, is that): no message
+/// content (none exists in this port), no attempt to reproduce a `Reserved`/pointer field's original
+/// garbage bytes (always zero here).
 ///
 /// <see cref="EmpireSlotIndex"/> is this format's own version of <see cref="GameJson"/>'s
 /// `EntityIndex.EmpireId` — same "real empires first, discover orphans lazily" idea — but capped at
@@ -52,7 +52,7 @@ public static class SavGameWriter
         WriteSector(writer, game.Galaxy, slots);
         WritePlanets(writer, game.Galaxy, slots, visibility);
         WriteStarbases(writer, game.Galaxy, slots, visibility);
-        WriteFleets(writer, game.Galaxy, slots, visibility);
+        WriteFleets(writer, game.Galaxy, slots, visibility, objectIds);
         WriteStargates(writer, game.Galaxy, slots, visibility);
         WriteConstructionSites(writer, game.Galaxy, slots, visibility);
         WriteMessages(writer);
@@ -238,17 +238,16 @@ public static class SavGameWriter
     }
 
     /// <summary>
-    /// `SaveFleets` (`LOADSAVE.PAS:188-225`). Always writes an empty order queue (`NoOfComs=0`) --
-    /// no in-memory order-queue representation exists in this port (`docs/OPEN_GAPS.md`'s tracked
-    /// gap). <see cref="Fleet.Destination"/> null must become `Dest:=XY`, never `(0,0)`:
-    /// `LoadFleets`' own per-axis quirk (`LOADSAVE.PAS:250-256`) resets <em>both</em> `XY` and `Dest`
-    /// to `(1,1)` the instant either coordinate has a zero component on either field, so writing a
-    /// literal `(0,0)` "no destination" sentinel would silently relocate every stationary fleet on
-    /// the very next load. `runload.pas`'s own `sumfleetx`/`sumfleety` checksum fields exist
-    /// specifically to cover this path in the real-Pascal acceptance test -- see that driver's own
-    /// doc comment.
+    /// `SaveFleets` (`LOADSAVE.PAS:188-225`). Writes each fleet's real <see cref="Fleet.Orders"/>
+    /// queue (see <see cref="WriteCommandRecord"/>) instead of always emitting `NoOfComs=0`.
+    /// <see cref="Fleet.Destination"/> null must become `Dest:=XY`, never `(0,0)`: `LoadFleets`' own
+    /// per-axis quirk (`LOADSAVE.PAS:250-256`) resets <em>both</em> `XY` and `Dest` to `(1,1)` the
+    /// instant either coordinate has a zero component on either field, so writing a literal `(0,0)`
+    /// "no destination" sentinel would silently relocate every stationary fleet on the very next
+    /// load. `runload.pas`'s own `sumfleetx`/`sumfleety` checksum fields exist specifically to cover
+    /// this path in the real-Pascal acceptance test -- see that driver's own doc comment.
     /// </summary>
-    private static void WriteFleets(SavWriter writer, Galaxy.Galaxy galaxy, EmpireSlotIndex slots, VisibilityIndex visibility)
+    private static void WriteFleets(SavWriter writer, Galaxy.Galaxy galaxy, EmpireSlotIndex slots, VisibilityIndex visibility, ObjectIdIndex objectIds)
     {
         for (var i = 0; i < galaxy.Fleets.Count; i++) {
             var fleet = galaxy.Fleets[i];
@@ -274,11 +273,57 @@ public static class SavGameWriter
             writer.WriteZeros(8); // Reserved
             writer.WriteIdNumber(new SavIdNumber(SavObjectType.Void, 0)); // NextID
 
-            writer.WriteWord(0); // order-queue count -- always empty, see doc comment
+            writer.WriteWord((ushort)fleet.Orders.Count);
+            foreach (var order in fleet.Orders) {
+                WriteCommandRecord(writer, order, objectIds);
+            }
         }
 
         writer.WriteWord(0);
     }
+
+    /// <summary>
+    /// Inverse of `SavGameLoader.ReadCommandRecord` -- `Typ` plus its 4-byte variant, populated only
+    /// for <see cref="CommandType.Destination"/>/<see cref="CommandType.Transfer"/> (every other
+    /// command carries no payload, matching real Pascal's own unused/garbage variant for those).
+    /// </summary>
+    private static void WriteCommandRecord(SavWriter writer, FleetOrder order, ObjectIdIndex objectIds)
+    {
+        writer.WriteByte((byte)order.Type);
+
+        switch (order.Type) {
+            case CommandType.Destination:
+                if (order.DestinationObject is { } destinationObject) {
+                    writer.WriteCoordinate(default); // Limbo -- an object reference wins over a raw coordinate, matching GetLocation's own convention.
+                    writer.WriteIdNumber(objectIds.IdOf(destinationObject));
+                } else {
+                    writer.WriteCoordinate(order.DestinationPosition ?? default);
+                    writer.WriteIdNumber(new SavIdNumber(SavObjectType.Void, 0));
+                }
+                break;
+
+            case CommandType.Transfer:
+                writer.WriteByte((byte)EncodeTransferResource(order.TransferShip, order.TransferCargo));
+                writer.WriteInteger((short)order.TransferAmount);
+                writer.WriteByte(0); // Trailing unused byte of the 4-byte variant (Res+Trns is only 3 bytes).
+                break;
+
+            default:
+                writer.WriteZeros(4); // No payload for this command type.
+                break;
+        }
+    }
+
+    /// Inverse of `SavGameLoader.ResolveTransferResource` -- same `ShipType`(+5)/`CargoType`(+12)
+    /// offsets back into the shared `ResourceTypes` ordinal space. Neither set (a `Transfer` order
+    /// with no real resource, which nothing in this port constructs) writes `NoRes` (0).
+    private static int EncodeTransferResource(ShipType? ship, CargoType? cargo) => ship switch {
+        { } s => (int)s + 5,
+        null => cargo switch {
+            { } c => (int)c + 12,
+            null => 0,
+        },
+    };
 
     /// `SaveStargates` (`LOADSAVE.PAS:301-317`). `LinkedTo` null means "not yet linked" -- `Limbo`
     /// (0,0) on disk, the opposite convention from Fleet/Starbase's `Destination` (compare this

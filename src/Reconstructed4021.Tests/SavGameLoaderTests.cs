@@ -1,3 +1,4 @@
+using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.SaveFormat;
@@ -124,13 +125,69 @@ public class SavGameLoaderTests
     }
 
     [Test]
-    public async Task LoadGame_FleetOrders_DiscardsCommandQueueWithoutDesyncing()
+    public async Task LoadGame_FleetOrders_DecodesCommandQueueWithoutDesyncing()
     {
-        // Fleet 240 (savtool's own index) has 4 queued CommandRecords -- discarded per the tracked
-        // gap, but must not throw off the byte cursor for the rest of the file. 13 fleets total.
+        // Ground truth via scripts/savtool.py: fleet 240 (savtool's own index) has 4 queued
+        // CommandRecords -- DestCOM (variant_hex 000002bc), WaitCOM (garbage variant left over from
+        // the previous write), DestCOM (variant_hex 00000282), RepeatCOM (garbage again). Both
+        // DestCOM variants decode as XY=Limbo(0,0) + a Pln IDNumber (188, 130) -- confirmed by
+        // docs/SAV_FILE_FORMAT.md's own worked example -- resolving to the planets at (19,20) and
+        // (20,19) respectively (savtool ordinals 188/130 -> this port's 0-based Planets[187]/[129]).
+        // 13 fleets total; the queue must not throw off the byte cursor for the rest of the file.
         var game = new SavGameLoader().LoadGame(LoadSave("FLEET_ORDERS.SAV"));
 
         await Assert.That(game.Galaxy.Fleets.Count).IsEqualTo(13);
+
+        var fleet = game.Galaxy.Fleets.Single(f => f.Location == new Coordinate(18, 21) && f.Fuel == 1992.0);
+        await Assert.That(fleet.Orders).Count().IsEqualTo(4);
+
+        await Assert.That(fleet.Orders[0].Type).IsEqualTo(CommandType.Destination);
+        await Assert.That(fleet.Orders[0].DestinationPosition).IsNull();
+        await Assert.That(fleet.Orders[0].DestinationObject).IsNotNull();
+        await Assert.That(fleet.Orders[0].DestinationObject!.Location).IsEqualTo(new Coordinate(19, 20));
+
+        await Assert.That(fleet.Orders[1].Type).IsEqualTo(CommandType.Wait);
+        await Assert.That(fleet.Orders[1].DestinationObject).IsNull();
+        await Assert.That(fleet.Orders[1].DestinationPosition).IsNull();
+
+        await Assert.That(fleet.Orders[2].Type).IsEqualTo(CommandType.Destination);
+        await Assert.That(fleet.Orders[2].DestinationObject).IsNotNull();
+        await Assert.That(fleet.Orders[2].DestinationObject!.Location).IsEqualTo(new Coordinate(20, 19));
+
+        await Assert.That(fleet.Orders[3].Type).IsEqualTo(CommandType.Repeat);
+    }
+
+    [Test]
+    public async Task WriteThenLoad_DestinationOrder_ResolvesStargateDespiteLoadOrder()
+    {
+        // Regression test: on-disk section order is Planets/Starbases/Fleets/Stargates/
+        // ConstructionSites, so a DestCOM naming a Stargate (or ConstructionSite, or a
+        // later-in-the-same-section Fleet) is a real forward reference at the point LoadFleets
+        // reads it -- ReadCommandRecord must defer resolution (via _pendingOrderDestinations /
+        // ResolvePendingOrderDestinations) rather than resolve inline against _objectsById, or this
+        // silently decodes as no object at all (write-back would then emit Limbo/Void, ORDERS.PAS's
+        // own BadDestOER shape) instead of the real stargate reference.
+        var galaxy = new Galaxy(10);
+        var empire = new Empire { Name = "Test Empire" };
+
+        var stargate = new Stargate { Location = new Coordinate(3, 3), Owner = empire };
+        galaxy.Stargates.Add(stargate);
+
+        var fleet = new Fleet { Location = new Coordinate(1, 1), Owner = empire };
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationObject: stargate));
+        galaxy.Fleets.Add(fleet);
+
+        var game = new Game(galaxy);
+        game.Empires.Add(empire);
+        game.CurrentEmpire = empire;
+
+        var bytes = SavGameWriter.WriteGame(game);
+        var loaded = new SavGameLoader().LoadGame(bytes);
+
+        var loadedFleet = loaded.Galaxy.Fleets.Single();
+        await Assert.That(loadedFleet.Orders).Count().IsEqualTo(1);
+        await Assert.That(loadedFleet.Orders[0].DestinationObject).IsNotNull();
+        await Assert.That(loadedFleet.Orders[0].DestinationObject!.Location).IsEqualTo(new Coordinate(3, 3));
     }
 
     [Test]

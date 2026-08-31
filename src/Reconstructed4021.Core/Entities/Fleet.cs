@@ -30,6 +30,15 @@ public sealed class Fleet : IMovable, ISectorObject, IShipCargoHolder
     public FleetStatus Status { get; set; } = FleetStatus.Ready;
 
     /// <summary>
+    /// A fleet's compiled order queue (`CommandRecord`/`DestCOM` et al, `ORDERS.PAS`) -- data only,
+    /// not acted on by any turn-processing code in this port yet: nothing here consumes an order and
+    /// advances the queue the way real Pascal's own `NextOrder`/`UpdateFleet` do. Modeled purely so
+    /// `.SAV` import/export round-trips a real order queue instead of discarding it on read and
+    /// always writing empty on write (`docs/OPEN_GAPS.md`'s tracked Save/load gap).
+    /// </summary>
+    public List<FleetOrder> Orders { get; init; } = [];
+
+    /// <summary>
     /// A fleet's classification is derived from its ship composition, never stored — Pascal itself
     /// computes this (TypeOfFleet, PRIMINTR.PAS:808-833) rather than keeping a type field, so a
     /// fleet's type can never drift out of sync with the ships actually present.

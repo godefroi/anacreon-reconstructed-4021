@@ -30,14 +30,32 @@ public sealed class SavGameLoader
 
     /// <summary>
     /// Real object references by on-disk `IDNumber`, populated as each of Planets/Starbases/
-    /// Fleets/Stargates/ConstructionSites is loaded (all five sections precede every reference to
-    /// one — `NameRecord.Coord` in Empire Data, `FleetDataRecord.TargetID`/`HomeBaseID` in NPE Data
-    /// — so the index is always complete by the time it's needed). Not populated for object types
-    /// this port has no representation of (`Con`'s own type tag aside, that one IS
-    /// `ConstructionSite` — the ones genuinely missing are `BlkHl`/`Plsr`/`WrmHl`/`Wndr`/`ArtObj`,
-    /// none of which any real `dos_131` reference save exercises).
+    /// Fleets/Stargates/ConstructionSites is loaded. Every reference *outside* the Fleets section
+    /// itself (`NameRecord.Coord` in Empire Data, `FleetDataRecord.TargetID`/`HomeBaseID` in NPE
+    /// Data) comes strictly after all five, so the index is always complete by then. A `DestCOM`'s
+    /// `Loc.ID` is the one exception — it's read *during* the Fleets section (`LoadFleets`), which
+    /// precedes Stargates/ConstructionSites and can't see a same-section forward reference to a
+    /// later fleet either — so <see cref="ReadCommandRecord"/> never resolves one against this
+    /// dictionary directly; see <see cref="_pendingOrderDestinations"/>. Not populated for object
+    /// types this port has no representation of (`Con`'s own type tag aside, that one IS
+    /// `ConstructionSite` — the ones genuinely missing are `BlkHl`/`Plsr`/`WrmHl`/`Wndr`/`ArtObj`).
+    /// Confirmed dead code in real Pascal, not just unexercised by this port's 13 reference saves --
+    /// no creation routine for any of the five exists in either the 1.31 or 2.0 source tree
+    /// (`docs/PASCAL_ARCHITECTURE_NOTES.md`'s own "Findings from porting" section), so no real
+    /// `.SAV` file, from any scenario, could ever contain a reference to one.
     /// </summary>
     private readonly Dictionary<(SavObjectType, int), ISectorObject> _objectsById = new();
+
+    /// <summary>
+    /// `(fleet, order index, raw on-disk id)` for every `DestCOM` order whose `Loc.ID` named a real
+    /// object — deferred rather than resolved inline in <see cref="ReadCommandRecord"/> because that
+    /// runs mid-Fleets-section, before Stargates/ConstructionSites are loaded and before a
+    /// same-section forward reference to a later fleet exists. Resolved by
+    /// <see cref="ResolvePendingOrderDestinations"/> once every section has run — the same two-phase
+    /// shape <see cref="SaveFormat.GameJson"/>'s own <c>Deserialize</c> uses for
+    /// <c>FleetOrder.DestinationObject</c>, for the identical reason.
+    /// </summary>
+    private readonly List<(Fleet Fleet, int OrderIndex, SavIdNumber Id)> _pendingOrderDestinations = new();
 
     /// Per-slot `InUse`/`IsAPlayer`, populated by <see cref="LoadEmpireData"/> — NPE Data (Phase
     /// 7e) needs both to know which slots get an NPE blob at all (`EmpireActive(Emp) AND NOT
@@ -96,6 +114,7 @@ public sealed class SavGameLoader
         LoadFleets(reader, galaxy);
         LoadStargates(reader, galaxy);
         LoadConstructionSites(reader, galaxy);
+        ResolvePendingOrderDestinations();
         LoadMessages(reader);
         LoadEmpireData(reader, game);
         LoadNewsData(reader, game);
@@ -370,8 +389,8 @@ public sealed class SavGameLoader
     /// `LoadFleets` (`LOADSAVE.PAS:227-263`). Reproduces the real load-time quirk verbatim
     /// (`LOADSAVE.PAS:250-256`): if any single axis of `XY`/`Dest` is exactly 0, both coordinates
     /// reset to `(1,1)` — confirmed to fire on a per-component basis, not "both coordinates are
-    /// (0,0)". `CommandRecord` order queues are read and discarded (`docs/OPEN_GAPS.md`'s own tracked
-    /// gap: no in-memory representation exists). `NextOrder`/`OrderData` are Pascal's
+    /// (0,0)". `CommandRecord` order queues are read into <see cref="Fleet.Orders"/> (see
+    /// <see cref="ReadCommandRecord"/>) rather than discarded. `NextOrder`/`OrderData` are Pascal's
     /// own legacy/superseded fields, already dead before this file was even written.
     /// </summary>
     private void LoadFleets(SavReader reader, Galaxy.Galaxy galaxy)
@@ -415,11 +434,81 @@ public sealed class SavGameLoader
             _objectsById[(SavObjectType.Flt, index)] = fleet;
 
             var orderCount = reader.ReadWord();
-            reader.Skip(orderCount * 5); // CommandRecord queue -- discarded, see doc comment above.
+            for (var i = 0; i < orderCount; i++) {
+                ReadCommandRecord(reader, fleet);
+            }
 
             index = reader.ReadWord();
         }
     }
+
+    /// <summary>
+    /// One `CommandRecord` (`ORDERS.PAS:47-53`, `docs/SAV_FILE_FORMAT.md`'s own worked example) --
+    /// `Typ` plus its 4-byte variant, interpreted only for the two `Typ` values that actually use it
+    /// (`DestCOM`/`TransCOM`); every other `Typ` has the variant skipped as garbage, matching real
+    /// Pascal leaving it holding whatever the previous write left there. Appends directly to
+    /// <paramref name="fleet"/>'s own <see cref="Fleet.Orders"/> rather than returning a value: a
+    /// `DestCOM` naming a real object can't resolve <see cref="ResolveObject"/> yet (see
+    /// <see cref="_pendingOrderDestinations"/>'s own doc comment), so this stashes a placeholder
+    /// order plus its pending index instead.
+    /// </summary>
+    private void ReadCommandRecord(SavReader reader, Fleet fleet)
+    {
+        var type = (CommandType)reader.ReadByte();
+
+        switch (type) {
+            case CommandType.Destination: {
+                var xy = reader.ReadCoordinate();
+                var id = reader.ReadIdNumber();
+
+                if (id.IsEmpty) {
+                    fleet.Orders.Add(new FleetOrder(type, DestinationPosition: xy));
+                } else {
+                    _pendingOrderDestinations.Add((fleet, fleet.Orders.Count, id));
+                    fleet.Orders.Add(new FleetOrder(type));
+                }
+                break;
+            }
+
+            case CommandType.Transfer: {
+                var resourceOrdinal = reader.ReadByte();
+                var amount = reader.ReadInteger();
+                reader.Skip(1); // Trailing unused byte of the 4-byte variant (Res+Trns is only 3 bytes).
+                var (ship, cargo) = ResolveTransferResource(resourceOrdinal);
+                fleet.Orders.Add(new FleetOrder(type, TransferShip: ship, TransferCargo: cargo, TransferAmount: amount));
+                break;
+            }
+
+            default:
+                reader.Skip(4); // Variant unused for this command type -- leftover garbage bytes.
+                fleet.Orders.Add(new FleetOrder(type));
+                break;
+        }
+    }
+
+    /// See <see cref="_pendingOrderDestinations"/>'s own doc comment for why this can't run inline
+    /// in <see cref="ReadCommandRecord"/>. A `DestCOM` naming an object type this port has no
+    /// representation for (`BlkHl`/`Plsr`/`WrmHl`/`Wndr`/`ArtObj` -- confirmed dead code in real
+    /// Pascal, see `_objectsById`'s own doc comment) resolves to null here, same as everywhere else
+    /// <see cref="ResolveObject"/> is used.
+    private void ResolvePendingOrderDestinations()
+    {
+        foreach (var (fleet, orderIndex, id) in _pendingOrderDestinations) {
+            fleet.Orders[orderIndex] = fleet.Orders[orderIndex] with { DestinationObject = ResolveObject(id) };
+        }
+    }
+
+    /// `ResourceTypes` ordinal (`ORDERS.PAS`'s own `GetResourceType`: `fgt..tri`, 5-18) split into
+    /// this port's existing `ShipType`(5-11)/`CargoType`(12-18) ordinal offsets -- the same shared
+    /// ordinal space `_technologyByOrdinal` already decodes for tech grants, just restricted to the
+    /// subrange a real `TRANSFER` order can actually name. Neither is set for an out-of-range ordinal
+    /// (0-4: `NoRes`/defenses) -- not producible by real Pascal's own `GetResourceType`, and no
+    /// reference save exercises `TransCOM` at all to confirm what such a byte would even mean here.
+    private static (ShipType? Ship, CargoType? Cargo) ResolveTransferResource(int ordinal) => ordinal switch {
+        >= 5 and <= 11 => ((ShipType?)(ordinal - 5), null),
+        >= 12 and <= 18 => (null, (CargoType?)(ordinal - 12)),
+        _ => (null, null),
+    };
 
     /// `LoadStargates` (`LOADSAVE.PAS:282-296`). `GTyp` is the full `TechnologyTypes` ordinal
     /// (confirmed by `docs/SAV_FILE_FORMAT.md`'s own `STARGATE_DONE.SAV` example: `GTyp=24` for

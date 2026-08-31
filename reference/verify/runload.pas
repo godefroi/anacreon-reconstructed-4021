@@ -39,11 +39,16 @@
    in Empire Data's own fields. News via NewsData[Emp].FirstItem walked to a count
    (order/content-independent, just proves the section round-trips at all -- see
    SavGameWriter's own doc comment for why full News fidelity is in scope while Messages
-   is not). Fuel/order-queue/message content are deliberately absent: Fleet.Fuel is a
-   double on the C# side (fractional for a played/scenario game, integral only for a
-   fresh file-load-file-write round trip) and the order queue/message text have no
-   in-memory representation on the C# side at all (docs/OPEN_GAPS.md's tracked
-   gaps) -- neither is meaningful to checksum here. ---------------------------------- *)
+   is not). Fuel/order-queue/message content are deliberately absent from the checksum
+   itself: Fleet.Fuel is a double on the C# side (fractional for a played/scenario game,
+   integral only for a fresh file-load-file-write round trip) and message text has no
+   in-memory representation on the C# side at all (docs/OPEN_GAPS.md's tracked gap) --
+   neither is meaningful to checksum here. The order queue *does* have a real C# model
+   now (Fleet.Orders) and is written back on round trip, but is still not summed above --
+   its correctness is instead proven by this driver's own LoadGame succeeding at all
+   (error=0) and every downstream section's fields still matching: a wrong CommandRecord
+   byte layout would desync LOADSAVE.PAS's own sequential reader and corrupt everything
+   read after it, not fail silently. ------------------------------------------------ *)
 
 PROGRAM RunLoad;
 

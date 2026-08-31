@@ -118,13 +118,23 @@ public static class GameJson
         var graphOptions = BuildGraphOptions(index: null, lookup);
 
         var galaxyNode = root["galaxy"]!.AsObject();
+        var fleetsNode = galaxyNode["fleets"]!.AsArray();
         var galaxy = new Galaxy.Galaxy((int)galaxyNode["size"]!);
         galaxy.Planets.AddRange(galaxyNode["planets"].Deserialize<List<Planet>>(graphOptions)!);
         galaxy.Starbases.AddRange(galaxyNode["starbases"].Deserialize<List<Starbase>>(graphOptions)!);
-        galaxy.Fleets.AddRange(galaxyNode["fleets"].Deserialize<List<Fleet>>(graphOptions)!);
+        galaxy.Fleets.AddRange(fleetsNode.Deserialize<List<Fleet>>(graphOptions)!);
         galaxy.Stargates.AddRange(galaxyNode["stargates"].Deserialize<List<Stargate>>(graphOptions)!);
         galaxy.ConstructionSites.AddRange(galaxyNode["constructionSites"].Deserialize<List<ConstructionSite>>(graphOptions)!);
         lookup.AttachGalaxy(galaxy);
+
+        // Fleet.Orders is filled in only now, not by the reflection pass above (FleetOrderListConverter.Read
+        // skips its own value there -- see that class's own doc comment): FleetOrder.DestinationObject can
+        // reference any of the 5 ISectorObject kinds, including a Fleet, which would still be forward
+        // references (this same list, still mid-deserialization) if resolved eagerly -- the exact
+        // two-phase shape FillEmpireFields below already uses for Empire's own cross-referencing fields.
+        for (var i = 0; i < galaxy.Fleets.Count; i++) {
+            galaxy.Fleets[i].Orders.AddRange(ReadFleetOrders(((JsonObject)fleetsNode[i]!)["orders"]!.AsArray(), lookup));
+        }
 
         ReadNebulae(root["nebulae"], galaxy);
         ReadMinefields(root["minefields"], galaxy, lookup);
@@ -150,13 +160,17 @@ public static class GameJson
     /// Options for the part of the graph still reflection-driven (<see cref="Game"/>'s scalars,
     /// <see cref="Galaxy.Galaxy"/> and its 5 entity lists): overrides just the <c>Owner</c> property
     /// on each of the 5 <see cref="ISectorObject"/> implementors to go through
-    /// <see cref="EmpireRefConverter"/> instead of full inline serialization. Built fresh per call
-    /// (not cached) since the converter closes over this call's <paramref name="index"/>/
-    /// <paramref name="lookup"/>.
+    /// <see cref="EmpireRefConverter"/> instead of full inline serialization, plus
+    /// <see cref="Fleet"/>'s own <c>Orders</c> property (its <see cref="FleetOrder.DestinationObject"/>
+    /// has the exact same forward-reference problem <c>Owner</c> does, only worse -- see
+    /// <see cref="FleetOrderListConverter"/>'s own doc comment for why its read side is a no-op)
+    /// through <see cref="FleetOrderListConverter"/>. Built fresh per call (not cached) since both
+    /// converters close over this call's <paramref name="index"/>.
     /// </summary>
     private static JsonSerializerOptions BuildGraphOptions(EntityIndex? index, EntityLookup? lookup)
     {
         var empireRefConverter = new EmpireRefConverter(index, lookup);
+        var fleetOrderListConverter = new FleetOrderListConverter(index);
         var resolver = new DefaultJsonTypeInfoResolver();
         resolver.Modifiers.Add(typeInfo => {
             if (typeInfo.Type != typeof(Planet) && typeInfo.Type != typeof(Starbase) && typeInfo.Type != typeof(Fleet) &&
@@ -166,6 +180,11 @@ public static class GameJson
 
             var owner = typeInfo.Properties.First(p => p.Name == "owner");
             owner.CustomConverter = empireRefConverter;
+
+            if (typeInfo.Type == typeof(Fleet)) {
+                var orders = typeInfo.Properties.First(p => p.Name == "orders");
+                orders.CustomConverter = fleetOrderListConverter;
+            }
         });
 
         return new JsonSerializerOptions {
@@ -306,6 +325,32 @@ public static class GameJson
         var defender = node["defender"] is { } defenderNode ? lookup.Empire((int)defenderNode) : null;
 
         return new NewsItem(headline, subject, position, otherEmpire, techGrant, (int)node["parm1"]!, (int)node["parm2"]!, (int)node["parm3"]!, defender);
+    }
+
+    /// <summary>
+    /// <see cref="Fleet.Orders"/>'s real read-side decode -- see <see cref="Deserialize"/>'s own
+    /// remarks on why this runs as a second pass, after <c>lookup</c> has a full galaxy attached,
+    /// rather than inline via <see cref="FleetOrderListConverter"/>.
+    /// </summary>
+    private static List<FleetOrder> ReadFleetOrders(JsonArray array, EntityLookup lookup)
+    {
+        var orders = new List<FleetOrder>();
+
+        foreach (var node in array) {
+            var obj = node!.AsObject();
+            var type = Enum.Parse<CommandType>((string)obj["type"]!);
+            var destinationObject = lookup.DecodeObjectRef(obj["destinationObject"]);
+            var destinationPosition = obj["destinationPosition"] is JsonObject positionNode
+                ? new Coordinate((int)positionNode["x"]!, (int)positionNode["y"]!)
+                : (Coordinate?)null;
+            var transferShip = obj["transferShip"] is { } shipNode ? Enum.Parse<ShipType>((string)shipNode!) : (ShipType?)null;
+            var transferCargo = obj["transferCargo"] is { } cargoNode ? Enum.Parse<CargoType>((string)cargoNode!) : (CargoType?)null;
+            var transferAmount = (int)obj["transferAmount"]!;
+
+            orders.Add(new FleetOrder(type, destinationObject, destinationPosition, transferShip, transferCargo, transferAmount));
+        }
+
+        return orders;
     }
 
     // ---- DefenseSettings / UnlockedTechnology: hand-written -- pure value data, but nested inside
@@ -725,5 +770,52 @@ public static class GameJson
 
         public override void Write(Utf8JsonWriter writer, Empire value, JsonSerializerOptions options) =>
             writer.WriteNumberValue(index!.EmpireId(value));
+    }
+
+    /// <summary>
+    /// Per-property override for <see cref="Fleet"/>'s <c>Orders</c> -- same shape of problem
+    /// <see cref="EmpireRefConverter"/> solves for <c>Owner</c>: <see cref="FleetOrder.DestinationObject"/>
+    /// is an <see cref="ISectorObject"/> reference System.Text.Json's plain reflection can't serialize
+    /// (an interface-typed property) or deserialize (no concrete type to construct), so it's encoded
+    /// the same way any other cross-entity reference in this format is -- <see cref="EntityIndex.EncodeObjectRef"/>/
+    /// <see cref="EntityLookup.DecodeObjectRef"/>, the same pair <see cref="NewsItem.Subject"/> and
+    /// <see cref="Turns.KingdomFleetState.Target"/>/<c>HomeBase</c> already use.
+    ///
+    /// <see cref="Read"/> deliberately does nothing but skip its own value -- unlike every other
+    /// cross-reference in this format, <see cref="FleetOrder.DestinationObject"/> can point at
+    /// another <see cref="Fleet"/>, including one later in this very list, which is still a forward
+    /// reference at the point this converter would otherwise run (mid-<c>Deserialize&lt;List&lt;Fleet&gt;&gt;</c>,
+    /// before <see cref="EntityLookup.AttachGalaxy"/>). <see cref="Deserialize"/> instead fills
+    /// <see cref="Fleet.Orders"/> in a real second pass via <see cref="ReadFleetOrders"/>, once every
+    /// entity list is loaded -- the same two-phase shape it already uses for <see cref="Empire"/>'s
+    /// own cross-referencing fields (<see cref="FillEmpireFields"/>).
+    /// </summary>
+    private sealed class FleetOrderListConverter(EntityIndex? index) : JsonConverter<List<FleetOrder>>
+    {
+        public override List<FleetOrder> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            reader.Skip();
+            return [];
+        }
+
+        public override void Write(Utf8JsonWriter writer, List<FleetOrder> value, JsonSerializerOptions options)
+        {
+            var array = new JsonArray();
+
+            foreach (var order in value) {
+                array.Add(new JsonObject {
+                    ["type"] = order.Type.ToString(),
+                    ["destinationObject"] = index!.EncodeObjectRef(order.DestinationObject),
+                    ["destinationPosition"] = order.DestinationPosition is { } position
+                        ? new JsonObject { ["x"] = position.X, ["y"] = position.Y }
+                        : null,
+                    ["transferShip"] = order.TransferShip?.ToString(),
+                    ["transferCargo"] = order.TransferCargo?.ToString(),
+                    ["transferAmount"] = order.TransferAmount,
+                });
+            }
+
+            array.WriteTo(writer, options);
+        }
     }
 }
