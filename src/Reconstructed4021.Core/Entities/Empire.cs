@@ -27,16 +27,26 @@ public sealed class Empire
     public IEconomicWorld? Capital { get; set; }
 
     /// <summary>
-    /// Set once this empire's capital falls and it has no other world to fall back to. Pascal instead
-    /// overloads Capital itself for this (ATTACK.PAS:1120-1131's ConquerEmpire: <c>NewCapID.ObjTyp:=Void;
-    /// NewCapID.Index:=Ord(Player); SetCapital(EnemyEmp,NewCapID)</c>, a type-tagged sentinel stuffed into
-    /// the one field that already means "no capital" via null here). NewsItem's own Subject/Position
-    /// split solves the same problem with a second, unambiguous field for the second fact instead of
-    /// overloading the first. Only ever set for a human empire; an NPE empire with no capital left is
-    /// torn down outright via DestroyEmpire, never left defeated-in-place. No human ITurnHandler exists
-    /// yet to read it.
+    /// Which empire conquered this one. Pascal instead overloads Capital itself for this
+    /// (ATTACK.PAS:1120-1131's ConquerEmpire: <c>NewCapID.ObjTyp:=Void; NewCapID.Index:=Ord(Player);
+    /// SetCapital(EnemyEmp,NewCapID)</c>, a type-tagged sentinel stuffed into the one field that already
+    /// means "no capital" via null here). NewsItem's own Subject/Position split solves the same problem
+    /// with a second, unambiguous field for the second fact instead of overloading the first.
+    /// Meaningful once <see cref="Status"/> is <see cref="EmpireStatus.PendingElimination"/> or
+    /// <see cref="EmpireStatus.Eliminated"/>, null while <see cref="EmpireStatus.Active"/>. Set for
+    /// both humans and NPEs: a human gets it at <see cref="EmpireStatus.PendingElimination"/> time and
+    /// keeps the same value through to <see cref="EmpireStatus.Eliminated"/>; an NPE gets it set
+    /// atomically with its synchronous transition straight to <see cref="EmpireStatus.Eliminated"/>.
     /// </summary>
     public Empire? DefeatedBy { get; set; }
+
+    /// <summary>
+    /// EmpireActive/InUse (PRIMINTR.PAS:962-965) plus the deferred-human-elimination window real
+    /// Pascal's own ConquerEmpire leaves open. See <see cref="Types.EmpireStatus"/> and
+    /// docs/EMPIRE_LIFECYCLE_DESIGN.md for the full model. <see cref="Game.Empires"/> is a permanent
+    /// roster — this is the field that tracks whether an entry is still alive, not list membership.
+    /// </summary>
+    public EmpireStatus Status { get; set; } = EmpireStatus.Active;
 
     /// <summary>
     /// Which NPE AI personality this empire runs (NEWGAME.PAS:1219-1259's CreateNPEmpire reads this
@@ -104,10 +114,12 @@ public sealed class Empire
     public List<NewsItem> News { get; } = [];
 
     /// <summary>
-    /// AddNews (NEWS.PAS:207-228). Inlines Pascal's <c>(Player&lt;&gt;Indep) AND EmpireActive(Player)</c>
-    /// guard as just <c>IsIndependent</c> — this port's <see cref="Game.Empires"/> only ever holds real,
-    /// in-use empires by construction, so <c>EmpireActive</c>'s <c>InUse</c> check is redundant with
-    /// list membership (same reasoning already applied to <see cref="ProbesInTransit"/>).
+    /// AddNews (NEWS.PAS:207-228). <c>(Player&lt;&gt;Indep) AND EmpireActive(Player)</c> ported directly
+    /// as <c>IsIndependent</c> plus a <see cref="EmpireStatus.Eliminated"/> check — <see cref="Game.Empires"/>
+    /// is a permanent roster (see <see cref="Status"/>), so <c>EmpireActive</c>'s <c>InUse</c> check can't
+    /// be inferred from list membership anymore. <see cref="EmpireStatus.PendingElimination"/> is
+    /// deliberately not excluded here: <c>EmpireActive</c> stays true through that window in Pascal, and
+    /// nothing treats a defeated-in-place empire specially (see docs/EMPIRE_LIFECYCLE_DESIGN.md).
     /// </summary>
     public void AddNews(
         NewsType headline,
@@ -120,7 +132,7 @@ public sealed class Empire
         int p3 = 0,
         Empire? defender = null)
     {
-        if (IsIndependent) {
+        if (IsIndependent || Status == EmpireStatus.Eliminated) {
             return;
         }
 
