@@ -1,10 +1,19 @@
+using Reconstructed4021.Core.Combat;
+using Reconstructed4021.Core.Types;
+
 namespace Reconstructed4021.Core.Turns;
 
 /// <summary>
 /// Owns exactly what Pascal's UpdateTurn owns: play the current empire's turn, move fleets,
 /// advance to the next empire, and run the annual tick exactly once per wrap back to the first
 /// empire. Human and AI turns go through the same dispatch (game.TurnHandlers), so there's no
-/// separate "auto-play the AI empires" path.
+/// separate "auto-play the AI empires" path. Since <see cref="Entities.Empire.Status"/> is a
+/// permanent-roster field (see docs/EMPIRE_LIFECYCLE_DESIGN.md), this is also the one place
+/// dispatch is <see cref="EmpireStatus"/>-aware: an <see cref="EmpireStatus.Active"/> empire plays
+/// normally, an <see cref="EmpireStatus.Eliminated"/> one does nothing, and a
+/// <see cref="EmpireStatus.PendingElimination"/> one finishes its own deferred teardown here —
+/// matching PROLOG.PAS's <c>EmpireNews</c>, which runs at the very start of a defeated player's own
+/// next turn.
 /// </summary>
 /// <remarks>
 /// EraseNews (NEWS.PAS) fires right after PlayTurn, matching ANACREON.PAS:246-248's own
@@ -30,9 +39,26 @@ public sealed class TurnEngine(
         var current = game.CurrentEmpire
             ?? throw new InvalidOperationException("Game.CurrentEmpire must be set before the first turn.");
 
-        visibility.RefreshVisibility(current, game);
-        game.TurnHandlers[current].PlayTurn(current, game);
-        current.News.Clear();
+        switch (current.Status) {
+            case EmpireStatus.Active:
+                visibility.RefreshVisibility(current, game);
+                game.TurnHandlers[current].PlayTurn(current, game);
+                current.News.Clear();
+                break;
+
+            case EmpireStatus.PendingElimination:
+                // EmpireNews (PROLOG.PAS:456-488): this empire's own turn-prologue is where real
+                // Pascal finishes the teardown ConquerEmpire's human branch deferred. DefeatedBy was
+                // already recorded at PendingElimination time and doesn't change.
+                CombatOutcome.DestroyEmpire(current, current.DefeatedBy!, game);
+                break;
+
+            case EmpireStatus.Eliminated:
+                // InUse stays False forever. Nothing to do -- current still advances below like
+                // every other slot, matching Pascal's own fixed-array cycling (see this class's own
+                // remarks on why NextEmpire/IsFirstEmpire stay Status-blind).
+                break;
+        }
 
         var next = game.NextEmpire(current);
         fleetMovement.AdvanceFleets(game, current, next);

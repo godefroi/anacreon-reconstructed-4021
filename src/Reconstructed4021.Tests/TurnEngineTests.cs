@@ -1,6 +1,7 @@
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Turns;
+using Reconstructed4021.Core.Types;
 
 namespace Reconstructed4021.Tests;
 
@@ -178,6 +179,32 @@ public class TurnEngineTests
         game.CurrentEmpire = ai;
 
         await Assert.That(() => engine.AdvanceOneTurn(game)).ThrowsExactly<KeyNotFoundException>();
+    }
+
+    /// <summary>
+    /// The one genuinely new runtime path this dispatch gained: a PendingElimination empire's own
+    /// turn-prologue finishes the deferred teardown (PROLOG.PAS's EmpireNews) instead of calling
+    /// PlayTurn. No real human-turn-driving UI loop exists yet to exercise this end to end, so this
+    /// is the direct unit-level coverage for it.
+    /// </summary>
+    [Test]
+    public async Task PendingElimination_ResolvesToEliminatedAndAdvancesNormally()
+    {
+        var conqueror = new Empire { Name = "Conqueror" };
+        var defeated = new Empire { Name = "Defeated", Status = EmpireStatus.PendingElimination, DefeatedBy = conqueror };
+        var log = new List<string>();
+        var (game, engine, _) = Build(log,
+            (defeated, new FakeTurnHandler(log, isHuman: true)),
+            (conqueror, new FakeTurnHandler(log, isHuman: false)));
+        game.CurrentEmpire = defeated;
+
+        engine.AdvanceOneTurn(game);
+
+        await Assert.That(defeated.Status).IsEqualTo(EmpireStatus.Eliminated);
+        await Assert.That(defeated.DefeatedBy).IsSameReferenceAs(conqueror);
+        await Assert.That(game.TurnHandlers).DoesNotContainKey(defeated);
+        await Assert.That(log).DoesNotContain("PlayTurn:Defeated");
+        await Assert.That(game.CurrentEmpire).IsSameReferenceAs(conqueror);
     }
 
     [Test]
