@@ -13,11 +13,16 @@ namespace Reconstructed4021.Core.Combat;
 /// known; neither <see cref="CombatEngine"/> nor <see cref="CombatResolution"/> reads those tallies
 /// for anything beyond returning them.
 ///
-/// Empire elimination is plain <c>Game.Empires.Remove</c>, not a ported <c>InUse</c> flag — see
-/// docs/PORT_DESIGN.md's "Empire elimination" section for why that self-heals <see cref="Game.NextEmpire"/>/
-/// <see cref="Game.IsFirstEmpire"/> with no new guard needed anywhere. A human empire is never torn
-/// down this way — <see cref="Empire.DefeatedBy"/> is set instead, matching Pascal's own
-/// <c>EmpirePlayer</c> branch in ConquerEmpire.
+/// Empire elimination is one unified lifecycle (see <see cref="Types.EmpireStatus"/> and
+/// docs/PORT_DESIGN.md's "Empire elimination" section), matching real Pascal's own permanent
+/// per-empire array: an NPE's
+/// loss transitions straight to <see cref="Types.EmpireStatus.Eliminated"/> synchronously, inside
+/// <see cref="DestroyEmpire"/>, right here; a human's loss instead parks at
+/// <see cref="Types.EmpireStatus.PendingElimination"/> until their own next turn-prologue
+/// (<see cref="Turns.TurnEngine.AdvanceOneTurn"/>) calls the same <see cref="DestroyEmpire"/> to
+/// finish the transition — matching Pascal's <c>ConquerEmpire</c> (immediate for
+/// <c>NOT EmpirePlayer</c>) versus <c>PROLOG.PAS</c>'s <c>EmpireNews</c> (deferred for a player).
+/// <see cref="Game.Empires"/> is never touched by either path — it's a permanent roster now.
 /// </summary>
 public static class CombatOutcome
 {
@@ -119,11 +124,12 @@ public static class CombatOutcome
 
         if (enemyEmpire.LosesIfCapitalConquered || newCapital is null) {
             // ASSERT: enemy empire totally destroyed.
-            if (game.TurnHandlers[enemyEmpire].IsHuman) {
+            if (enemyEmpire.NpeType is null) {
                 enemyEmpire.Capital = null;
+                enemyEmpire.Status = EmpireStatus.PendingElimination;
                 enemyEmpire.DefeatedBy = conqueror;
             } else {
-                DestroyEmpire(enemyEmpire, game);
+                DestroyEmpire(enemyEmpire, conqueror, game);
             }
         } else {
             NewCapital(enemyEmpire, newCapital, random);
@@ -340,17 +346,21 @@ public static class CombatOutcome
 
     /// <summary>
     /// DestroyEmpire (INTRFACE.PAS:1612-1658). <c>IF (NOT EmpirePlayer(Emp)) THEN CleanUpNPE(Emp)</c>
-    /// disposes that empire's own NPE data record — this method's own precondition already guarantees
-    /// non-human (ConquerEmpire's ELSE branch never reaches here for a human, see the branch just
-    /// above its one call site), so the port-side equivalent is unconditional: drop this empire's own
-    /// <see cref="Game.TurnHandlers"/> entry. This is distinct from, and doesn't touch, a *different*
-    /// Kingdom's own diplomacy dictionary still referencing this empire after it's gone — real
-    /// Pascal's fixed per-empire arrays never clear those either, which is why the SaveFormat layer's
-    /// "orphan empire" handling stays necessary regardless (see GameJson's EntityIndex remarks).
-    /// DeleteAllNames isn't ported either — no naming system exists in this port (matching AbortFleet's
-    /// own established gap). EraseNews is <c>Empire.News.Clear()</c>.
+    /// disposes that empire's own NPE data record; the port-side equivalent is the unconditional
+    /// <see cref="Game.TurnHandlers"/> removal below, which now fires for a human too (their own AI
+    /// decision data, such as it is, is equally moot once <see cref="Types.EmpireStatus.Eliminated"/>).
+    /// <see cref="Game.Empires"/> is never touched — it's a permanent roster (see
+    /// <see cref="Types.EmpireStatus"/>); <paramref name="conqueror"/> lets both call sites (the NPE
+    /// branch here, and <see cref="Turns.TurnEngine.AdvanceOneTurn"/>'s deferred human path, which
+    /// already recorded <paramref name="conqueror"/> at <see cref="Types.EmpireStatus.PendingElimination"/>
+    /// time and just needs it reasserted here) share one tail. This is distinct from, and doesn't
+    /// touch, a *different* Kingdom's own diplomacy dictionary still referencing this empire after
+    /// it's gone — real Pascal's fixed per-empire arrays never clear those either, which is why the
+    /// SaveFormat layer's narrower "orphan empire" handling stays necessary regardless (see
+    /// GameJson's EntityIndex remarks). DeleteAllNames isn't ported either — no naming system exists
+    /// in this port (matching AbortFleet's own established gap). EraseNews is <c>Empire.News.Clear()</c>.
     /// </summary>
-    private static void DestroyEmpire(Empire empire, Game game)
+    internal static void DestroyEmpire(Empire empire, Empire conqueror, Game game)
     {
         foreach (Planet planet in game.Galaxy.Planets.Where(p => p.Owner == empire).ToList()) {
             IEconomicWorld world = planet;
@@ -372,7 +382,8 @@ public static class CombatOutcome
         }
 
         empire.News.Clear();
-        game.Empires.Remove(empire);
+        empire.Status = EmpireStatus.Eliminated;
+        empire.DefeatedBy = conqueror;
         game.TurnHandlers.Remove(empire);
     }
 

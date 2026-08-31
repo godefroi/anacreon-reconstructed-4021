@@ -132,29 +132,34 @@ concern, with `AttackTypeExtensions` mapping at the boundary. The leading `NoRes
 rather than ported — its row/column in every combat table is all zero and never legitimately read, so
 "no target" is `AttackType?` at the call site instead of an enum member.
 
-## Empire elimination: a plain list, not a ported flag
+## Empire elimination: a permanent roster, matching Pascal's own fixed array
 
-Real Pascal marks a fixed array slot `InUse:=False` (`INTRFACE.PAS:1657`) because it has no real list
-to remove an eliminated empire from. This port does have one (`Game.Empires: List<Empire>`), and
-`Game.NextEmpire`/`Game.IsFirstEmpire` already re-derive everything live (`Empires.IndexOf(current)`,
-`Empires[0]`) rather than caching a position — hand-traced before committing to this that plain
-`Empires.Remove(eliminated)` self-heals the "one annual tick per lap" invariant regardless of
-*when* in a lap the removal happens: if the removed empire wasn't at position 0, nothing observable
-changes; if it was, whoever was at position 1 slides into position 0 and becomes the new lap anchor
-from then on, because both `Count` and `Empires[0]` are re-read live on every call, never stored. No
-new `IsEliminated` field, no guards needed anywhere `Game.Empires` is already iterated
-(`Game.AddGlobalNews`'s Scouted-check loop, `RunAnnualTick`'s per-empire loop) — an eliminated empire
-isn't in the list any more, so there's nothing to filter.
+`Game.Empires: List<Empire>` never shrinks — nothing is ever removed from it. This directly mirrors
+`Universe^.EmpireData`'s own fixed `ARRAY[Empire1..Empire8]`: Pascal never grows or shrinks it either,
+only flips one field, `InUse:=False` (`INTRFACE.PAS:1657`). `Empire.Status` (`Active` /
+`PendingElimination` / `Eliminated`) is that field's port-side equivalent; liveness for AI/diplomacy
+purposes is `Status != Eliminated`, matching `EmpireActive` (`PRIMINTR.PAS:962-965`) exactly.
 
-Only a human empire is exempt from removal, matching Pascal's own `EmpirePlayer` branch in
-`ConquerEmpire`: `Empire.DefeatedBy: Empire?` replaces Pascal's capital-sentinel trick
-(`ConquerEmpire`, `ATTACK.PAS:1120-1131`, overloads `Capital: IDNumber` with `ObjTyp:=Void;
-Index:=Ord(Player)` to record the winner) — the same shape of problem `NewsItem.Loc` had before the
-`Subject`/`Position` split above, fixed the same way: `Capital = null` (already means "no capital"
-unambiguously) plus a real second field for the second fact. The write is real Pascal behavior
-`ConquerEmpire`'s port needs regardless of a reader. This port has no code path that reads
-`DefeatedBy` today — matching the same precedent as `Empire.News.Clear()`: port the branch Pascal
-actually takes, independent of whether something already consumes the result.
+There is one lifecycle, not two, for both empire kinds — they just reach `Eliminated` on different
+schedules, matching `ConquerEmpire`'s (`ATTACK.PAS:985-1139`) own branch on the *loser's*
+`EmpirePlayer` flag: an NPE loser goes `Active → Eliminated` synchronously, inside
+`CombatOutcome.DestroyEmpire`, in the same call that resolved the fight. A human loser instead parks
+at `PendingElimination` — `Capital = null`, `Status = PendingElimination`, `DefeatedBy` set to the
+conqueror, nothing else touched — until their own next turn's dispatch (`TurnEngine.AdvanceOneTurn`)
+calls the same `DestroyEmpire` to finish the transition, matching Pascal's own deferred
+`PROLOG.PAS:456-488` `EmpireNews`. `DestroyEmpire` reassigns every owned planet/starbase to
+Independent, destroys every fleet, clears news, and drops the `Game.TurnHandlers` entry (the AI
+decision data half of Pascal's `CleanUpNPE`) — but never touches `Game.Empires` itself.
+
+Turn dispatch (`TurnEngine.AdvanceOneTurn`) is the one place that needs an explicit `Status` switch;
+everywhere else that already iterated `game.Empires` (`NpeToolkit`'s `StateDeptReport`/
+`StateDepartment`, `AnnualTickHandler`'s per-empire tick) just needed an `Eliminated`-skip guard added,
+since an eliminated empire staying in the list is now correct, not a bug to filter around.
+`Game.NextEmpire`/`Game.IsFirstEmpire` stay deliberately `Status`-blind — see their own doc comments
+for why a skip-aware version would break annual-tick wrap detection.
+
+Full reasoning, including the direct Pascal source trace this was designed from, is in
+`docs/EMPIRE_LIFECYCLE_DESIGN.md`.
 
 ## Standalone attack mechanics: port what's live, skip what's dead
 

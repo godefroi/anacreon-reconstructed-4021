@@ -52,6 +52,10 @@ public class NpeAttackTests
         galaxy.Fleets.Add(fleet);
 
         var defender = EmpireFactory.CreateEmpire("Defender", null, isEmpress: false, TechLevel.PreTech, restlessness: 0, centralModifier: false, foundingYear: 0);
+        // NpeType, not TurnHandlers/IsHuman, is what CombatOutcome.ConquerEmpire now reads to tell a
+        // human from an NPE (see its own remarks) -- a real NPE construction site always sets this
+        // alongside registering a TurnHandler, so this test-only defender needs it set explicitly too.
+        defender.NpeType = NpeEmpireType.Pirate;
 
         game.Empires.Add(attacker);
         game.Empires.Add(defender);

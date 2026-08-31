@@ -71,8 +71,11 @@ public static class GameJson
         node["currentEmpireId"] = EmpireIdOrNull(index, game.CurrentEmpire);
 
         // TurnHandlers/blobs/minefields/mineScoutedBy first -- see EntityIndex's own remarks on why
-        // an empire can be discovered only here, never in game.Empires, and why "empires" must be
-        // written last so any such discovery is already reflected in it.
+        // an empire can still be discovered only here, never in game.Empires (a Kingdom's own State
+        // keys, or -- confirmed by SavGameWriter's own equivalent, see its remarks -- a minefield
+        // owner/scout referencing an empire that was already not-InUse when the .SAV this Game was
+        // originally loaded from was captured), and why "empires" must be written last so any such
+        // discovery is already reflected in it.
         var turnHandlersNode = WriteTurnHandlers(game, index);
         var blobsNode = WriteBlobs(game, index);
         var minefieldsNode = WriteMinefields(game.Galaxy, index);
@@ -215,6 +218,7 @@ public static class GameJson
                 ["password"] = empire.Password,
                 ["isEmpress"] = empire.IsEmpress,
                 ["capital"] = index.EncodeObjectRef(empire.Capital),
+                ["status"] = empire.Status.ToString(),
                 ["defeatedBy"] = EmpireIdOrNull(index, empire.DefeatedBy),
                 ["npeType"] = empire.NpeType?.ToString(),
                 ["defenseSettings"] = WriteDefenseSettings(empire.DefenseSettings),
@@ -249,6 +253,7 @@ public static class GameJson
         empire.Password = (string?)node["password"];
         empire.IsEmpress = (bool)node["isEmpress"]!;
         empire.Capital = lookup.DecodeObjectRef(node["capital"]) as IEconomicWorld;
+        empire.Status = Enum.Parse<EmpireStatus>((string)node["status"]!);
         empire.DefeatedBy = node["defeatedBy"] is { } defeatedByNode ? lookup.Empire((int)defeatedByNode) : null;
         empire.NpeType = node["npeType"] is { } npeTypeNode ? Enum.Parse<NpeEmpireType>((string)npeTypeNode!) : null;
         ReadDefenseSettingsInto(empire.DefenseSettings, (JsonObject)node["defenseSettings"]!);
@@ -675,18 +680,21 @@ public static class GameJson
     /// <see cref="Entities.Empire.Independent"/> (never a member of <see cref="Game.Empires"/>),
     /// matching <see cref="SavGameLoader"/>'s own ordinal-8 convention.
     ///
-    /// Empires are the one kind assigned lazily rather than up front:
-    /// <see cref="Combat.CombatOutcome.DestroyEmpire"/> removes a defeated empire from
-    /// <see cref="Game.Empires"/> and from its own <see cref="Game.TurnHandlers"/> entry, but a
-    /// *different*, still-living <see cref="Turns.KingdomTurnHandler"/>'s own <c>State</c> dictionary
-    /// (diplomatic memory, keyed per enemy ever encountered) can still hold a real, live
-    /// <see cref="Empire"/> object that <see cref="Game.Empires"/> no longer lists — real Pascal's
-    /// fixed per-empire array never clears that entry either, so this isn't a bug to fix, just a
-    /// reference this format has to be able to round-trip.
-    /// <see cref="EmpireId"/> auto-registers such "orphan" empires the first time anything asks for
-    /// their id; <see cref="Serialize"/> writes the turnHandlers/blobs/minefield sections (the only
-    /// places an orphan can surface) before <c>"empires"</c> so every orphan this call discovers is
-    /// already known by the time <see cref="WriteEmpires"/> walks <see cref="AllEmpires"/>.
+    /// Empires are the one kind assigned lazily rather than up front. <see cref="Game.Empires"/> is a
+    /// permanent roster (see <see cref="Types.EmpireStatus"/>) — a defeated empire, human or NPE,
+    /// stays a member forever, so a *defeated* empire is never orphaned from it. That alone doesn't
+    /// eliminate the orphan case, though: an empire that was already not-InUse when the `.SAV` file
+    /// this <see cref="Game"/> was originally loaded from was captured was never added to
+    /// <see cref="Game.Empires"/> in the first place (<see cref="SavGameLoader"/>'s own placeholder
+    /// gate, unrelated to and unchanged by <see cref="Types.EmpireStatus"/>), so a living
+    /// <see cref="Turns.KingdomTurnHandler"/>'s own <c>State</c> dictionary, or a minefield's
+    /// owner/scouts, can still reference one — confirmed for real (not just theorized) by
+    /// <see cref="SavGameWriter"/>'s own equivalent orphan-discovery code, whose otherwise-identical
+    /// simplification broke against a real reference save's minefield owner (see its remarks).
+    /// <see cref="EmpireId"/> auto-registers such an orphan the first time anything asks for its id;
+    /// <see cref="Serialize"/> writes the turnHandlers/blobs/minefield sections (the only places an
+    /// orphan can surface) before <c>"empires"</c> so every orphan this call discovers is already
+    /// known by the time <see cref="WriteEmpires"/> walks <see cref="AllEmpires"/>.
     /// </summary>
     private sealed class EntityIndex
     {

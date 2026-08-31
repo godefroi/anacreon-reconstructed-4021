@@ -40,6 +40,7 @@ public class CombatOutcomeTests
         var game = new Core.Game(galaxy);
 
         var conqueror = EmpireFactory.CreateEmpire("Conqueror", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        conqueror.NpeType = NpeEmpireType.Pirate; // Registered with a NonHumanTurnHandler below -- NpeType is what AnyHumanPlayersRemain/ConquerEmpire now read to tell human from NPE.
         var conquerorCapital = new Planet { Location = new Coordinate(0, 0), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
         conqueror.Capital = conquerorCapital;
         galaxy.Planets.Add(conquerorCapital);
@@ -59,6 +60,7 @@ public class CombatOutcomeTests
         CombatOutcome.ConquerEmpire(conqueror, human, game, new FixedRandom(0));
 
         await Assert.That(human.Capital).IsNull();
+        await Assert.That(human.Status).IsEqualTo(EmpireStatus.PendingElimination);
         await Assert.That(human.DefeatedBy).IsEqualTo(conqueror);
         await Assert.That(game.Empires).Contains(human);
         await Assert.That(game.AnyHumanPlayersRemain).IsFalse();
@@ -66,8 +68,9 @@ public class CombatOutcomeTests
 
     /// <summary>
     /// ConquerEmpire's non-human branch (ATTACK.PAS:1130): an NPE empire in the same no-worlds-left
-    /// situation is torn down via DestroyEmpire instead — removed from Game.Empires entirely, not left
-    /// defeated in place.
+    /// situation is torn down via DestroyEmpire instead of parking at PendingElimination — but stays
+    /// a permanent Game.Empires member (Status.Eliminated), same as a human, since the roster never
+    /// shrinks. Only Game.TurnHandlers loses its entry (no more AI decisions to make).
     /// </summary>
     [Test]
     public async Task ConquerEmpire_NonHumanEmpireWithNoOtherWorldIsDestroyed()
@@ -76,11 +79,13 @@ public class CombatOutcomeTests
         var game = new Core.Game(galaxy);
 
         var conqueror = EmpireFactory.CreateEmpire("Conqueror", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        conqueror.NpeType = NpeEmpireType.Pirate; // Registered with a NonHumanTurnHandler below -- NpeType is what AnyHumanPlayersRemain/ConquerEmpire now read to tell human from NPE.
         var conquerorCapital = new Planet { Location = new Coordinate(0, 0), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
         conqueror.Capital = conquerorCapital;
         galaxy.Planets.Add(conquerorCapital);
 
         var npe = EmpireFactory.CreateEmpire("Npe", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        npe.NpeType = NpeEmpireType.Pirate; // ConquerEmpire now reads NpeType, not TurnHandlers/IsHuman, to tell a human from an NPE.
         var npeCapital = new Planet { Location = new Coordinate(50, 50), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Independent, TechLevel = TechLevel.Jump };
         npe.Capital = npeCapital;
 
@@ -91,7 +96,9 @@ public class CombatOutcomeTests
 
         CombatOutcome.ConquerEmpire(conqueror, npe, game, new FixedRandom(0));
 
-        await Assert.That(game.Empires).DoesNotContain(npe);
+        await Assert.That(game.Empires).Contains(npe);
         await Assert.That(game.TurnHandlers).DoesNotContainKey(npe);
+        await Assert.That(npe.Status).IsEqualTo(EmpireStatus.Eliminated);
+        await Assert.That(npe.DefeatedBy).IsEqualTo(conqueror);
     }
 }

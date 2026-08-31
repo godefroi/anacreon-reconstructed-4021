@@ -77,6 +77,15 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     [JsonIgnore]
     public List<Message> Messages { get; } = [];
 
+    /// <summary>
+    /// Deliberately <see cref="Types.EmpireStatus"/>-blind: cycles through every fixed slot,
+    /// eliminated or not, matching real Pascal's own fixed per-empire array (only the *player* index
+    /// cycles unconditionally; per-slot behavior, not iteration, is what's gated). All
+    /// <see cref="Types.EmpireStatus"/>-awareness lives in <see cref="Turns.TurnEngine.AdvanceOneTurn"/>'s
+    /// dispatch step instead — a skip-aware version here would break annual-tick wrap detection the
+    /// moment <c>Empires[0]</c> itself becomes <see cref="Types.EmpireStatus.Eliminated"/>, since
+    /// <see cref="IsFirstEmpire"/> checks that exact slot by reference.
+    /// </summary>
     public Empire NextEmpire(Empire current)
     {
         var index = Empires.IndexOf(current);
@@ -103,13 +112,14 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     /// <see cref="TurnHandlers"/> entry, which isn't true for e.g. a freshly-constructed <see cref="Game"/>.
     /// </summary>
     [JsonIgnore]
-    public bool AnyHumanPlayersRemain => Empires.Any(e => TurnHandlers[e].IsHuman && e.DefeatedBy is null);
+    public bool AnyHumanPlayersRemain => Empires.Any(e => e.Status == EmpireStatus.Active && e.NpeType is null);
 
     /// <summary>
     /// AddGlobalNews (NEWS.PAS:230-243): broadcasts one news item to every empire that isn't in
     /// <paramref name="exclude"/> and has scouted <paramref name="source"/>. Pascal's own
-    /// <c>EmpireActive(Emp)</c> conjunct is redundant here for the same reason <see cref="Empire.AddNews"/>
-    /// drops it — <see cref="Empires"/> only ever holds real, in-use empires.
+    /// <c>EmpireActive(Emp)</c> conjunct is now enforced by the callee — <see cref="Empire.AddNews"/>'s
+    /// own <see cref="EmpireStatus.Eliminated"/> guard — rather than by <see cref="Empires"/> list
+    /// membership, since that's a permanent roster now (see <see cref="EmpireStatus"/>).
     /// </summary>
     public void AddGlobalNews(
         IEnumerable<Empire> exclude,

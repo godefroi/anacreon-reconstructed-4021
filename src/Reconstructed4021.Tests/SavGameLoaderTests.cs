@@ -1,6 +1,7 @@
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
+using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
@@ -417,5 +418,43 @@ public class SavGameLoaderTests
         await Assert.That(berserker.NpeType).IsEqualTo(NpeEmpireType.Berserker);
         await Assert.That(game.TurnHandlers).DoesNotContainKey(berserker);
         await Assert.That(game.UnimplementedNpeBlobs[berserker].Length).IsEqualTo(930);
+    }
+
+    /// <summary>
+    /// Resolves docs/OPEN_GAPS.md's "SavGameLoader's DefeatedBy decode branch has no exercising
+    /// reference save" -- none of the 13 captured .SAV files include a defeated human empire, so
+    /// this exercises SavGameWriter's own encode of the human-defeat sentinel (ATTACK.PAS:1120-1131)
+    /// followed by this loader's decode of it, rather than a real DOS-captured file. Hand-built
+    /// (matching GameJsonTests.RoundTrips_MinimalHandbuiltGame's style) rather than routed through
+    /// CombatOutcome.ConquerEmpire, since ConquerEmpire's own logic is already covered by
+    /// CombatOutcomeTests -- this test's job is the .SAV encode/decode alone.
+    /// </summary>
+    [Test]
+    public async Task RoundTrips_PendingEliminationHumanEmpire()
+    {
+        var galaxy = new Galaxy(size: 20);
+
+        var conqueror = EmpireFactory.CreateEmpire("Conqueror", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var conquerorCapital = new Planet { Location = new Coordinate(1, 1), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        conqueror.Capital = conquerorCapital;
+        galaxy.Planets.Add(conquerorCapital);
+
+        var human = EmpireFactory.CreateEmpire("Human", "pw", isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        human.Capital = null;
+        human.Status = EmpireStatus.PendingElimination;
+        human.DefeatedBy = conqueror;
+
+        var game = new Core.Game(galaxy);
+        game.Empires.Add(conqueror);
+        game.Empires.Add(human);
+        game.CurrentEmpire = conqueror;
+
+        var bytes = SavGameWriter.WriteGame(game);
+        var roundTripped = new SavGameLoader().LoadGame(bytes);
+
+        var roundTrippedHuman = roundTripped.Empires.Single(e => e.Name == "Human");
+        await Assert.That(roundTrippedHuman.Capital).IsNull();
+        await Assert.That(roundTrippedHuman.Status).IsEqualTo(EmpireStatus.PendingElimination);
+        await Assert.That(roundTrippedHuman.DefeatedBy?.Name).IsEqualTo("Conqueror");
     }
 }

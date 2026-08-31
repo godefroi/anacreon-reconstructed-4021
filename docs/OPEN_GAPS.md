@@ -47,11 +47,6 @@ codebase is in a test file.
   `AutoSave`/`AsyncTurns`/`PauseActive`/`ReEnterGame` have no effect anywhere in this port yet —
   `EmpiresToMove` is redundant with `Game.CurrentEmpire`/`NextEmpire()` so there's nothing to store
   regardless; the rest are read-and-discarded pending a UI session that has settings to hold them.
-- **`SavGameLoader`'s `DefeatedBy` decode branch (a conquered human empire) has no exercising
-  reference save.** None of the 13 captured `.SAV` files include a defeated human empire, so this
-  branch was implemented and reasoned through directly from `ConquerEmpire`'s on-disk sentinel
-  convention, not verified against a real file. Worth a note for whoever next captures or
-  hand-builds one.
 
 ## Production tick: unresolved Cargo.Chemicals/Metals mismatch
 
