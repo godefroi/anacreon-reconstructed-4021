@@ -1636,7 +1636,7 @@ public static class NpeToolkit
         selfState.Worlds = empireWorlds;
 
         foreach (var enemyEmp in game.Empires) {
-            if (enemyEmp == emp) {
+            if (enemyEmp == emp || enemyEmp.Status == EmpireStatus.Eliminated) {
                 continue;
             }
 
@@ -1677,7 +1677,7 @@ public static class NpeToolkit
         var usefulPower = selfState.Worlds == 0 ? (double)selfState.TotalMilitary : (double)selfState.TotalMilitary / selfState.Worlds;
 
         foreach (var enemyEmp in game.Empires) {
-            if (enemyEmp == emp) {
+            if (enemyEmp == emp || enemyEmp.Status == EmpireStatus.Eliminated) {
                 continue;
             }
 
