@@ -51,7 +51,12 @@ public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandle
             UpdateConstruction(site, game);
         }
 
+        // UPDATE.PAS:1481-1483: IF EmpireActive(Emp) THEN UpdateEmpire(Emp).
         foreach (var empire in game.Empires) {
+            if (empire.Status == EmpireStatus.Eliminated) {
+                continue;
+            }
+
             empire.TotalRevolutionIndex = newTotalRevIndex.GetValueOrDefault(empire, 0);
             NewTechLevel(empire, game);
         }
