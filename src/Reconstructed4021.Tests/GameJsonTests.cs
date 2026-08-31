@@ -80,12 +80,11 @@ public class GameJsonTests
     [Test]
     public async Task DestroyedKingdom_HasNoTurnHandlerAfterRoundTrip()
     {
-        // Counterpart to Intro1_ActuallyExercisesTheOrphanEmpirePath: that test pins a *different*,
-        // still-living Kingdom's own diplomacy dictionary correctly retaining a dead empire as a
-        // reference (expected, matches real Pascal's fixed per-empire array). This one is the case
-        // that actually was a bug before CombatOutcome.DestroyEmpire removed its own Game.TurnHandlers
-        // entry: a destroyed Kingdom's *own* handler used to linger in Game.TurnHandlers and got
-        // serialized (and, on read-back, resurrected) as if it were still a real, active empire.
+        // Game.Empires permanently retains an eliminated empire's identity (Status.Eliminated) --
+        // only Game.TurnHandlers (AI decision data) is disposed, matching CleanUpNPE's own
+        // Dispose(Data). This pins that a destroyed Kingdom's own handler doesn't linger in
+        // TurnHandlers and doesn't get serialized/resurrected as if it were still active, while its
+        // Game.Empires membership and Status/DefeatedBy do survive the round trip.
         var galaxy = new Galaxy(size: 100);
         var game = new Core.Game(galaxy);
 
@@ -115,7 +114,11 @@ public class GameJsonTests
         var roundTripped = GameJson.Deserialize(json, new Random(0));
 
         await Assert.That(roundTripped.TurnHandlers.Keys.Select(e => e.Name)).DoesNotContain(kingdom.Name);
-        await Assert.That(roundTripped.Empires.Select(e => e.Name)).DoesNotContain(kingdom.Name);
+        await Assert.That(roundTripped.Empires.Select(e => e.Name)).Contains(kingdom.Name);
+
+        var roundTrippedKingdom = roundTripped.Empires.Single(e => e.Name == kingdom.Name);
+        await Assert.That(roundTrippedKingdom.Status).IsEqualTo(EmpireStatus.Eliminated);
+        await Assert.That(roundTrippedKingdom.DefeatedBy?.Name).IsEqualTo(conqueror.Name);
     }
 
     [Test]

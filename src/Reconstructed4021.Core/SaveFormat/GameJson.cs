@@ -70,9 +70,11 @@ public static class GameJson
         var node = JsonSerializer.SerializeToNode(game, graphOptions)!.AsObject();
         node["currentEmpireId"] = EmpireIdOrNull(index, game.CurrentEmpire);
 
-        // TurnHandlers/blobs/minefields/mineScoutedBy first -- see EntityIndex's own remarks on why
-        // an empire can be discovered only here, never in game.Empires, and why "empires" must be
-        // written last so any such discovery is already reflected in it.
+        // TurnHandlers/blobs/minefields/mineScoutedBy first -- see EntityIndex's own remarks. Only
+        // WriteTurnHandlers can still discover a genuine orphan (a living Kingdom's diplomacy
+        // dictionary referencing an ordinal that was never a real empire in this game); blobs/
+        // minefields/mineScoutedBy references are always real Game.Empires members now, current or
+        // Eliminated. "empires" still needs to be written last regardless, for that one case.
         var turnHandlersNode = WriteTurnHandlers(game, index);
         var blobsNode = WriteBlobs(game, index);
         var minefieldsNode = WriteMinefields(game.Galaxy, index);
@@ -193,6 +195,7 @@ public static class GameJson
                 ["password"] = empire.Password,
                 ["isEmpress"] = empire.IsEmpress,
                 ["capital"] = index.EncodeObjectRef(empire.Capital),
+                ["status"] = empire.Status.ToString(),
                 ["defeatedBy"] = EmpireIdOrNull(index, empire.DefeatedBy),
                 ["npeType"] = empire.NpeType?.ToString(),
                 ["defenseSettings"] = WriteDefenseSettings(empire.DefenseSettings),
@@ -227,6 +230,7 @@ public static class GameJson
         empire.Password = (string?)node["password"];
         empire.IsEmpress = (bool)node["isEmpress"]!;
         empire.Capital = lookup.DecodeObjectRef(node["capital"]) as IEconomicWorld;
+        empire.Status = Enum.Parse<EmpireStatus>((string)node["status"]!);
         empire.DefeatedBy = node["defeatedBy"] is { } defeatedByNode ? lookup.Empire((int)defeatedByNode) : null;
         empire.NpeType = node["npeType"] is { } npeTypeNode ? Enum.Parse<NpeEmpireType>((string)npeTypeNode!) : null;
         ReadDefenseSettingsInto(empire.DefenseSettings, (JsonObject)node["defenseSettings"]!);
@@ -593,18 +597,18 @@ public static class GameJson
     /// <see cref="Entities.Empire.Independent"/> (never a member of <see cref="Game.Empires"/>),
     /// matching <see cref="SavGameLoader"/>'s own ordinal-8 convention.
     ///
-    /// Empires are the one kind assigned lazily rather than up front:
-    /// <see cref="Combat.CombatOutcome.DestroyEmpire"/> removes a defeated empire from
-    /// <see cref="Game.Empires"/> and from its own <see cref="Game.TurnHandlers"/> entry, but a
-    /// *different*, still-living <see cref="Turns.KingdomTurnHandler"/>'s own <c>State</c> dictionary
-    /// (diplomatic memory, keyed per enemy ever encountered) can still hold a real, live
-    /// <see cref="Empire"/> object that <see cref="Game.Empires"/> no longer lists — real Pascal's
-    /// fixed per-empire array never clears that entry either, so this isn't a bug to fix, just a
-    /// reference this format has to be able to round-trip.
-    /// <see cref="EmpireId"/> auto-registers such "orphan" empires the first time anything asks for
-    /// their id; <see cref="Serialize"/> writes the turnHandlers/blobs/minefield sections (the only
-    /// places an orphan can surface) before <c>"empires"</c> so every orphan this call discovers is
-    /// already known by the time <see cref="WriteEmpires"/> walks <see cref="AllEmpires"/>.
+    /// Empires are the one kind assigned lazily rather than up front. <see cref="Game.Empires"/> is a
+    /// permanent roster (see <see cref="Types.EmpireStatus"/>) — a defeated empire, human or NPE,
+    /// stays a member forever, so it's never actually orphaned from it. The one real orphan case left
+    /// is a living <see cref="Turns.KingdomTurnHandler"/>'s own <c>State</c> dictionary (diplomatic
+    /// memory, keyed per raw ordinal) referencing a placeholder <see cref="Empire"/> object for an
+    /// ordinal that was never a real empire in this game — real Pascal's on-disk <c>State</c> array
+    /// is always 9 fixed slots regardless of how many empires actually exist, so this can happen even
+    /// though no elimination was ever involved.
+    /// <see cref="EmpireId"/> auto-registers such an orphan the first time anything asks for its id;
+    /// <see cref="Serialize"/> writes the turnHandlers section (the only place this can surface)
+    /// before <c>"empires"</c> so it's already known by the time <see cref="WriteEmpires"/> walks
+    /// <see cref="AllEmpires"/>.
     /// </summary>
     private sealed class EntityIndex
     {
