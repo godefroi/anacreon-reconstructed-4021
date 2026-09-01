@@ -97,6 +97,36 @@ public class CombatEngineTests
         }
     }
 
+    // Real bug, found via a hand-built playtest scenario rather than this suite: DefaultDistribution
+    // used to mutate the live fleet.Ships/fleet.Cargo objects directly (fleet.Ships[ship]=0 inside
+    // DefaultGroup) instead of a local snapshot -- real Pascal's own DefaultDistribution (ATTACK.PAS:
+    // 1344-1367) declares Sh/Cr as local VAR arrays, populated via GetShips/GetCargo (Pascal array
+    // assignment copies by value) and never PutShips/PutCargo'd back, so the fleet's own persistent
+    // Ships/Cargo are never touched by this step. With the bug, every attacking fleet's live Ships
+    // silently zeroed out for the rest of the engagement, so CombatOutcome.RestoreCombatant's later
+    // `ships[t] -= casualties[t]` always computed `0 - casualties` instead of the real survivor count
+    // -- an attacking fleet had zero ships left after literally any attack, win or lose, regardless of
+    // actual losses. Fixed by cloning Ships/Cargo before handing them to DefaultGroup. No existing
+    // MatchesGoldenFile case caught this: it only ever asserts on the returned GroupRecords/tallies,
+    // never on the fleet's own post-call Ships -- this test is that missing assertion.
+    [Test]
+    public async Task DefaultDistribution_DoesNotMutateTheFleetsOwnLiveShipsOrCargo()
+    {
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = new Empire { Name = "Attacker" } };
+        fleet.Ships.Fighters = 100;
+        fleet.Ships.HunterKillers = 20;
+        fleet.Ships.Transports = 10;
+        fleet.Cargo.Legions = 50;
+
+        var groups = CombatEngine.DefaultDistribution(fleet);
+
+        await Assert.That(fleet.Ships.Fighters).IsEqualTo(100);
+        await Assert.That(fleet.Ships.HunterKillers).IsEqualTo(20);
+        await Assert.That(fleet.Ships.Transports).IsEqualTo(10);
+        await Assert.That(fleet.Cargo.Legions).IsEqualTo(50);
+        await Assert.That(groups.Sum(g => g.Num)).IsEqualTo(130);
+    }
+
     // ShipsDestroyed(100,Fighter,HunterKiller,100): temp=100*(15/100)=15.0 exactly (CombatTable's
     // Fighter-vs-HunterKiller entry is 15) -- an integral result, so the Rnd(1,100)<temp2 remainder
     // roll never fires (temp2=0) regardless of which value Random supplies.

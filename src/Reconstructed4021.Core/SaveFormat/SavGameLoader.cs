@@ -130,6 +130,15 @@ public sealed class SavGameLoader
         LoadNewsData(reader, game);
         LoadNpeData(reader, game);
 
+        // .SAV has no on-disk representation of a human's turn handler (there's no persisted AI
+        // state to load -- HumanTurnHandler.PlayTurn is a no-op) -- mirrors ScenarioLoader.
+        // RunCreatePlayerEmpire's own registration for a freshly created game.
+        foreach (var empire in game.Empires) {
+            if (empire.NpeType is null) {
+                game.TurnHandlers[empire] = new HumanTurnHandler();
+            }
+        }
+
         return game;
     }
 

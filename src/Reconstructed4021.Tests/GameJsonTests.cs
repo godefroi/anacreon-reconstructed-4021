@@ -50,6 +50,7 @@ public class GameJsonTests
         var game = new Game(galaxy);
         game.Empires.Add(empire);
         game.CurrentEmpire = empire;
+        game.TurnHandlers[empire] = new HumanTurnHandler(); // Deserialize reconstructs one for every NpeType-null empire -- give the original one too, or the round trip "gains" it.
 
         await AssertRoundTrips(game);
     }
@@ -75,6 +76,8 @@ public class GameJsonTests
         game.Empires.Add(owner);
         game.Empires.Add(watcher);
         game.CurrentEmpire = owner;
+        game.TurnHandlers[owner] = new HumanTurnHandler();
+        game.TurnHandlers[watcher] = new HumanTurnHandler();
 
         await AssertRoundTrips(game);
     }
@@ -99,10 +102,36 @@ public class GameJsonTests
         game.Empires.Add(owner);
         game.Empires.Add(watcher);
         game.CurrentEmpire = owner;
+        game.TurnHandlers[owner] = new HumanTurnHandler();
+        game.TurnHandlers[watcher] = new HumanTurnHandler();
 
         galaxy.Fleets.Remove(fleet); // CombatOutcome.DestroyFleet's own primitive, inlined -- internal, not reachable from this assembly.
 
         await AssertRoundTrips(game);
+    }
+
+    [Test]
+    public async Task RoundTrips_HumanEmpireGetsAFreshTurnHandlerNotSerializedState()
+    {
+        // WriteTurnHandlers skips HumanTurnHandler entirely (nothing to persist -- its PlayTurn is a
+        // no-op) rather than throwing NotSupportedException the way it does for any other
+        // unrecognized ITurnHandler; ReadTurnHandlers reconstructs a fresh one for every NpeType-null
+        // empire instead, the same way ScenarioLoader.RunCreatePlayerEmpire does for a new game.
+        // DeepGraphComparer can't see this on its own -- TurnHandlers is [JsonIgnore]d -- hence the
+        // explicit assertions below alongside AssertRoundTrips.
+        var galaxy = new Galaxy(10);
+        var human = new Empire { Name = "Human" };
+        var game = new Game(galaxy);
+        game.Empires.Add(human);
+        game.CurrentEmpire = human;
+        game.TurnHandlers[human] = new HumanTurnHandler();
+
+        await AssertRoundTrips(game);
+
+        var roundTripped = GameJson.Deserialize(GameJson.Serialize(game), new Random(0));
+        var handler = roundTripped.TurnHandlers[roundTripped.Empires[0]];
+        await Assert.That(handler).IsTypeOf<HumanTurnHandler>();
+        await Assert.That(handler.IsHuman).IsTrue();
     }
 
     [Test]

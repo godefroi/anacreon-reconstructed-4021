@@ -565,6 +565,7 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         var empire = EmpireFactory.CreateEmpire(player.Name, player.Password, player.IsEmpress, tech, revFactor, centralModifier, game.Year, extraTechs);
         _empireBySlot[pl] = empire;
         game.Empires.Add(empire);
+        game.TurnHandlers[empire] = new HumanTurnHandler();
     }
 
     /// <summary>

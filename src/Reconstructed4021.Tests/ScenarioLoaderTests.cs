@@ -86,6 +86,19 @@ public class ScenarioLoaderTests
     }
 
     [Test]
+    public async Task Load_CreatePlayerEmpireRegistersHumanTurnHandler()
+    {
+        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0));
+        var text = Header(20) + "CREATEPLAYEREMPIRE 0 0 3 0\r\nENDSCENARIO";
+
+        var game = loader.Load(text, _onePlayer);
+
+        var handler = game.TurnHandlers[game.Empires[0]];
+        await Assert.That(handler).IsTypeOf<HumanTurnHandler>();
+        await Assert.That(handler.IsHuman).IsTrue();
+    }
+
+    [Test]
     public async Task Load_CreatePlayerEmpireSlotBeyondDeclaredPlayersIsSilentlySkipped()
     {
         var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0));

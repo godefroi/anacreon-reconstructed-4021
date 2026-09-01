@@ -131,48 +131,82 @@ public static class CombatEngine
     /// DefaultDistribution+DefaultGroup (ATTACK.PAS:1280-1367): splits a fleet's ships into one group
     /// per ship type present, each starting unaimed (<see cref="GroupRecord.Trg"/> null) at deep space.
     /// A transport/jumptransport group picks up ground assault troops from the fleet's own cargo —
-    /// ninjas preferentially over plain legions, never both. Mutates <paramref name="fleet"/>'s
-    /// Ships/Cargo exactly as Pascal's GetShips/GetCargo-then-mutate-locals does (real state, not a
-    /// snapshot): a ship or trooper picked up into a group leaves the fleet's own counts.
+    /// ninjas preferentially over plain legions, never both.
+    ///
+    /// Operates on a local snapshot of <paramref name="fleet"/>'s Ships/Cargo, not the live objects —
+    /// confirmed against source, not assumed: real Pascal's own <c>DefaultDistribution</c> declares
+    /// <c>Sh</c>/<c>Cr</c> as local <c>VAR</c> arrays, populates them via <c>GetShips</c>/<c>GetCargo</c>
+    /// (Pascal array assignment copies by value), and never calls <c>PutShips</c>/<c>PutCargo</c> to
+    /// write the zeroed-out locals back — the fleet's own persistent Ships/Cargo are untouched by this
+    /// step in real Pascal. A first pass here mutated <paramref name="fleet"/>'s own <see
+    /// cref="Entities.Fleet.Ships"/>/<see cref="Entities.Fleet.Cargo"/> objects directly (C#'s
+    /// reference semantics don't hand you Pascal's implicit copy-by-value for free) — every attacking
+    /// fleet's live Ships ended up zeroed for the rest of the engagement, so
+    /// <see cref="CombatOutcome.RestoreCombatant"/>'s later <c>ships[t] -= casualties[t]</c> always
+    /// computed <c>0 - casualties</c> instead of <c>survivors</c>, silently discarding every surviving
+    /// ship on the attacking side after every real attack. No existing test caught this: golden-file
+    /// coverage (<c>combat.golden</c>/<c>npeattack.golden</c>) only checks <see cref="AttackTally"/>
+    /// outputs and defender-side state, never the attacking <see cref="Entities.Fleet"/>'s own
+    /// post-battle Ships — found via a hand-built playtest scenario, not this repo's own test suite.
     /// </summary>
     public static List<GroupRecord> DefaultDistribution(Fleet fleet)
     {
         var groups = new List<GroupRecord>();
+        var ships = CloneShips(fleet.Ships);
+        var cargo = CloneCargo(fleet.Cargo);
 
         foreach (var ship in Enum.GetValues<ShipType>()) {
-            if (fleet.Ships[ship] != 0 && ship is ShipType.Fighter or ShipType.HunterKiller or ShipType.Jumpship or ShipType.Penetrator or ShipType.Starship) {
-                groups.Add(DefaultGroup(fleet, ship));
+            if (ships[ship] != 0 && ship is ShipType.Fighter or ShipType.HunterKiller or ShipType.Jumpship or ShipType.Penetrator or ShipType.Starship) {
+                groups.Add(DefaultGroup(ships, cargo, ship));
             }
         }
 
         foreach (var ship in Enum.GetValues<ShipType>()) {
-            if (fleet.Ships[ship] != 0 && ship is ShipType.Jumptransport or ShipType.Transport) {
-                groups.Add(DefaultGroup(fleet, ship));
+            if (ships[ship] != 0 && ship is ShipType.Jumptransport or ShipType.Transport) {
+                groups.Add(DefaultGroup(ships, cargo, ship));
             }
         }
 
         return groups;
     }
 
-    private static GroupRecord DefaultGroup(Fleet fleet, ShipType shipType)
+    private static ShipCounts CloneShips(ShipCounts source)
     {
-        var num = fleet.Ships[shipType];
-        fleet.Ships[shipType] = 0;
+        var clone = new ShipCounts();
+        foreach (var t in Enum.GetValues<ShipType>()) {
+            clone[t] = source[t];
+        }
+        return clone;
+    }
+
+    private static CargoHold CloneCargo(CargoHold source)
+    {
+        var clone = new CargoHold();
+        foreach (var t in Enum.GetValues<CargoType>()) {
+            clone[t] = source[t];
+        }
+        return clone;
+    }
+
+    private static GroupRecord DefaultGroup(ShipCounts ships, CargoHold cargo, ShipType shipType)
+    {
+        var num = ships[shipType];
+        ships[shipType] = 0;
 
         var group = new GroupRecord { Typ = shipType.ToAttackType(), Num = num };
 
         if (shipType is ShipType.Jumptransport or ShipType.Transport) {
             var trnAdj = CombatConstants.TrnAdj[shipType];
-            if (fleet.Cargo[CargoType.NinjaLegion] > 0) {
-                var maxMen = Math.Min(ClampResource(PascalRound(trnAdj * num * CombatConstants.CargoSpace[CargoType.NinjaLegion])), fleet.Cargo[CargoType.NinjaLegion]);
+            if (cargo[CargoType.NinjaLegion] > 0) {
+                var maxMen = Math.Min(ClampResource(PascalRound(trnAdj * num * CombatConstants.CargoSpace[CargoType.NinjaLegion])), cargo[CargoType.NinjaLegion]);
                 group.Gat = maxMen;
                 group.GatTyp = AttackType.NinjaLegion;
-                fleet.Cargo[CargoType.NinjaLegion] -= maxMen;
+                cargo[CargoType.NinjaLegion] -= maxMen;
             } else {
-                var maxMen = Math.Min(ClampResource(PascalRound(trnAdj * num * CombatConstants.CargoSpace[CargoType.Legion])), fleet.Cargo[CargoType.Legion]);
+                var maxMen = Math.Min(ClampResource(PascalRound(trnAdj * num * CombatConstants.CargoSpace[CargoType.Legion])), cargo[CargoType.Legion]);
                 group.Gat = maxMen;
                 group.GatTyp = AttackType.Legion;
-                fleet.Cargo[CargoType.Legion] -= maxMen;
+                cargo[CargoType.Legion] -= maxMen;
             }
         }
 

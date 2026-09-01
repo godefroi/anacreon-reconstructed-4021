@@ -524,6 +524,14 @@ public static class GameJson
         var array = new JsonArray();
 
         foreach (var (empire, handler) in game.TurnHandlers) {
+            // A human has no persisted AI state -- HumanTurnHandler.PlayTurn is a no-op, see its own
+            // doc comment -- so it's simply not written; ReadTurnHandlers reconstructs a fresh one on
+            // load for every empire with NpeType is null, the same way ScenarioLoader registers one
+            // for a freshly created game.
+            if (handler is HumanTurnHandler) {
+                continue;
+            }
+
             if (handler is not KingdomTurnHandler kingdom) {
                 throw new NotSupportedException(
                     $"{nameof(GameJson)} only knows how to serialize {nameof(KingdomTurnHandler)}; " +
@@ -588,11 +596,7 @@ public static class GameJson
 
     private static void ReadTurnHandlers(JsonNode? node, Game game, EntityLookup lookup, Random random)
     {
-        if (node is null) {
-            return;
-        }
-
-        foreach (var entryNode in node.AsArray()) {
+        foreach (var entryNode in node?.AsArray() ?? []) {
             var entry = entryNode!.AsObject();
             var empire = lookup.Empire((int)entry["empireId"]!);
             var persona = entry["persona"].Deserialize<NpeCharacter>(PlainOptions)!;
@@ -603,6 +607,17 @@ public static class GameJson
                 $"Empire '{empire.Name}' has a saved Kingdom turn handler but no NpeType.");
 
             game.TurnHandlers[empire] = new KingdomTurnHandler(npeType, persona, state, fleetStates, random);
+        }
+
+        // Mirrors ScenarioLoader.RunCreatePlayerEmpire's own registration -- WriteTurnHandlers never
+        // writes a HumanTurnHandler (nothing to persist), so every human empire needs a fresh one
+        // reconstructed here instead. game.Empires only (not every lookup-known id): an "orphan"
+        // empire reachable only via a Kingdom's own diplomatic memory is never itself a live roster
+        // member TurnEngine would dispatch to.
+        foreach (var empire in game.Empires) {
+            if (empire.NpeType is null) {
+                game.TurnHandlers[empire] = new HumanTurnHandler();
+            }
         }
     }
 
