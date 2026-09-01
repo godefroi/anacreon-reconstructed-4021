@@ -29,6 +29,33 @@ codebase is in a test file.
   round-trips through `.SAV` but nothing reads it — out of scope for now, but real multiplayer/hotseat
   parity needs it eventually.
 
+## Human interactive turn handler / TUI
+
+A real per-empire turn loop now exists (`Program.cs`'s own loop, human sessions via `GameShell`,
+NPE turns auto-played with no UI), wired against a hand-built `assets/saves/Border Skirmish.json`
+fixture (loaded via `--load`) rather than a `.SCN` scenario. Real gaps this deliberately doesn't
+close:
+
+- **`GalaxyView` draws the whole galaxy with no fog-of-war.** Every object is rendered regardless of
+  whether the human has actually scouted/knows about it — real Pascal's map only shows what
+  `Known`/`Scouted` allow. Pre-existing since `GalaxyView`'s own introduction (8a), not new here;
+  `Worlds > Close Up`'s own info dump has the same simplification (see its own doc comment) rather
+  than reproducing `CloseUpCom`'s real `Known`/`Scouted`-gated redaction.
+- **No Resource Distribution Editor.** `Fleet > Deploy` always takes a launch world's entire current
+  `Ships` (zero `Cargo`) rather than letting the player choose a split — the interactive grid
+  `TUI_SURFACES_MAPPING.md`'s own "Suggested build order" defers to last (no stock widget covers
+  it). Same gap blocks `Transfer`/`Abort-Join`/`Refuel`/`Defenses`, all still stubs.
+- **No Fleet Group Configuration or Tactical Battle Display.** `Ministry of War > Attack` resolves
+  entirely through `CombatResolution.NPEAttack`'s own `CombatEngine.DefaultDistribution` (the same
+  grouping Kingdom's AI uses) with `AttackIntentionType.Conquer` always assumed and no player choice
+  of intent, groups, or a turn-by-turn tactical view.
+- **No hotseat protection.** `Program.cs`'s turn loop is already `Status`/`ITurnHandler.IsHuman`-driven
+  per empire (not hardcoded to one `Empire` reference), so a second human empire would already get
+  its own greeting+`GameShell` cycle when its slot comes up — but the password prompt and Capital
+  Fallen Report/Empire Status Report steps of `PROLOG.PAS: SetUpPlayer`'s chained per-turn sequence
+  are still missing, and nothing exercises this yet (this branch's own fixture has exactly one
+  human).
+
 ## Production tick: unresolved Cargo.Chemicals/Metals mismatch
 
 `AnnualTickHandlerProductionTests.MatchesGoldenFile` excludes `Cargo.Chemicals`/`Cargo.Metals` from

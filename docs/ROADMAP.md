@@ -695,6 +695,130 @@ upstream), not this project's draw code — ruled out via `Application.Iteration
 14ms/iteration, no busy-loop) before the actual fix (switching Windows Terminal's renderer to
 Direct2D) surfaced; see the README's Known Issues section.
 
+- **8g, a real playable turn loop.** First vertical slice all the way through: deploy a fleet, send
+  it to an enemy, attack once it arrives, against the already-fully-ported Kingdom NPE. Two real
+  gaps found while scoping this, fixed rather than routed around: `ScenarioLoader.
+  RunCreatePlayerEmpire` never registered anything in `Game.TurnHandlers` for a human empire (new
+  `Turns/HumanTurnHandler.cs`, `PlayTurn` a deliberate no-op — a human's actions already happened
+  synchronously through the UI before End Turn was pressed, matching `PLAYTURN.PAS`'s own
+  interactive command loop running entirely before `UpdateTurn`); and `GameJson.WriteTurnHandlers`
+  threw on anything but a `KingdomTurnHandler` once a human had an entry at all — fixed to skip a
+  `HumanTurnHandler` on write (nothing to persist) and reconstruct a fresh one on read for every
+  `NpeType is null` empire, on both `GameJson` and (found empirically, via a broken round-trip test
+  the first fix's own asymmetry caused) `SavGameLoader`.
+  - **`Program.cs` now owns a real per-empire session loop**, not just a single `GameShell` run:
+    `TurnEngine.AdvanceOneTurn` plays exactly one empire's turn; the loop decides, for whichever
+    empire is current, whether to show a `TurnStartGreetingWindow` + interactive `GameShell` session
+    (a human, `Active`) or just auto-play it with no UI (an NPE, or a human `TurnEngine` is quietly
+    finishing off via `PendingElimination`/`Eliminated`) — matching `ANACREON.PAS`'s own main loop,
+    which cycles every empire's slot the same way regardless of who owns it. `GameShell` itself
+    shrank to *one human's one turn*: its constructor now takes the human `Empire` explicitly
+    instead of hardcoding `game.Empires[0]`, and `Game > Next Turn` calls `TurnEngine.
+    AdvanceOneTurn` exactly once and hands control back to `Program.cs`'s loop via a new
+    `ExitChoice.EndTurn`, rather than looping across empires itself. This is already
+    `Status`/`ITurnHandler.IsHuman`-driven per empire, not hardcoded to one `Empire` reference, so a
+    second human would already get its own greeting+`GameShell` cycle when its slot comes up — real
+    hotseat protection (password prompt, Capital Fallen Report/Empire Status Report) is still
+    missing, tracked in `docs/OPEN_GAPS.md`, since nothing exercises it yet.
+  - **`assets/saves/Border Skirmish.json`** — new sibling to `reference/saves/` (real captured
+    `.SAV` fixtures) for port-authored content, matching the convention the unmerged
+    `kdl-scenario-format` branch already started for scenarios. Built directly against the same Core
+    APIs `ScenarioLoader` itself calls (`EmpireFactory.CreateEmpire`, `GalaxySetup.CreateWorld`,
+    `KingdomTurnHandler`'s own `InitializeNPE`-equivalent constructor) rather than an authored
+    `.SCN` scenario — the user's own explicit redirect, since a scenario file would mean routing
+    through the whole New Game flow just to reach a testable state. Three planets, all pairwise
+    within 5 sectors: a heavily-armed human capital (3,000 ships, exactly 10x the NPE's combined
+    total — sized with room for several real engagements, not just one), and two lightly-defended
+    Kingdom2 (aggressive) worlds with no LAMs at either. The
+    generating test (`GameJsonFixtureTests.cs`) doubles as the fixture's own regression check —
+    byte-identical against the committed file, plus a full `DeepGraphComparer` round trip — same
+    bootstrap-then-pin pattern this repo's other golden-file tests already use. New `--load <path>`
+    flag on the TUI (`Program.cs`) deserializes it and drops straight into the session loop above,
+    skipping the whole pre-game flow. **Kingdom's starting population/efficiency retuned down after
+    a real playtest, not guessed**: a first pass (1500 population/70% efficiency capital, 500/50%
+    outpost — proportional to the human capital's own) let Kingdom's real, aggressive `WarCabinet`/
+    `DefendEmpire` AI grow its capital from 10 GDMs to 494 over the ~4 turns the human fleet's
+    transit took, erasing the 10x ship-count edge entirely by the time of contact — confirmed via a
+    hand-run diagnostic, not assumed, and not a bug (the NPE's defensive buildup is real, ported
+    behavior reacting correctly to an incoming threat). Lowered to 150/20% (capital) and 100/15%
+    (outpost), keeping 4-turn growth modest (capital tops out around 161 fighters/54 jumpships/14
+    GDMs) so the human's edge actually holds by the time the fleet arrives — confirmed end-to-end in
+    a real playtest afterward: destroy the escort fleet Kingdom deploys in response, then the capital
+    itself falls and converts to an independent world, eliminating the Kingdom empire.
+  - **`GalaxyView` gained `Refresh()`/`CursorLocation`.** Its location-cache index was built once in
+    the constructor on the (until now correct) assumption that nothing changes it mid-session — a
+    real turn engine invalidates that, so `Refresh()` (called after End Turn, Deploy, and Attack)
+    rebuilds it. `CursorLocation` (named distinctly from `View.Cursor`, Terminal.Gui's own unrelated
+    text-cursor concept it would otherwise hide) exposes the one real selection mechanism the map
+    has, for the new commands below to read.
+  - **`Worlds > Close Up`, and Enter on the map** (`CloseUpWindow.cs`) — `CLSCOMM.PAS: CloseUpCom`.
+    Reproduces its real 80x21 fixed-size display window (`DISPLAY.PAS`'s own shared
+    `OpenWindow(1,4,80,21,ThinBRD,...)`, the panel every command including the original galaxy map
+    itself drew into) centered over the map instead of pinned under the menu bar, since this port's
+    map is the permanent shell rather than one of several panels sharing that fixed slot; field
+    layout (every label's row/column) is transcribed directly from `DisplayBasicInfo`/
+    `DisplayCargoInfo`/`DisplayMilitaryInfo` (a world) and `DisplayFleetInfo`/
+    `DisplayFleetComplement` (a fleet) — confirmed with the user after an initial single-`MessageBox`
+    pass didn't resemble the real screen at all. Enter (or the menu item) resolves every object at
+    the cursor: 0 is a no-op, 1 opens `CloseUpWindow` directly, 2+ opens a small `ListView` picker
+    overlay first (`TUI_SURFACES_MAPPING.md`'s "Sector Selected Popup"). Both are added/removed
+    directly as children of the running `GameShell`, not a nested `Application.Run` — matching this
+    project's established habit (`PlayerSetupWindow`'s gender box) of toggling child-view visibility
+    for in-session overlays rather than nesting Dialogs. Real Pascal's `Known`/`Scouted` redaction
+    isn't reproduced, matching `GalaxyView`'s own already-accepted no-fog-of-war simplification.
+  - **`Fleet > Deploy`** (`FLTCOMM.PAS: LaunchFleetCommand`) — deploys the launch world's entire
+    current `Ships` (no cargo, no fleet name), destination picked by reusing the map cursor (move
+    then Enter, Esc cancels) via a small `GameShell`-level "pending pick" state machine. The
+    Resource Distribution Editor and a name prompt are real UI `TUI_SURFACES_MAPPING.md`'s own
+    "Suggested build order" defers past this branch's actual job (proving the combat loop end to
+    end) — deliberately not built here. **Real bug found in the first pass, not a Core issue**:
+    passing the launch world's own live `Ships` object straight through as `FleetLifecycle.
+    DeployFleet`'s `ships` argument deployed an empty fleet every time — `ChangeCompositionOfFleet`
+    (which `DeployFleet` calls internally) overwrites the launch world's own `Ships` in place
+    *before* copying the "new fleet" composition onto the fleet, so the aliased object had already
+    been zeroed by the time it was read for the fleet's own side. Every real Core caller
+    (`NpeToolkit`'s `Deploy*Fleet` procedures) avoids this by building the composition off
+    `GetFleetComposition`, a fresh, independent `ShipCounts` — never a world's own live `Ships` —
+    fixed the same way here (a snapshot copy, not the live reference).
+  - **`Ministry of War > Attack`** (`ATTCOMM.PAS: GetTarget`/`AttackCommand`) — requires the
+    attacking fleet and an enemy target already in the same sector (no range/adjacency rule
+    re-derived from source), auto-resolved through `CombatResolution.NPEAttack` — the same entry
+    point Kingdom's own AI calls — with `AttackIntentionType.Conquer` and `CombatEngine`'s own
+    default distribution/grouping standing in for the deferred Fleet Group Configuration/Tactical
+    Battle Display screens. No target picker for 2+ enemy fleets in one sector (whichever is found
+    first wins) — nothing this branch's own fixture can produce ever hits that case. **Target
+    selection order transcribed from `GetTarget`'s own nested `CreateMenu` (`ATTCOMM.PAS:663-715`),
+    not guessed**: every enemy fleet in the sector is offered first, and the world itself (Planet/
+    Starbase) is only ever offered when there are none — a world defended by any fleet can't be
+    attacked directly, confirmed with the user after a first pass got this backwards (checked the
+    world before any defending fleet) and produced a bizarre result investigated below.
+  - **Real bug found and fixed in `CombatEngine.DefaultDistribution`, not a Core issue specific to
+    this branch's own new code.** A hand-built playtest (deploy 3,000 ships, wait several turns,
+    attack) surfaced it directly: the attacking fleet was reported destroyed while inflicting no
+    visible damage, against a Kingdom capital whose own war economy had ballooned over the turns the
+    slow-moving attack took to arrive. Investigating (with a throwaway diagnostic test, not guessed)
+    turned up two separate real causes layered together:
+    1. **The world's own defending fleet should have been the forced target, not the world itself**
+       — see the `Attack` targeting-order fix just above. Attacking the wrong thing meant the
+       fight was against a world whose military had grown far past its starting stats, not the
+       small, genuinely beatable defense fleet actually guarding it.
+    2. **`DefaultDistribution` mutated the live `Fleet.Ships`/`Fleet.Cargo` objects directly**
+       (`fleet.Ships[ship]=0` inside `DefaultGroup`) instead of a local snapshot. Real Pascal's own
+       `DefaultDistribution` (`ATTACK.PAS:1344-1367`) declares `Sh`/`Cr` as local `VAR` arrays,
+       populated via `GetShips`/`GetCargo` (Pascal array assignment copies by value) and never
+       `PutShips`/`PutCargo`'d back — the fleet's own persistent Ships/Cargo are never touched by
+       this step in real Pascal. With the bug, every attacking fleet's live Ships silently zeroed
+       out for the rest of the engagement, so `CombatOutcome.RestoreCombatant`'s later `ships[t] -=
+       casualties[t]` always computed `0 - casualties` instead of the real survivor count — an
+       attacking fleet ended up with zero ships left after *any* attack, win or lose, regardless of
+       actual losses. Fixed by cloning `Ships`/`Cargo` before handing them to `DefaultGroup`. No
+       existing test caught this — `CombatEngineTests.MatchesGoldenFile` only ever asserts on the
+       returned `GroupRecord`s/tallies, never on the fleet's own post-call `Ships` — new
+       `DefaultDistribution_DoesNotMutateTheFleetsOwnLiveShipsOrCargo` is that missing assertion.
+       Full suite (`combat.golden`/`npeattack.golden` included) stayed green before and after —
+       this bug was invisible to every existing assertion, isolated purely to a real playing
+       session actually checking a fleet's own ships after it fought.
+
 ## 9. Async/hotseat turn mode
 
 Deferred multiplayer option — sequential mode (already built) is the only mode a solo player sees.

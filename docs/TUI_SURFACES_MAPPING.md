@@ -45,7 +45,7 @@ Not yet covered by the existing view, but part of the same screen:
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
 | Cursor coordinate/name readout | Help line, updates as cursor moves | `MAPWIND.PAS: DrawMapCursor` | `StatusBar`/`Label` bound to cursor position |
-| Sector Selected Popup | Enter on a sector with 2+ objects | `MAPWIND.PAS: GetMapObject`/`SelectPoint` | `Dialog` + `ListView` (Enter on a single-object sector skips straight to Close Up) |
+| Sector Selected Popup | Enter on a sector with 2+ objects | `MAPWIND.PAS: GetMapObject`/`SelectPoint` | **Done** (`GameShell.ShowSectorPicker`) — small `ListView` overlay added/removed directly on `GameShell` (not a `Dialog`, matching this project's own overlay convention); Enter on a single-object sector skips straight to Close Up, matching the original |
 
 ## Turn Start / Player Login (hotseat)
 
@@ -63,14 +63,14 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
-| Close Up | Selecting a planet/base/fleet from the map or a picker | `CLSCOMM.PAS: CloseUpCom` | `FrameView`/`Dialog` with `Label` rows (read-only, fixed layout; fogs unscouted fields) |
+| Close Up | Selecting a planet/base/fleet from the map or a picker | `CLSCOMM.PAS: CloseUpCom` | **Done** (`CloseUpWindow.cs`) — real 80x21 fixed-size window (`DISPLAY.PAS`'s own shared `OpenWindow(1,4,80,21,ThinBRD,...)`), centered over the map instead of pinned under the menu bar; field layout transcribed row/column-exact from `DisplayBasicInfo`/`DisplayCargoInfo`/`DisplayMilitaryInfo` (world) and `DisplayFleetInfo`/`DisplayFleetComplement` (fleet). No `Known`/`Scouted` field redaction — matches `GalaxyView`'s own no-fog-of-war simplification |
 | Production | Close Up on an owned world, drill into industry detail | `CLSCOMM.PAS: ProductionCom` | Same as Close Up — `FrameView` + `Label` rows, read-only |
 
 ## Fleet management
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
-| Deploy Fleet | Fleet menu → Deploy | `FLTCOMM.PAS: LaunchFleetCommand` | `Dialog` + `TextField` (name), map cursor reuse for launch/destination, then Resource Distribution Editor |
+| Deploy Fleet | Fleet menu → Deploy | `FLTCOMM.PAS: LaunchFleetCommand` | **Done, MVP scope** (`GameShell.DeployFleet`) — map cursor reuse for destination (a `GameShell`-level "pending pick" state machine, not a `Dialog`), but deploys the launch world's *entire* current `Ships`, no cargo, no name prompt — the Resource Distribution Editor is still not built (see its own row below) |
 | Resource Distribution Editor (shared) | Deploy, Abort/Join, Transfer | `FLTCOMM.PAS: InputNewDistribution` | Custom grid `View` (own `Draw()`, arrow-key column cursor, Up/Down bulk fill/empty) with a small `Dialog`+`TextField` popup for per-cell numeric entry — no stock widget supports live drill-down-to-edit on a grid |
 | Abort/Join Fleet | Fleet menu → Abort/Join | `FLTCOMM.PAS: AbortFleetCommand` | `Dialog` + Ground/Fleet Target Picker, `MessageBox` confirm on overflow/non-empire territory |
 | Ground/Fleet Target Picker (shared) | Abort, Transfer, Refuel | `FLTCOMM.PAS: GetGround` | `ListView` inside a `Dialog` |
@@ -87,7 +87,7 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
-| Attack Target Picker | Ministry of War → Attack | `ATTCOMM.PAS: GetTarget` | `ListView` in a `Dialog` |
+| Attack Target Picker | Ministry of War → Attack | `ATTCOMM.PAS: GetTarget` | **Done, MVP scope** (`GameShell.Attack`) — target selection order transcribed from `GetTarget`'s own nested `CreateMenu` (enemy fleets first, the world itself only offered when none are present); no `ListView` picker yet for 2+ enemy fleets in one sector (whichever is found first wins) — nothing this branch's own fixture produces ever hits that case. Auto-resolved through `CombatResolution.NPEAttack` with no Fleet Group Configuration/Tactical Battle Display (see their own rows below) |
 | Fleet Group Configuration | Pre-battle setup | `ATTCOMM.PAS: GetGroups` | Custom grid `View` (cursor-driven, role assignment + load/unload sub-widgets) |
 | Tactical Battle Display | During an engagement | `ATTCOMM.PAS: DrawScreen`/`Engage`/`GroupMove`/etc. | Custom animated `View`, own `Draw()` + `Application.AddTimeout` for tick-driven redraws — same shape as `GalaxyView` but animated |
 | Post-Battle Reports | After an engagement | `ATTCOMM.PAS: CleanUp` and related | Chained `MessageBox`/`Dialog` screens |
