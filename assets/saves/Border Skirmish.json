@@ -1,0 +1,514 @@
+{
+  "galaxy": {
+    "size": 5,
+    "planets": [
+      {
+        "location": {
+          "x": 0,
+          "y": 0
+        },
+        "owner": 0,
+        "names": [],
+        "class": "EarthLike",
+        "type": "Capital",
+        "selfSufficiency": {
+          "chemical": 5,
+          "metal": 5,
+          "supply": 5,
+          "trillum": 5
+        },
+        "techLevel": "Bio",
+        "efficiency": 80,
+        "revolutionIndex": 0,
+        "isAddictedToAmbrosia": false,
+        "population": 1939,
+        "ships": {
+          "fighters": 1500,
+          "hunterKillers": 500,
+          "jumpships": 500,
+          "jumptransports": 0,
+          "penetrators": 0,
+          "starships": 0,
+          "transports": 500
+        },
+        "cargo": {
+          "legions": 0,
+          "ninjaLegions": 0,
+          "ambrosia": 0,
+          "chemicals": 500,
+          "metals": 500,
+          "supplies": 500,
+          "trillum": 200
+        },
+        "defenses": {
+          "lams": 0,
+          "defenseSatellites": 20,
+          "gdms": 20,
+          "ionCannons": 10
+        },
+        "industry": {
+          "bioindustry": 0,
+          "chemical": 75,
+          "mining": 95,
+          "shipyardGeneral": 168,
+          "shipyardJump": 0,
+          "shipyardStarship": 0,
+          "shipyardTransport": 0,
+          "supply": 79,
+          "trillumMining": 47
+        },
+        "trillumReserve": 904
+      },
+      {
+        "location": {
+          "x": 4,
+          "y": 4
+        },
+        "owner": 1,
+        "names": [],
+        "class": "EarthLike",
+        "type": "Capital",
+        "selfSufficiency": {
+          "chemical": 5,
+          "metal": 5,
+          "supply": 5,
+          "trillum": 5
+        },
+        "techLevel": "Bio",
+        "efficiency": 20,
+        "revolutionIndex": 0,
+        "isAddictedToAmbrosia": false,
+        "population": 164,
+        "ships": {
+          "fighters": 150,
+          "hunterKillers": 50,
+          "jumpships": 50,
+          "jumptransports": 0,
+          "penetrators": 0,
+          "starships": 0,
+          "transports": 0
+        },
+        "cargo": {
+          "legions": 0,
+          "ninjaLegions": 0,
+          "ambrosia": 0,
+          "chemicals": 500,
+          "metals": 500,
+          "supplies": 500,
+          "trillum": 200
+        },
+        "defenses": {
+          "lams": 0,
+          "defenseSatellites": 10,
+          "gdms": 10,
+          "ionCannons": 5
+        },
+        "industry": {
+          "bioindustry": 0,
+          "chemical": 10,
+          "mining": 12,
+          "shipyardGeneral": 22,
+          "shipyardJump": 0,
+          "shipyardStarship": 0,
+          "shipyardTransport": 0,
+          "supply": 26,
+          "trillumMining": 6
+        },
+        "trillumReserve": 907
+      },
+      {
+        "location": {
+          "x": 4,
+          "y": 1
+        },
+        "owner": 1,
+        "names": [],
+        "class": "EarthLike",
+        "type": "Outpost",
+        "selfSufficiency": {
+          "chemical": 5,
+          "metal": 5,
+          "supply": 5,
+          "trillum": 5
+        },
+        "techLevel": "Bio",
+        "efficiency": 15,
+        "revolutionIndex": 0,
+        "isAddictedToAmbrosia": false,
+        "population": 101,
+        "ships": {
+          "fighters": 50,
+          "hunterKillers": 0,
+          "jumpships": 0,
+          "jumptransports": 0,
+          "penetrators": 0,
+          "starships": 0,
+          "transports": 0
+        },
+        "cargo": {
+          "legions": 0,
+          "ninjaLegions": 0,
+          "ambrosia": 0,
+          "chemicals": 0,
+          "metals": 0,
+          "supplies": 0,
+          "trillum": 0
+        },
+        "defenses": {
+          "lams": 0,
+          "defenseSatellites": 5,
+          "gdms": 0,
+          "ionCannons": 0
+        },
+        "industry": {
+          "bioindustry": 0,
+          "chemical": 0,
+          "mining": 0,
+          "shipyardGeneral": 0,
+          "shipyardJump": 0,
+          "shipyardStarship": 0,
+          "shipyardTransport": 0,
+          "supply": 20,
+          "trillumMining": 0
+        },
+        "trillumReserve": 933
+      }
+    ],
+    "starbases": [],
+    "fleets": [],
+    "stargates": [],
+    "constructionSites": []
+  },
+  "year": 4021,
+  "scenarioFilename": null,
+  "timePerTurn": 300,
+  "autoSave": true,
+  "asyncTurns": false,
+  "pauseActive": true,
+  "reEnterGame": false,
+  "currentEmpireId": 0,
+  "realEmpireCount": 2,
+  "empires": [
+    {
+      "name": "Human",
+      "password": null,
+      "isEmpress": false,
+      "capital": {
+        "kind": "Planet",
+        "id": 0
+      },
+      "status": "Active",
+      "defeatedBy": null,
+      "npeType": null,
+      "defenseSettings": {
+        "fleets": {
+          "DeepSpace": {
+            "Fighter": 5,
+            "HunterKiller": 50,
+            "Jumpship": 10,
+            "Jumptransport": 0,
+            "Penetrator": 15,
+            "Starship": 0,
+            "Transport": 0
+          },
+          "HighOrbit": {
+            "Fighter": 10,
+            "HunterKiller": 10,
+            "Jumpship": 20,
+            "Jumptransport": 0,
+            "Penetrator": 30,
+            "Starship": 50,
+            "Transport": 0
+          },
+          "Orbit": {
+            "Fighter": 10,
+            "HunterKiller": 10,
+            "Jumpship": 30,
+            "Jumptransport": 0,
+            "Penetrator": 30,
+            "Starship": 30,
+            "Transport": 0
+          },
+          "SubOrbit": {
+            "Fighter": 55,
+            "HunterKiller": 30,
+            "Jumpship": 40,
+            "Jumptransport": 0,
+            "Penetrator": 25,
+            "Starship": 20,
+            "Transport": 0
+          },
+          "Ground": {
+            "Fighter": 20,
+            "HunterKiller": 0,
+            "Jumpship": 0,
+            "Jumptransport": 100,
+            "Penetrator": 0,
+            "Starship": 0,
+            "Transport": 100
+          }
+        },
+        "starbases": {
+          "DeepSpace": {
+            "Fighter": 0,
+            "HunterKiller": 0,
+            "Jumpship": 0,
+            "Jumptransport": 0,
+            "Penetrator": 0,
+            "Starship": 0,
+            "Transport": 0
+          },
+          "HighOrbit": {
+            "Fighter": 0,
+            "HunterKiller": 0,
+            "Jumpship": 0,
+            "Jumptransport": 0,
+            "Penetrator": 0,
+            "Starship": 0,
+            "Transport": 0
+          },
+          "Orbit": {
+            "Fighter": 0,
+            "HunterKiller": 0,
+            "Jumpship": 0,
+            "Jumptransport": 0,
+            "Penetrator": 0,
+            "Starship": 0,
+            "Transport": 0
+          },
+          "SubOrbit": {
+            "Fighter": 0,
+            "HunterKiller": 0,
+            "Jumpship": 0,
+            "Jumptransport": 0,
+            "Penetrator": 0,
+            "Starship": 0,
+            "Transport": 0
+          },
+          "Ground": {
+            "Fighter": 0,
+            "HunterKiller": 0,
+            "Jumpship": 0,
+            "Jumptransport": 0,
+            "Penetrator": 0,
+            "Starship": 0,
+            "Transport": 0
+          }
+        }
+      },
+      "probesInTransit": [],
+      "bookmarks": [],
+      "totalRevolutionIndex": 0,
+      "revolutionFactor": 0,
+      "technologyLevel": "Bio",
+      "technology": {
+        "ships": [
+          "Fighter",
+          "Jumpship",
+          "Jumptransport",
+          "Transport"
+        ],
+        "defenses": [
+          "Gdm",
+          "IonCannon"
+        ],
+        "constructions": [],
+        "resources": [
+          "Legion",
+          "Chemicals",
+          "Metals",
+          "Supplies",
+          "Trillum"
+        ]
+      },
+      "foundingYear": 4021,
+      "losesIfCapitalConquered": false,
+      "planetsKnown": [],
+      "planetsScouted": [],
+      "starbasesKnown": [],
+      "starbasesScouted": [],
+      "fleetsKnown": [],
+      "fleetsScouted": [],
+      "stargatesKnown": [],
+      "stargatesScouted": [],
+      "constructionSitesKnown": [],
+      "constructionSitesScouted": [],
+      "news": []
+    },
+    {
+      "name": "Kingdom",
+      "password": null,
+      "isEmpress": false,
+      "capital": {
+        "kind": "Planet",
+        "id": 1
+      },
+      "status": "Active",
+      "defeatedBy": null,
+      "npeType": "Kingdom2",
+      "defenseSettings": {
+        "fleets": {
+          "DeepSpace": {
+            "Fighter": 5,
+            "HunterKiller": 50,
+            "Jumpship": 10,
+            "Jumptransport": 0,
+            "Penetrator": 15,
+            "Starship": 0,
+            "Transport": 0
+          },
+          "HighOrbit": {
+            "Fighter": 10,
+            "HunterKiller": 10,
+            "Jumpship": 20,
+            "Jumptransport": 0,
+            "Penetrator": 30,
+            "Starship": 50,
+            "Transport": 0
+          },
+          "Orbit": {
+            "Fighter": 10,
+            "HunterKiller": 10,
+            "Jumpship": 30,
+            "Jumptransport": 0,
+            "Penetrator": 30,
+            "Starship": 30,
+            "Transport": 0
+          },
+          "SubOrbit": {
+            "Fighter": 55,
+            "HunterKiller": 30,
+            "Jumpship": 40,
+            "Jumptransport": 0,
+            "Penetrator": 25,
+            "Starship": 20,
+            "Transport": 0
+          },
+          "Ground": {
+            "Fighter": 20,
+            "HunterKiller": 0,
+            "Jumpship": 0,
+            "Jumptransport": 100,
+            "Penetrator": 0,
+            "Starship": 0,
+            "Transport": 100
+          }
+        },
+        "starbases": {
+          "DeepSpace": {
+            "Fighter": 0,
+            "HunterKiller": 0,
+            "Jumpship": 0,
+            "Jumptransport": 0,
+            "Penetrator": 0,
+            "Starship": 0,
+            "Transport": 0
+          },
+          "HighOrbit": {
+            "Fighter": 0,
+            "HunterKiller": 0,
+            "Jumpship": 0,
+            "Jumptransport": 0,
+            "Penetrator": 0,
+            "Starship": 0,
+            "Transport": 0
+          },
+          "Orbit": {
+            "Fighter": 0,
+            "HunterKiller": 0,
+            "Jumpship": 0,
+            "Jumptransport": 0,
+            "Penetrator": 0,
+            "Starship": 0,
+            "Transport": 0
+          },
+          "SubOrbit": {
+            "Fighter": 0,
+            "HunterKiller": 0,
+            "Jumpship": 0,
+            "Jumptransport": 0,
+            "Penetrator": 0,
+            "Starship": 0,
+            "Transport": 0
+          },
+          "Ground": {
+            "Fighter": 0,
+            "HunterKiller": 0,
+            "Jumpship": 0,
+            "Jumptransport": 0,
+            "Penetrator": 0,
+            "Starship": 0,
+            "Transport": 0
+          }
+        }
+      },
+      "probesInTransit": [],
+      "bookmarks": [],
+      "totalRevolutionIndex": 0,
+      "revolutionFactor": 0,
+      "technologyLevel": "Bio",
+      "technology": {
+        "ships": [
+          "Fighter",
+          "Jumpship",
+          "Jumptransport",
+          "Transport"
+        ],
+        "defenses": [
+          "Gdm",
+          "IonCannon"
+        ],
+        "constructions": [],
+        "resources": [
+          "Legion",
+          "Chemicals",
+          "Metals",
+          "Supplies",
+          "Trillum"
+        ]
+      },
+      "foundingYear": 4021,
+      "losesIfCapitalConquered": false,
+      "planetsKnown": [],
+      "planetsScouted": [],
+      "starbasesKnown": [],
+      "starbasesScouted": [],
+      "fleetsKnown": [],
+      "fleetsScouted": [],
+      "stargatesKnown": [],
+      "stargatesScouted": [],
+      "constructionSitesKnown": [],
+      "constructionSitesScouted": [],
+      "news": []
+    }
+  ],
+  "nebulae": [],
+  "minefields": [],
+  "mineScoutedBy": [],
+  "turnHandlers": [
+    {
+      "empireId": 1,
+      "persona": {
+        "imperialistGene": 51,
+        "defensiveGene": 9,
+        "offensiveGene": 86,
+        "factorGene": 25,
+        "randomGene": 50,
+        "defensive": 9,
+        "offensive": 86,
+        "techno": 50,
+        "provoke": 94,
+        "imperialist": 51,
+        "worldPower": 54,
+        "honorable": 50,
+        "sphereX": 56,
+        "clock": 0,
+        "offset": 3
+      },
+      "state": [],
+      "fleetStates": []
+    }
+  ],
+  "unimplementedNpeBlobs": [],
+  "messages": []
+}
