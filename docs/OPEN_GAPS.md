@@ -36,11 +36,23 @@ NPE turns auto-played with no UI), wired against a hand-built `assets/saves/Bord
 fixture (loaded via `--load`) rather than a `.SCN` scenario. Real gaps this deliberately doesn't
 close:
 
-- **`GalaxyView` draws the whole galaxy with no fog-of-war.** Every object is rendered regardless of
-  whether the human has actually scouted/knows about it — real Pascal's map only shows what
-  `Known`/`Scouted` allow. Pre-existing since `GalaxyView`'s own introduction (8a), not new here;
-  `Worlds > Close Up`'s own info dump has the same simplification (see its own doc comment) rather
-  than reproducing `CloseUpCom`'s real `Known`/`Scouted`-gated redaction.
+- **Fog-of-war is real for the map and Close Up's own gating, but not yet for Close Up's fields.**
+  `GalaxyView` and `GameShell.ObjectsAt` now gate on `Game.Visible` (Known, or owned outright) — an
+  unscouted world or enemy fleet just doesn't draw, and can't be opened via Close Up/the sector picker
+  at all (`MAPWIND.PAS`'s `UMSector`/`UMFleets`/`EnemyFleetInSector`). Two real gaps remain: (1)
+  `CloseUpWindow`'s own field dump still shows everything about an object once it's open, rather than
+  reproducing `CloseUpCom`'s finer-grained `Known`-vs-`Scouted` field redaction (Known-but-not-Scouted
+  should show less detail than fully Scouted); (2) `MAPWIND.PAS`'s `UnkPlanetChar` case — an unscouted
+  planet in a nebula still gets a distinct "something's there" glyph — isn't reproduced, since this
+  port has no nebula-vision modeling at all yet (`VisibilityHandler.ScoutAdjacent`'s own TODO); an
+  unscouted planet reads as plain nebula (or nothing, outside one) instead.
+  Also worth knowing, not a gap: first discovery of an object this empire has never seen only happens
+  via adjacency (a fleet/world within 1 cell) or a 50% roll in starbase scan range — there's no
+  starbase-free "detect at a distance" path (`INTRFACE.PAS: DetermineIfScouted`'s capital-range check
+  only re-detects something already Known). A scenario fixture with no starbases (`assets/saves/Border
+  Skirmish.json`) is genuinely flying blind on turn 1 until a fleet closes to adjacency — faithful
+  behavior, confirmed by inspecting the fixture's actual post-refresh visibility state before this was
+  wired up, not a bug.
 - **Fleet menu's real commands are done; the rest of the menu bar is still stubs.** Deploy, Transfer,
   Abort/Join, and Refuel are all real now (`FLTCOMM.PAS`'s `LaunchFleetCommand`/`TransferFleetCommand`/
   `AbortFleetCommand`/`RefuelFleetCommand`, `TUI_SURFACES_MAPPING.md`'s "Fleet management" table) —

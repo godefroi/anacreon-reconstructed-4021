@@ -891,6 +891,49 @@ Direct2D) surfaced; see the README's Known Issues section.
     (`GameShell.PickOwnFleetAtCursor`), sharing the same `ShowObjectPicker` the Sector Selected
     Popup and `PickGround` already use — the third real call site, which is what actually justified
     factoring `ShowSectorPicker`'s inline picker code into that shared helper in the first place.
+- **8i, real fog-of-war on the map.** The Core-side visibility engine (`VisibilityHandler`,
+  `EntityVisibility<T>`, `Game.Known`/`Scouted`) already existed and was already fully tested; this
+  entry is TUI wiring plus one real sequencing bug the wiring surfaced.
+  - **Turn-sequencing bug found and fixed.** `TurnEngine.AdvanceOneTurn` refreshed a human's
+    fog-of-war right before `PlayTurn` — fine for an NPE's atomic turn, wrong for a human, whose
+    `GameShell` session runs entirely *between* those two points. `Program.cs`'s loop deferred the
+    whole call into `GameShell`'s own End Turn button, so a human's map reflected whatever was left
+    over from the end of their *previous* turn, stale by a full round of enemy movement, for the
+    entire session. Fixed by restoring `ANACREON.PAS`'s own two-procedure structure
+    (`TurnEngine.BeginTurn`/`SetUpTurn` vs. `TurnEngine.EndTurn`/`UpdateTurn`) instead of inventing a
+    new split: `Program.cs` now calls `BeginTurn` before showing the greeting/status/`GameShell`, and
+    `GameShell.EndTurn()` calls only `TurnEngine.EndTurn`. `AdvanceOneTurn` (still `BeginTurn` then
+    `EndTurn` back to back) is unchanged for every AI turn and every existing `TurnEngineTests` case.
+    News-erasure timing matters here too: `EraseNews` is `UpdateTurn`'s own line in Pascal, not
+    `SetUpTurn`'s, so it stays in `EndTurn` — moving it into `BeginTurn` would wipe a human's news
+    right before they ever see it.
+  - **`Game.Visible(empire, source)`** (`Game.cs`, beside the already-existing `Known`/`Scouted`) —
+    `Known`, or owned outright. Real Pascal seeds `KnownBy:=[NewEmp]` the moment an object is created
+    (`INTRFACE.PAS:384-385,419-420,507-508`); this port has no creation hook for that (no
+    new-game/construction setup calls an equivalent), so a freshly-owned object can sit un-Known
+    behind `VisibilityHandler`'s 50%-roll discovery path — gating on bare `Known` would make a
+    player's own starbase vanish from their own map.
+  - **`GalaxyView`** (`MAPWIND.PAS: UMSector`/`UMFleets`/`EnemyFleetInSector`) — a world glyph only
+    draws once `Game.Visible` says so, otherwise the sector falls through to nebula/grid/blank exactly
+    as if nothing were there; the enemy-fleet indicator needs the identical per-fleet check, the
+    player-fleet indicator needs none (owning it is trivially visible). Not reproduced:
+    `UnkPlanetChar`, the distinct "something's here" glyph real Pascal draws for an unscouted planet
+    specifically inside a nebula — this port has no nebula-vision modeling at all yet.
+  - **`GameShell.ObjectsAt`** gated the same way, so Close Up/the sector picker can't surface or open
+    anything the map itself would hide. `GameShell.PickGround` (Transfer/Abort-Join/Refuel's own
+    picker) needed no equivalent change: its source fleet is always physically at the location being
+    queried, and `VisibilityHandler`'s per-fleet `ScoutAdjacent` call always scouts a fleet's own
+    sector, so anything sharing that exact cell is already guaranteed visible by construction.
+  - **Verified against the actual fixture before writing any rendering code**, not assumed: with
+    `assets/saves/Border Skirmish.json` (no starbases), the two NPE worlds sit Chebyshev 4 from the
+    human capital — outside adjacency, and outside starbase-roll range since none exists — so the
+    human is genuinely flying blind on turn 1 until a fleet closes to adjacency. Confirmed by loading
+    the real fixture and calling `VisibilityHandler.RefreshVisibility` directly rather than guessing
+    from the scoring rules alone. Faithful to a no-starbase scenario, not a bug — but exactly the kind
+    of consequence worth checking before, not after, wiring the renderer to it.
+  - Still open, tracked in `docs/OPEN_GAPS.md`: `CloseUpWindow`'s own field dump still shows
+    everything about an object once opened, rather than reproducing `CloseUpCom`'s finer-grained
+    `Known`-vs-`Scouted` per-field redaction.
 
 ## 9. Async/hotseat turn mode
 

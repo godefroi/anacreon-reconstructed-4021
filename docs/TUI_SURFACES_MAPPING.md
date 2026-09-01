@@ -34,7 +34,7 @@ this; it's purely about what sits underneath everything else.
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
-| Galaxy map viewport | F10 / main map view | `MAPWIND.PAS: ScanWindow` | Custom `View` subclass, own `Draw()` writing cells via `Move()`/`SetAttribute()`/`AddRune()` — done, this is `GalaxyView.cs` |
+| Galaxy map viewport | F10 / main map view | `MAPWIND.PAS: ScanWindow` | Custom `View` subclass, own `Draw()` writing cells via `Move()`/`SetAttribute()`/`AddRune()` — done, this is `GalaxyView.cs`. Fog-of-war is now real (`UMSector`/`UMFleets`/`EnemyFleetInSector`, gated on `Game.Visible`) — an unknown world/enemy fleet just doesn't draw, same as empty space; not reproduced: the `UnkPlanetChar` nebula-specific case (docs/OPEN_GAPS.md) |
 | Top-level navigation shell | Always visible | `PLAYTURN.PAS`/`PULLDOWN.PAS` (menu), `SWINDOWS.PAS` (status/help line) | `MenuBar` + `StatusBar`, `GalaxyView` as the permanent base — done, this is `GameShell.cs`. Every menu/status-bar leaf item is still stubbed to a `MessageBox` placeholder; each gets a real implementation as its own surface is built |
 | TMA Logo Splash | Once, at program launch | `ANACREON.PAS: Introduction` / `TMA.PAS: TMALogo` | Done — see Meta/one-off below for detail |
 | Anacreon Title + Orbit | Immediately after the TMA logo, once | `PROLOG.PAS: MainTitle`/`ZoomOutSFX`, `InitStarArray`/`UpdateStarArray` | Done — see Meta/one-off below for detail |
@@ -63,7 +63,7 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
-| Close Up | Selecting a planet/base/fleet from the map or a picker | `CLSCOMM.PAS: CloseUpCom` | **Done** (`CloseUpWindow.cs`) — real 80x21 fixed-size window (`DISPLAY.PAS`'s own shared `OpenWindow(1,4,80,21,ThinBRD,...)`), centered over the map instead of pinned under the menu bar; field layout transcribed row/column-exact from `DisplayBasicInfo`/`DisplayCargoInfo`/`DisplayMilitaryInfo` (world) and `DisplayFleetInfo`/`DisplayFleetComplement` (fleet). No `Known`/`Scouted` field redaction — matches `GalaxyView`'s own no-fog-of-war simplification |
+| Close Up | Selecting a planet/base/fleet from the map or a picker | `CLSCOMM.PAS: CloseUpCom` | **Done** (`CloseUpWindow.cs`) — real 80x21 fixed-size window (`DISPLAY.PAS`'s own shared `OpenWindow(1,4,80,21,ThinBRD,...)`), centered over the map instead of pinned under the menu bar; field layout transcribed row/column-exact from `DisplayBasicInfo`/`DisplayCargoInfo`/`DisplayMilitaryInfo` (world) and `DisplayFleetInfo`/`DisplayFleetComplement` (fleet). `GameShell.ObjectsAt` now gates on `Game.Visible`, so this can only be opened on something the player can already see — what's left is no per-field `Known`-vs-`Scouted` redaction once open (docs/OPEN_GAPS.md) |
 | Production | Close Up on an owned world, drill into industry detail | `CLSCOMM.PAS: ProductionCom` | Same as Close Up — `FrameView` + `Label` rows, read-only |
 
 ## Fleet management
