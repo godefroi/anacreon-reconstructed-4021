@@ -157,17 +157,17 @@ try {
 
 // Real per-empire turn cycle for one whole game session: ANACREON.PAS's own main loop plays every
 // empire's turn, human or NPE, one after another, wrapping back to the first when it runs out --
-// this is that loop. A human empire gets its own Turn Start Greeting (PROLOG.PAS's SetUpPlayer,
-// "once per player, per turn") plus an interactive GameShell session; anything else (an NPE, or a
-// human TurnEngine itself is quietly finishing off via PendingElimination/Eliminated) just advances
-// with no UI at all. Returns how the session ended, for the caller to decide what runs next.
+// this is that loop. A human empire gets its own Turn Start Greeting + Empire Status Report
+// (PROLOG.PAS's SetUpPlayer, "once per player, per turn") plus an interactive GameShell session;
+// anything else (an NPE, or a human TurnEngine itself is quietly finishing off via
+// PendingElimination/Eliminated) just advances with no UI at all. Returns how the session ended,
+// for the caller to decide what runs next.
 //
 // Deliberately out of scope here, same as the rest of PROLOG.PAS's chained per-turn sequence: the
-// password prompt and Capital Fallen Report/Empire Status Report steps. Nothing yet exercises more
-// than one human empire in the same game, so building real hotseat protection would be speculative
-// -- this loop is already Status/IsHuman-driven per empire rather than hardcoded to one Empire
-// reference, so a second human slotting in later needs no changes here, just those still-missing
-// steps.
+// password prompt and Capital Fallen Report step. Nothing yet exercises more than one human empire
+// in the same game, so building real hotseat protection would be speculative -- this loop is
+// already Status/IsHuman-driven per empire rather than hardcoded to one Empire reference, so a
+// second human slotting in later needs no changes here, just those still-missing steps.
 GameShell.ExitChoice RunGame(Game game)
 {
     while (true) {
@@ -178,6 +178,7 @@ GameShell.ExitChoice RunGame(Game game)
             turnEngine.AdvanceOneTurn(game);
         } else {
             app.Run(new TurnStartGreetingWindow(current, game.Year, Random.Shared.Next(1, 4)), null);
+            app.Run(new EmpireStatusWindow(current, game), null);
 
             var gameShell = new GameShell(game, turnEngine, current, random);
             app.Run(gameShell, null);

@@ -271,21 +271,40 @@ internal sealed class GameShell : Window
         };
     }
 
+    // DISPLAY.PAS's own GetIDMenuChoice/DisplayMenu (DISPLAY.PAS:51-74, MENU.PAS:116-156) -- the
+    // shared "ID/menu choice picker" primitive real Pascal builds every target/ground/empire picker
+    // on top of (TUI_SURFACES_MAPPING.md's own "Prompts & dialogs" section), and specifically what
+    // MAPWIND.PAS's GetMapObject uses for this exact "2+ objects in one sector" case. Real Pascal
+    // opens it at a fixed screen position (col 5, row 12); centered here instead, matching
+    // CloseUpWindow's own precedent for translating a real absolute-position window onto this
+    // port's variable terminal size.
+    private static readonly TgAttribute PickerBorderAttribute = new(StandardColor.LightGray, StandardColor.Black); // SYSWBorder = 7
+    private static readonly TgAttribute PickerNormalAttribute = new(StandardColor.LightGray, StandardColor.Black); // DisplayMenu's own Col param
+    private static readonly TgAttribute PickerSelectedAttribute = new(StandardColor.Black, StandardColor.LightGray); // SYSDispSelect = 112
+
     private void ShowSectorPicker(List<ISectorObject> objects)
     {
-        var picker = new FrameView {
-            Title = "Select an Object",
+        var picker = new Window {
+            Title = string.Empty, // DisplayMenu's own OpenWindow passes '' for the title too.
             X = Pos.Center(),
             Y = Pos.Center(),
-            Width = 40,
-            Height = objects.Count + 4,
+            Width = 45,
+            Height = 7,
+            BorderStyle = LineStyle.Single, // ThinBRD
+            CanFocus = true,
         };
+        picker.SetScheme(new Scheme(PickerNormalAttribute));
+        picker.Border.View?.SetScheme(new Scheme(PickerBorderAttribute));
 
-        var listView = new ListView<ObjectListItem> { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(1) };
-        listView.SetSource(new ObservableCollection<ObjectListItem>(objects.Select(o => new ObjectListItem(o))));
+        // No in-window "Enter: choose  Esc: cancel" hint: real Pascal's own GetIDMenuChoice puts
+        // that on the shared help line (WriteHelpLine) instead of inside the menu window itself --
+        // not reproduced, same simplification depth as CloseUpWindow dropping its own former
+        // "Press any key" line for the same reason (it isn't real Pascal content either).
+        var listView = new ListView<ObjectListItem> { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill() };
+        listView.SetScheme(new Scheme { Normal = PickerNormalAttribute, Focus = PickerSelectedAttribute });
+        listView.SetSource(new ObservableCollection<ObjectListItem>(objects.Select(o => new ObjectListItem(o, human))));
         listView.Index = 0; // SetSource alone leaves nothing selected -- default to the first item.
         picker.Add(listView);
-        picker.Add(new Label { X = 0, Y = Pos.AnchorEnd(1), Text = "Enter: choose   Esc: cancel" });
 
         var dismiss = AddModal(picker);
         picker.KeyDown += (_, key) => {
@@ -316,7 +335,14 @@ internal sealed class GameShell : Window
     /// running Toplevel rather than run via a nested Application.Run -- see CloseUpWindow's own doc
     /// comment for why.
     /// </summary>
-    private Action AddModal(View popup)
+    /// <param name="dismissOnOutsideClick">
+    /// False for a popup with no real Pascal click-to-cancel equivalent (the Resource Distribution
+    /// Editor, the fleet-name prompt): a stray click outside it would otherwise silently discard
+    /// whatever the player had already entered with zero feedback, since <see cref="ResourceDistributionEditor.Committed"/>
+    /// never gets a chance to fire. An outside click there is just swallowed instead -- real Pascal's
+    /// own version of these is keyboard-only anyway, no click-out ever existed to reproduce.
+    /// </param>
+    private Action AddModal(View popup, bool dismissOnOutsideClick = true)
     {
         var backdrop = new View { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(), CanFocus = false };
         // ViewportSettingsFlags.Transparent is Terminal.Gui's own documented mechanism for this
@@ -336,7 +362,10 @@ internal sealed class GameShell : Window
 
         backdrop.MouseEvent += (_, mouse) => {
             if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked)) {
-                Dismiss();
+                if (dismissOnOutsideClick) {
+                    Dismiss();
+                }
+
                 mouse.Handled = true;
             }
         };
@@ -348,50 +377,144 @@ internal sealed class GameShell : Window
         return Dismiss;
     }
 
-    /// <summary>Display wrapper for <see cref="ShowSectorPicker"/>'s ListView -- ISectorObject implementors are plain domain entities with no display-formatting concern of their own.</summary>
-    private sealed record ObjectListItem(ISectorObject Object)
+    /// <summary>
+    /// Display wrapper for <see cref="ShowSectorPicker"/>'s ListView -- ISectorObject implementors
+    /// are plain domain entities with no display-formatting concern of their own. Text format
+    /// matches GetMapObject's own CreateMenu (MAPWIND.PAS:858-859): "Name  (Owner)".
+    /// </summary>
+    private sealed record ObjectListItem(ISectorObject Object, Empire Viewer)
     {
-        public override string ToString() => CloseUpWindow.DescribeKind(Object);
+        public override string ToString() =>
+            $"{Object.Names.GetValueOrDefault(Viewer) ?? CloseUpWindow.DescribeKind(Object)}  ({Object.Owner.Name})";
     }
 
     /// <summary>
-    /// Fleet menu > Deploy (FLTCOMM.PAS: LaunchFleetCommand). MVP simplification, called out rather
-    /// than silent: deploys the entire current Ships of the world under the cursor, no cargo, no
-    /// fleet name -- the Resource Distribution Editor and a name prompt are real UI
-    /// TUI_SURFACES_MAPPING.md's own "Suggested build order" defers past this branch's actual job
-    /// (proving the combat loop end to end). Destination reuses the map cursor, matching that same
-    /// doc's prescribed primitive for this command.
+    /// Fleet menu > Deploy (FLTCOMM.PAS: LaunchFleetCommand): source and destination both reuse the
+    /// map cursor (matching TUI_SURFACES_MAPPING.md's own "map cursor reuse for launch/destination"),
+    /// a name prompt (LaunchFleetCommand's own FleetName parameter), and the real Resource
+    /// Distribution Editor (<see cref="ResourceDistributionEditor"/>, InputNewDistribution) for
+    /// picking which ships/cargo actually go -- not an all-or-nothing dump of the source world's
+    /// Ships anymore.
     /// </summary>
-    private void DeployFleet()
+    private void DeployFleet() =>
+        BeginPick("Deploy Fleet -- move cursor to a world to launch from, Enter: select, Esc: cancel", PickDeploySource);
+
+    private void PickDeploySource(Coordinate location)
     {
-        var source = FindWorldAt(galaxyView.CursorLocation);
+        var source = FindWorldAt(location);
         if (source is null || !ReferenceEquals(source.Owner, human)) {
-            MessageBox.Query(App!, "Deploy Fleet", "Move the cursor onto one of your own worlds first.", "OK");
+            MessageBox.Query(App!, "Deploy Fleet", "That isn't one of your own worlds.", "OK");
             return;
         }
 
-        var s = source.Ships;
-        if (s.Fighters + s.HunterKillers + s.Jumpships + s.Jumptransports + s.Penetrators + s.Starships + s.Transports == 0) {
+        if (!HasAnyShips(source.Ships)) {
             MessageBox.Query(App!, "Deploy Fleet", "This world has no ships to deploy.", "OK");
             return;
         }
 
-        // A snapshot, not source.Ships itself: FleetLifecycle.ChangeCompositionOfFleet (which
-        // DeployFleet calls internally) overwrites the launch world's own Ships in place before
-        // copying the "new fleet" composition onto the fleet -- passing the live object here aliases
-        // the two, so the fleet would end up copying its own just-zeroed source (confirmed by hitting
-        // this exact bug: the fleet was created with every ship count at 0). Every real Core caller
-        // avoids this by building composition off GetFleetComposition, never a world's own live Ships.
-        var deployedShips = new ShipCounts {
-            Fighters = s.Fighters, HunterKillers = s.HunterKillers, Jumpships = s.Jumpships,
-            Jumptransports = s.Jumptransports, Penetrators = s.Penetrators, Starships = s.Starships, Transports = s.Transports,
-        };
-
-        BeginPick("Deploy Fleet -- move cursor to destination, Enter: launch, Esc: cancel", destination => {
-            FleetLifecycle.DeployFleet(human, source, deployedShips, new CargoHold(), destination, game);
-            galaxyView.Refresh();
-        });
+        PromptForFleetName(source);
     }
+
+    private static readonly TgAttribute DialogNormalAttribute = new(StandardColor.LightGray, StandardColor.Black); // SYSWBorder = 7, matching the sector picker's own popup style
+    private static readonly TgAttribute DialogBorderAttribute = new(StandardColor.LightGray, StandardColor.Black);
+
+    // FleetName (FLTCOMM.PAS's own LaunchFleetCommand parameter) -- a small text prompt, matching
+    // PlayerSetupWindow's own established TextField-in-a-popup pattern rather than a nested
+    // Application.Run.
+    private void PromptForFleetName(IEconomicWorld source)
+    {
+        var dialog = new Window {
+            Title = "Name This Fleet",
+            X = Pos.Center(), Y = Pos.Center(),
+            Width = 50, Height = 5,
+            BorderStyle = LineStyle.Single,
+            CanFocus = true,
+        };
+        dialog.SetScheme(new Scheme(DialogNormalAttribute));
+        dialog.Border.View?.SetScheme(new Scheme(DialogBorderAttribute));
+
+        var nameField = new TextField { X = 1, Y = 1, Width = Dim.Fill(1) };
+        dialog.Add(new Label { X = 1, Y = 0, Text = "Fleet name (optional):" });
+        dialog.Add(nameField);
+        dialog.Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "Enter: confirm   Esc: cancel" });
+
+        var dismiss = AddModal(dialog, dismissOnOutsideClick: false);
+        nameField.SetFocus();
+
+        nameField.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Enter) {
+                return;
+            }
+
+            var name = nameField.Text?.Trim() ?? "";
+            dismiss();
+            BeginDeployDistribution(source, name);
+            key.Handled = true;
+        };
+        dialog.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Esc) {
+                return;
+            }
+
+            dismiss();
+            key.Handled = true;
+        };
+    }
+
+    private void BeginDeployDistribution(IEconomicWorld source, string fleetName)
+    {
+        var groundShips = CloneShips(source.Ships);
+        var groundCargo = CloneCargo(source.Cargo);
+        var fleetShips = new ShipCounts();
+        var fleetCargo = new CargoHold();
+        var sourceName = source.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(source);
+
+        var editor = new ResourceDistributionEditor(
+            fleetShips, fleetCargo, groundShips, groundCargo,
+            groundIsPlayerOwned: true, groundIsAFleet: false,
+            title: $"Deploy Fleet from {sourceName}");
+        var dismiss = AddModal(editor, dismissOnOutsideClick: false);
+
+        editor.Committed += (_, _) => {
+            dismiss();
+
+            // NoShips (MISC.PAS) -- LaunchFleetCommand's own "IF NOT NoShips(FltSh)" guard: nothing
+            // was actually put aboard, so there's nothing to deploy.
+            if (!HasAnyShips(fleetShips)) {
+                return;
+            }
+
+            BeginPick($"Deploy Fleet -- move cursor to destination, Enter: launch, Esc: cancel", destination => {
+                var fleet = FleetLifecycle.DeployFleet(human, source, fleetShips, fleetCargo, destination, game);
+                if (!string.IsNullOrWhiteSpace(fleetName)) {
+                    // LaunchFleetCommand's own FleetName[1]:=UpCase(FleetName[1]) (FLTCOMM.PAS:517).
+                    fleet.Names[human] = char.ToUpperInvariant(fleetName[0]) + fleetName[1..];
+                }
+
+                galaxyView.Refresh();
+            });
+        };
+    }
+
+    private static bool HasAnyShips(ShipCounts s) =>
+        s.Fighters + s.HunterKillers + s.Jumpships + s.Jumptransports + s.Penetrators + s.Starships + s.Transports > 0;
+
+    // A snapshot, not the source's own live Ships/Cargo: FleetLifecycle.ChangeCompositionOfFleet
+    // (which DeployFleet calls internally) overwrites the launch world's own Ships in place, and
+    // recomputes the actual ground remainder itself from whatever ships ultimately get deployed --
+    // passing the live object into the editor would let its FillFleet/EmptyFleet mutate the world's
+    // real inventory before the player even confirms. Every real Core caller avoids the same trap by
+    // building composition off a copy, never a world's own live Ships (confirmed by hitting this
+    // exact aliasing bug once already, before this snapshot existed).
+    private static ShipCounts CloneShips(ShipCounts s) => new() {
+        Fighters = s.Fighters, HunterKillers = s.HunterKillers, Jumpships = s.Jumpships,
+        Jumptransports = s.Jumptransports, Penetrators = s.Penetrators, Starships = s.Starships, Transports = s.Transports,
+    };
+
+    private static CargoHold CloneCargo(CargoHold c) => new() {
+        Legions = c.Legions, NinjaLegions = c.NinjaLegions, Ambrosia = c.Ambrosia,
+        Chemicals = c.Chemicals, Metals = c.Metals, Supplies = c.Supplies, Trillum = c.Trillum,
+    };
 
     /// <summary>
     /// Ministry of War menu > Attack (ATTCOMM.PAS: GetTarget/AttackCommand). Target selection order

@@ -92,19 +92,7 @@ internal sealed class CloseUpWindow : Window
     private static string DisplayWindowTitle(Game game, Empire viewer)
     {
         var age = game.Year - viewer.FoundingYear + 1;
-        return $"Anacreon: {game.Year} ({age}{OrdinalSuffix(age)} year of your reign.)";
-    }
-
-    private static string OrdinalSuffix(int num)
-    {
-        var ultim = num % 10;
-        var penultim = num % 100 / 10;
-
-        if (penultim == 1 || ultim > 3 || ultim == 0) {
-            return "th";
-        }
-
-        return ultim switch { 3 => "rd", 2 => "nd", 1 => "st", _ => "th" };
+        return $"Anacreon: {game.Year} ({age}{DisplayText.OrdinalSuffix(age)} year of your reign.)";
     }
 
     /// <summary>Fallback label for an object with no player-given name -- shared with <see cref="GameShell"/>'s sector picker overlay. For a Fleet this is a generic placeholder, not its real type -- see the header's own FleetTypeNames lookup for that.</summary>
