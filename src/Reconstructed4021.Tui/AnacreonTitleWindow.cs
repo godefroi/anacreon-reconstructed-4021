@@ -55,7 +55,7 @@ internal sealed class AnacreonTitleWindow : Window
     // COLORS.INC: Title1 = 4 -> Red on Black (same red as the TMA logo, and as PROLOG.PAS's own
     // WriteString(...,C.Title1) calls for the version/copyright lines below). The orbiting stars use the
     // inline assembly's hardcoded "bright" attribute 0x0F -> White on Black.
-    private static readonly TgAttribute TitleAttribute = new(StandardColor.Red, StandardColor.Black);
+    private static readonly TgAttribute TitleAttribute = new(DosColors.Red, StandardColor.Black);
     private static readonly TgAttribute BandAttribute = new(StandardColor.White, StandardColor.Black);
     private static readonly TgAttribute StarAttribute = new(StandardColor.White, StandardColor.Black);
 
@@ -65,7 +65,7 @@ internal sealed class AnacreonTitleWindow : Window
     // inverting to a light background -- black stays the background in both states, so the bright-yellow
     // hotkey letter stays legible either way (a white focus background is what made it unreadable before).
     private static readonly Scheme MenuButtonScheme = new() {
-        Normal = new TgAttribute(StandardColor.Red, StandardColor.Black),
+        Normal = new TgAttribute(DosColors.Red, StandardColor.Black),
         Focus = new TgAttribute(StandardColor.BrightRed, StandardColor.Black),
         HotNormal = new TgAttribute(StandardColor.BrightYellow, StandardColor.Black),
         HotFocus = new TgAttribute(StandardColor.BrightYellow, StandardColor.Black),

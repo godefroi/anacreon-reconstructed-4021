@@ -1,9 +1,18 @@
 using Terminal.Gui.App;
+using Terminal.Gui.Views;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.NewGame;
+using Reconstructed4021.Core.SaveFormat;
+using Reconstructed4021.Core.Turns;
+using Reconstructed4021.Core.Types;
 using Reconstructed4021.Tui;
+using Game = Reconstructed4021.Core.Game;
 
 var random = new Random(4021);
+
+// One TurnEngine for the whole process -- stateless itself, just wraps three handlers that all
+// share this same random, matching every other scenario-load/setup component below.
+var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random));
 
 // NEWGAME.PAS's own ScenarioIntroduction just prompts for a hardcoded filename -- no directory scan or
 // title list. ScenarioLoader.ReadHeader reads only the same header tokens Load() itself would, so this
@@ -32,10 +41,17 @@ Application.MaximumIterationsPerSecond = 240;
 // --intro-only: play the TMA logo and the Anacreon title/orbit main menu, then exit whenever it's
 // dismissed, regardless of which button -- for reviewing those without waiting through the New Game flow
 // too. --no-intro: skip the TMA logo splash, straight to the main menu (the map itself is then one New
-// Game choice away from there). None given: play the full original sequence (ANACREON.PAS's Introduction,
-// then PROLOG.PAS's MainTitle/SetUpPlayer).
+// Game choice away from there). --load <path>: skip the whole pre-game flow (logo/title/picker/intro/
+// player setup) and drop straight into a game deserialized from a native JSON save (Core/SaveFormat/
+// GameJson.cs) -- for testing a hand-built fixture without routing it through scenario authoring. None
+// of the above: play the full original sequence (ANACREON.PAS's Introduction, then PROLOG.PAS's
+// MainTitle/SetUpPlayer).
 var introOnly = args.Contains("--intro-only");
 var noIntro = args.Contains("--no-intro");
+var loadIndex = Array.IndexOf(args, "--load");
+var loadPath = loadIndex >= 0 && loadIndex + 1 < args.Length
+    ? Path.Combine(FindRepoRoot(AppContext.BaseDirectory), args[loadIndex + 1])
+    : null;
 
 IApplication app = Application.Create().Init();
 
@@ -52,6 +68,14 @@ try {
 
     if (!noIntro) {
         app.Run(new TmaLogoWindow(), null);
+    }
+
+    if (loadPath is not null) {
+        var loadedGame = GameJson.Deserialize(File.ReadAllText(loadPath), random);
+        if (RunGame(loadedGame) == GameShell.ExitChoice.ExitToOs) {
+            return;
+        }
+        // MainMenu: fall through into the normal main-menu loop below for whatever comes next.
     }
 
     while (true) {
@@ -121,11 +145,7 @@ try {
         var loader = new ScenarioLoader(setup, random);
         var game = loader.Load(scenarioText, players);
 
-        app.Run(new TurnStartGreetingWindow(game.Empires[0], game.Year, Random.Shared.Next(1, 4)), null);
-
-        var gameShell = new GameShell(game);
-        app.Run(gameShell, null);
-        if (gameShell.Choice == GameShell.ExitChoice.MainMenu) {
+        if (RunGame(game) == GameShell.ExitChoice.MainMenu) {
             continue;
         }
 
@@ -133,6 +153,52 @@ try {
     }
 } finally {
     app.Dispose();
+}
+
+// Real per-empire turn cycle for one whole game session: ANACREON.PAS's own main loop plays every
+// empire's turn, human or NPE, one after another, wrapping back to the first when it runs out --
+// this is that loop. A human empire gets its own Turn Start Greeting (PROLOG.PAS's SetUpPlayer,
+// "once per player, per turn") plus an interactive GameShell session; anything else (an NPE, or a
+// human TurnEngine itself is quietly finishing off via PendingElimination/Eliminated) just advances
+// with no UI at all. Returns how the session ended, for the caller to decide what runs next.
+//
+// Deliberately out of scope here, same as the rest of PROLOG.PAS's chained per-turn sequence: the
+// password prompt and Capital Fallen Report/Empire Status Report steps. Nothing yet exercises more
+// than one human empire in the same game, so building real hotseat protection would be speculative
+// -- this loop is already Status/IsHuman-driven per empire rather than hardcoded to one Empire
+// reference, so a second human slotting in later needs no changes here, just those still-missing
+// steps.
+GameShell.ExitChoice RunGame(Game game)
+{
+    while (true) {
+        var current = game.CurrentEmpire ?? throw new InvalidOperationException("Game.CurrentEmpire must be set before the first turn.");
+        var handler = game.TurnHandlers[current];
+
+        if (!handler.IsHuman || current.Status != EmpireStatus.Active) {
+            turnEngine.AdvanceOneTurn(game);
+        } else {
+            app.Run(new TurnStartGreetingWindow(current, game.Year, Random.Shared.Next(1, 4)), null);
+
+            var gameShell = new GameShell(game, turnEngine, current, random);
+            app.Run(gameShell, null);
+            if (gameShell.Choice is GameShell.ExitChoice.MainMenu or GameShell.ExitChoice.ExitToOs) {
+                return gameShell.Choice;
+            }
+            // EndTurn: AdvanceOneTurn already ran inside GameShell -- loop straight to whatever
+            // CurrentEmpire is now.
+        }
+
+        if (!game.AnyHumanPlayersRemain) {
+            MessageBox.Query(app, "Defeat", "Your empire has fallen.", "OK");
+            return GameShell.ExitChoice.MainMenu;
+        }
+
+        var npeEmpires = game.Empires.Where(e => e.NpeType is not null).ToList();
+        if (npeEmpires.Count > 0 && npeEmpires.All(e => e.Status == EmpireStatus.Eliminated)) {
+            MessageBox.Query(app, "Victory", "Every enemy empire has been destroyed.", "OK");
+            return GameShell.ExitChoice.MainMenu;
+        }
+    }
 }
 
 static string FindRepoRoot(string start)

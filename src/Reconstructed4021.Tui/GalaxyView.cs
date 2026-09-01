@@ -65,15 +65,16 @@ internal sealed class GalaxyView : View
     private readonly CoreGalaxy _galaxy;
     private readonly Empire _player;
 
-    // The galaxy is static for the lifetime of this prototype (no turn engine driving it), so a
-    // one-time coordinate index is safe and correct -- not a duplicated/stale copy of Core state, just
-    // a render-local cache. Without it, every redraw called Galaxy.GetObjectAt (up to four linear scans
-    // across Planets/Starbases/Stargates/ConstructionSites) once per visible cell: on GAUNTLET.SCN
-    // (~290 objects) at a ~1800-cell viewport, that's on the order of half a million comparisons on
-    // every single arrow-key press. Both indexes are built once here, so any fleet the caller wants
-    // rendered must already be in Galaxy.Fleets before this constructor runs.
+    // A render-local cache, not a duplicated/stale copy of Core state: without it, every redraw
+    // called Galaxy.GetObjectAt (up to four linear scans across Planets/Starbases/Stargates/
+    // ConstructionSites) once per visible cell -- on GAUNTLET.SCN (~290 objects) at a ~1800-cell
+    // viewport, that's on the order of half a million comparisons on every single arrow-key press.
+    // Now that a real turn engine can move fleets/change ownership mid-session, callers that mutate
+    // Galaxy must call Refresh() afterward -- this index is only ever as fresh as the last Refresh().
     private readonly Dictionary<Coordinate, ISectorObject> _objectsByLocation = [];
-    private readonly ILookup<Coordinate, Fleet> _fleetsByLocation;
+
+    // Not readonly: Refresh() reassigns this (a lookup has no in-place "clear and repopulate").
+    private ILookup<Coordinate, Fleet> _fleetsByLocation = null!;
 
     // PRIMINTR.PAS's RelativeX/RelativeY report cursor position relative to the player's capital (X same
     // sign, Y flipped since screen-down is universe-"south") -- captured once here rather than re-looked-up
@@ -104,27 +105,51 @@ internal sealed class GalaxyView : View
         SetContentSize(new Size(galaxy.Size * CellWidth, galaxy.Size));
         CanFocus = true;
 
-        foreach (var planet in galaxy.Planets) {
-            _objectsByLocation[planet.Location] = planet;
-        }
-
-        foreach (var starbase in galaxy.Starbases) {
-            _objectsByLocation[starbase.Location] = starbase;
-        }
-
-        foreach (var stargate in galaxy.Stargates) {
-            _objectsByLocation[stargate.Location] = stargate;
-        }
-
-        foreach (var site in galaxy.ConstructionSites) {
-            _objectsByLocation[site.Location] = site;
-        }
-
-        _fleetsByLocation = galaxy.Fleets.ToLookup(f => f.Location);
+        RebuildIndex();
 
         DrawingContent += OnDrawingContent;
         KeyDown += OnKeyDown;
         MouseEvent += OnMouseEvent;
+    }
+
+    /// <summary>
+    /// The cursor's current sector -- the one real selection mechanism this view has (no Enter/menu
+    /// action of its own yet). Named distinctly from <c>View.Cursor</c> (Terminal.Gui's own unrelated
+    /// text-cursor-position concept), which this would otherwise silently hide.
+    /// </summary>
+    public Coordinate CursorLocation => _cursor;
+
+    /// <summary>
+    /// Rebuilds the location caches from the galaxy's current state and redraws. Needed because a
+    /// turn actually running now (End Turn, Deploy, Attack -- unlike when this view was first built,
+    /// with no turn engine driving it at all) can move fleets, add new ones, or change ownership.
+    /// </summary>
+    public void Refresh()
+    {
+        _objectsByLocation.Clear();
+        RebuildIndex();
+        SetNeedsDraw();
+    }
+
+    private void RebuildIndex()
+    {
+        foreach (var planet in _galaxy.Planets) {
+            _objectsByLocation[planet.Location] = planet;
+        }
+
+        foreach (var starbase in _galaxy.Starbases) {
+            _objectsByLocation[starbase.Location] = starbase;
+        }
+
+        foreach (var stargate in _galaxy.Stargates) {
+            _objectsByLocation[stargate.Location] = stargate;
+        }
+
+        foreach (var site in _galaxy.ConstructionSites) {
+            _objectsByLocation[site.Location] = site;
+        }
+
+        _fleetsByLocation = _galaxy.Fleets.ToLookup(f => f.Location);
     }
 
     private void OnDrawingContent(object? sender, DrawEventArgs e)
@@ -318,9 +343,29 @@ internal sealed class GalaxyView : View
         CursorCoordinateChanged?.Invoke(this, CursorCoordinateText);
     }
 
-    /// <summary>Left-button drag pans the viewport by the pixel delta since the last event; released or moved-without-the-button ends the drag.</summary>
+    /// <summary>
+    /// A plain click moves the cursor to that sector and activates it, same as pressing Enter there
+    /// -- no Pascal equivalent (MAPWIND.PAS is keyboard-only, DOS-era), a TUI-only convenience like
+    /// this view's own drag-panning below. Left-button drag (no full click, held and moved) instead
+    /// pans the viewport by the pixel delta since the last event; released or moved-without-the-button
+    /// ends the drag.
+    /// </summary>
     private void OnMouseEvent(object? sender, Mouse mouse)
     {
+        if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) && mouse.Position is { } clickPosition) {
+            // A click landing inside this View's own Frame but outside the galaxy's actual drawn
+            // grid (e.g. a small galaxy with room to spare in a bigger terminal) used to silently
+            // clamp to the nearest edge cell -- which, if that happened to already be the cursor's
+            // own position, activated whatever was already selected instead of doing nothing.
+            if (TryGetSectorAt(clickPosition, out var sector)) {
+                MoveCursorTo(sector);
+                SectorActivated?.Invoke(this, _cursor);
+            }
+
+            mouse.Handled = true;
+            return;
+        }
+
         if (!mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed) || mouse.Position is not { } position) {
             if (_dragOrigin is not null) {
                 _dragOrigin = null;
@@ -353,8 +398,43 @@ internal sealed class GalaxyView : View
     /// <summary>Raised whenever the cursor moves, with the same text <see cref="CursorCoordinateText"/> would return.</summary>
     public event EventHandler<string>? CursorCoordinateChanged;
 
+    /// <summary>
+    /// Raised when a sector is clicked (see <see cref="OnMouseEvent"/>) -- click behaves like Enter,
+    /// per the user's own explicit request. <see cref="GameShell"/> subscribes to this and its own
+    /// Enter-key handler calls the exact same method, so the two input paths can never drift apart.
+    /// </summary>
+    public event EventHandler<Coordinate>? SectorActivated;
+
     /// <summary>PRIMINTR.PAS's GetCoordName format: cursor position relative to <see cref="_origin"/>, e.g. "0,0" at the origin.</summary>
     public string CursorCoordinateText => $"{_cursor.X - _origin.X},{_origin.Y - _cursor.Y}";
+
+    /// <summary>Maps a click's screen position (relative to this View's own Viewport) to a galaxy sector -- false if it lands outside the actual grid, not clamped to the nearest edge.</summary>
+    private bool TryGetSectorAt(Point screenPosition, out Coordinate sector)
+    {
+        var viewport = Viewport;
+        var galaxyX = (screenPosition.X + viewport.X) / CellWidth;
+        var galaxyY = screenPosition.Y + viewport.Y;
+
+        if (galaxyX < 0 || galaxyX >= _galaxy.Size || galaxyY < 0 || galaxyY >= _galaxy.Size) {
+            sector = default;
+            return false;
+        }
+
+        sector = new Coordinate(galaxyX, galaxyY);
+        return true;
+    }
+
+    private void MoveCursorTo(Coordinate target)
+    {
+        if (target.X == _cursor.X && target.Y == _cursor.Y) {
+            return;
+        }
+
+        _cursor = target;
+        EnsureCursorVisible();
+        SetNeedsDraw();
+        CursorCoordinateChanged?.Invoke(this, CursorCoordinateText);
+    }
 
     private void CenterOnCursor()
     {

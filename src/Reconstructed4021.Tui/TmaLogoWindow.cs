@@ -53,7 +53,7 @@ internal sealed class TmaLogoWindow : Window
         // showing up as a visibly darker box behind the logo text. Setting it here keeps the whole
         // screen one uniform black, matching TMALogo's ClrScr.
         SetScheme(new Scheme(new TgAttribute(StandardColor.Black, StandardColor.Black)));
-        _logoLabel.SetScheme(new Scheme(new TgAttribute(StandardColor.Red, StandardColor.Black)));
+        _logoLabel.SetScheme(new Scheme(new TgAttribute(DosColors.Red, StandardColor.Black)));
         _presentsLabel.SetScheme(new Scheme(new TgAttribute(StandardColor.LightCyan, StandardColor.Black)));
 
         Add(_logoLabel);
