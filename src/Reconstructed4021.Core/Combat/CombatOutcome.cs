@@ -19,7 +19,7 @@ namespace Reconstructed4021.Core.Combat;
 /// loss transitions straight to <see cref="Types.EmpireStatus.Eliminated"/> synchronously, inside
 /// <see cref="DestroyEmpire"/>, right here; a human's loss instead parks at
 /// <see cref="Types.EmpireStatus.PendingElimination"/> until their own next turn-prologue
-/// (<see cref="Turns.TurnEngine.AdvanceOneTurn"/>) calls the same <see cref="DestroyEmpire"/> to
+/// (<see cref="Turns.TurnEngine.BeginTurn"/>) calls the same <see cref="DestroyEmpire"/> to
 /// finish the transition — matching Pascal's <c>ConquerEmpire</c> (immediate for
 /// <c>NOT EmpirePlayer</c>) versus <c>PROLOG.PAS</c>'s <c>EmpireNews</c> (deferred for a player).
 /// <see cref="Game.Empires"/> is never touched by either path — it's a permanent roster now.

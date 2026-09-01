@@ -1,4 +1,5 @@
 using Reconstructed4021.Core.Combat;
+using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Types;
 
 namespace Reconstructed4021.Core.Turns;
@@ -29,21 +30,25 @@ public sealed class TurnEngine(
     IAnnualTickHandler annualTick)
 {
     /// <summary>
-    /// Plays game.CurrentEmpire's turn — via its assigned ITurnHandler, human or AI alike — then
-    /// moves fleets, advances CurrentEmpire to the next empire, and runs the annual tick exactly
-    /// once per wrap back to the first empire. Mirrors ANACREON.PAS's UpdateTurn (:211-291),
-    /// sequential path, one iteration.
+    /// game.CurrentEmpire's own turn-prologue: refresh its fog-of-war and dispatch its ITurnHandler
+    /// (human or AI alike), or finish a PendingElimination empire's deferred teardown. Mirrors
+    /// ANACREON.PAS's SetUpTurn (:183-196) — the source already keeps this separate from
+    /// <see cref="EndTurn"/>'s own UpdateTurn (:211-291); this split restores that structure rather
+    /// than inventing a new one. A human's own <c>GameShell</c> session runs entirely between this
+    /// call and <see cref="EndTurn"/>: <see cref="BeginTurn"/> must run first so their map reflects
+    /// fog-of-war as of the start of their turn, not whatever was left over from ending their last
+    /// one (the human path used to defer this whole method into "End Turn", which showed them a map
+    /// stale by one full round of enemy movement — see docs/OPEN_GAPS.md for how this port's
+    /// fog-of-war work found and fixed that ordering bug).
     /// </summary>
-    public void AdvanceOneTurn(Game game)
+    public void BeginTurn(Game game)
     {
-        var current = game.CurrentEmpire
-            ?? throw new InvalidOperationException("Game.CurrentEmpire must be set before the first turn.");
+        var current = CurrentOrThrow(game);
 
         switch (current.Status) {
             case EmpireStatus.Active:
                 visibility.RefreshVisibility(current, game);
                 game.TurnHandlers[current].PlayTurn(current, game);
-                current.News.Clear();
                 break;
 
             case EmpireStatus.PendingElimination:
@@ -54,10 +59,26 @@ public sealed class TurnEngine(
                 break;
 
             case EmpireStatus.Eliminated:
-                // InUse stays False forever. Nothing to do -- current still advances below like
-                // every other slot, matching Pascal's own fixed-array cycling (see this class's own
-                // remarks on why NextEmpire/IsFirstEmpire stay Status-blind).
+                // InUse stays False forever. Nothing to do here.
                 break;
+        }
+    }
+
+    /// <summary>
+    /// game.CurrentEmpire's own turn-epilogue: erase its news, move fleets, advance CurrentEmpire to
+    /// the next empire, and run the annual tick exactly once per wrap back to the first empire.
+    /// Mirrors ANACREON.PAS's UpdateTurn (:211-291) — EraseNews only fires for a still-Active empire
+    /// (:213-222's <c>IF EmpireActive(Player) THEN ... EraseNews(Player)</c>); a PendingElimination
+    /// empire's news was already cleared as part of <see cref="Combat.CombatOutcome.DestroyEmpire"/>'s
+    /// one-time teardown inside <see cref="BeginTurn"/>, and an already-Eliminated empire generates
+    /// none to clear (<see cref="Entities.Empire.AddNews"/> no-ops for it).
+    /// </summary>
+    public void EndTurn(Game game)
+    {
+        var current = CurrentOrThrow(game);
+
+        if (current.Status == EmpireStatus.Active) {
+            current.News.Clear();
         }
 
         var next = game.NextEmpire(current);
@@ -70,4 +91,19 @@ public sealed class TurnEngine(
 
         game.CurrentEmpire = next;
     }
+
+    /// <summary>
+    /// <see cref="BeginTurn"/> then <see cref="EndTurn"/> back to back, for the common case where
+    /// nothing (a human's own interactive session) needs to run between them — every AI turn, and
+    /// any test that doesn't care about the split. The TUI's GameShell is the one caller that calls
+    /// the two halves separately.
+    /// </summary>
+    public void AdvanceOneTurn(Game game)
+    {
+        BeginTurn(game);
+        EndTurn(game);
+    }
+
+    private static Empire CurrentOrThrow(Game game) =>
+        game.CurrentEmpire ?? throw new InvalidOperationException("Game.CurrentEmpire must be set before the first turn.");
 }

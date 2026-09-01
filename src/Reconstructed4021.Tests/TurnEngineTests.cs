@@ -216,4 +216,56 @@ public class TurnEngineTests
 
         await Assert.That(() => engine.AdvanceOneTurn(game)).ThrowsExactly<InvalidOperationException>();
     }
+
+    /// <summary>
+    /// The split a human's own GameShell session needs: BeginTurn (fog-of-war refresh, PlayTurn) has
+    /// to run before that session is even shown, and EndTurn (news erase, fleet movement, handoff)
+    /// only after it closes -- see TurnEngine's own doc comments on why AdvanceOneTurn used to run both
+    /// atomically at the wrong end of a human's turn. Calling the two halves back to back must produce
+    /// the exact same sequence AdvanceOneTurn itself does.
+    /// </summary>
+    [Test]
+    public async Task BeginTurnThenEndTurn_Separately_MatchesAdvanceOneTurn()
+    {
+        var human = new Empire { Name = "Human" };
+        var ai = new Empire { Name = "AI" };
+        var log = new List<string>();
+        var (game, engine, _) = Build(log,
+            (human, new FakeTurnHandler(log, isHuman: true)),
+            (ai, new FakeTurnHandler(log, isHuman: false)));
+        game.CurrentEmpire = human;
+
+        engine.BeginTurn(game);
+        engine.EndTurn(game);
+
+        await Assert.That(string.Join("|", log)).IsEqualTo(string.Join("|",
+        [
+            "Visibility:Human", "PlayTurn:Human", "AdvanceFleets:Human->AI", "AdvanceStarbases:AI",
+        ]));
+        await Assert.That(game.CurrentEmpire).IsSameReferenceAs(ai);
+    }
+
+    /// <summary>
+    /// EraseNews (ANACREON.PAS:216) fires inside UpdateTurn, i.e. at the END of a turn -- not at the
+    /// start. Moving the whole BeginTurn/EndTurn split's news-clearing into BeginTurn instead would
+    /// wipe a human's news right before their own session, before they ever see it.
+    /// </summary>
+    [Test]
+    public async Task News_SurvivesBeginTurn_ClearedByEndTurn()
+    {
+        var human = new Empire { Name = "Human" };
+        var ai = new Empire { Name = "AI" };
+        var log = new List<string>();
+        var (game, engine, _) = Build(log,
+            (human, new FakeTurnHandler(log, isHuman: true)),
+            (ai, new FakeTurnHandler(log, isHuman: false)));
+        game.CurrentEmpire = human;
+        human.AddNews(NewsType.WorldRevoltedGlobal);
+
+        engine.BeginTurn(game);
+        await Assert.That(human.News).Count().IsEqualTo(1);
+
+        engine.EndTurn(game);
+        await Assert.That(human.News).IsEmpty();
+    }
 }

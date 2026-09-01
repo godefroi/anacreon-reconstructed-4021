@@ -64,4 +64,34 @@ public class GameTests
 
         await Assert.That(recipient.News).IsEmpty();
     }
+
+    [Test]
+    public async Task Visible_OwnedButNotKnown_IsTrue()
+    {
+        var owner = new Empire { Name = "Owner" };
+        var planet = new Planet { Owner = owner, Location = new Coordinate(1, 1) };
+
+        await Assert.That(Game.Visible(owner, planet)).IsTrue();
+    }
+
+    [Test]
+    public async Task Visible_NotOwnedAndNotKnown_IsFalse()
+    {
+        var observer = new Empire { Name = "Observer" };
+        var owner = new Empire { Name = "Owner" };
+        var planet = new Planet { Owner = owner, Location = new Coordinate(1, 1) };
+
+        await Assert.That(Game.Visible(observer, planet)).IsFalse();
+    }
+
+    [Test]
+    public async Task Visible_NotOwnedButKnown_IsTrue()
+    {
+        var observer = new Empire { Name = "Observer" };
+        var owner = new Empire { Name = "Owner" };
+        var planet = new Planet { Owner = owner, Location = new Coordinate(1, 1) };
+        observer.Planets.MarkKnown(planet);
+
+        await Assert.That(Game.Visible(observer, planet)).IsTrue();
+    }
 }

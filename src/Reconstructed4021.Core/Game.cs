@@ -194,4 +194,17 @@ public sealed class Game(Galaxy.Galaxy galaxy)
         Fleet f => empire.Fleets.Known.Contains(f),
         _ => false,
     };
+
+    /// <summary>
+    /// What the TUI's map/cursor/Close Up should treat as visible to <paramref name="empire"/>: Known,
+    /// or owned outright. Real Pascal seeds <c>KnownBy:=[NewEmp]</c> the moment an object is created
+    /// (INTRFACE.PAS:384-385, 419-420, 507-508), so an empire's own objects are always Known there by
+    /// construction; this port has no equivalent creation hook (see <see cref="Turns.VisibilityHandler"/>'s
+    /// own doc comment), so a freshly-owned object can otherwise sit un-Known behind
+    /// <see cref="Turns.VisibilityHandler"/>'s 50%-roll discovery path until something scouts it. The
+    /// ownership clause here restores that invariant at the read site instead, so the human's own
+    /// worlds/fleets never vanish from their own map.
+    /// </summary>
+    public static bool Visible(Empire empire, ISectorObject source) =>
+        Known(empire, source) || source.Owner == empire;
 }
