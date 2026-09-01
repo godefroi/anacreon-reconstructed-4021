@@ -23,6 +23,13 @@ namespace Reconstructed4021.Tui;
 /// Added/removed as a direct child of the running <see cref="GameShell"/> (via its own AddModal),
 /// same convention as <see cref="CloseUpWindow"/>/the sector picker -- see that class's own doc
 /// comment for why.
+///
+/// Also has mouse (click a column to select it, wheel to step it by 1) and Shift/Ctrl+Up/Down (step
+/// by 100/1000) support with no real Pascal equivalent at all -- this port's own addition, not a
+/// transcribed row/column position like the rest of the layout. Height is 21, not the 19 that fits
+/// every transcribed row exactly, to leave room for its own two-line hint (rows 12-13, right under
+/// the transcribed +###/-### lines) and the resulting downward shift of the prompt/error rows below
+/// it -- don't trim it back down to "match source" without moving those lines first.
 /// </summary>
 internal sealed class ResourceDistributionEditor : Window
 {
@@ -66,7 +73,7 @@ internal sealed class ResourceDistributionEditor : Window
 
         Title = title;
         Width = 80;
-        Height = 19;
+        Height = 21;
         X = Pos.Center();
         Y = Pos.Center();
         BorderStyle = LineStyle.Single;
@@ -79,6 +86,8 @@ internal sealed class ResourceDistributionEditor : Window
         for (var i = 0; i < ResourceColumn.All.Length; i++) {
             fleetCells[i] = AddAt(i * 5, 1, string.Empty);
             groundCells[i] = AddAt(i * 5, 2, string.Empty);
+            AttachColumnMouse(fleetCells[i], i);
+            AttachColumnMouse(groundCells[i], i);
         }
 
         fleetCargoSpaceLabel = AddAt(ResourceColumn.All.Length * 5, 1, string.Empty);
@@ -89,6 +98,12 @@ internal sealed class ResourceDistributionEditor : Window
         AddAt(0, 10, "   +### to transfer from ground to fleet.");
         AddAt(0, 11, "   -### to transfer from fleet to ground.");
 
+        // Not real Pascal (that widget is keyboard-only) -- this port's own addition, kept to two
+        // lines right under the transcribed instructions above rather than off on its own, but still
+        // narrow enough (<51 cols) to stay clear of the Transport Capacity list at col 51.
+        AddAt(0, 12, "Click/wheel a column: select it / step by 1.");
+        AddAt(0, 13, "Shift +/-100.  Ctrl +/-1000.");
+
         AddAt(51, 8, "Transport Capacity:");
         var cargoRow = 9;
         foreach (var column in ResourceColumn.All) {
@@ -97,8 +112,8 @@ internal sealed class ResourceDistributionEditor : Window
             }
         }
 
-        promptLabel = AddAt(0, 13, string.Empty);
-        errorLabel = AddAt(0, 15, string.Empty);
+        promptLabel = AddAt(0, 15, string.Empty);
+        errorLabel = AddAt(0, 17, string.Empty);
 
         KeyDown += OnKeyDown;
         UpdateDisplay();
@@ -109,6 +124,28 @@ internal sealed class ResourceDistributionEditor : Window
         var label = new Label { X = x, Y = y, Text = text };
         Add(label);
         return label;
+    }
+
+    // Not real Pascal -- this port's own mouse support: a click on either row selects that column
+    // (same as Left/Right landing on it), the wheel steps it by 1 (Step's own clamped transfer),
+    // matching Left/Right + a quick-adjust rather than opening the numeric prompt.
+    private void AttachColumnMouse(Label cell, int columnIndex)
+    {
+        cell.MouseEvent += (_, mouse) => {
+            if (mouse.Flags.HasFlag(MouseFlags.WheeledUp)) {
+                pointIndex = columnIndex;
+                Step(1);
+                mouse.Handled = true;
+            } else if (mouse.Flags.HasFlag(MouseFlags.WheeledDown)) {
+                pointIndex = columnIndex;
+                Step(-1);
+                mouse.Handled = true;
+            } else if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked)) {
+                pointIndex = columnIndex;
+                UpdatePointerHighlight();
+                mouse.Handled = true;
+            }
+        };
     }
 
     // UpdateDisplay (FLTCOMM.PAS:162-209): both rows' per-column counts (ground redacted to "????"
@@ -167,13 +204,29 @@ internal sealed class ResourceDistributionEditor : Window
                 UpdatePointerHighlight();
                 key.Handled = true;
                 return;
-            case KeyCode.CursorUp:
+            case KeyCode.CursorUp when key.IsShift && !key.IsCtrl:
+                Step(100);
+                key.Handled = true;
+                return;
+            case KeyCode.CursorDown when key.IsShift && !key.IsCtrl:
+                Step(-100);
+                key.Handled = true;
+                return;
+            case KeyCode.CursorUp when key.IsCtrl && !key.IsShift:
+                Step(1000);
+                key.Handled = true;
+                return;
+            case KeyCode.CursorDown when key.IsCtrl && !key.IsShift:
+                Step(-1000);
+                key.Handled = true;
+                return;
+            case KeyCode.CursorUp when !key.IsShift && !key.IsCtrl:
                 ResourceDistribution.FillFleet(ResourceColumn.All[pointIndex], fleetShips, fleetCargo, groundShips, groundCargo, groundIsPlayerOwned);
                 SetError(groundIsPlayerOwned ? "" : "This is not your territory.");
                 UpdateDisplay();
                 key.Handled = true;
                 return;
-            case KeyCode.CursorDown:
+            case KeyCode.CursorDown when !key.IsShift && !key.IsCtrl:
                 ResourceDistribution.EmptyFleet(ResourceColumn.All[pointIndex], fleetShips, fleetCargo, groundShips, groundCargo, groundIsAFleet);
                 SetError("");
                 UpdateDisplay();
@@ -273,6 +326,40 @@ internal sealed class ResourceDistributionEditor : Window
 
     private void RenderEditPrompt() =>
         promptLabel.Text = $"How many {ResourceColumn.All[pointIndex].Name} to transfer : {editBuffer}";
+
+    // Not real Pascal -- a fixed-size quick-adjust for the currently selected column (Shift/Ctrl+Up/
+    // Down, the mouse wheel), a third option alongside InputNewDistribution's own GetChange (exact
+    // amount) and Fill/EmptyFleet (everything at once, capacity-aware). Clamped only to what's
+    // actually on each side (never to fleet cargo capacity) so a request for more than's available
+    // becomes a smaller step instead of failing outright -- matching GetChange's own
+    // capacity-oblivious behavior (TryTransfer, the same primitive GetChange itself uses), not
+    // Fill/EmptyFleet's. An over-capacity fleet built this way is caught the same place GetChange's
+    // own would be: TryFinish's transport-capacity check on Esc/X.
+    private void Step(int amount)
+    {
+        var column = ResourceColumn.All[pointIndex];
+        var onGround = column.Get(groundShips, groundCargo);
+        var inFleet = column.Get(fleetShips, fleetCargo);
+
+        int actual;
+        if (amount > 0) {
+            if (!groundIsPlayerOwned) {
+                SetError("This is not your territory.");
+                return;
+            }
+
+            actual = Math.Min(amount, onGround);
+        } else {
+            actual = -Math.Min(-amount, inFleet);
+        }
+
+        if (actual != 0) {
+            ResourceDistribution.TryTransfer(column, fleetShips, fleetCargo, groundShips, groundCargo, groundIsPlayerOwned, actual, out _);
+        }
+
+        SetError("");
+        UpdateDisplay();
+    }
 
     // InputNewDistribution's own outer `UNTIL EverythingOk` (FLTCOMM.PAS:441-472): a deployed fleet
     // that ended up over its own transport capacity re-opens the editor with an error instead of

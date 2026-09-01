@@ -41,6 +41,8 @@ internal sealed class GameShell : Window
     private readonly Random random;
     private readonly GalaxyView galaxyView;
     private readonly Label pickerPromptLabel;
+    private readonly MenuBar menuBar;
+    private int openModalCount;
 
     // Set while a command (Deploy, Attack) is waiting for the player to move the map cursor onto a
     // target sector and confirm -- the map-cursor-reuse pattern TUI_SURFACES_MAPPING.md calls for
@@ -71,7 +73,7 @@ internal sealed class GameShell : Window
         };
 
         var menuItems = BuildMenus();
-        var menuBar = new MenuBar { Menus = menuItems };
+        menuBar = new MenuBar { Menus = menuItems };
         menuBar.SetScheme(new Scheme(MenuBarAttribute));
 
         // Each top-level item's dropdown is a separate Menu (either a PopoverMenu or an inline SubMenu,
@@ -353,10 +355,24 @@ internal sealed class GameShell : Window
         // whole job is catching clicks outside the popup, so it must stay opaque to the mouse.
         backdrop.ViewportSettings = ViewportSettingsFlags.Transparent;
 
+        // MenuBar tracks mouse hover to keep its own highlight/focus in sync even when nothing has
+        // been clicked -- confirmed from real testing: hovering it while a modal popup (e.g. the
+        // Resource Distribution Editor) was open stole focus straight off the popup with no click at
+        // all, since that hover tracking isn't gated by z-order the way a click is. Disabling it for
+        // the popup's lifetime blocks that regardless of the exact internal mechanism. A depth
+        // counter, not a bare bool: AddModal isn't reentrant on its own (Deploy Fleet chains a
+        // name-prompt popup straight into the distribution-editor popup), and a bare
+        // `menuBar.Enabled = true` on Dismiss would re-enable the bar the moment the inner popup of
+        // two ever closed while the outer one was still up.
+        openModalCount++;
+        menuBar.Enabled = false;
+
         void Dismiss()
         {
             Remove(popup);
             Remove(backdrop);
+            openModalCount--;
+            menuBar.Enabled = openModalCount == 0;
             galaxyView.SetFocus();
         }
 
