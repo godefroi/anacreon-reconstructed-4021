@@ -233,6 +233,32 @@ internal sealed class GameShell : Window
         (IEconomicWorld?)game.Galaxy.Planets.FirstOrDefault(p => p.Location == location)
         ?? game.Galaxy.Starbases.FirstOrDefault(s => s.Location == location);
 
+    /// <summary>
+    /// Resolves "the player's own fleet under the cursor" for every Fleet-menu command below plus
+    /// Attack. Real Pascal disambiguates multiple fleets in one sector by having the player type the
+    /// target fleet's own name (PLAYTURN.PAS's GetParameters/InterpretObj); this port's map-cursor-
+    /// driven UI has no typed-command layer to reuse for that, so instead this reuses ExamineCursor's
+    /// own "exactly one auto-picks, 2+ opens a picker" rule (MAPWIND.PAS's GetMapObject), scoped down
+    /// to just the player's own fleets at that sector since none of these commands can ever target
+    /// someone else's fleet directly. Confirmed necessary, not hypothetical: nothing stops two of the
+    /// player's own fleets from sharing a sector (e.g. Transfer between them).
+    /// </summary>
+    private void PickOwnFleetAtCursor(string title, Action<Fleet> onChosen)
+    {
+        var fleets = game.Galaxy.Fleets.Where(f => f.Location == galaxyView.CursorLocation && ReferenceEquals(f.Owner, human)).ToList();
+        switch (fleets.Count) {
+            case 0:
+                MessageBox.Query(App!, title, "Move the cursor onto one of your own fleets first.", "OK");
+                break;
+            case 1:
+                onChosen(fleets[0]);
+                break;
+            default:
+                ShowObjectPicker(title, fleets.Cast<ISectorObject>().ToList(), o => onChosen((Fleet)o));
+                break;
+        }
+    }
+
     private List<ISectorObject> ObjectsAt(Coordinate location)
     {
         var result = new List<ISectorObject>();
@@ -284,10 +310,21 @@ internal sealed class GameShell : Window
     private static readonly TgAttribute PickerNormalAttribute = new(StandardColor.LightGray, StandardColor.Black); // DisplayMenu's own Col param
     private static readonly TgAttribute PickerSelectedAttribute = new(StandardColor.Black, StandardColor.LightGray); // SYSDispSelect = 112
 
-    private void ShowSectorPicker(List<ISectorObject> objects)
+    private void ShowSectorPicker(List<ISectorObject> objects) =>
+        ShowObjectPicker(string.Empty, objects, ShowCloseUp);
+
+    /// <summary>
+    /// Shared "pick one of these objects" popup -- DISPLAY.PAS's own GetIDMenuChoice/DisplayMenu, the
+    /// primitive both MAPWIND.PAS's GetMapObject (2+ objects in one sector, <see cref="ShowSectorPicker"/>)
+    /// and FLTCOMM.PAS's GetGround (<see cref="PickGround"/>, Transfer/Abort-Join/Refuel's own
+    /// target picker) build on top of in real Pascal. "Name  (Owner)" display format matches both of
+    /// those procedures' own AddGround/CreateMenu (MAPWIND.PAS:858-859, FLTCOMM.PAS:87-88) verbatim
+    /// -- identical text in both sources, not a coincidence.
+    /// </summary>
+    private void ShowObjectPicker(string title, IReadOnlyList<ISectorObject> objects, Action<ISectorObject> onChosen)
     {
         var picker = new Window {
-            Title = string.Empty, // DisplayMenu's own OpenWindow passes '' for the title too.
+            Title = title, // DisplayMenu's own OpenWindow passes '' for the sector-picker case too.
             X = Pos.Center(),
             Y = Pos.Center(),
             Width = 45,
@@ -315,7 +352,7 @@ internal sealed class GameShell : Window
                     var chosen = listView.Value;
                     dismiss();
                     if (chosen is not null) {
-                        ShowCloseUp(chosen.Object);
+                        onChosen(chosen.Object);
                     }
                     key.Handled = true;
                     break;
@@ -325,6 +362,43 @@ internal sealed class GameShell : Window
                     break;
             }
         };
+    }
+
+    /// <summary>
+    /// GetGround (FLTCOMM.PAS:51-132): every fleet at <paramref name="source"/>'s own location
+    /// (minus <paramref name="source"/> itself unless <paramref name="includeFleet"/>, matching real
+    /// Pascal's one actual use of that flag -- CreateMenu never filters *other* fleets on it, only
+    /// ever the given one), plus the planet/base there, filtered to the player's own when
+    /// <paramref name="playerOnly"/>. No Scouted gating -- matches this port's existing no-fog-of-war
+    /// simplification (docs/OPEN_GAPS.md), the map already shows everything regardless. Real Pascal
+    /// just opens an empty menu when nothing qualifies; a plain "nothing here" message reads better.
+    /// </summary>
+    private void PickGround(Fleet source, bool playerOnly, bool includeFleet, string title, string emptyMessage, Action<ISectorObject> onPicked)
+    {
+        var candidates = new List<ISectorObject>();
+        foreach (var f in game.Galaxy.Fleets) {
+            if (f.Location != source.Location) {
+                continue;
+            }
+            if (!includeFleet && ReferenceEquals(f, source)) {
+                continue;
+            }
+            if (playerOnly && !ReferenceEquals(f.Owner, human)) {
+                continue;
+            }
+            candidates.Add(f);
+        }
+
+        if (FindWorldAt(source.Location) is { } world && (!playerOnly || ReferenceEquals(world.Owner, human))) {
+            candidates.Add(world);
+        }
+
+        if (candidates.Count == 0) {
+            MessageBox.Query(App!, title, emptyMessage, "OK");
+            return;
+        }
+
+        ShowObjectPicker(title, candidates, onPicked);
     }
 
     /// <summary>
@@ -533,6 +607,160 @@ internal sealed class GameShell : Window
     };
 
     /// <summary>
+    /// Fleet menu > Transfer (FLTCOMM.PAS: TransferFleetCommand): the same Resource Distribution
+    /// Editor Deploy uses -- InputNewDistribution is the exact same call in real Pascal, just with a
+    /// fleet standing in for LaunchFleetCommand's launch world -- between one of the player's own
+    /// fleets under the map cursor and whatever <see cref="PickGround"/> picks as the other side
+    /// (any owner, matching TransferFleetCommand's own GetGround(...,PlayerOnly:=False,...)).
+    /// </summary>
+    private void TransferFleet() => PickOwnFleetAtCursor("Transfer Fleet", fleet =>
+        PickGround(fleet, playerOnly: false, includeFleet: false, "Transfer Fleet",
+            "There is nothing here to transfer with.",
+            ground => BeginTransferDistribution(fleet, ground)));
+
+    private void BeginTransferDistribution(Fleet fleet, ISectorObject ground)
+    {
+        var groundHolder = (IShipCargoHolder)ground;
+        var fleetShips = CloneShips(fleet.Ships);
+        var fleetCargo = CloneCargo(fleet.Cargo);
+        var groundShips = CloneShips(groundHolder.Ships);
+        var groundCargo = CloneCargo(groundHolder.Cargo);
+        var fleetName = fleet.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(fleet);
+        var groundName = ground.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(ground);
+
+        var editor = new ResourceDistributionEditor(
+            fleetShips, fleetCargo, groundShips, groundCargo,
+            groundIsPlayerOwned: ReferenceEquals(ground.Owner, human), groundIsAFleet: ground is Fleet,
+            title: $"Transfer -- {fleetName} <-> {groundName}");
+        var dismiss = AddModal(editor, dismissOnOutsideClick: false);
+
+        editor.Committed += (_, _) => {
+            dismiss();
+            // ChangeCompositionOfFleet (FLEET.PAS:282-389) -- may destroy either side, see that
+            // method's own doc comment; TransferFleetCommand calls it unconditionally too.
+            FleetLifecycle.ChangeCompositionOfFleet(fleet, groundHolder, fleetShips, fleetCargo, groundShips, groundCargo, game);
+            galaxyView.Refresh();
+        };
+    }
+
+    /// <summary>
+    /// Fleet menu > Abort/Join (FLTCOMM.PAS: AbortFleetCommand): dumps the whole fleet onto whatever
+    /// <see cref="PickGround"/> picks -- no distribution grid, matching real Pascal exactly
+    /// (InputNewDistribution is never called here, unlike Transfer). Two confirmations, both
+    /// transcribed from source: target not the player's own, and any single ship type's combined
+    /// total exceeding <see cref="ResourceDistribution.MaxResources"/> ("some will be lost" --
+    /// purely an echo of Pascal's own warning; this port's plain int counters never actually overflow
+    /// on the write itself, see <see cref="FleetLifecycle.AbortFleet"/>'s own doc comment). One
+    /// deliberate deviation: real Pascal still shows the second confirmation even after the player
+    /// already declined the first (both just set the same <c>Ok:=False</c>, so the outcome is
+    /// identical either way) -- declining here returns immediately instead of asking a second,
+    /// already-moot question.
+    /// </summary>
+    private void AbortJoinFleet() => PickOwnFleetAtCursor("Abort/Join Fleet", fleet =>
+        PickGround(fleet, playerOnly: false, includeFleet: false, "Abort/Join Fleet",
+            "There is nothing here to abort the fleet to.",
+            ground => ConfirmAbortJoin(fleet, ground)));
+
+    private void ConfirmAbortJoin(Fleet fleet, ISectorObject ground)
+    {
+        if (!ReferenceEquals(ground.Owner, human)) {
+            var groundName = ground.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(ground);
+            if (MessageBox.Query(App!, "Abort/Join Fleet", $"{groundName} is not part of your empire. Are you sure you want to abort the fleet?", "_Yes", "_No") != 0) {
+                return;
+            }
+        }
+
+        var groundHolder = (IShipCargoHolder)ground;
+        var overflow = Enum.GetValues<ShipType>().Any(t => groundHolder.Ships[t] + fleet.Ships[t] > ResourceDistribution.MaxResources);
+        if (overflow) {
+            if (MessageBox.Query(App!, "Abort/Join Fleet", "An object cannot hold so many ships -- some will be lost. Are you sure?", "_Yes", "_No") != 0) {
+                return;
+            }
+        }
+
+        FleetLifecycle.AbortFleet(fleet, groundHolder, game);
+        galaxyView.Refresh();
+    }
+
+    /// <summary>
+    /// Fleet menu > Refuel (FLTCOMM.PAS: RefuelFleetCommand): <see cref="PickGround"/> restricted to
+    /// the player's own (RefuelFleetCommand's own GetGround(...,PlayerOnly:=True,IncludeFleet:=True,...)
+    /// -- IncludeFleet lets the fleet refuel from trillum already in its own cargo, matching that
+    /// procedure's own SameID(FltID,Ground) message branch), then a numeric prompt for tons of
+    /// trillum to spend.
+    /// </summary>
+    private void RefuelFleet() => PickOwnFleetAtCursor("Refuel Fleet", fleet =>
+        PickGround(fleet, playerOnly: true, includeFleet: true, "Refuel Fleet",
+            "There is no world or fleet of yours here to refuel from.",
+            ground => PromptForTrillum(fleet, (IShipCargoHolder)ground)));
+
+    private void PromptForTrillum(Fleet fleet, IShipCargoHolder ground)
+    {
+        var maxTri = FleetLifecycle.MaxTrillumToRefuel(fleet, ground);
+        if (maxTri <= 0) {
+            MessageBox.Query(App!, "Refuel Fleet", "There is no trillum available to refuel with.", "OK");
+            return;
+        }
+
+        var dialog = new Window {
+            Title = "Refuel Fleet",
+            X = Pos.Center(), Y = Pos.Center(),
+            Width = 50, Height = 6,
+            BorderStyle = LineStyle.Single,
+            CanFocus = true,
+        };
+        dialog.SetScheme(new Scheme(DialogNormalAttribute));
+        dialog.Border.View?.SetScheme(new Scheme(DialogBorderAttribute));
+
+        var amountField = new TextField { X = 1, Y = 1, Width = Dim.Fill(1) };
+        var errorLabel = new Label { X = 1, Y = 2 };
+        dialog.Add(new Label { X = 1, Y = 0, Text = $"Tons of trillum (max {maxTri}, 0 = max):" });
+        dialog.Add(amountField);
+        dialog.Add(errorLabel);
+        dialog.Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "Enter: confirm   Esc: cancel" });
+
+        var dismiss = AddModal(dialog, dismissOnOutsideClick: false);
+        amountField.SetFocus();
+
+        // GetTrillumToUse (FLTCOMM.PAS:692-724): 0 (or a blank field here) defaults to the max,
+        // out-of-range re-prompts with an error instead of closing -- the REPEAT...UNTIL Ok retry
+        // loop, minus the retyped literal since the field just stays open and focused.
+        amountField.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Enter) {
+                return;
+            }
+            key.Handled = true;
+
+            var text = amountField.Text?.Trim() ?? "";
+            if (!int.TryParse(text, out var amount) && text.Length > 0) {
+                errorLabel.Text = "Enter a whole number of tons.";
+                return;
+            }
+            if (amount == 0) {
+                amount = maxTri;
+            } else if (amount < 0) {
+                errorLabel.Text = "That is a most bizarre request.";
+                return;
+            } else if (amount > maxTri) {
+                errorLabel.Text = $"The maximum amount allowable is {maxTri} tons.";
+                return;
+            }
+
+            dismiss();
+            FleetLifecycle.RefuelFleet(fleet, ground, amount);
+            galaxyView.Refresh();
+        };
+        dialog.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Esc) {
+                return;
+            }
+
+            dismiss();
+            key.Handled = true;
+        };
+    }
+
+    /// <summary>
     /// Ministry of War menu > Attack (ATTCOMM.PAS: GetTarget/AttackCommand). Target selection order
     /// is transcribed directly from GetTarget's own nested CreateMenu (ATTCOMM.PAS:663-715): every
     /// enemy Fleet in the sector goes on the target list first, and the world itself (Planet/
@@ -553,15 +781,8 @@ internal sealed class GameShell : Window
     /// distribution/grouping standing in for the deferred Fleet Group Configuration/Tactical Battle
     /// Display screens.
     /// </summary>
-    private void Attack()
-    {
-        var cursor = galaxyView.CursorLocation;
-        var attacker = game.Galaxy.Fleets.FirstOrDefault(f => f.Location == cursor && ReferenceEquals(f.Owner, human));
-        if (attacker is null) {
-            MessageBox.Query(App!, "Attack", "Move the cursor onto one of your own fleets first.", "OK");
-            return;
-        }
-
+    private void Attack() => PickOwnFleetAtCursor("Attack", attacker => {
+        var cursor = attacker.Location;
         object? target = game.Galaxy.Fleets.FirstOrDefault(f => f.Location == cursor && !ReferenceEquals(f.Owner, human))
             ?? (object?)game.Galaxy.Planets.FirstOrDefault(p => p.Location == cursor && !ReferenceEquals(p.Owner, human))
             ?? game.Galaxy.Starbases.FirstOrDefault(s => s.Location == cursor && !ReferenceEquals(s.Owner, human));
@@ -574,7 +795,7 @@ internal sealed class GameShell : Window
         var result = CombatResolution.NPEAttack(human, attacker, target, AttackIntentionType.Conquer, game, random);
         galaxyView.Refresh();
         MessageBox.Query(App!, "Attack", $"Result: {result.Result}", "OK");
-    }
+    });
 
     private MenuBarItem[] BuildMenus() => [
         new MenuBarItem("⌂", new MenuItem[] {
@@ -605,9 +826,9 @@ internal sealed class GameShell : Window
         new MenuBarItem("_Fleet", new MenuItem[] {
             new("_Deploy", Key.Empty, DeployFleet),
             new("_Change Destination", Key.Empty, () => Stub("Change Destination")),
-            new("_Transfer", Key.Empty, () => Stub("Transfer Fleet")),
-            new("_Abort/Join", Key.Empty, () => Stub("Abort/Join Fleet")),
-            new("_Refuel", Key.Empty, () => Stub("Refuel Fleet")),
+            new("_Transfer", Key.Empty, TransferFleet),
+            new("_Abort/Join", Key.Empty, AbortJoinFleet),
+            new("_Refuel", Key.Empty, RefuelFleet),
             new("_SRM Sweep", Key.Empty, () => Stub("Mine Sweeper")),
             new("_Orders", Key.Empty, () => Stub("Fleet Orders")),
             new("Canc_el Orders", Key.Empty, () => Stub("Cancel Orders")),
