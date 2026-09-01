@@ -450,8 +450,8 @@ public sealed partial class AnnualTickHandler
         return world.Owner.IsIndependent || world.Owner.Technology.Ships.Contains(ship);
     }
 
-    /// <summary>Total Industrial Production of a world given population and tech level (MISC.PAS:247-265).</summary>
-    private static int TotalProd(int population, TechLevel tech)
+    /// <summary>Total Industrial Production of a world given population and tech level (MISC.PAS:247-265). Internal: also read directly by <see cref="EmpireStatusReport"/>'s own average-industry figure (PROLOG.PAS's EmpireStatus reads the exact same formula).</summary>
+    internal static int TotalProd(int population, TechLevel tech)
     {
         if (population <= 0)
             population = 1;

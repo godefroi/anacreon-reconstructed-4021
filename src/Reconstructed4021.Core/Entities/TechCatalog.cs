@@ -129,6 +129,59 @@ public static class TechCatalog
     }
 
     /// <summary>
+    /// Every catalog item <paramref name="owned"/> that's beyond what <paramref name="baseLevel"/>
+    /// alone would already grant, in catalog order (PROLOG.PAS's EmpireStatus: <c>TechSet -
+    /// TechDev[Pred(Tech)]</c> -- pass the empire's own tech level minus one as <paramref
+    /// name="baseLevel"/> for that exact query). Used only for that report's own "technologies
+    /// mastered beyond your level" display.
+    /// </summary>
+    public static List<TechGrantIdentity> UnlockedBeyond(UnlockedTechnology owned, TechLevel baseLevel) =>
+        [.. _catalog.Where(e => e.MinTech > baseLevel && e.IsUnlocked(owned)).Select(e => e.Identity)];
+
+    /// <summary>DATACNST.PAS:63-69's own TechnologyName strings, keyed the same way <see cref="TechGrantIdentity"/> already is -- only real reader is PROLOG.PAS's EmpireStatus, via <see cref="UnlockedBeyond"/>.</summary>
+    public static string DisplayName(TechGrantIdentity identity) => identity.Category switch {
+        TechCategory.Defense => (DefenseType)identity.Ordinal switch {
+            DefenseType.Lam => "LAM",
+            DefenseType.DefenseSatellite => "defense satellite",
+            DefenseType.Gdm => "GDM",
+            DefenseType.IonCannon => "ion cannon",
+            _ => throw new ArgumentOutOfRangeException(nameof(identity)),
+        },
+        TechCategory.Ship => (ShipType)identity.Ordinal switch {
+            ShipType.Fighter => "fighter",
+            ShipType.HunterKiller => "hunter-killer",
+            ShipType.Jumpship => "jumpship",
+            ShipType.Jumptransport => "jumptransport",
+            ShipType.Penetrator => "penetrator",
+            ShipType.Starship => "starship",
+            ShipType.Transport => "transport",
+            _ => throw new ArgumentOutOfRangeException(nameof(identity)),
+        },
+        TechCategory.Cargo => (CargoType)identity.Ordinal switch {
+            CargoType.Legion => "troop",
+            CargoType.NinjaLegion => "ninja",
+            CargoType.Ambrosia => "ambrosia",
+            CargoType.Chemicals => "chemical",
+            CargoType.Metals => "metal",
+            CargoType.Supplies => "supply",
+            CargoType.Trillum => "trillum",
+            _ => throw new ArgumentOutOfRangeException(nameof(identity)),
+        },
+        TechCategory.Construction => (ConstructionType)identity.Ordinal switch {
+            ConstructionType.Minefield => "SRM",
+            ConstructionType.CommandBase => "command base",
+            ConstructionType.Fortress => "fortress",
+            ConstructionType.IndustrialComplex => "industrial complex",
+            ConstructionType.Outpost => "outpost",
+            ConstructionType.Gate => "gate",
+            ConstructionType.WarpLink => "link",
+            ConstructionType.Disrupter => "disrupter",
+            _ => throw new ArgumentOutOfRangeException(nameof(identity)),
+        },
+        _ => throw new ArgumentOutOfRangeException(nameof(identity)),
+    };
+
+    /// <summary>
     /// A single named grant, for callers building an explicit tech list by real type (e.g. empire
     /// creation's scenario-specified "extra techs") rather than walking the whole catalog. Kept here
     /// rather than callers writing <c>t => t.Ships.Add(type)</c> inline so every grant of a given
