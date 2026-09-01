@@ -254,6 +254,77 @@ public class FleetLifecycleTests
     }
 
     [Test]
+    public async Task AbortFleet_DumpsShipsAndCargoOntoGroundAndDestroysFleet()
+    {
+        var (game, galaxy) = NewGame();
+        var owner = NewEmpire("Owner");
+
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = owner, Fuel = 10.0 };
+        fleet.Ships.Fighters = 3;
+        fleet.Cargo.Metals = 5;
+        var world = new Planet { Location = new Coordinate(0, 0), Owner = owner, Type = WorldType.Base };
+        world.Ships.Fighters = 1;
+        galaxy.Fleets.Add(fleet);
+        galaxy.Planets.Add(world);
+
+        FleetLifecycle.AbortFleet(fleet, world, game);
+
+        await Assert.That(galaxy.Fleets).DoesNotContain(fleet);
+        await Assert.That(world.Ships.Fighters).IsEqualTo(4); // 1 already there + 3 from the fleet
+        await Assert.That(world.Cargo.Metals).IsEqualTo(5);
+    }
+
+    [Test]
+    public async Task AbortFleet_OntoAnotherFleet_MergesFuelToo()
+    {
+        var (game, galaxy) = NewGame();
+        var owner = NewEmpire("Owner");
+
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = owner, Fuel = 10.0 };
+        var ground = new Fleet { Location = new Coordinate(0, 0), Owner = owner, Fuel = 5.0 };
+        galaxy.Fleets.Add(fleet);
+        galaxy.Fleets.Add(ground);
+
+        FleetLifecycle.AbortFleet(fleet, ground, game);
+
+        await Assert.That(galaxy.Fleets).DoesNotContain(fleet);
+        await Assert.That(galaxy.Fleets).Contains(ground);
+        await Assert.That(ground.Fuel).IsEqualTo(15.0);
+    }
+
+    [Test]
+    public async Task MaxTrillumToRefuel_CapsAtWhicheverIsSmaller_TonsNeededOrTonsOnGround()
+    {
+        var target = new Fleet { Location = new Coordinate(0, 0), Owner = NewEmpire("Owner"), Fuel = 0.0 };
+        target.Ships.Starships = 10; // big capacity so TonsNeeded is well above 1
+        var maxFuel = FleetLogistics.FuelCapacity(target.Ships);
+        var tonsNeeded = (int)(maxFuel / FleetLogistics.FuelPerTon) + 1;
+        var ground = new Planet { Location = new Coordinate(0, 0), Owner = target.Owner, Type = WorldType.Base };
+        ground.Cargo.Trillum = tonsNeeded + 50; // plenty on ground -> capped by TonsNeeded
+
+        await Assert.That(FleetLifecycle.MaxTrillumToRefuel(target, ground)).IsEqualTo(tonsNeeded);
+
+        ground.Cargo.Trillum = 2; // scarce on ground -> capped by what's there instead
+        await Assert.That(FleetLifecycle.MaxTrillumToRefuel(target, ground)).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task MaxTrillumToRefuel_TargetIsStarbase_TreatsItsFuelAsZero()
+    {
+        // GetFleetFuel no-op precedent (RefuelFleet's own doc comment) -- a Starbase target always
+        // reads as needing a full tank's worth, regardless of anything a real Fleet's own Fuel field
+        // might otherwise hold.
+        var starbase = new Starbase { Location = new Coordinate(0, 0), Owner = NewEmpire("Owner") };
+        starbase.Ships.Starships = 10;
+        var maxFuel = FleetLogistics.FuelCapacity(starbase.Ships);
+        var expectedTonsNeeded = (int)(maxFuel / FleetLogistics.FuelPerTon) + 1;
+        var ground = new Planet { Location = new Coordinate(0, 0), Owner = starbase.Owner, Type = WorldType.Base };
+        ground.Cargo.Trillum = 9999;
+
+        await Assert.That(FleetLifecycle.MaxTrillumToRefuel(starbase, ground)).IsEqualTo(expectedTonsNeeded);
+    }
+
+    [Test]
     public async Task EstimatedDateOfArrival_PlainDistance_DividesByMovementRateRoundedUp()
     {
         var (game, _) = NewGame();

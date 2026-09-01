@@ -149,6 +149,37 @@ public static class FleetLifecycle
     }
 
     /// <summary>
+    /// AbortFleet (FLEET.PAS:150-209), exposed publicly for Fleet menu &gt; Abort/Join
+    /// (FLTCOMM.PAS: AbortFleetCommand's own tail, lines 597-609): dumps every ship/cargo in
+    /// <paramref name="fleet"/> onto <paramref name="ground"/>, then removes <paramref name="fleet"/>.
+    /// No distribution grid -- AbortFleetCommand never calls InputNewDistribution, unlike
+    /// TransferFleetCommand -- and no capacity clamp, matching <see cref="Combat.CombatOutcome"/>'s
+    /// own AbortFleet doc comment (Pascal has none here either). CombatOutcome's AbortFleet/DestroyFleet
+    /// stay internal (every other caller -- DestroyEmpire, ChangeCompositionOfFleet above -- is
+    /// Core-internal); this is the one real Tui entry point for the raw operation, confirmation
+    /// prompts (ownership warning, MaxResources overflow warning) staying in Tui to ask the player.
+    /// </summary>
+    public static void AbortFleet(Fleet fleet, IShipCargoHolder ground, Game game)
+    {
+        CombatOutcome.AbortFleet(fleet, ground, report: true);
+        CombatOutcome.DestroyFleet(fleet, game);
+    }
+
+    /// <summary>
+    /// RefuelFleetCommand's own "how much could the player ask for" math (FLTCOMM.PAS:733-738), split
+    /// from that procedure's own numeric-input loop (GetTrillumToUse), which stays in Tui matching
+    /// this port's Core/Tui split. The lesser of what's needed to top <paramref name="target"/>'s
+    /// tank off and however much trillum <paramref name="ground"/> actually has.
+    /// </summary>
+    public static int MaxTrillumToRefuel(IShipCargoHolder target, IShipCargoHolder ground)
+    {
+        var fuel = target is Fleet fleet ? fleet.Fuel : 0; // GetFleetFuel no-op precedent -- see RefuelFleet's own doc comment.
+        var maxFuel = FleetLogistics.FuelCapacity(target.Ships);
+        var tonsNeeded = (int)((maxFuel - fuel) / FleetLogistics.FuelPerTon) + 1;
+        return Math.Min(tonsNeeded, ground.Cargo.Trillum);
+    }
+
+    /// <summary>
     /// RefuelFleet (FLEET.PAS:452-490): converts up to <paramref name="trillum"/> tons of
     /// <paramref name="ground"/>'s trillum into fuel for <paramref name="target"/>, capped at
     /// capacity, then re-derives Ready/InTransit status if the result clears consumption. Real
