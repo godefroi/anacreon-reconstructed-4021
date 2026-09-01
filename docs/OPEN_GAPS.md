@@ -41,20 +41,26 @@ close:
   `Known`/`Scouted` allow. Pre-existing since `GalaxyView`'s own introduction (8a), not new here;
   `Worlds > Close Up`'s own info dump has the same simplification (see its own doc comment) rather
   than reproducing `CloseUpCom`'s real `Known`/`Scouted`-gated redaction.
-- **No Resource Distribution Editor.** `Fleet > Deploy` always takes a launch world's entire current
-  `Ships` (zero `Cargo`) rather than letting the player choose a split — the interactive grid
-  `TUI_SURFACES_MAPPING.md`'s own "Suggested build order" defers to last (no stock widget covers
-  it). Same gap blocks `Transfer`/`Abort-Join`/`Refuel`/`Defenses`, all still stubs.
+- **Fleet menu's real commands are done; the rest of the menu bar is still stubs.** Deploy, Transfer,
+  Abort/Join, and Refuel are all real now (`FLTCOMM.PAS`'s `LaunchFleetCommand`/`TransferFleetCommand`/
+  `AbortFleetCommand`/`RefuelFleetCommand`, `TUI_SURFACES_MAPPING.md`'s "Fleet management" table) —
+  Deploy/Transfer share the real Resource Distribution Editor (`ResourceDistributionEditor.cs`,
+  `InputNewDistribution`), Abort/Join and Refuel share a Ground/Fleet Target Picker
+  (`GameShell.PickGround`, `GetGround`) with no grid. Everything else on the menu bar (`Fleet >
+  SRM Sweep`/`Orders`/`Cancel Orders`/`Probe`, all of `Build`/`Empire`/`Worlds`, `Ministry of War >
+  Auto Attack`/`Launch LAMs`/`Defenses`, every status-bar F-key panel) is still a `MessageBox` stub.
+  `Defenses` needs its own custom grid (ship type × orbital shell percentages) — a different widget
+  from the Resource Distribution Editor, not yet built.
 - **No Fleet Group Configuration or Tactical Battle Display.** `Ministry of War > Attack` resolves
   entirely through `CombatResolution.NPEAttack`'s own `CombatEngine.DefaultDistribution` (the same
   grouping Kingdom's AI uses) with `AttackIntentionType.Conquer` always assumed and no player choice
   of intent, groups, or a turn-by-turn tactical view.
 - **No hotseat protection.** `Program.cs`'s turn loop is already `Status`/`ITurnHandler.IsHuman`-driven
   per empire (not hardcoded to one `Empire` reference), so a second human empire would already get
-  its own greeting+`GameShell` cycle when its slot comes up — but the password prompt and Capital
-  Fallen Report/Empire Status Report steps of `PROLOG.PAS: SetUpPlayer`'s chained per-turn sequence
-  are still missing, and nothing exercises this yet (this branch's own fixture has exactly one
-  human).
+  its own greeting+`GameShell` cycle when its slot comes up — and the Empire Status Report step of
+  `PROLOG.PAS: SetUpPlayer`'s chained per-turn sequence is now real (`EmpireStatusWindow.cs`), but
+  the password prompt and Capital Fallen Report steps are still missing, and nothing exercises any
+  of this yet (this branch's own fixture has exactly one human).
 
 ## Production tick: unresolved Cargo.Chemicals/Metals mismatch
 

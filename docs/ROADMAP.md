@@ -818,6 +818,79 @@ Direct2D) surfaced; see the README's Known Issues section.
        Full suite (`combat.golden`/`npeattack.golden` included) stayed green before and after —
        this bug was invisible to every existing assertion, isolated purely to a real playing
        session actually checking a fleet's own ships after it fought.
+- **8h, Deploy Fleet done properly, plus Transfer/Abort-Join/Refuel.** 8g's Deploy Fleet was
+  explicitly an MVP stand-in (dump a world's entire `Ships`, no cargo, no name prompt) to prove the
+  combat loop end to end; this entry replaces it with the real thing and reuses the resulting widget
+  for the rest of the Fleet menu.
+  - **Sector picker rebuilt to match source.** `GameShell.ShowSectorPicker` now mirrors
+    `DisplayMenu`/`GetIDMenuChoice` (`DISPLAY.PAS:51-74`, `MENU.PAS:116-156`): fixed 45x7 size,
+    `SYSWBorder` border against plain `Col`-attribute (light gray on black) content, `SYSDispSelect`
+    highlight on the focused row, no in-window hint text (real Pascal puts that on the shared help
+    line instead, not reproduced here either).
+  - **Empire Status Report** (`EmpireStatusWindow.cs`, `Core.EmpireStatusReport`) — `PROLOG.PAS:
+    EmpireStatus`, shown right after the turn-start greeting in `Program.cs`'s per-empire loop.
+    Totals worlds/population/averaged efficiency and industry across a player's Planets + Starbases
+    + Fleets, plus technologies mastered beyond `EmpireFactory`'s own automatic
+    `TechDev[Pred(Tech)]` baseline (`TechCatalog.UnlockedBeyond`) and a per-ship-type military tally.
+    Word-wraps its tech list at column 77, matching `DisplayMenu`'s own wrap rule; a plain `Label`
+    rather than `TextView`, which this Terminal.Gui version has deprecated in favor of a package
+    this project doesn't reference. `AnnualTickHandler.TotalProd` widened from `private` to
+    `internal` so the report reuses the real production formula instead of duplicating it.
+  - **The real Resource Distribution Editor** (`ResourceDistributionEditor.cs`, transfer math in
+    `Core.Entities.ResourceDistribution`) — `FLTCOMM.PAS: InputNewDistribution`, the interactive
+    ship/cargo split grid `TUI_SURFACES_MAPPING.md`'s own "Suggested build order" had deferred to
+    last. Built for Deploy specifically, but kept generic from the start (`ResourceDistribution`'s
+    transfer math — `TryTransfer`/`FillFleet`/`EmptyFleet`, one column at a time between a fleet and
+    a "ground": a world or another fleet) rather than Deploy-specific, per the user's own framing
+    ("deploying fleets is the first use case, but we'll also need it for fleet transfers") — which
+    paid off directly in the Transfer/Abort-Join work below. `ResourceDistribution.MaxResources`
+    names `TYPES.PAS:40`'s own constant rather than a repeated literal `9999`, per an explicit
+    mid-task request not to hardcode it.
+  - **`Fleet > Deploy`** now runs the real `LaunchFleetCommand` sequence: pick the source world via
+    the map cursor, name the fleet (a small `TextField` popup, `FleetName[1]:=UpCase` transcribed),
+    choose ships/cargo through the new editor, then pick the destination the same way it already
+    did. `GameShell.AddModal` gained a `dismissOnOutsideClick` opt-out for this: the editor and name
+    prompt have no click-to-cancel in real Pascal (keyboard-only), and a stray click outside them
+    used to silently discard whatever the player had already entered with no feedback at all.
+  - **Mouse and quick-step controls for the editor**, all called out as having no real Pascal
+    equivalent (that widget is keyboard-only) rather than silently added: clicking a column's cell
+    selects it, the mouse wheel over a cell steps that column by 1 (up = ground→fleet, matching the
+    existing `+###` direction; down = fleet→ground), and Shift/Ctrl+Up/Down step by 100/1000. These
+    step helpers clamp to whatever's actually available on each side but don't check fleet cargo
+    capacity — matching `GetChange`'s own real behavior (capacity is only enforced at Esc/X, via
+    `TryFinish`), not `FillFleet`/`EmptyFleet`'s. **Real focus-stealing bug found and fixed along the
+    way**: Terminal.Gui's `MenuBar` tracks mouse hover to keep its own highlight in sync even without
+    a click, which was silently stealing focus off the editor the moment the pointer crossed the
+    menu row — no click involved at all. `AddModal` now disables the bar for as long as any popup is
+    open, tracked with a depth counter rather than a bare bool, since Deploy Fleet chains two popups
+    back to back (name prompt, then the editor) and a naive "re-enable on dismiss" would misfire on
+    the inner one closing while the outer was still up.
+  - **`Fleet > Transfer`/`Abort/Join`/`Refuel`** (`FLTCOMM.PAS: TransferFleetCommand`/
+    `AbortFleetCommand`/`RefuelFleetCommand`) — a shared `GameShell.PickGround` (`GetGround`,
+    `FLTCOMM.PAS:51-132`) resolves the "other side": every fleet at the source fleet's own location
+    (minus itself unless `includeFleet`) plus the world/base there, filtered to the player's own
+    when `playerOnly`. Transfer reuses the Resource Distribution Editor exactly like Deploy does,
+    just fleet-vs-ground instead of ground-vs-fleet; `FleetLifecycle.ChangeCompositionOfFleet`
+    (already real, built for the NPE toolkit) applies the result and may destroy either side, per
+    its own doc comment. Abort/Join has no grid at all, matching `AbortFleetCommand` exactly — it
+    dumps everything via a new `FleetLifecycle.AbortFleet` public wrapper around the mutation
+    `CombatOutcome.AbortFleet`/`DestroyFleet` already did internally for `ChangeCompositionOfFleet`
+    and `DestroyEmpire`, gated by two confirmations transcribed from source (non-empire ground, and
+    any single ship type's combined total exceeding `MaxResources` — "some will be lost", though
+    this port's plain `int` counters never actually overflow on the write itself, unlike real
+    Pascal's fixed-size arrays). Refuel is a `TextField` numeric prompt (`GetTrillumToUse`
+    transcribed: 0 or blank defaults to the max, out-of-range re-prompts with an error) driving a
+    new `FleetLifecycle.MaxTrillumToRefuel` (the "how much could the player ask for" math split out
+    from that same procedure) and the already-real `FleetLifecycle.RefuelFleet`.
+  - **Real gap found and fixed, not hypothetical**: every Fleet-menu command (plus Attack, already
+    in 8g) resolved "the player's own fleet under the cursor" with a bare `FirstOrDefault`, silently
+    picking one if two of the player's own fleets ever shared a sector. Real Pascal disambiguates
+    this by having the player type the target fleet's own name (`PLAYTURN.PAS`'s
+    `GetParameters`/`InterpretObj`), which this port's cursor-driven UI has no equivalent for; fixed
+    by reusing `ExamineCursor`'s own "exactly one auto-picks, 2+ opens a picker" rule
+    (`GameShell.PickOwnFleetAtCursor`), sharing the same `ShowObjectPicker` the Sector Selected
+    Popup and `PickGround` already use — the third real call site, which is what actually justified
+    factoring `ShowSectorPicker`'s inline picker code into that shared helper in the first place.
 
 ## 9. Async/hotseat turn mode
 

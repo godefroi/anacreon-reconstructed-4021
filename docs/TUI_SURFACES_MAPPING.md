@@ -45,7 +45,7 @@ Not yet covered by the existing view, but part of the same screen:
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
 | Cursor coordinate/name readout | Help line, updates as cursor moves | `MAPWIND.PAS: DrawMapCursor` | `StatusBar`/`Label` bound to cursor position |
-| Sector Selected Popup | Enter on a sector with 2+ objects | `MAPWIND.PAS: GetMapObject`/`SelectPoint` | **Done** (`GameShell.ShowSectorPicker`) — small `ListView` overlay added/removed directly on `GameShell` (not a `Dialog`, matching this project's own overlay convention); Enter on a single-object sector skips straight to Close Up, matching the original |
+| Sector Selected Popup | Enter on a sector with 2+ objects | `MAPWIND.PAS: GetMapObject`/`SelectPoint` | **Done** (`GameShell.ShowSectorPicker`, now a thin wrapper over the shared `GameShell.ShowObjectPicker` — see Ground/Fleet Target Picker below, its other real caller) — small `ListView` overlay added/removed directly on `GameShell` (not a `Dialog`, matching this project's own overlay convention); Enter on a single-object sector skips straight to Close Up, matching the original |
 
 ## Turn Start / Player Login (hotseat)
 
@@ -57,7 +57,7 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 | Turn Start Greeting | First thing shown in `SetUpPlayer`, every turn | `PROLOG.PAS: DisplayIntroScreen` | **Done** (`TurnStartGreetingWindow.cs`) — small `Window`/`Label`, header (empire name + year) plus one of 3 greeting lines, picked via `CASE Rnd(1,3)` in the original (`Random.Shared.Next(1, 4)` equivalent); `--greetings` cycles all 3 once each then exits, for review |
 | Password Prompt | Immediately after the greeting | `PROLOG.PAS: GetPassword` | `TextField` (secret) in a `Dialog`; Esc cancels back out to the prologue/main menu without taking the turn |
 | Capital Fallen Report | After password, only if this empire's capital was conquered since its last turn | `PROLOG.PAS: EmpireNews` (the `CapID.ObjTyp=Void` branch) | Read-only `TextView`/`Label`, dismiss-on-any-key — narrative defeat text, then triggers empire elimination. (Despite the name, `EmpireNews` is this conquest check, not a news feed — it's a no-op UI otherwise.) |
-| Empire Status Report | After the above, skipped if this was the player's last turn | `PROLOG.PAS: EmpireStatus` | Read-only, scrollable `TextView` — plain narrative summary (world/population counts, average industry/efficiency, mastered technologies, military totals); original renders it with raw `Writeln` rather than the windowing system |
+| Empire Status Report | After the above, skipped if this was the player's last turn | `PROLOG.PAS: EmpireStatus` | **Done** (`EmpireStatusWindow.cs`, totals from `Core.EmpireStatusReport`) — shown right after the Turn Start Greeting in `Program.cs`'s per-empire loop; a plain `Label` rather than `TextView` (this Terminal.Gui version has deprecated `TextView` in favor of a separate package this project doesn't reference), word-wrapped tech list at column 77 matching `DisplayMenu`'s own wrap rule |
 
 ## Galaxy/Sector views
 
@@ -70,12 +70,12 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
-| Deploy Fleet | Fleet menu → Deploy | `FLTCOMM.PAS: LaunchFleetCommand` | **Done, MVP scope** (`GameShell.DeployFleet`) — map cursor reuse for destination (a `GameShell`-level "pending pick" state machine, not a `Dialog`), but deploys the launch world's *entire* current `Ships`, no cargo, no name prompt — the Resource Distribution Editor is still not built (see its own row below) |
-| Resource Distribution Editor (shared) | Deploy, Abort/Join, Transfer | `FLTCOMM.PAS: InputNewDistribution` | Custom grid `View` (own `Draw()`, arrow-key column cursor, Up/Down bulk fill/empty) with a small `Dialog`+`TextField` popup for per-cell numeric entry — no stock widget supports live drill-down-to-edit on a grid |
-| Abort/Join Fleet | Fleet menu → Abort/Join | `FLTCOMM.PAS: AbortFleetCommand` | `Dialog` + Ground/Fleet Target Picker, `MessageBox` confirm on overflow/non-empire territory |
-| Ground/Fleet Target Picker (shared) | Abort, Transfer, Refuel | `FLTCOMM.PAS: GetGround` | `ListView` inside a `Dialog` |
-| Transfer Fleet | Fleet menu → Transfer | `FLTCOMM.PAS: TransferFleetCommand` | Target Picker + Resource Distribution Editor |
-| Refuel Fleet | Fleet menu → Refuel | `FLTCOMM.PAS: RefuelFleetCommand` | Target Picker (`ListView`/`Dialog`) + `TextField` numeric prompt |
+| Deploy Fleet | Fleet menu → Deploy | `FLTCOMM.PAS: LaunchFleetCommand` | **Done** (`GameShell.DeployFleet`) — map cursor reuse for source and destination, a `TextField` name prompt (`FleetName[1]:=UpCase` transcribed), and the real Resource Distribution Editor for the ship/cargo split, not an all-or-nothing dump |
+| Resource Distribution Editor (shared) | Deploy, Abort/Join, Transfer | `FLTCOMM.PAS: InputNewDistribution` | **Done** (`ResourceDistributionEditor.cs`, transfer math in `Core.Entities.ResourceDistribution`) — custom grid `View`, arrow-key column cursor, digit/+/-/x numeric entry matching `GetChange`, Up/Down bulk fill/empty (`FillFleet`/`EmptyFleet`). Plus port-only additions with no Pascal equivalent: click/mouse-wheel column selection, Shift/Ctrl±100/1000 quick-step keys — see the class's own doc comment |
+| Abort/Join Fleet | Fleet menu → Abort/Join | `FLTCOMM.PAS: AbortFleetCommand` | **Done** (`GameShell.AbortJoinFleet`) — Ground/Fleet Target Picker, `MessageBox` confirm on overflow/non-empire territory (single confirm each, not Pascal's own double-prompt-even-after-declining quirk — see `ConfirmAbortJoin`'s own doc comment) |
+| Ground/Fleet Target Picker (shared) | Abort, Transfer, Refuel | `FLTCOMM.PAS: GetGround` | **Done** (`GameShell.PickGround`, sharing `ShowObjectPicker` with the Sector Selected Popup above) — `ListView` inside a `Window` overlay |
+| Transfer Fleet | Fleet menu → Transfer | `FLTCOMM.PAS: TransferFleetCommand` | **Done** (`GameShell.TransferFleet`) — Target Picker + Resource Distribution Editor, `ChangeCompositionOfFleet` applying the result |
+| Refuel Fleet | Fleet menu → Refuel | `FLTCOMM.PAS: RefuelFleetCommand` | **Done** (`GameShell.RefuelFleet`) — Target Picker + `TextField` numeric prompt (`GetTrillumToUse` transcribed: 0/blank defaults to max, out-of-range re-prompts) |
 | Change Destination | Fleet menu → Change Destination | `FLTCOMM.PAS: ChangeDestinationCommand` | `Dialog` + `TextField` (coordinate/name), reuse map cursor as an alternative entry path |
 | Launch Probe | Fleet menu → Launch Probe | `FLTCOMM.PAS: LaunchProbeCommand` | `Dialog` + `TextField` (coordinate) |
 | Mine Sweeper | Fleet menu → SRM Sweep | `FLTCOMM.PAS: MineSweeperCommand` | None — one-line `MessageBox`/status result, no dialog needed |
@@ -87,7 +87,7 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
-| Attack Target Picker | Ministry of War → Attack | `ATTCOMM.PAS: GetTarget` | **Done, MVP scope** (`GameShell.Attack`) — target selection order transcribed from `GetTarget`'s own nested `CreateMenu` (enemy fleets first, the world itself only offered when none are present); no `ListView` picker yet for 2+ enemy fleets in one sector (whichever is found first wins) — nothing this branch's own fixture produces ever hits that case. Auto-resolved through `CombatResolution.NPEAttack` with no Fleet Group Configuration/Tactical Battle Display (see their own rows below) |
+| Attack Target Picker | Ministry of War → Attack | `ATTCOMM.PAS: GetTarget` | **Done, MVP scope** (`GameShell.Attack`) — attacking fleet resolved via `GameShell.PickOwnFleetAtCursor` (auto-picks if exactly one of the player's own fleets is under the cursor, `ShowObjectPicker` if 2+); target selection order transcribed from `GetTarget`'s own nested `CreateMenu` (enemy fleets first, the world itself only offered when none are present); no `ListView` picker yet for 2+ *enemy* fleets in one sector (whichever is found first wins) — nothing this branch's own fixture produces ever hits that case. Auto-resolved through `CombatResolution.NPEAttack` with no Fleet Group Configuration/Tactical Battle Display (see their own rows below) |
 | Fleet Group Configuration | Pre-battle setup | `ATTCOMM.PAS: GetGroups` | Custom grid `View` (cursor-driven, role assignment + load/unload sub-widgets) |
 | Tactical Battle Display | During an engagement | `ATTCOMM.PAS: DrawScreen`/`Engage`/`GroupMove`/etc. | Custom animated `View`, own `Draw()` + `Application.AddTimeout` for tick-driven redraws — same shape as `GalaxyView` but animated |
 | Post-Battle Reports | After an engagement | `ATTCOMM.PAS: CleanUp` and related | Chained `MessageBox`/`Dialog` screens |
@@ -185,6 +185,11 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
    convention speculatively; per the project's "abstract on the second or third real use" rule,
    write the first couple of pickers concretely and extract the shared pattern from what actually
    repeats.
-3. The custom-drawn grids (Resource Distribution Editor, Defenses, Fleet Group Configuration,
-   Tactical Battle Display) are the remaining genuinely novel work — same category of effort as
-   `GalaxyView`, no stock widget covers them. Save these for last; everything else is wiring.
+3. The custom-drawn grids are the genuinely novel work — same category of effort as `GalaxyView`,
+   no stock widget covers them. The Resource Distribution Editor is **done** (`ResourceDistributionEditor.cs`,
+   shared by Deploy/Transfer/Abort-Join per above) and turned out to be the right one to build
+   first among them, not last: real Pascal callers only ever call `InputNewDistribution` from
+   Fleet-menu commands, so building it unlocked Deploy/Transfer in one pass and Abort-Join for free
+   (that one doesn't even use the grid — see its own row above). Defenses, Fleet Group
+   Configuration, and Tactical Battle Display remain unbuilt; save those for last, same reasoning
+   as before.
