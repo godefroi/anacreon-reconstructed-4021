@@ -4,6 +4,7 @@ using Terminal.Gui.Drawing;
 using Terminal.Gui.Drivers;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
+using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Types;
 using CoreGalaxy = Reconstructed4021.Core.Galaxy.Galaxy;
@@ -21,8 +22,16 @@ namespace Reconstructed4021.Tui;
 /// DrawPlanets' own <c>IF Emp=Player THEN PlayerColor ELSE EnemyColor</c> -- the original never gave
 /// individual empires distinct colors). A cursor (arrows move it, PageUp/PageDown jump it, the viewport
 /// auto-follows) highlights one sector the same way DrawMapCursor did -- corner brackets straddling the
-/// cursor's own column in the rows above/below, not a box drawn on the cursor's own row. Still no
-/// selection action (Enter/menu) and no fog-of-war -- just the map, scrolling, and the cursor indicator.
+/// cursor's own column in the rows above/below, not a box drawn on the cursor's own row.
+///
+/// Fog-of-war (MAPWIND.PAS's UMSector/UMFleets/EnemyFleetInSector): a world glyph only shows once
+/// <see cref="Game.Visible"/> says so, otherwise the sector falls through to nebula/grid/blank exactly
+/// as if nothing were there; the enemy-fleet indicator needs the same check per fleet, the player-fleet
+/// indicator needs none (owning it makes it trivially visible). Not reproduced: MAPWIND.PAS's own
+/// <c>UnkPlanetChar</c> case, which reveals "a planet-shaped something" for an unscouted world sitting
+/// in a nebula -- this port has no nebula-vision modeling at all yet (see
+/// <see cref="Reconstructed4021.Core.Turns.VisibilityHandler.ScoutAdjacent"/>'s own TODO), so an
+/// unscouted nebula-planet reads as plain nebula here instead of that distinct glyph.
 /// </summary>
 internal sealed class GalaxyView : View
 {
@@ -213,7 +222,7 @@ internal sealed class GalaxyView : View
 
     private (Rune Rune, TgAttribute Attribute) WorldGlyphAt(Coordinate coordinate, NebulaType nebula)
     {
-        if (_objectsByLocation.TryGetValue(coordinate, out var sectorObject)) {
+        if (_objectsByLocation.TryGetValue(coordinate, out var sectorObject) && Game.Visible(_player, sectorObject)) {
             var glyph = sectorObject switch {
                 Planet p => WorldTypeGlyphs[(int)p.Type],
                 Starbase s => StarbaseGlyphs[(int)s.Kind],
@@ -267,7 +276,9 @@ internal sealed class GalaxyView : View
     private bool FleetPresent(Coordinate coordinate, bool wantPlayerOwned)
     {
         foreach (var fleet in _fleetsByLocation[coordinate]) {
-            if (ReferenceEquals(fleet.Owner, _player) == wantPlayerOwned) {
+            // Game.Visible is trivially true for the player's own fleets (Owner == _player); an enemy
+            // fleet still needs Known (EnemyFleetInSector, MAPWIND.PAS:982-1005).
+            if (ReferenceEquals(fleet.Owner, _player) == wantPlayerOwned && Game.Visible(_player, fleet)) {
                 return true;
             }
         }

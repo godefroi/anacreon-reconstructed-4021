@@ -23,9 +23,10 @@ namespace Reconstructed4021.Tui;
 ///
 /// One human's one turn, not the whole play session: <see cref="Program"/>'s own loop owns cycling
 /// through every empire's turn (human or NPE alike), constructing a fresh <see cref="GameShell"/>
-/// only when a human empire comes up. Ending this turn (<see cref="EndTurn"/>) advances
-/// <paramref name="game"/> by exactly one empire-turn and hands control back to that loop --
-/// nothing here loops across multiple empires itself.
+/// only when a human empire comes up -- and already ran that empire's <see cref="TurnEngine.BeginTurn"/>
+/// (fog-of-war refresh) before doing so. Ending this turn (<see cref="EndTurn"/>) runs the other half,
+/// <see cref="TurnEngine.EndTurn"/>, and hands control back to that loop -- nothing here loops across
+/// multiple empires itself.
 /// </summary>
 internal sealed class GameShell : Window
 {
@@ -190,13 +191,15 @@ internal sealed class GameShell : Window
     public ExitChoice Choice { get; private set; }
 
     /// <summary>
-    /// PLAYTURN.PAS's own command loop runs entirely before UpdateTurn is called -- so ending a turn
-    /// here means advancing <see cref="game"/> by exactly this one empire's turn and handing control
-    /// back to <see cref="Program"/>'s own loop, which decides what (if anything) to show next.
+    /// PLAYTURN.PAS's own command loop runs entirely before UpdateTurn is called -- <see cref="Program"/>
+    /// already ran this empire's <see cref="TurnEngine.BeginTurn"/> (fog-of-war refresh) before this
+    /// shell was even shown, so ending a turn here only needs <see cref="TurnEngine.EndTurn"/>'s own
+    /// half: erase news, move fleets, and hand <see cref="game"/> off to the next empire. Control then
+    /// returns to <see cref="Program"/>'s own loop, which decides what (if anything) to show next.
     /// </summary>
     private void EndTurn()
     {
-        turnEngine.AdvanceOneTurn(game);
+        turnEngine.EndTurn(game);
         Choice = ExitChoice.EndTurn;
         App?.RequestStop();
     }
@@ -259,6 +262,14 @@ internal sealed class GameShell : Window
         }
     }
 
+    /// <summary>
+    /// Every object at <paramref name="location"/> the human can actually see (<see cref="Game.Visible"/>)
+    /// -- MAPWIND.PAS's own map cursor (GetMapObject) only ever finds <c>Sector[x]^[y].Obj</c>, a single
+    /// slot gated the same Known-first way <see cref="GalaxyView"/>'s own world glyph is; fleets need
+    /// the identical filter here too, mirroring MAPWIND.PAS's EnemyFleetInSector. Feeds Close Up/the
+    /// sector picker (<see cref="ExamineCursor"/>), so nothing the map itself would hide from the player
+    /// can be picked or inspected via this path.
+    /// </summary>
     private List<ISectorObject> ObjectsAt(Coordinate location)
     {
         var result = new List<ISectorObject>();
@@ -267,7 +278,7 @@ internal sealed class GameShell : Window
         result.AddRange(game.Galaxy.Fleets.Where(f => f.Location == location));
         result.AddRange(game.Galaxy.Stargates.Where(g => g.Location == location));
         result.AddRange(game.Galaxy.ConstructionSites.Where(c => c.Location == location));
-        return result;
+        return result.Where(o => Game.Visible(human, o)).ToList();
     }
 
     /// <summary>
@@ -369,9 +380,13 @@ internal sealed class GameShell : Window
     /// (minus <paramref name="source"/> itself unless <paramref name="includeFleet"/>, matching real
     /// Pascal's one actual use of that flag -- CreateMenu never filters *other* fleets on it, only
     /// ever the given one), plus the planet/base there, filtered to the player's own when
-    /// <paramref name="playerOnly"/>. No Scouted gating -- matches this port's existing no-fog-of-war
-    /// simplification (docs/OPEN_GAPS.md), the map already shows everything regardless. Real Pascal
-    /// just opens an empty menu when nothing qualifies; a plain "nothing here" message reads better.
+    /// <paramref name="playerOnly"/>. No separate <see cref="Game.Visible"/> gating needed even for the
+    /// <paramref name="playerOnly"/>: false callers (Transfer/Abort-Join, which can target an enemy
+    /// fleet or world) -- <paramref name="source"/> is one of the player's own active fleets, and
+    /// <see cref="VisibilityHandler"/>'s own per-fleet ScoutAdjacent call always scouts a fleet's own
+    /// location (its offset list includes (0,0)), so anything sharing that exact sector is already
+    /// guaranteed Known/Scouted. Real Pascal just opens an empty menu when nothing qualifies; a plain
+    /// "nothing here" message reads better.
     /// </summary>
     private void PickGround(Fleet source, bool playerOnly, bool includeFleet, string title, string emptyMessage, Action<ISectorObject> onPicked)
     {

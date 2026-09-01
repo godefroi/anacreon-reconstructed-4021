@@ -177,6 +177,12 @@ GameShell.ExitChoice RunGame(Game game)
         if (!handler.IsHuman || current.Status != EmpireStatus.Active) {
             turnEngine.AdvanceOneTurn(game);
         } else {
+            // BeginTurn (fog-of-war refresh, matching ANACREON.PAS's SetUpTurn) runs here, before the
+            // human sees anything -- not inside GameShell's own End Turn, which would show them a map
+            // still reflecting the end of their *previous* turn. GameShell's End Turn only runs the
+            // other half, TurnEngine.EndTurn (see its own doc comment).
+            turnEngine.BeginTurn(game);
+
             app.Run(new TurnStartGreetingWindow(current, game.Year, Random.Shared.Next(1, 4)), null);
             app.Run(new EmpireStatusWindow(current, game), null);
 
@@ -185,7 +191,7 @@ GameShell.ExitChoice RunGame(Game game)
             if (gameShell.Choice is GameShell.ExitChoice.MainMenu or GameShell.ExitChoice.ExitToOs) {
                 return gameShell.Choice;
             }
-            // EndTurn: AdvanceOneTurn already ran inside GameShell -- loop straight to whatever
+            // EndTurn: TurnEngine.EndTurn already ran inside GameShell -- loop straight to whatever
             // CurrentEmpire is now.
         }
 
