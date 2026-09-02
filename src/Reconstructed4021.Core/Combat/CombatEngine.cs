@@ -170,7 +170,8 @@ public static class CombatEngine
         return groups;
     }
 
-    private static ShipCounts CloneShips(ShipCounts source)
+    /// <summary>Public (not private): Fleet Group Configuration (<see cref="FleetGroupConfiguration"/>/the Tui grid) needs the same "operate on a snapshot, not the live fleet" starting point <see cref="DefaultDistribution"/> already established — GetGroups' own <c>GetShips</c>/<c>GetCargo</c> into local arrays is the exact same idea.</summary>
+    public static ShipCounts CloneShips(ShipCounts source)
     {
         var clone = new ShipCounts();
         foreach (var t in Enum.GetValues<ShipType>()) {
@@ -179,7 +180,8 @@ public static class CombatEngine
         return clone;
     }
 
-    private static CargoHold CloneCargo(CargoHold source)
+    /// <summary>Public (not private): see <see cref="CloneShips"/>'s own doc comment.</summary>
+    public static CargoHold CloneCargo(CargoHold source)
     {
         var clone = new CargoHold();
         foreach (var t in Enum.GetValues<CargoType>()) {

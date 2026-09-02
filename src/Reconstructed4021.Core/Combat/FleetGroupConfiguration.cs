@@ -64,17 +64,15 @@ public static class FleetGroupConfiguration
     }
 
     /// <summary>
-    /// LoadTransports (ATTCOMM.PAS:951-975) — the 'M'/'N' command: only valid for a Transport/
-    /// Jumptransport group. Returns any troops the group already carries to the pool first, then loads
-    /// as many of <paramref name="troopType"/> as the pool has, capped by cargo space
-    /// (<c>TrnAdj[Typ]*Num*CargoSpace[troopType]</c>, the same formula <see cref="CombatEngine.DefaultGroup"/>
-    /// already uses for the automatic path).
+    /// LoadTransports (ATTCOMM.PAS:951-975) — the 'M'/'N' command. Real Pascal has no "only valid for a
+    /// Transport/Jumptransport group" guard at all: it always returns whatever's carried, then computes
+    /// the new capacity via <c>TrnAdj[Typ]*Num*CargoSpace[troopType]</c> unconditionally — for any other
+    /// ship type, <c>TrnAdj</c> is 0 (<see cref="CombatConstants.TrnAdj"/>), so pressing M/N on, say, a
+    /// Fighter group harmlessly loads zero troops rather than erroring. Confirmed against source,
+    /// preserved as-is rather than adding a guard Pascal doesn't have.
     /// </summary>
     public static void LoadTroops(CargoHold cargoPool, GroupRecord group, CargoType troopType)
     {
-        if (group.Typ is not (AttackType.Transport or AttackType.Jumptransport)) {
-            throw new InvalidOperationException($"LoadTroops: group Typ {group.Typ} cannot carry troops.");
-        }
         if (group.Gat > 0) {
             cargoPool[ToCargoType(group.GatTyp!.Value)] += group.Gat;
         }

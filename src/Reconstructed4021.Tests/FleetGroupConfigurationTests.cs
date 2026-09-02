@@ -61,12 +61,18 @@ public class FleetGroupConfigurationTests
     }
 
     [Test]
-    public async Task LoadTroops_ThrowsForANonTransportGroup()
+    public async Task LoadTroops_OnANonTransportGroup_HarmlesslyLoadsZero()
     {
+        // Real Pascal's LoadTransports has no type guard at all -- TrnAdj[fgt] is 0, so capacity
+        // computes to 0 regardless of how much cargo is in the pool.
+        var pool = new CargoHold { Legions = 50 };
         var group = new GroupRecord { Typ = AttackType.Fighter, Num = 10 };
 
-        await Assert.That(() => FleetGroupConfiguration.LoadTroops(new CargoHold(), group, CargoType.Legion))
-            .Throws<InvalidOperationException>();
+        FleetGroupConfiguration.LoadTroops(pool, group, CargoType.Legion);
+
+        await Assert.That(group.Gat).IsEqualTo(0);
+        await Assert.That(group.GatTyp).IsEqualTo(AttackType.Legion);
+        await Assert.That(pool.Legions).IsEqualTo(50);
     }
 
     [Test]
