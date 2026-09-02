@@ -31,34 +31,27 @@ codebase is in a test file.
 
 ## Human interactive turn handler / TUI
 
-- **`DisplayBackground`'s post-conquest caller isn't wired.** `Game.FindWorldBackgroundText` and
-  `CloseUpWindow` cover `CLSCOMM.PAS: CloseUpCom`'s own call (`conquer:false`), the real scenario
-  flavor text. `ATTCOMM.PAS: EnemyConquered` calls the same primitive a second way (`conquer:true`,
-  right after a successful attack), falling back to one of three random congratulatory messages when
-  nothing scenario-specific matches — `GameShell.Attack()`'s own post-attack report is still the
-  generic `MessageBox` it always was, and `EnemyConquered`'s other real mechanic (`AskToCapture`,
-  deciding whether to capture a defeated fleet's ships) isn't built at all. Both belong with the
-  Attack-command work, not here.
-- **Fleet menu's real commands are done; the rest of the menu bar is still stubs.** Deploy, Transfer,
-  Abort/Join, and Refuel are all real now (`FLTCOMM.PAS`'s `LaunchFleetCommand`/`TransferFleetCommand`/
-  `AbortFleetCommand`/`RefuelFleetCommand`, `TUI_SURFACES_MAPPING.md`'s "Fleet management" table) —
-  Deploy/Transfer share the real Resource Distribution Editor (`ResourceDistributionEditor.cs`,
-  `InputNewDistribution`), Abort/Join and Refuel share a Ground/Fleet Target Picker
-  (`GameShell.PickGround`, `GetGround`) with no grid. Everything else on the menu bar (`Fleet >
-  SRM Sweep`/`Orders`/`Cancel Orders`/`Probe`, all of `Build`/`Empire`/`Worlds`, `Ministry of War >
-  Auto Attack`/`Launch LAMs`/`Defenses`, every status-bar F-key panel) is still a `MessageBox` stub.
-  `Defenses` needs its own custom grid (ship type × orbital shell percentages) — a different widget
-  from the Resource Distribution Editor, not yet built.
-- **No Fleet Group Configuration or Tactical Battle Display.** `Ministry of War > Attack` resolves
-  entirely through `CombatResolution.NPEAttack`'s own `CombatEngine.DefaultDistribution` (the same
-  grouping Kingdom's AI uses) with `AttackIntentionType.Conquer` always assumed and no player choice
-  of intent, groups, or a turn-by-turn tactical view.
-- **No hotseat protection.** `Program.cs`'s turn loop is already `Status`/`ITurnHandler.IsHuman`-driven
-  per empire (not hardcoded to one `Empire` reference), so a second human empire would already get
-  its own greeting+`GameShell` cycle when its slot comes up — and the Empire Status Report step of
-  `PROLOG.PAS: SetUpPlayer`'s chained per-turn sequence is now real (`EmpireStatusWindow.cs`), but
-  the password prompt and Capital Fallen Report steps are still missing, and nothing exercises any
-  of this yet (this branch's own fixture has exactly one human).
+- **Most of the menu bar is still stubs.** `Fleet > SRM Sweep`/`Orders`/`Cancel Orders`/`Probe`, all
+  of `Build`/`Empire`/`Worlds`, `Ministry of War > Auto Attack`/`Launch LAMs`/`Defenses`, and every
+  status-bar F-key panel are a `MessageBox` stub. `Defenses` needs its own custom grid (ship type ×
+  orbital shell percentages) — a different widget from the Resource Distribution Editor, not yet
+  built.
+- **Tactical Battle Display has no decorative art.** `ATTCOMM.PAS: DrawScreen`'s `DrawObject`/
+  `DrawGrid`/`DrawStars` (ASCII box-art of the target, range-ring background, a starfield) aren't
+  reproduced — a plain text header names the target instead. Zero information content either way,
+  so this is a low-priority gap, tracked rather than silently dropped.
+- **No post-conquest world-list report.** `ATTACK.PAS: ConquerEmpire`'s own `Booty` (the set of
+  world indices that joined the conqueror mid-`ConquerEmpire`) is declared and threaded through
+  real Pascal's call chain but never read anywhere in it — dropped entirely by this port, confirmed
+  by reading (`CombatOutcome.cs`'s own doc comment). `ATTCOMM.PAS: EmpireConquestReport` (the screen
+  that would list those worlds after a capital-conquering attack) is the one real consumer of that
+  data; building it means un-dropping `Booty` tracking first, not just adding a screen.
+- **No hotseat protection.** `PROLOG.PAS: SetUpPlayer`'s own password prompt (`GetPassword`) isn't
+  built. `Program.cs`'s turn loop is already `Status`/`ITurnHandler.IsHuman`-driven per empire (not
+  hardcoded to one `Empire` reference), so a second human empire would already get its own
+  greeting+`GameShell` cycle when its slot comes up — the password step is the only thing actually
+  missing for that — but nothing exercises any of this yet (this branch's own fixture has exactly
+  one human).
 
 ## Production tick: unresolved Cargo.Chemicals/Metals mismatch
 
