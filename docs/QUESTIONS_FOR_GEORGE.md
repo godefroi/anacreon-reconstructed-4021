@@ -74,6 +74,16 @@ quirk findings these questions are drawn from, with more detail on how each was 
   timeout — `RetrIndex` is never read anywhere in its own body. Was a configurable retreat
   threshold (e.g. per-empire aggressiveness, or a player-settable "fight to the last N rounds")
   planned but never connected, or is the parameter a leftover from an earlier version of the rule?
+- **The interactive `Engage` never auto-targets, unlike the automatic `ATTNPE.PAS` engine**
+  (`ATTCOMM.PAS`'s own `GroupEngage`/`Menu` vs. `ATTNPE.PAS`'s `Targetting`/`GetBestTarget`).
+  `GetGroups` leaves every group's `Trg` unset, and nothing in the interactive `Engage` loop ever
+  calls anything like the automatic engine's own `Targetting` — a player who never presses
+  `<T>arget` fires nothing and just absorbs return fire round after round, indefinitely, with only
+  `<G>roup status`'s `(-)` no-target marker as a hint. Was this deliberate — "the player owns
+  targeting, full stop," consistent with `<R>etreat` also having no auto-suggestion — or an
+  oversight, given the automatic `NPEAttack` path clearly has a reusable smarter default
+  (`Targetting`/`GetBestTarget`) that easily could have served as a "just fight" fallback for a group
+  the player hasn't aimed, and wasn't?
 
 ## Empire elimination and conquest
 
