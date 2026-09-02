@@ -112,13 +112,22 @@ internal sealed class TacticalBattleDisplayWindow : Window
         // DrawScreen's own opening flavor line (ATTCOMM.PAS:1192-1196): one Rnd(1,3) draw, consumed
         // after DrawStars' own RNG use inside BattleMapView's constructor above -- matching Pascal's
         // real call order inside DrawScreen exactly (Grid/Stars, then Object, then EnemyStatus, then
-        // this pick).
-        var flavor = PascalMath.Rnd(random, 1, 3) switch {
-            1 => "Fleet entering real space...",
-            2 => "Fleet now coming out of hyperspace...",
-            _ => "Fleet in combat status...",
+        // this pick). Deferred to Initialized, same reason as TmaLogoWindow's own timer: App isn't
+        // assigned yet during construction -- this window is only ever added as a child via
+        // GameShell's AddModal (called right after this constructor returns), never run directly via
+        // Application.Run, so FlashMessage's own App!.AddTimeout would null-ref if called here instead
+        // (App walks the SuperView chain, and there's no SuperView yet at construction time). AddAt's
+        // own BeginInit/EndInit call for a view added to an already-initialized parent fires this
+        // synchronously during that Add() call, so the relative RNG-consumption order versus
+        // everything else is unchanged.
+        Initialized += (_, _) => {
+            var flavor = PascalMath.Rnd(random, 1, 3) switch {
+                1 => "Fleet entering real space...",
+                2 => "Fleet now coming out of hyperspace...",
+                _ => "Fleet in combat status...",
+            };
+            FlashMessage(flavor);
         };
-        FlashMessage(flavor);
     }
 
     private Label AddAt(int x, Pos y, string text)
