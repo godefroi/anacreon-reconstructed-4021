@@ -1,5 +1,6 @@
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.NewGame;
 
 namespace Reconstructed4021.Tests;
@@ -169,24 +170,69 @@ public class ScenarioLoaderWorldBackgroundTests
         var game = BuildGame(
             "BEGINDESCRIPTION\r\n" +
             "WorldBackgroundIndex\r\n" +
-            "2:1 A:1 1\r\n" + // matches only during a conquest report, by empire slot 1
+            "2:1 A:0 1\r\n" + // matches only during a conquest report, by empire slot 0 (world 1's real owner)
+            "EndIndex\r\n" +
+            "TEXT 1\r\nConquered!\r\nENDTEXT\r\n" +
+            "ENDDESCRIPTION\r\n");
+
+        var world1 = game.Galaxy.Planets[0];
+        var owner = game.Empires[0];
+        var conqueror = game.Empires[1];
+
+        // SatisfiesConditions' 'A' clause checks the object's own *current* owner (GetStatus(ID) IN
+        // Empires) -- and real Pascal calls DisplayBackground(...,True,...) from EnemyConquered,
+        // which runs *before* ResolveAttack's own ConquerWorld reassigns ownership (confirmed by
+        // reading CleanUp's real body: RestoreCombatant, then the DefConqueredART case -- which is
+        // where EnemyConquered lives -- then ResolveAttack, in that order). So an 'A:' row means
+        // "when *this owner* loses the world," keyed on the loser -- world1 is still owned by `owner`
+        // here, not reassigned to `conqueror` first (an earlier version of this test got that ordering
+        // backwards).
+        await Assert.That(world1.Owner).IsSameReferenceAs(owner);
+        await Assert.That(Game.FindWorldBackgroundText(game, world1, conqueror, conquer: false)).IsNull();
+
+        var lines = Game.FindWorldBackgroundText(game, world1, conqueror, conquer: true);
+        await Assert.That(lines).IsNotNull();
+        await Assert.That(lines![0]).IsEqualTo("Conquered!");
+    }
+
+    /// <summary>The 'A:' clause reads the *pre-conquest* owner, so it stops matching the instant ConquerWorld reassigns ownership -- the wiring that calls FindWorldBackgroundText(conquer:true) must do so before ConquerWorld runs, not after.</summary>
+    [Test]
+    public async Task FindWorldBackgroundText_ConqueredByRowNoLongerMatches_OnceOwnershipIsReassigned()
+    {
+        var game = BuildGame(
+            "BEGINDESCRIPTION\r\n" +
+            "WorldBackgroundIndex\r\n" +
+            "2:1 A:0 1\r\n" +
             "EndIndex\r\n" +
             "TEXT 1\r\nConquered!\r\nENDTEXT\r\n" +
             "ENDDESCRIPTION\r\n");
 
         var world1 = game.Galaxy.Planets[0];
         var conqueror = game.Empires[1];
-
-        // SatisfiesConditions' 'A' clause checks the object's own *current* owner, not the viewer --
-        // real Pascal's ConquerWorld already reassigns ownership before EnemyConquered's own
-        // DisplayBackground(...,True,...) call runs, so simulate that same ordering here.
         ((IEconomicWorld)world1).Reassign(conqueror);
 
-        await Assert.That(Game.FindWorldBackgroundText(game, world1, conqueror, conquer: false)).IsNull();
-
         var lines = Game.FindWorldBackgroundText(game, world1, conqueror, conquer: true);
-        await Assert.That(lines).IsNotNull();
-        await Assert.That(lines![0]).IsEqualTo("Conquered!");
+
+        await Assert.That(lines).IsNull();
+    }
+
+    /// <summary>EnemyConquered's real DisplayBackground call is unconditional regardless of target kind (world or fleet) -- ResolveWorldReference only ever resolves Pln/Base, so no index entry can reference a Fleet and this must fall through to null, not throw.</summary>
+    [Test]
+    public async Task FindWorldBackgroundText_FleetTarget_ReturnsNullWithoutThrowing()
+    {
+        var game = BuildGame(
+            "BEGINDESCRIPTION\r\n" +
+            "WorldBackgroundIndex\r\n" +
+            "2:1 E:0 1\r\n" +
+            "EndIndex\r\n" +
+            "TEXT 1\r\nUnreachable.\r\nENDTEXT\r\n" +
+            "ENDDESCRIPTION\r\n");
+
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = game.Empires[1] };
+
+        var lines = Game.FindWorldBackgroundText(game, fleet, game.Empires[0], conquer: true);
+
+        await Assert.That(lines).IsNull();
     }
 
     /// <summary>Real Pascal's own REPEAT loop stops at the first row whose World matches and whose Conditions pass -- a later row for the same World never gets a chance, even if it would also match.</summary>
