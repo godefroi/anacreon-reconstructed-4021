@@ -29,10 +29,10 @@ namespace Reconstructed4021.Tui;
 /// as if nothing were there -- except an unscouted planet specifically inside a nebula, which still
 /// draws <c>UnkPlanetChar</c> ("something's here") rather than reading as empty nebula; the
 /// enemy-fleet indicator needs the same <see cref="Game.Visible"/> check per fleet, the player-fleet
-/// indicator needs none (owning it makes it trivially visible). Not reproduced: this port still has
-/// no nebula-vision modeling of its own (nebula never reduces or blocks scouting range -- see
-/// <see cref="Reconstructed4021.Core.Turns.VisibilityHandler.ScoutAdjacent"/>'s own TODO), a separate
-/// gap from just drawing the right glyph once visibility is known.
+/// indicator needs none (owning it makes it trivially visible). Nebula genuinely blocks scouting too
+/// (<see cref="Reconstructed4021.Core.Turns.VisibilityHandler"/>'s own dark-nebula ring-stop and
+/// planet-detection exclusion), not just this glyph -- this view doesn't need to know that itself, it
+/// only ever draws what <see cref="Game.Visible"/> already decided.
 /// </summary>
 internal sealed class GalaxyView : View
 {
