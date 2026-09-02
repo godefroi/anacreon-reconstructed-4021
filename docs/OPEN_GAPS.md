@@ -34,8 +34,14 @@ codebase is in a test file.
 - **No nebula-vision modeling.** Nebula never reduces or blocks scouting range
   (`VisibilityHandler.ScoutAdjacent`'s own TODO for the dark-nebula early exit) — a genuinely separate
   gap from the map/Close Up's own `Known`/`Scouted` gating, which is otherwise real.
-- **`CloseUpCom`'s `DisplayBackground` (racial/artifact flavor text) was never ported.** Everything
-  else in Close Up's field layout reproduces real redaction; this one panel simply doesn't exist yet.
+- **`DisplayBackground`'s post-conquest caller isn't wired.** `Game.FindWorldBackgroundText` and
+  `CloseUpWindow` cover `CLSCOMM.PAS: CloseUpCom`'s own call (`conquer:false`), the real scenario
+  flavor text. `ATTCOMM.PAS: EnemyConquered` calls the same primitive a second way (`conquer:true`,
+  right after a successful attack), falling back to one of three random congratulatory messages when
+  nothing scenario-specific matches — `GameShell.Attack()`'s own post-attack report is still the
+  generic `MessageBox` it always was, and `EnemyConquered`'s other real mechanic (`AskToCapture`,
+  deciding whether to capture a defeated fleet's ships) isn't built at all. Both belong with the
+  Attack-command work, not here.
 - **Fleet menu's real commands are done; the rest of the menu bar is still stubs.** Deploy, Transfer,
   Abort/Join, and Refuel are all real now (`FLTCOMM.PAS`'s `LaunchFleetCommand`/`TransferFleetCommand`/
   `AbortFleetCommand`/`RefuelFleetCommand`, `TUI_SURFACES_MAPPING.md`'s "Fleet management" table) —

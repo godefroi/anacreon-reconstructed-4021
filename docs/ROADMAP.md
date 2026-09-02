@@ -956,8 +956,64 @@ Direct2D) surfaced; see the README's Known Issues section.
     Destination rule (a non-owned fleet's destination only shows while it's `Ready`, hidden while
     still in transit even if Scouted) and `DisplayFleetComplement`'s `ResI IN [fgt..trn]` guard (only
     ship-type counts get the `YesNo` upgrade; legions/cargo redact to "????" for anyone but the owner,
-    same as a world's cargo line). Not ported: `CloseUpCom`'s own `DisplayBackground` racial/artifact
-    panel — never built at all, not a redaction regression.
+    same as a world's cargo line). Left open at the time, closed in 8k below:
+    `CloseUpCom`'s own `DisplayBackground` racial/artifact panel.
+- **8k, `DisplayBackground` (scenario flavor text) for Close Up's `conquer:false` case.** `SCENA.PAS`'s
+  `WorldBackgroundIndex`/`TEXT n` blocks, real content in 6 of the 12 shipped `dos_131` scenarios,
+  previously discarded whole by `ScenarioLoader`'s own `SkipDescriptions`.
+  - **Index parity verified empirically before writing a parser**, not assumed: loaded `ARRONAX.SCN`
+    through this port's real `ScenarioLoader`/`PascalRandom` and cross-checked several planet-list
+    positions against that file's own explicit `CreateWorld` ownership data — every one matched
+    exactly, confirming `Galaxy.Planets[i-1]` really does correspond to Pascal's 1-based `Planet[i]`,
+    both structurally (both sides assign indices via one sequential counter across
+    `CreateWorld`/`CreateRandomWorlds` in file order) and now empirically. Some of ARRONAX's own
+    `WorldBackgroundIndex` row *comments* (`; Player 4 Capital`) don't actually match that row's real
+    owner condition — a pre-existing inconsistency in the 1988 file itself, harmless in real play
+    since Pascal discards everything after `;` and the condition just silently never matches; not a
+    porting bug, and not something worth "fixing."
+  - **`BackgroundConditionKind` is an enum (`OwnedBy`/`ConqueredBy`), not a bool.** `SatisfiesConditions`
+    dispatches a row's own clauses by their leading character (`CASE Parm[i][1] OF 'E': ... 'A':
+    ...`), not a boolean's polarity, and that `CASE` has no `ELSE` — i.e. it isn't declaring a closed
+    two-state set on purpose. A `RequiresConquer: bool` first draft conflated "which condition" with
+    "what it requires"; the enum matches the real dispatch shape and leaves room for a
+    never-yet-seen third clause letter without renegotiating what an existing value means.
+  - **`ScenarioLoader.ParseDescriptions`/`ResolveWorldBackground`** replace `SkipDescriptions`: every
+    real scenario places `BEGINDESCRIPTION` before the `CreateWorld`/`CreatePlayerEmpire`/
+    `CreateNPEmpire` commands that would create the objects/empires a row references, so nothing
+    exists yet to resolve against at parse time — rows and condition slot numbers are collected raw,
+    then resolved once against the fully-populated `Galaxy`/empire-slot table right before `Load`
+    returns (both its `ENDSCENARIO` and early-EOF exit points).
+  - **`Game.WorldBackgroundIndex`/`BackgroundTexts`/`FindWorldBackgroundText`** — parsed once at load
+    instead of real Pascal's own "reopen and rescan the original `.SCN` file every single Close Up
+    call" (`DisplayBackground` literally re-`Assign`s/`Reset`s the file each time); same content,
+    cheaper lookup. `[JsonIgnore]`d like `TurnHandlers` (an `ISectorObject` reference, not
+    reflection-serializable as-is) — also matches real Pascal, which never persists this in a `.SAV`
+    either, always re-deriving it from `ScenaFilename` on demand. A game loaded via `.SAV`/native
+    JSON (no equivalent "re-open the original .SCN" step exists) simply has none, same as a
+    hand-built fixture never parsed from a real scenario at all — `Border Skirmish.json`'s own
+    playtest path doesn't exercise any of this.
+  - **`[C:id]`/`[N:id]` placeholder substitution implemented for file-format completeness, confirmed
+    unexercised by real content** — grepped every scenario pack in this repo (`dos_131`, `dos_20`,
+    `pack_1`); zero uses. Real Pascal's own `ParseLine` only ever substitutes the first bracket pair
+    on a line, never loops for a second — reproduced faithfully (a second marker on the same line is
+    left untouched) rather than "improved," and covered by a dedicated test since no shipped scenario
+    can exercise it. `CoordinateName`'s relative-to-capital formula duplicates `GalaxyView`'s own
+    cursor-readout formula rather than sharing it — that one also falls back to the galaxy's center
+    with no capital, a UI-only concern this query doesn't need — and `DescribeBackgroundKind`
+    duplicates `CloseUpWindow.DescribeKind`/`ObjectListItem`'s naming convention rather than sharing
+    it, since Core can't reference the Tui project. Both are deliberate small copies for genuinely
+    dead-content code paths, not drift risk.
+  - **Checked the (stale, unwired) `kdl-scenario-format` branch before implementing**, at the user's
+    prompt — its own `docs/KSCN_FILE_FORMAT.md` design doc independently confirmed the same
+    `DisplayBackground`/`SatisfiesConditions` semantics (many-to-many worlds↔text, conditioned on
+    owner and on which screen triggered it) derived here straight from `SCENA.PAS`. That branch's own
+    `ScenarioParser` is still a stub with no `world-backgrounds` parsing at all, so nothing to
+    reconcile — confirms this design rather than duplicating or superseding it.
+  - **Excluded, staying with the Attack-command work instead of here**: `DisplayBackground`'s other
+    caller, `ATTCOMM.PAS: EnemyConquered`'s post-attack report (`conquer:true`) — `GameShell.Attack()`
+    still shows its old generic `MessageBox`. Reproducing `EnemyConquered` properly also means
+    `AskToCapture` (deciding whether to capture a defeated fleet's ships), an unrelated mechanic that
+    belongs with combat work, not visibility/redaction work (docs/OPEN_GAPS.md).
 
 ## 9. Async/hotseat turn mode
 
