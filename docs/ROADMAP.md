@@ -1039,6 +1039,82 @@ Direct2D) surfaced; see the README's Known Issues section.
     intersection in real Pascal — no other file references `GetNebula` from scouting/detection logic,
     and no NPE AI file (`NPE00.PAS`/`NPE03.PAS`) reads nebula state at all. Dense-nebula fleet/starbase
     movement blocking was already real (`FleetMovementHandler`), unaffected by this entry.
+- **8m, Fleet Group Configuration / Tactical Battle Display, `DisplayBackground`'s `conquer:true`
+  caller, `AskToCapture`, Capital Fallen Report.** `combat-work` branch. User chose the full
+  interactive option over two smaller alternatives (an auto-resolved animated replay, or
+  configuration-only with a text report) after being asked how deep to go — `ATTCOMM.PAS`'s real
+  `Engage` is genuinely player-interactive per round (Move/Target/Retreat between shells), not just
+  a viewer, and this reproduces that rather than replaying the automatic engine.
+  - **Two wrong assumptions caught before they shipped, both from mis-ordering `CleanUp`'s real
+    body.** `CleanUp` (`ATTCOMM.PAS:1564-1588`) runs `RestoreCombatant` for both sides, *then*
+    (only on `DefConqueredART`) `OldShipsFound`/`EnemyConquered`, *then* `ResolveAttack` — meaning
+    `EnemyConquered`'s own `DisplayBackground(Target,...,True,...)` call, and its `GetType(Target)=
+    CapTyp` check, both read the target's **pre-conquest** state, since `ResolveAttack`'s own
+    `ConquerWorld` (ownership reassignment) hasn't run yet. `SatisfiesConditions`'s `'A'` clause is
+    just `GetStatus(ID) IN Empires` — the object's current owner, same field `'E'` reads — so an
+    `A:` scenario index row means "when *this owner* loses the world," keyed on the loser, not the
+    conqueror. The 8k-era test `FindWorldBackgroundText_ConqueredByRowOnlyMatchesWhileConquering`
+    had reassigned the world to the conqueror *before* checking `conquer:true`, backwards from this
+    real ordering — fixed, plus a new test pinning down that the match stops firing once ownership
+    *is* reassigned. `AskToCapture`'s `GetShips(Target,Sh2)`/`NoShips` check similarly reads
+    post-`RestoreCombatant` survivors, not the pre-battle complement — confirmed by the same
+    `CleanUp` read, not assumed.
+  - **`InteractiveCombat.cs`** (Core) — `InteractiveCombatState` wraps the exact same
+    `CombatEngine.Battle`/`EnemySurrenders`/`CombatResolution.AdvanceGroups` primitives the automatic
+    engine uses (`AdvanceGroups` made `internal`, reused rather than duplicated), but exposes one
+    round per `Engage()`/`Retreat()` call instead of looping to completion. Confirmed against source
+    that the interactive path **never auto-targets** — `ATTCOMM.PAS`'s own `GroupEngage` has no
+    counterpart to `ATTNPE.PAS`'s `Targetting`, so a group with no player-chosen `Trg` does zero
+    damage while still taking return fire, indefinitely; added to `docs/QUESTIONS_FOR_GEORGE.md`
+    since it's surprising enough to be worth asking about. `Retreat` forces `Result` *before* the
+    round runs (suppressing `EnemySurrenders` but not `AllGroupsDestroyed`, which can still override
+    it) — a `Result`-forcing wrapper around one ordinary round, not a mass-move command; `GroupRetreat`
+    doesn't set every group to `Retreating` at all, confirmed by reading it in full.
+  - **`FleetGroupConfiguration.cs`** (Core) — `GetGroups`' pool↔group bookkeeping
+    (`ChangeGroupType`/`LoadShips`/`LoadTroops`/`Finalize`), separate from `DefaultDistribution`
+    (which starts groups already-full; this starts empty, matching `GetGroups`' own
+    `FillChar`+`GetShips`/`GetCargo` starting state). Caught two source-vs-assumption gaps while
+    writing it: `LoadTroops` initially threw for a non-transport group — real `LoadTransports` has no
+    such guard, `TrnAdj` is just 0 for anything else, harmlessly loading zero — fixed to match.
+    `Finalize`'s own auto-load-remaining-troops pass checks `Cr[men]` *before* `Cr[nnj]`
+    (`ATTCOMM.PAS:1055-1068`) — confirmed the *opposite* priority from `DefaultGroup`'s own
+    ninja-first order, a real asymmetry between the two screens, not a bug in either.
+  - **`FleetGroupConfigurationWindow.cs`/`TacticalBattleDisplayWindow.cs`** (Tui) — same
+    `Window`-built-from-`Label`-children shape as `ResourceDistributionEditor`; the battle display is
+    genuinely full-screen (`Dim.Fill()`, matching `AttackWindow`/`GroupWindow`/`EnemyWindow` together
+    filling the screen in source) with no Esc at all, matching `Engage`'s own menu exactly. Confirmed
+    via `dotnet-inspect` that `View.App` walks the `SuperView` chain (`_app ?? SuperView?.App`) rather
+    than needing explicit propagation, so a child view added via `AddModal` can still call
+    `App!.AddTimeout` for the message-flash timer — no special wiring needed. One deliberate
+    adaptation: `AttReport`'s real `Delay(1000)` blocks the whole game loop for a second per message;
+    reproduced as an immediate show + one-shot timer clear instead, not a literal block.
+  - **`GameShell.Attack()`** rewritten end to end: a real target picker (`ShowObjectPicker`) when
+    multiple enemy fleets share a sector, not just "whichever is found first"; "Standard battle
+    configuration (Y/n)?" fork (Y skips straight to `DefaultDistribution`, same as before this
+    branch; N opens Fleet Group Configuration); `InteractiveCombat.BeginEngagement` →
+    `TacticalBattleDisplayWindow`; on `BattleEnded`, the real `CleanUp` sequence (`RestoreCombatant`
+    ×2, `OldShipsFound`, `AskToCapture`, `DisplayBackground(conquer:true)` — all *before*
+    `ResolveAttack`, per the ordering fix above — then `ResolveAttack` itself). Zero configured
+    groups now skips the battle entirely (`AttackCommand`'s own `IF NoOfGroups>0` gate,
+    `ATTCOMM.PAS:1619`), matching real Pascal rather than fighting an empty engagement.
+  - **`OldShipsFound` built, `EmpireConquestReport` deliberately not** — asked the user how to
+    handle the two remaining real (Pascal-has-it-port-doesn't) gaps found while scoping this, plus
+    the battle screen's decorative art; `OldShipsFound` was cheap and directly adjacent to code
+    already being touched, so built; the art and `EmpireConquestReport` (which would need
+    `Booty` tracking un-dropped first) were tracked as `OPEN_GAPS.md` bullets instead.
+  - **Capital Fallen Report** (`PROLOG.PAS: EmpireNews`) — genuinely independent of hotseat (unlike
+    `GetPassword`, still deferred): the mechanical `PendingElimination`→`Eliminated` teardown was
+    already fully ported and tested at the `TurnEngine`/`CombatOutcome` layer, only the narrative
+    letter was missing. `Program.cs`'s `RunGame` now shows it once, right where that transition
+    actually happens (inside the `AdvanceOneTurn` call `TurnEngine.BeginTurn` runs for a
+    `PendingElimination` empire), replacing that empire's own turn session for the one cycle it has
+    nothing left to do in. `Honorifics.MyLord` extracted as a shared helper once this made a third
+    call site want the exact same randomized-honorific array `TurnStartGreetingWindow`/`GameShell`
+    each had their own private copy of.
+  - Zero Tui automated coverage exists (`Reconstructed4021.Tests` doesn't reference `Reconstructed4021.Tui`
+    at all) — every bit of correctness confidence for this entry comes from Core-level tests
+    (`InteractiveCombatTests`, `FleetGroupConfigurationTests`, the `ScenarioLoaderWorldBackgroundTests`
+    ordering fix) plus manual playtest, same as every other Tui surface in this port.
 
 ## 9. Async/hotseat turn mode
 
