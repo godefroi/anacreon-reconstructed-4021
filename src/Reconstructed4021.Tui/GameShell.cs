@@ -776,41 +776,169 @@ internal sealed class GameShell : Window
     }
 
     /// <summary>
-    /// Ministry of War menu > Attack (ATTCOMM.PAS: GetTarget/AttackCommand). Target selection order
-    /// is transcribed directly from GetTarget's own nested CreateMenu (ATTCOMM.PAS:663-715): every
-    /// enemy Fleet in the sector goes on the target list first, and the world itself (Planet/
-    /// Starbase) is only ever offered "if no fleets" (ListSize=0) -- a world defended by any enemy
-    /// fleet cannot be attacked directly, the fleet(s) must be dealt with first. Confirmed with the
-    /// user after an initial pass got this backwards (checked the world before any defending fleet)
-    /// and produced a wildly wrong result: an undamaged 50-ship Kingdom defense fleet sat next to a
-    /// heavily-refortified capital, and attacking the capital directly wiped out a 3000-ship human
-    /// fleet against a world whose own war economy had ballooned during the several turns the attack
-    /// took to arrive -- attacking the (comparatively tiny) defending fleet first is what real Pascal
-    /// would have forced instead. MVP gate, called out rather than silent: attacker and target must
-    /// already be in the same sector (i.e. the fleet has arrived) -- real Pascal's exact range rule
-    /// wasn't re-derived here. No target picker if more than one enemy fleet occupies the sector
-    /// (whichever is found first wins) -- TUI_SURFACES_MAPPING.md calls for a ListView/Dialog there,
-    /// matching GetTarget's own menu for that case, but nothing this branch's own fixture produces
-    /// ever hits it. Auto-resolved through CombatResolution.NPEAttack -- the same entry point
-    /// Kingdom's own AI calls -- with AttackIntentionType.Conquer and CombatEngine's own default
-    /// distribution/grouping standing in for the deferred Fleet Group Configuration/Tactical Battle
-    /// Display screens.
+    /// Ministry of War menu > Attack (ATTCOMM.PAS: GetTarget/AttackCommand/CleanUp/EnemyConquered).
+    /// Target selection order is transcribed directly from GetTarget's own nested CreateMenu
+    /// (ATTCOMM.PAS:663-715): every enemy Fleet in the sector goes on the target list first (a picker
+    /// if there's more than one), and the world itself (Planet/Starbase) is only ever offered "if no
+    /// fleets" (ListSize=0) -- a world defended by any enemy fleet cannot be attacked directly, the
+    /// fleet(s) must be dealt with first. Confirmed with the user after an initial pass got this
+    /// backwards (checked the world before any defending fleet) and produced a wildly wrong result:
+    /// an undamaged 50-ship Kingdom defense fleet sat next to a heavily-refortified capital, and
+    /// attacking the capital directly wiped out a 3000-ship human fleet against a world whose own war
+    /// economy had ballooned during the several turns the attack took to arrive. MVP gate, called out
+    /// rather than silent: attacker and target must already be in the same sector (i.e. the fleet has
+    /// arrived) -- real Pascal's exact range rule wasn't re-derived here.
     /// </summary>
     private void Attack() => PickOwnFleetAtCursor("Attack", attacker => {
         var cursor = attacker.Location;
-        object? target = game.Galaxy.Fleets.FirstOrDefault(f => f.Location == cursor && !ReferenceEquals(f.Owner, human))
-            ?? (object?)game.Galaxy.Planets.FirstOrDefault(p => p.Location == cursor && !ReferenceEquals(p.Owner, human))
-            ?? game.Galaxy.Starbases.FirstOrDefault(s => s.Location == cursor && !ReferenceEquals(s.Owner, human));
+        var enemyFleets = game.Galaxy.Fleets.Where(f => f.Location == cursor && !ReferenceEquals(f.Owner, human)).ToList();
+
+        if (enemyFleets.Count > 1) {
+            ShowObjectPicker("Attack", enemyFleets.Cast<ISectorObject>().ToList(), o => BeginAttack(attacker, o));
+            return;
+        }
+
+        object? target = enemyFleets.Count == 1 ? enemyFleets[0]
+            : (object?)game.Galaxy.Planets.FirstOrDefault(p => p.Location == cursor && !ReferenceEquals(p.Owner, human))
+              ?? game.Galaxy.Starbases.FirstOrDefault(s => s.Location == cursor && !ReferenceEquals(s.Owner, human));
 
         if (target is null) {
             MessageBox.Query(App!, "Attack", "No enemy target in this sector.", "OK");
             return;
         }
 
-        var result = CombatResolution.NPEAttack(human, attacker, target, AttackIntentionType.Conquer, game, random);
-        galaxyView.Refresh();
-        MessageBox.Query(App!, "Attack", $"Result: {result.Result}", "OK");
+        BeginAttack(attacker, target);
     });
+
+    // AttackCommand's own "Standard battle configuration (Y/n)?" fork (ATTCOMM.PAS:1608-1616): Y
+    // (default) skips Fleet Group Configuration and uses DefaultDistribution, matching what this
+    // command always did before this screen existed; N opens the real GetGroups-equivalent screen.
+    // Esc abandons the attack entirely (IF Ans<>EscKey), matching AttackCommand's own guard.
+    private void BeginAttack(Fleet attacker, object target)
+    {
+        var choice = MessageBox.Query(App!, "Attack", "Standard battle configuration?", "_Yes", "_No");
+        if (choice is null) {
+            return;
+        }
+
+        if (choice == 0) {
+            StartEngagement(attacker, target, CombatEngine.DefaultDistribution(attacker));
+            return;
+        }
+
+        var configWindow = new FleetGroupConfigurationWindow(attacker.Ships, attacker.Cargo);
+        var dismiss = AddModal(configWindow, dismissOnOutsideClick: false);
+        configWindow.Committed += (_, _) => {
+            dismiss();
+            StartEngagement(attacker, target, [.. configWindow.Groups]);
+        };
+    }
+
+    private void StartEngagement(Fleet attacker, object target, List<GroupRecord> groups)
+    {
+        // AttackCommand's own IF NoOfGroups>0 (ATTCOMM.PAS:1619) -- zero groups skips the battle
+        // entirely (no Engage, no CleanUp), matching real Pascal exactly rather than fighting an
+        // empty engagement.
+        if (groups.Count == 0) {
+            return;
+        }
+
+        var state = InteractiveCombat.BeginEngagement(human, (IShipCargoHolder)target, groups);
+        var targetName = DisplayName((ISectorObject)target);
+
+        var display = new TacticalBattleDisplayWindow(state, random, targetName);
+        var dismiss = AddModal(display, dismissOnOutsideClick: false);
+        display.BattleEnded += (_, _) => {
+            dismiss();
+            ApplyAttackOutcome(attacker, target, state);
+            galaxyView.Refresh();
+        };
+    }
+
+    // CleanUp (ATTCOMM.PAS:1564-1588): RestoreCombatant for both sides first, then (only on a
+    // successful conquest) OldShipsFound/AskToCapture/EnemyConquered's own DisplayBackground call --
+    // all three run *before* ResolveAttack, which is what actually reassigns ownership (ConquerWorld).
+    // Calling FindWorldBackgroundText(conquer:true) here, before ResolveAttack, is load-bearing: its
+    // 'A:' condition reads the target's *current* (pre-conquest) owner, so calling it after would mean
+    // it can never match (see docs/ROADMAP.md and ScenarioLoaderWorldBackgroundTests for the ordering
+    // bug this fixed).
+    private void ApplyAttackOutcome(Fleet attackerFleet, object target, InteractiveCombatState state)
+    {
+        var subject = (ISectorObject)target;
+        var hkSurprise = CombatEngine.ForcesUnknown(attackerFleet, subject.Owner);
+
+        CombatOutcome.RestoreCombatant(attackerFleet, state.Casualties);
+        CombatOutcome.RestoreCombatant(target, state.Killed);
+
+        var capture = true;
+        string? report = null;
+
+        if (state.Result == AttackResultType.DefenderConquered) {
+            ShowOldShipsFound(target);
+
+            if (target is Fleet targetFleet && HasAnyShips(targetFleet.Ships)) {
+                // AskToCapture's own inverted polarity (ATTCOMM.PAS:1358-1380): "Y" (destroy) sets
+                // Capture:=False; anything else -- the default -- sets Capture:=True.
+                capture = MessageBox.Query(App!, "Attack", "Do you wish to destroy the enemy fleet?", "_Yes", "_No") != 0;
+            }
+
+            report = Game.FindWorldBackgroundText(game, subject, human, conquer: true) is { } lines
+                ? string.Join('\n', lines)
+                : ConquestMessage(attackerFleet, subject);
+        }
+
+        CombatOutcome.ResolveAttack(state.Result, attackerFleet, target, hkSurprise, capture, state.Casualties, state.Killed, game, random);
+
+        MessageBox.Query(App!, "Attack", report ?? $"Result: {state.Result}", "OK");
+    }
+
+    // OldShipsFound (ATTCOMM.PAS:1485-1526): an Independent planet may hold ships too obsolete for its
+    // own tech level (left behind by a since-advanced empire) -- read-only info, no state effect.
+    private void ShowOldShipsFound(object target)
+    {
+        if (target is not Planet planet || !planet.Owner.IsIndependent) {
+            return;
+        }
+
+        var obsolete = Enum.GetValues<ShipType>()
+            .Where(t => planet.Ships[t] > 0 && TechCatalog.MinTechForShip[t] > planet.TechLevel)
+            .Select(t => $"{planet.Ships[t]} {t}")
+            .ToList();
+
+        if (obsolete.Count > 0) {
+            MessageBox.Query(App!, "Attack", $"We have found the following ships in orbit:\n{string.Join('\n', obsolete)}", "OK");
+        }
+    }
+
+    // EnemyConquered's own three fallback congratulatory messages (ATTCOMM.PAS:1403-1431), verbatim --
+    // Message1 always wins for a conquered capital (GetType(Target)=CapTyp, checked here before
+    // ResolveAttack clears it back to Independent); otherwise one of the three is picked uniformly at
+    // random, consuming exactly one Rnd(1,3) call to match Pascal's own RNG-order contract.
+    private string ConquestMessage(Fleet attackerFleet, ISectorObject subject)
+    {
+        var empireName = human.Name;
+        var isCapital = subject is IEconomicWorld { Type: WorldType.Capital };
+        var messageNumber = isCapital ? 1 : PascalMath.Rnd(random, 1, 3);
+        var noun = subject switch { Fleet => "fleet", Starbase => "starbase", _ => "planet" };
+
+        return messageNumber switch {
+            1 => human.IsEmpress
+                ? $"In the name of Her Imperial Majesty, Lady of {empireName}, I hereby declare\nthis {noun} to be under the sovereign jurisdiction of the\n{empireName} Empire."
+                : $"In the name of His Imperial Majesty, Lord of {empireName}, I hereby declare\nthis {noun} to be under the sovereign jurisdiction of the\n{empireName} Empire.",
+            2 => $"Congratulations {MyLord()}, {DisplayName(attackerFleet)} has succeeded in its attack against\n{DisplayName(subject)}.  No doubt some of your enemies will in the future\nbe more careful when challenging this empire.",
+            _ => $"Congratulations on your victory, {MyLord()}, but remember that not\nall battles will be this easy.",
+        };
+    }
+
+    private string DisplayName(ISectorObject obj) => obj.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(obj);
+
+    // PRIMINTR.PAS's MyLord, same independently-randomized-honorific precedent as
+    // TurnStartGreetingWindow's own private copy -- flavor text only, no gameplay effect, so reusing
+    // Random.Shared rather than this empire's deterministic combat `random` is consistent with that
+    // existing choice, not a new one.
+    private string MyLord() => human.IsEmpress
+        ? new[] { "My Lady", "Your Highness", "Your Excellency", "My Empress" }[Random.Shared.Next(4)]
+        : new[] { "My Lord", "Your Highness", "Your Majesty", "My Liege", "Your Excellency", "Sir" }[Random.Shared.Next(6)];
 
     private MenuBarItem[] BuildMenus() => [
         new MenuBarItem("⌂", new MenuItem[] {
