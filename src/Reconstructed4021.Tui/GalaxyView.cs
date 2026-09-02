@@ -26,12 +26,13 @@ namespace Reconstructed4021.Tui;
 ///
 /// Fog-of-war (MAPWIND.PAS's UMSector/UMFleets/EnemyFleetInSector): a world glyph only shows once
 /// <see cref="Game.Visible"/> says so, otherwise the sector falls through to nebula/grid/blank exactly
-/// as if nothing were there; the enemy-fleet indicator needs the same check per fleet, the player-fleet
-/// indicator needs none (owning it makes it trivially visible). Not reproduced: MAPWIND.PAS's own
-/// <c>UnkPlanetChar</c> case, which reveals "a planet-shaped something" for an unscouted world sitting
-/// in a nebula -- this port has no nebula-vision modeling at all yet (see
-/// <see cref="Reconstructed4021.Core.Turns.VisibilityHandler.ScoutAdjacent"/>'s own TODO), so an
-/// unscouted nebula-planet reads as plain nebula here instead of that distinct glyph.
+/// as if nothing were there -- except an unscouted planet specifically inside a nebula, which still
+/// draws <c>UnkPlanetChar</c> ("something's here") rather than reading as empty nebula; the
+/// enemy-fleet indicator needs the same <see cref="Game.Visible"/> check per fleet, the player-fleet
+/// indicator needs none (owning it makes it trivially visible). Not reproduced: this port still has
+/// no nebula-vision modeling of its own (nebula never reduces or blocks scouting range -- see
+/// <see cref="Reconstructed4021.Core.Turns.VisibilityHandler.ScoutAdjacent"/>'s own TODO), a separate
+/// gap from just drawing the right glyph once visibility is known.
 /// </summary>
 internal sealed class GalaxyView : View
 {
@@ -59,6 +60,7 @@ internal sealed class GalaxyView : View
     private static readonly Rune MineRune = new('+'); // MAPWIND.PAS's MineChar
     private static readonly Rune GridCrossRune = new('┼'); // MAPWIND.PAS's CrossChar2
     private static readonly Rune GridLineRune = new('·'); // MAPWIND.PAS's Horz/VertChar
+    private static readonly Rune UnkPlanetRune = new('p'); // MAPWIND.PAS's UnkPlanetChar (CP437 #112)
 
     // MAPWIND.PAS's TLCursor/TRCursor/BLCursor/BRCursor (CP437 #218/#191/#192/#217).
     private static readonly Rune CursorTopLeftRune = new('┌');
@@ -70,6 +72,7 @@ internal sealed class GalaxyView : View
     private static readonly TgAttribute OtherAttribute = new(StandardColor.LightGray, StandardColor.Black);
     private static readonly TgAttribute NebulaAttribute = new(StandardColor.Magenta, StandardColor.Black);
     private static readonly TgAttribute EmptyAttribute = new(StandardColor.Black, StandardColor.Black);
+    private static readonly TgAttribute UnscoutedAttribute = new(DosColors.Red, StandardColor.Black); // COLORS.INC's UnscoutedColor = 4
 
     private readonly CoreGalaxy _galaxy;
     private readonly Empire _player;
@@ -235,6 +238,13 @@ internal sealed class GalaxyView : View
 
         if (_galaxy.GetMineOwner(coordinate) is { } mineOwner) {
             return (MineRune, OwnerAttribute(mineOwner));
+        }
+
+        // UMSector's own ELSE IF (Obj.ObjTyp=Pln) AND (Neb<>NoNeb): an unscouted planet still reads
+        // as "something's here" specifically inside a nebula -- sectorObject is set here whenever
+        // TryGetValue found something above, even though the Visible check just failed for it.
+        if (sectorObject is Planet && nebula != NebulaType.None) {
+            return (UnkPlanetRune, UnscoutedAttribute);
         }
 
         if (nebula != NebulaType.None) {
