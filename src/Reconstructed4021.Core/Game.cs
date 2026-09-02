@@ -207,4 +207,17 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     /// </summary>
     public static bool Visible(Empire empire, ISectorObject source) =>
         Known(empire, source) || source.Owner == empire;
+
+    /// <summary>
+    /// Scouted, or owned outright — the full-detail analog of <see cref="Visible"/>'s "exists at all"
+    /// tier, for redaction that needs to know whether the *viewer* gets real numbers (Close Up's
+    /// field-by-field detail, CLSCOMM.PAS) rather than just whether an icon draws. Same
+    /// ownership-fallback reasoning as <see cref="Visible"/>: real Pascal's <c>ScoutFleets</c>
+    /// unconditionally Scouts every one of an empire's own fleets (<c>IF Emp=PlayerEmp THEN
+    /// ScoutedBy:=ScoutedBy+[PlayerEmp]</c>), so an owned object is always Scouted there by
+    /// construction; this port has no equivalent guarantee before <see cref="Turns.VisibilityHandler"/>
+    /// has actually run once for that owner.
+    /// </summary>
+    public static bool ScoutedOrOwned(Empire empire, ISectorObject source) =>
+        Scouted(empire, source) || source.Owner == empire;
 }

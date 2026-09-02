@@ -94,4 +94,35 @@ public class GameTests
 
         await Assert.That(Game.Visible(observer, planet)).IsTrue();
     }
+
+    [Test]
+    public async Task ScoutedOrOwned_OwnedButNotScouted_IsTrue()
+    {
+        var owner = new Empire { Name = "Owner" };
+        var planet = new Planet { Owner = owner, Location = new Coordinate(1, 1) };
+
+        await Assert.That(Game.ScoutedOrOwned(owner, planet)).IsTrue();
+    }
+
+    [Test]
+    public async Task ScoutedOrOwned_NotOwnedAndKnownButNotScouted_IsFalse()
+    {
+        var observer = new Empire { Name = "Observer" };
+        var owner = new Empire { Name = "Owner" };
+        var planet = new Planet { Owner = owner, Location = new Coordinate(1, 1) };
+        observer.Planets.MarkKnown(planet);
+
+        await Assert.That(Game.ScoutedOrOwned(observer, planet)).IsFalse();
+    }
+
+    [Test]
+    public async Task ScoutedOrOwned_NotOwnedButScouted_IsTrue()
+    {
+        var observer = new Empire { Name = "Observer" };
+        var owner = new Empire { Name = "Owner" };
+        var planet = new Planet { Owner = owner, Location = new Coordinate(1, 1) };
+        observer.Planets.MarkScouted(planet);
+
+        await Assert.That(Game.ScoutedOrOwned(observer, planet)).IsTrue();
+    }
 }
