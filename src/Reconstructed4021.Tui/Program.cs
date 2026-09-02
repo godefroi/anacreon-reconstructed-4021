@@ -1,5 +1,6 @@
 using Terminal.Gui.App;
 using Terminal.Gui.Views;
+using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.SaveFormat;
@@ -163,11 +164,11 @@ try {
 // PendingElimination/Eliminated) just advances with no UI at all. Returns how the session ended,
 // for the caller to decide what runs next.
 //
-// Deliberately out of scope here, same as the rest of PROLOG.PAS's chained per-turn sequence: the
-// password prompt and Capital Fallen Report step. Nothing yet exercises more than one human empire
-// in the same game, so building real hotseat protection would be speculative -- this loop is
-// already Status/IsHuman-driven per empire rather than hardcoded to one Empire reference, so a
-// second human slotting in later needs no changes here, just those still-missing steps.
+// Deliberately still out of scope here, same as the rest of PROLOG.PAS's chained per-turn sequence:
+// the password prompt. Nothing yet exercises more than one human empire in the same game, so real
+// hotseat protection would be speculative -- this loop is already Status/IsHuman-driven per empire
+// rather than hardcoded to one Empire reference, so a second human slotting in later needs no
+// changes here, just that still-missing step. The Capital Fallen Report step (below) is real now.
 GameShell.ExitChoice RunGame(Game game)
 {
     while (true) {
@@ -175,7 +176,16 @@ GameShell.ExitChoice RunGame(Game game)
         var handler = game.TurnHandlers[current];
 
         if (!handler.IsHuman || current.Status != EmpireStatus.Active) {
+            // A human parked at PendingElimination reaches this branch too (Status<>Active) --
+            // AdvanceOneTurn is where TurnEngine.BeginTurn actually finishes that empire's own
+            // teardown (CombatOutcome.DestroyEmpire), so the transition to Eliminated has to be
+            // detected around this exact call, not before it.
+            var wasPendingElimination = handler.IsHuman && current.Status == EmpireStatus.PendingElimination;
             turnEngine.AdvanceOneTurn(game);
+
+            if (wasPendingElimination) {
+                ShowCapitalFallenReport(current);
+            }
         } else {
             // BeginTurn (fog-of-war refresh, matching ANACREON.PAS's SetUpTurn) runs here, before the
             // human sees anything -- not inside GameShell's own End Turn, which would show them a map
@@ -206,6 +216,30 @@ GameShell.ExitChoice RunGame(Game game)
             return GameShell.ExitChoice.MainMenu;
         }
     }
+}
+
+// EmpireNews (PROLOG.PAS:456-488), the "Capital Fallen Report": shown once, in place of that turn's
+// own GameShell session, at the start of the defeated player's own next turn-prologue -- there's
+// nothing left to do once Empire.Capital is null and Status is Eliminated, matching real Pascal's own
+// SetUpPlayer ordering (this replaces the whole per-turn sequence for that one cycle, same as
+// PROLOG.PAS's own EmpireNews sets LastTurn:=True to skip EmpireStatus). The mechanical teardown
+// (Eliminated, DefeatedBy) already ran inside TurnEngine.BeginTurn/AdvanceOneTurn -- this is only the
+// narrative screen real Pascal shows alongside it, transcribed verbatim from EmpireNews' own
+// WriteString calls.
+void ShowCapitalFallenReport(Empire defeated)
+{
+    var lord = Honorifics.MyLord(defeated.IsEmpress);
+    var text =
+        $"{lord},\n\n" +
+        "I regret that I must communicate the dreadful news in this impersonal way,\n" +
+        "but by the time you read this I will most likely be either dead or\n" +
+        "imprisoned.  While you slept peacefully, our capital was attacked by the\n" +
+        $"{defeated.DefeatedBy!.Name} Empire.  Though our men and women fought bravely,\n" +
+        "the strength of our adversary overwhelmed us and we were forced to surrender.\n\n" +
+        "I have arranged an honorable course of action for Your Majesty; you will find\n" +
+        $"necessary materials by your bedside.  Good luck, {lord}.\n\n" +
+        "- Your Loyal Servant";
+    MessageBox.Query(app, "Capital Fallen", text, "OK");
 }
 
 static string FindRepoRoot(string start)

@@ -932,13 +932,7 @@ internal sealed class GameShell : Window
 
     private string DisplayName(ISectorObject obj) => obj.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(obj);
 
-    // PRIMINTR.PAS's MyLord, same independently-randomized-honorific precedent as
-    // TurnStartGreetingWindow's own private copy -- flavor text only, no gameplay effect, so reusing
-    // Random.Shared rather than this empire's deterministic combat `random` is consistent with that
-    // existing choice, not a new one.
-    private string MyLord() => human.IsEmpress
-        ? new[] { "My Lady", "Your Highness", "Your Excellency", "My Empress" }[Random.Shared.Next(4)]
-        : new[] { "My Lord", "Your Highness", "Your Majesty", "My Liege", "Your Excellency", "Sir" }[Random.Shared.Next(6)];
+    private string MyLord() => Honorifics.MyLord(human.IsEmpress);
 
     private MenuBarItem[] BuildMenus() => [
         new MenuBarItem("⌂", new MenuItem[] {

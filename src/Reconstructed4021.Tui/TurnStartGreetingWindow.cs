@@ -26,7 +26,7 @@ internal sealed class TurnStartGreetingWindow : Window
         // inherit it.
         SetScheme(new Scheme(new TgAttribute(StandardColor.LightGray, StandardColor.Blue)));
 
-        var lord = MyLord(player.IsEmpress);
+        var lord = Honorifics.MyLord(player.IsEmpress);
 
         var greeting = greetingVariant switch {
             1 => $"Welcome, {lord}, I trust your sleep was peaceful and untroubled by\nthe events of the year.",
@@ -40,10 +40,4 @@ internal sealed class TurnStartGreetingWindow : Window
 
         KeyDown += (_, _) => App?.RequestStop();
     }
-
-    // PRIMINTR.PAS's MyLord: an independently-randomized honorific, layered on top of the 3-way
-    // greeting-text choice above.
-    private static string MyLord(bool isEmpress) => isEmpress
-        ? new[] { "My Lady", "Your Highness", "Your Excellency", "My Empress" }[Random.Shared.Next(4)]
-        : new[] { "My Lord", "Your Highness", "Your Majesty", "My Liege", "Your Excellency", "Sir" }[Random.Shared.Next(6)];
 }
