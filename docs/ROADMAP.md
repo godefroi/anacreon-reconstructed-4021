@@ -1014,6 +1014,31 @@ Direct2D) surfaced; see the README's Known Issues section.
     still shows its old generic `MessageBox`. Reproducing `EnemyConquered` properly also means
     `AskToCapture` (deciding whether to capture a defeated fleet's ships), an unrelated mechanic that
     belongs with combat work, not visibility/redaction work (docs/OPEN_GAPS.md).
+- **8l, nebula actually affects scouting.** `INTRFACE.PAS`'s three real `GetNebula` call sites in the
+  visibility code (`Scout`, `ProbeScout`, `InRangeOfPlanet`) grepped and checked one by one;
+  `ProbeScout`'s own dark-nebula exit was already ported, the other two weren't.
+  - **`VisibilityHandler.IsInRangeOfPlanet`** now requires the *target* cell to have no nebula at all
+    (`GetNebula(ObjXY)=NoNeb`, INTRFACE.PAS:1411) — any of Nebula/DarkNebula/DenseNebula blocks a
+    planet's own passive detection range, not just DarkNebula's stronger ring-stopping rule below.
+  - **`VisibilityHandler.ScoutAdjacent`** (the `Scout(Emp,XY)` primitive `CombatOutcome.ConquerWorld`
+    also calls) now iterates the same fixed clockwise `_probeScoutOffsets` order `ScoutFromProbe`
+    already used, instead of an unordered set — order matters once a Dark Nebula cell can stop the
+    scan partway through the ring (INTRFACE.PAS:132-133): the cell itself still gets scouted, nothing
+    later in the fixed order does.
+  - **`POk` news on first contact, found and fixed alongside the nebula work, at the user's own
+    prompt** ("why not simply implement this now?") rather than left as a second documented gap the
+    way `DisplayBackground`'s `conquer:true` caller was. Not nebula-specific, but small, already using
+    infrastructure `ScoutFromProbe` exercises the same way, and genuinely in the code being touched —
+    confirmed `POk` is one real shared news constant between `Scout` and `ProbeScout` (`NEWS.PAS:34,126`),
+    not a coincidentally similar name; real Pascal's own message text ("Imperial probe has scouted
+    *.") stays literally about a probe even when `Scout` fires it, transcribed as-is. New
+    `VisibilityHandler.ScoutOneEntity<T>` centralizes the "not yet Scouted → fire news if first
+    contact with someone else's object, then mark Scouted" check so it isn't duplicated across the
+    four entity-kind loops in `ScoutAdjacent`.
+  - Confirmed via full source grep that these three call sites are the *only* nebula-and-visibility
+    intersection in real Pascal — no other file references `GetNebula` from scouting/detection logic,
+    and no NPE AI file (`NPE00.PAS`/`NPE03.PAS`) reads nebula state at all. Dense-nebula fleet/starbase
+    movement blocking was already real (`FleetMovementHandler`), unaffected by this entry.
 
 ## 9. Async/hotseat turn mode
 

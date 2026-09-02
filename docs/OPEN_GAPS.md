@@ -31,9 +31,6 @@ codebase is in a test file.
 
 ## Human interactive turn handler / TUI
 
-- **No nebula-vision modeling.** Nebula never reduces or blocks scouting range
-  (`VisibilityHandler.ScoutAdjacent`'s own TODO for the dark-nebula early exit) — a genuinely separate
-  gap from the map/Close Up's own `Known`/`Scouted` gating, which is otherwise real.
 - **`DisplayBackground`'s post-conquest caller isn't wired.** `Game.FindWorldBackgroundText` and
   `CloseUpWindow` cover `CLSCOMM.PAS: CloseUpCom`'s own call (`conquer:false`), the real scenario
   flavor text. `ATTCOMM.PAS: EnemyConquered` calls the same primitive a second way (`conquer:true`,
