@@ -90,7 +90,7 @@ internal sealed class CloseUpWindow : Window
         if (fleet is not null) {
             LayoutFleet(fleet, viewer, game);
         } else if (obj is IEconomicWorld world) {
-            LayoutWorld(world, viewer);
+            LayoutWorld(world, viewer, game);
         }
     }
 
@@ -118,15 +118,19 @@ internal sealed class CloseUpWindow : Window
     };
 
     /// <summary>
-    /// DisplayBasicInfo (col 2/24) + DisplayCargoInfo (col 51-52) + DisplayMilitaryInfo (col 2-3),
-    /// CLSCOMM.PAS:500-634. Three separate redaction rules, not one applied three times: the
-    /// Cls/Tech/Pop/Eff/Amb/Rev block needs <see cref="Game.ScoutedOrOwned"/> or it's left blank
-    /// (labels only); the amb/che/met/sup/tri cargo line is gated on ownership alone, never shown for
-    /// anyone else's world no matter how well scouted (DisplayCargoInfo has no Scouted branch at all);
-    /// the ships/legions/defenses line falls back to <see cref="YesNo"/>'s coarse magnitude bucket
-    /// when Scouted-but-not-owned, or "????" when not even that.
+    /// DisplayBasicInfo (col 2/24) + DisplayCargoInfo (col 51-52) + DisplayMilitaryInfo (col 2-3) +
+    /// DisplayBackground (col 2, row 10), CLSCOMM.PAS:500-634,804-805. Four separate redaction rules,
+    /// not one applied three or four times: the Cls/Tech/Pop/Eff/Amb/Rev block needs
+    /// <see cref="Game.ScoutedOrOwned"/> or it's left blank (labels only); the amb/che/met/sup/tri
+    /// cargo line is gated on ownership alone, never shown for anyone else's world no matter how well
+    /// scouted (DisplayCargoInfo has no Scouted branch at all); the ships/legions/defenses line falls
+    /// back to <see cref="YesNo"/>'s coarse magnitude bucket when Scouted-but-not-owned, or "????"
+    /// when not even that; the scenario's own flavor text (<see cref="Game.FindWorldBackgroundText"/>)
+    /// needs the same Scouted gate as the basic-info block, matching CloseUpCommand's own <c>IF
+    /// Scouted(Player,Obj) THEN DisplayBackground(...)</c> — not shown at all for an owned-but-not-
+    /// yet-Scouted world either, real Pascal's own condition, not an oversight.
     /// </summary>
-    private void LayoutWorld(IEconomicWorld world, Empire viewer)
+    private void LayoutWorld(IEconomicWorld world, Empire viewer, Game game)
     {
         var owned = ReferenceEquals(world.Owner, viewer);
         var scouted = Game.ScoutedOrOwned(viewer, world);
@@ -156,6 +160,11 @@ internal sealed class CloseUpWindow : Window
             $"{Level(s.Fighters),5}{Level(s.HunterKillers),5}{Level(s.Jumpships),5}{Level(s.Jumptransports),5}{Level(s.Penetrators),5}{Level(s.Starships),5}{Level(s.Transports),5}" +
             $"  {Level(c.Legions),5}{Level(c.NinjaLegions),5}" +
             $"  {Level(d.Lams),5}{Level(d.DefenseSatellites),5}{Level(d.Gdms),5}{Level(d.IonCannons),5}");
+
+        if (scouted && Game.FindWorldBackgroundText(game, world, viewer, conquer: false) is { } background) {
+            for (var i = 0; i < background.Count; i++)
+                AddAt(1, 9 + i, background[i]);
+        }
     }
 
     /// <summary>
