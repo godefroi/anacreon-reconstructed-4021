@@ -916,9 +916,9 @@ Direct2D) surfaced; see the README's Known Issues section.
   - **`GalaxyView`** (`MAPWIND.PAS: UMSector`/`UMFleets`/`EnemyFleetInSector`) — a world glyph only
     draws once `Game.Visible` says so, otherwise the sector falls through to nebula/grid/blank exactly
     as if nothing were there; the enemy-fleet indicator needs the identical per-fleet check, the
-    player-fleet indicator needs none (owning it is trivially visible). Not reproduced:
-    `UnkPlanetChar`, the distinct "something's here" glyph real Pascal draws for an unscouted planet
-    specifically inside a nebula — this port has no nebula-vision modeling at all yet.
+    player-fleet indicator needs none (owning it is trivially visible). `UnkPlanetChar` (the distinct
+    "something's here" glyph for an unscouted planet specifically inside a nebula) wasn't reproduced
+    here yet — see 8j below.
   - **`GameShell.ObjectsAt`** gated the same way, so Close Up/the sector picker can't surface or open
     anything the map itself would hide. `GameShell.PickGround` (Transfer/Abort-Join/Refuel's own
     picker) needed no equivalent change: its source fleet is always physically at the location being
@@ -931,9 +931,33 @@ Direct2D) surfaced; see the README's Known Issues section.
     the real fixture and calling `VisibilityHandler.RefreshVisibility` directly rather than guessing
     from the scoring rules alone. Faithful to a no-starbase scenario, not a bug — but exactly the kind
     of consequence worth checking before, not after, wiring the renderer to it.
-  - Still open, tracked in `docs/OPEN_GAPS.md`: `CloseUpWindow`'s own field dump still shows
-    everything about an object once opened, rather than reproducing `CloseUpCom`'s finer-grained
-    `Known`-vs-`Scouted` per-field redaction.
+  - Left open at the time, closed in 8j below: `UnkPlanetChar` and `CloseUpWindow`'s own per-field
+    `Known`-vs-`Scouted` redaction.
+- **8j, `UnkPlanetChar` and Close Up's field-level redaction.** The two gaps 8i's own map/Close Up
+  gating deliberately left open.
+  - **`GalaxyView`'s `UnkPlanetChar`** (`MAPWIND.PAS:36,1097-1101`, CP437 #112, `p`) — an unscouted
+    planet specifically inside a nebula now draws that distinct glyph in `UnscoutedColor`
+    (`COLORS.INC`'s `UnscoutedColor: 4`, red on black via the existing `DosColors.Red` correction)
+    rather than reading as plain nebula.
+  - **`Game.ScoutedOrOwned(empire, source)`** (`Game.cs`, beside `Visible`) — Scouted, or owned
+    outright; same ownership-fallback reasoning as `Visible` (real Pascal's `ScoutFleets`
+    unconditionally Scouts every one of an empire's own fleets, a guarantee this port's
+    `VisibilityHandler` can't offer before it's actually run once for that owner).
+  - **`CloseUpWindow`'s real per-field redaction**, transcribed from `CLSCOMM.PAS`'s
+    `DisplayBasicInfo`/`DisplayCargoInfo`/`DisplayMilitaryInfo` (worlds) and
+    `DisplayFleetInfo`/`DisplayFleetComplement` (fleets) — three genuinely different rules per source,
+    not one rule reused: a world's Cls/Tech/Pop/Eff/Amb/Rev block needs `ScoutedOrOwned` or stays
+    blank; its amb/che/met/sup/tri cargo line is gated on ownership *alone*, never upgraded by
+    Scouted (`DisplayCargoInfo` has no Scouted branch at all); its ships/legions/defenses line falls
+    back to `MISC.PAS`'s `YesNo` — a coarse magnitude bucket ("yes-".."yes+", not an exact count), not
+    a boolean — when Scouted-but-not-owned. A fleet's header type/owner name needs `ScoutedOrOwned`
+    (stricter than a world's, which only needs Known); its Status/Destination/Range/complement each
+    have their own real gate transcribed from source, including `DisplayFleetInfo`'s odd
+    Destination rule (a non-owned fleet's destination only shows while it's `Ready`, hidden while
+    still in transit even if Scouted) and `DisplayFleetComplement`'s `ResI IN [fgt..trn]` guard (only
+    ship-type counts get the `YesNo` upgrade; legions/cargo redact to "????" for anyone but the owner,
+    same as a world's cargo line). Not ported: `CloseUpCom`'s own `DisplayBackground` racial/artifact
+    panel — never built at all, not a redaction regression.
 
 ## 9. Async/hotseat turn mode
 
