@@ -136,7 +136,7 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
             var command = NextToken(tokenizer).ToUpperInvariant();
             switch (command) {
                 case "DEBUGSCENARIO": break; // DebugScena only gates diagnostic WriteLns in real Pascal -- no state effect to model
-                case "BEGINDESCRIPTION": SkipDescriptions(tokenizer); break;
+                case "BEGINDESCRIPTION": ParseDescriptions(tokenizer); break;
                 case "CLASSTABLE": _classTable = LoadClassArray(tokenizer); break;
                 case "CREATENEBULA": RunCreateNebula(tokenizer, galaxy); break;
                 case "CREATERANDOMNEBULA": RunCreateRandomNebula(tokenizer, galaxy); break;
@@ -152,12 +152,16 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
                 case "REPORT": NextToken(tokenizer); break; // WriteLn(token) in real Pascal -- no console to write to
                 case "TECHTABLE": _techTable = LoadTechArray(tokenizer); break;
                 case "SETTRILLUMRESERVES": _trillumReserveBase = RunSetTrillumReserves(tokenizer); break;
-                case "ENDSCENARIO": return game;
+                case "ENDSCENARIO":
+                    ResolveWorldBackground(galaxy, game);
+                    return game;
                 default: throw new FormatException($"ERROR: Unknown command \"{command}\"");
             }
 
-            if (tokenizer.AtEnd)
+            if (tokenizer.AtEnd) {
+                ResolveWorldBackground(galaxy, game);
                 return game;
+            }
         }
     }
 
@@ -298,15 +302,142 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         return pages;
     }
 
-    /// <summary>NEWGAME.PAS:1372-1386 (SkipDescriptions) — whole-line reads, not tokens, until a line containing ENDDESCRIPTION or EoF.</summary>
-    private static void SkipDescriptions(ScenarioTokenizer tokenizer)
+    private readonly record struct RawBackgroundEntry(
+        int ObjType, int Index, IReadOnlyList<(BackgroundConditionKind Kind, IReadOnlyList<int> Slots)> Conditions, int TextNumber);
+
+    private readonly List<RawBackgroundEntry> _rawBackgroundIndex = [];
+    private readonly Dictionary<int, List<string>> _backgroundTexts = [];
+
+    /// <summary>
+    /// SCENA.PAS's WorldBackgroundIndex/TEXT parsing (DisplayBackground/LoadScenaText), replacing
+    /// this method's own former SkipDescriptions (whole-line reads until ENDDESCRIPTION, discarding
+    /// everything). Stores rows/texts by their raw slot/index numbers rather than resolving to real
+    /// Planet/Starbase/Empire references immediately: every real scenario file places this block
+    /// before the CreateWorld/CreatePlayerEmpire/CreateNPEmpire commands that would create them, so
+    /// nothing exists yet to resolve against at this point in the load — <see cref="ResolveWorldBackground"/>
+    /// does that once the whole file has finished loading (see <see cref="Game.WorldBackgroundIndex"/>'s
+    /// own doc comment on why this is a one-time parse rather than real Pascal's own reopen-and-rescan).
+    /// A description block with no WorldBackgroundIndex at all (just flavor text, matching this
+    /// method's own former behavior) is valid and produces nothing. Every marker here (WorldBackgroundIndex/
+    /// EndIndex/ENDDESCRIPTION) is matched the same substring-anywhere way real Pascal's own FindLine
+    /// does (<c>Pos(LineToFind,TestLine)&lt;&gt;0</c>) — not <see cref="CollectIntroTextPages"/>'s own
+    /// deliberate whole-trimmed-line deviation, which is a different scan (BEGINTEXT, token-based) for
+    /// a different reason (see that method's own doc comment).
+    /// </summary>
+    private void ParseDescriptions(ScenarioTokenizer tokenizer)
     {
         string line;
         do {
             if (tokenizer.AtEnd)
                 throw new FormatException("ERROR: EndDescription not found.");
             line = tokenizer.ReadLine();
-        } while (!line.ToUpperInvariant().Contains("ENDDESCRIPTION"));
+        } while (!ContainsMarker(line, "WORLDBACKGROUNDINDEX") && !ContainsMarker(line, "ENDDESCRIPTION"));
+
+        if (ContainsMarker(line, "ENDDESCRIPTION"))
+            return;
+
+        while (true) {
+            if (tokenizer.AtEnd)
+                throw new FormatException("ERROR: EndIndex not found.");
+            line = tokenizer.ReadLine();
+            if (ContainsMarker(line, "ENDINDEX"))
+                break;
+
+            var trimmed = StripComment(line).Trim();
+            if (trimmed.Length > 0)
+                _rawBackgroundIndex.Add(ParseIndexRow(trimmed));
+        }
+
+        while (true) {
+            if (tokenizer.AtEnd)
+                throw new FormatException("ERROR: EndDescription not found.");
+            line = tokenizer.ReadLine();
+            if (ContainsMarker(line, "ENDDESCRIPTION"))
+                return;
+
+            var trimmed = line.Trim();
+            if (!trimmed.StartsWith("TEXT ", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!int.TryParse(trimmed[5..].Trim(), out var textNumber))
+                throw new FormatException($"ERROR: Illegal number format \"{trimmed}\"");
+
+            var body = new List<string>();
+            while (true) {
+                if (tokenizer.AtEnd)
+                    throw new FormatException("ERROR: EndText not found.");
+                line = tokenizer.ReadLine();
+                if (line.Trim().Equals("ENDTEXT", StringComparison.OrdinalIgnoreCase))
+                    break;
+                body.Add(line);
+            }
+            _backgroundTexts[textNumber] = body;
+        }
+    }
+
+    private static bool ContainsMarker(string line, string marker) => line.ToUpperInvariant().Contains(marker);
+
+    private static string StripComment(string line)
+    {
+        var semi = line.IndexOf(';');
+        return semi >= 0 ? line[..semi] : line;
+    }
+
+    /// <summary>
+    /// SCENA.PAS's SplitLine+IDMatch+SatisfiesConditions, applied to one already comment-stripped,
+    /// trimmed WorldBackgroundIndex row: leading "type:index" token, zero or more "E:slot,slot"/
+    /// "A:slot,slot" condition tokens, trailing text number.
+    /// </summary>
+    private static RawBackgroundEntry ParseIndexRow(string line)
+    {
+        var tokens = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length < 2 || !Game.TryParseTypeIndex(tokens[0], out var objType, out var index))
+            throw new FormatException($"ERROR: Malformed WorldBackgroundIndex row \"{line}\"");
+        if (!int.TryParse(tokens[^1], out var textNumber))
+            throw new FormatException($"ERROR: Illegal number format \"{tokens[^1]}\"");
+
+        var conditions = new List<(BackgroundConditionKind, IReadOnlyList<int>)>();
+        for (var i = 1; i < tokens.Length - 1; i++) {
+            var token = tokens[i];
+            if (token.Length < 3 || token[1] != ':')
+                throw new FormatException($"ERROR: Malformed WorldBackgroundIndex condition \"{token}\"");
+
+            var kind = char.ToUpperInvariant(token[0]) switch {
+                'E' => BackgroundConditionKind.OwnedBy,
+                'A' => BackgroundConditionKind.ConqueredBy,
+                _ => throw new FormatException($"ERROR: Unknown WorldBackgroundIndex condition \"{token}\""),
+            };
+            var slots = token[2..].Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToList();
+            conditions.Add((kind, slots));
+        }
+
+        return new RawBackgroundEntry(objType, index, conditions, textNumber);
+    }
+
+    /// <summary>
+    /// Resolves every raw-slot-number row <see cref="ParseDescriptions"/> collected into a real
+    /// <see cref="Game.WorldBackgroundIndex"/> entry, now that every CreateWorld/CreateRandomWorlds/
+    /// CreatePlayerEmpire/CreateNPEmpire command in the file has actually run — both the objects and
+    /// <see cref="_empireBySlot"/> are only fully populated by the time <see cref="Load"/> returns. A
+    /// row whose object type isn't Pln/Base, or whose 1-based index is out of range, is silently
+    /// dropped — confirmed no real committed scenario ever references anything else
+    /// (docs/OPEN_GAPS.md notes the narrower gap this leaves for a hypothetical Con/Gate row, which
+    /// this port's own CloseUpWindow doesn't lay out background text for at all yet anyway).
+    /// </summary>
+    private void ResolveWorldBackground(Galaxy.Galaxy galaxy, Game game)
+    {
+        foreach (var raw in _rawBackgroundIndex) {
+            if (Game.ResolveWorldReference(galaxy, raw.ObjType, raw.Index) is not { } world)
+                continue;
+
+            var conditions = raw.Conditions
+                .Select(c => new BackgroundCondition(c.Kind, c.Slots.Select(ResolveEmpire).ToHashSet()))
+                .ToList();
+
+            game.WorldBackgroundIndex.Add(new WorldBackgroundEntry(world, conditions, raw.TextNumber));
+        }
+
+        foreach (var (number, lines) in _backgroundTexts)
+            game.BackgroundTexts[number] = lines;
     }
 
     /// <summary>NEWGAME.PAS:258-290 (GetRandomRange) — "N" (a fixed value) or "N..M" (a range), both ends inclusive.</summary>

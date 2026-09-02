@@ -100,6 +100,30 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     public List<Message> Messages { get; } = [];
 
     /// <summary>
+    /// SCENA.PAS's own WorldBackgroundIndex, parsed once at scenario load (<see cref="NewGame.ScenarioLoader"/>)
+    /// rather than real Pascal's own "reopen and rescan the original .SCN file every single Close Up
+    /// call" (<c>DisplayBackground</c> literally re-<c>Assign</c>s/<c>Reset</c>s the file each time) —
+    /// same content, cheaper lookup, since this port's <see cref="Entities.Planet"/>/<see cref="Empire"/>
+    /// references don't need reconstructing from a byte offset the way Pascal's own <c>IDNumber</c>s do.
+    /// Not <c>[JsonIgnore]</c>d for the reference-cycle reasons <see cref="Turns.ITurnHandler"/>'s own
+    /// dictionary is (<see cref="Entities.WorldBackgroundEntry.World"/> is an <see cref="Entities.ISectorObject"/>
+    /// reference) — also matches real Pascal, which never persists this in a <c>.SAV</c> either, always
+    /// re-deriving it from <see cref="ScenarioFilename"/> on demand. A game loaded via <c>.SAV</c>/native
+    /// JSON (this port has no equivalent "re-open the original .SCN" step) simply has none, same as a
+    /// hand-built fixture never parsed from a real scenario at all.
+    /// </summary>
+    [JsonIgnore]
+    public List<Entities.WorldBackgroundEntry> WorldBackgroundIndex { get; } = [];
+
+    /// <summary>
+    /// SCENA.PAS's own <c>TEXT n</c>..<c>ENDTEXT</c> bodies, keyed by their number — raw lines,
+    /// <c>[C:id]</c>/<c>[N:id]</c> placeholders unsubstituted until <see cref="FindWorldBackgroundText"/>
+    /// resolves them for a specific viewer.
+    /// </summary>
+    [JsonIgnore]
+    public Dictionary<int, IReadOnlyList<string>> BackgroundTexts { get; } = [];
+
+    /// <summary>
     /// Deliberately <see cref="Types.EmpireStatus"/>-blind: cycles through every fixed slot,
     /// eliminated or not, matching real Pascal's own fixed per-empire array (only the *player* index
     /// cycles unconditionally; per-slot behavior, not iteration, is what's gated). All
@@ -220,4 +244,120 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     /// </summary>
     public static bool ScoutedOrOwned(Empire empire, ISectorObject source) =>
         Scouted(empire, source) || source.Owner == empire;
+
+    /// <summary>
+    /// SCENA.PAS's DisplayBackground: the first <see cref="WorldBackgroundIndex"/> row (file order)
+    /// whose <see cref="WorldBackgroundEntry.World"/> is <paramref name="world"/> and whose
+    /// <see cref="WorldBackgroundEntry.Conditions"/> all pass for (<paramref name="conquer"/>, that
+    /// world's current <see cref="ISectorObject.Owner"/>). Returns the matched <c>TEXT</c> block's
+    /// lines, <c>[C:id]</c>/<c>[N:id]</c> placeholders substituted for <paramref name="viewer"/>, or
+    /// null if nothing matched (real Pascal's own <c>Found=False</c>). <c>CLSCOMM.PAS</c>'s own
+    /// <c>CloseUpCom</c> call always passes <c>conquer:false</c>; <c>ATTCOMM.PAS</c>'s post-conquest
+    /// report (<c>conquer:true</c>) isn't wired to any caller yet (docs/OPEN_GAPS.md).
+    /// </summary>
+    public static IReadOnlyList<string>? FindWorldBackgroundText(Game game, ISectorObject world, Empire viewer, bool conquer)
+    {
+        var wantKind = conquer ? BackgroundConditionKind.ConqueredBy : BackgroundConditionKind.OwnedBy;
+
+        foreach (var entry in game.WorldBackgroundIndex) {
+            if (!ReferenceEquals(entry.World, world))
+                continue;
+            if (!entry.Conditions.All(c => c.Kind == wantKind && c.Empires.Contains(world.Owner)))
+                continue;
+            if (!game.BackgroundTexts.TryGetValue(entry.TextNumber, out var lines))
+                continue;
+
+            return lines.Select(line => SubstitutePlaceholder(game, viewer, line)).ToList();
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// SCENA.PAS's ParseLine: at most one <c>[C:id]</c>/<c>[N:id]</c> marker per line (the first '['
+    /// through the first ']'), replaced with a relative coordinate or a short object name — real
+    /// Pascal only ever scans for one bracket pair per line, never loops for a second, so neither
+    /// does this. A marker whose id doesn't resolve is dropped rather than left as raw <c>[X:...]</c>
+    /// text, matching Pascal's own <c>IDMatch</c> leaving <c>ID:=EmptyQuadrant</c> on failure rather
+    /// than throwing — a malformed marker in scenario prose shouldn't crash the game.
+    /// </summary>
+    private static string SubstitutePlaceholder(Game game, Empire viewer, string line)
+    {
+        var open = line.IndexOf('[');
+        var close = open < 0 ? -1 : line.IndexOf(']', open);
+        if (open < 0 || close < 0)
+            return line;
+
+        var marker = line[open..(close + 1)];
+        if (marker.Length < 5 || marker[2] != ':')
+            return line;
+
+        var kind = marker[1];
+        if (kind is not ('C' or 'N') || !TryParseTypeIndex(marker[3..^1], out var objType, out var index))
+            return line;
+
+        var target = ResolveWorldReference(game.Galaxy, objType, index);
+        if (target is null)
+            return line.Remove(open, marker.Length);
+
+        var replacement = kind == 'C'
+            ? CoordinateName(game, viewer, target.Location)
+            : target.Names.GetValueOrDefault(viewer) ?? DescribeBackgroundKind(target);
+
+        return line.Remove(open, marker.Length).Insert(open, replacement);
+    }
+
+    /// <summary>
+    /// PRIMINTR.PAS's GetCoordName: a location's coordinates relative to <paramref name="viewer"/>'s
+    /// own capital (X same sign, Y flipped since screen-down is universe-"south"). Matches
+    /// GalaxyView's own cursor-readout formula (its <c>CursorCoordinateText</c>), which is relative
+    /// to the map's own origin rather than a general <see cref="Empire"/> — kept separate rather than
+    /// shared, since that origin also falls back to the galaxy's center with no capital, a UI-only
+    /// concern this query doesn't need.
+    /// </summary>
+    private static string CoordinateName(Game game, Empire viewer, Galaxy.Coordinate location)
+    {
+        var origin = viewer.Capital?.Location ?? new Galaxy.Coordinate(game.Galaxy.Size / 2, game.Galaxy.Size / 2);
+        return $"{location.X - origin.X},{origin.Y - location.Y}";
+    }
+
+    /// <summary>
+    /// <c>ObjectName</c>'s fallback when nothing has named this object — mirrors the TUI's own
+    /// <c>CloseUpWindow.DescribeKind</c>/<c>GameShell.ObjectListItem</c> convention, kept as a
+    /// separate small copy here rather than shared (Core can't reference the Tui project, and
+    /// <c>[N:id]</c> is never actually exercised by any committed scenario — confirmed, no real .SCN
+    /// uses it — so this exists for file-format completeness, not to serve real content).
+    /// </summary>
+    private static string DescribeBackgroundKind(ISectorObject obj) => obj switch {
+        Planet p => p.Type.ToString(),
+        Starbase s => s.Kind.ToString(),
+        Stargate g => g.Kind.ToString(),
+        ConstructionSite c => $"{c.Building} site",
+        Fleet => "Fleet",
+        _ => "Unknown",
+    };
+
+    /// <summary>"type:index" (SCENA.PAS's own colon-packed token) split into its two integers, or false if it isn't one.</summary>
+    internal static bool TryParseTypeIndex(string text, out int objType, out int index)
+    {
+        var colon = text.IndexOf(':');
+        if (colon >= 0 && int.TryParse(text[..colon], out objType) && int.TryParse(text[(colon + 1)..], out index))
+            return true;
+
+        (objType, index) = (0, 0);
+        return false;
+    }
+
+    /// <summary>
+    /// IDMatch (SCENA.PAS): a "type:index" reference (ObjectTypes ordinals — Pln=2, Base=3) to the
+    /// real object <see cref="NewGame.ScenarioLoader"/> created at that 1-based Pascal index, or null
+    /// for any other type or an out-of-range index. Only Pln/Base are supported — confirmed the only
+    /// two types any real WorldBackgroundIndex row or <c>[C:id]</c>/<c>[N:id]</c> marker ever
+    /// references, and the only two the TUI's own CloseUpWindow lays out background text for anyway.
+    /// </summary>
+    internal static ISectorObject? ResolveWorldReference(Galaxy.Galaxy galaxy, int objType, int index) => objType switch {
+        2 when index >= 1 && index <= galaxy.Planets.Count => galaxy.Planets[index - 1],
+        3 when index >= 1 && index <= galaxy.Starbases.Count => galaxy.Starbases[index - 1],
+        _ => null,
+    };
 }
