@@ -175,9 +175,12 @@ public static class CombatResolution
     /// Retreating group one shell back, resetting to Ready either way. A transport/jumptransport
     /// reaching Ground with troops aboard swaps Num/Gat and becomes a troop group (Typ:=GatTyp) — and
     /// its Trg is unconditionally set to Legion regardless of whether the cargo was actually
-    /// NinjaLegion, a real Pascal quirk (ATTACK.PAS:205) preserved verbatim, not fixed.
+    /// NinjaLegion, a real Pascal quirk (ATTACK.PAS:205) preserved verbatim, not fixed. Internal (not
+    /// private): <see cref="InteractiveCombatState"/> reuses this exact primitive for the player-driven
+    /// engine (ATTCOMM.PAS's own GroupEngage calls the same AdvanceGroups this unit's automatic
+    /// GroupEngage does) rather than duplicating it.
     /// </summary>
-    private static void AdvanceGroups(IReadOnlyList<GroupRecord> groups)
+    internal static void AdvanceGroups(IReadOnlyList<GroupRecord> groups)
     {
         foreach (var g in groups) {
             if (g.Sta == GroupStatus.Advancing) {
