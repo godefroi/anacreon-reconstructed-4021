@@ -1098,10 +1098,12 @@ Direct2D) surfaced; see the README's Known Issues section.
     groups now skips the battle entirely (`AttackCommand`'s own `IF NoOfGroups>0` gate,
     `ATTCOMM.PAS:1619`), matching real Pascal rather than fighting an empty engagement.
   - **`OldShipsFound` built, `EmpireConquestReport` deliberately not** — asked the user how to
-    handle the two remaining real (Pascal-has-it-port-doesn't) gaps found while scoping this, plus
-    the battle screen's decorative art; `OldShipsFound` was cheap and directly adjacent to code
-    already being touched, so built; the art and `EmpireConquestReport` (which would need
-    `Booty` tracking un-dropped first) were tracked as `OPEN_GAPS.md` bullets instead.
+    handle two remaining real (Pascal-has-it-port-doesn't) gaps found while scoping this;
+    `OldShipsFound` was cheap and directly adjacent to code already being touched, so built;
+    `EmpireConquestReport` (which would need `Booty` tracking un-dropped first) was tracked as an
+    `OPEN_GAPS.md` bullet instead. (The battle screen's own decorative art was in this same
+    "track instead of build" bucket at first too — see the correction entry below; it isn't
+    anymore.)
   - **Capital Fallen Report** (`PROLOG.PAS: EmpireNews`) — genuinely independent of hotseat (unlike
     `GetPassword`, still deferred): the mechanical `PendingElimination`→`Eliminated` teardown was
     already fully ported and tested at the `TurnEngine`/`CombatOutcome` layer, only the narrative
@@ -1115,6 +1117,26 @@ Direct2D) surfaced; see the README's Known Issues section.
     at all) — every bit of correctness confidence for this entry comes from Core-level tests
     (`InteractiveCombatTests`, `FleetGroupConfigurationTests`, the `ScenarioLoaderWorldBackgroundTests`
     ordering fix) plus manual playtest, same as every other Tui surface in this port.
+  - **Correction, found by the user's own playtest**: `DrawScreen`'s whole visual complex
+    (`DrawGrid`/`DrawStars`/`DrawObject`/`DrawEnemyShips`/`DrawGroupShips`) was judged "decorative,
+    zero information content" above and left unbuilt — wrong, on two counts caught only once a real
+    screenshot of the actual DOS game was compared against this port's own screen. First:
+    `TYPES.PAS`'s `ObjectTypes` is declared `(Void,Con,Pln,Base,Gate,...)`, so `DrawScreen`'s own
+    `IF Obj IN [Con..Gate] THEN DrawGrid ELSE DrawStars` actually means "attacking a Planet or Base"
+    (the common case, and the case in the user's screenshot) draws the range grid — only a Fleet
+    target gets the rare starfield branch. Second, and more important: `DrawGroupShips` (called
+    every round from `GroupEngage`, right alongside `Battle`) draws each live group's own marker at
+    its *current shell*, continuously — real information a player needs to track the battle with,
+    not a decoration, and not equivalent to fetching it via `G`roup status on demand. Fixed by
+    building a custom-drawn `BattleMapView` (`TacticalBattleDisplayWindow.cs`) reproducing all of
+    `DrawScreen`: the range grid/starfield, the target's own ASCII silhouette (`DrawObject`, its
+    exact CP437 bytes extracted via a raw codepage-437 byte read of `ATTCOMM.PAS` — this project's
+    own established caveat that normal file reads corrupt those bytes), the abstracted
+    enemy-ship-cluster glyphs (`DrawEnemyShips`), and the group-position markers, all positioned
+    using real Pascal's own byte-offset constant tables (`OrbLoc`/`PlayerOffset`/`EnemyOffset`/
+    `Disp`/`Disp2`, ATTCOMM.PAS:46-65,1136-1142) decoded to plain row/column deltas. Explicitly told
+    not to defer any of this a second time once asked — built all four pieces in this same pass
+    rather than re-triaging by perceived value again.
 
 ## 9. Async/hotseat turn mode
 

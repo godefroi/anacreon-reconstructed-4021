@@ -36,10 +36,6 @@ codebase is in a test file.
   status-bar F-key panel are a `MessageBox` stub. `Defenses` needs its own custom grid (ship type ×
   orbital shell percentages) — a different widget from the Resource Distribution Editor, not yet
   built.
-- **Tactical Battle Display has no decorative art.** `ATTCOMM.PAS: DrawScreen`'s `DrawObject`/
-  `DrawGrid`/`DrawStars` (ASCII box-art of the target, range-ring background, a starfield) aren't
-  reproduced — a plain text header names the target instead. Zero information content either way,
-  so this is a low-priority gap, tracked rather than silently dropped.
 - **No post-conquest world-list report.** `ATTACK.PAS: ConquerEmpire`'s own `Booty` (the set of
   world indices that joined the conqueror mid-`ConquerEmpire`) is declared and threaded through
   real Pascal's call chain but never read anywhere in it — dropped entirely by this port, confirmed
