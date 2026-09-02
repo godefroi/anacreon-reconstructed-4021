@@ -24,9 +24,10 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
     }.ToFrozenSet();
 
     // Directions = (NoDir,No,Ne,Ea,Se,So,Sw,We,Nw), DirX/DirY (DATACNST.PAS:561-564) -- center, then
-    // clockwise from north. Order matters here, unlike _adjacentOffsets above: ProbeScout
-    // (INTRFACE.PAS:1289-1344) can stop scanning partway through the ring, so which offsets come
-    // before an early exit is part of the real behavior, not an implementation detail.
+    // clockwise from north. Order matters here, unlike _adjacentOffsets above: both real callers of
+    // this table (ProbeScout, INTRFACE.PAS:1289-1344; Scout, INTRFACE.PAS:91-137/ScoutAdjacent below)
+    // can stop scanning partway through the ring on a Dark Nebula cell, so which offsets come before
+    // that early exit is part of the real behavior, not an implementation detail.
     private static readonly (int dx, int dy)[] _probeScoutOffsets = [
         (0, 0), (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1),
     ];
@@ -225,13 +226,13 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
     /// ScoutAdjacent doubles as PRIMINTR.PAS's own <c>Scout(Emp,XY)</c> primitive — internal, not
     /// private, so <see cref="Combat.CombatOutcome"/>'s ConquerWorld can call it directly for its own
     /// <c>Scout(Emp,XY)</c> call rather than reimplementing a second, inevitably-diverging copy.
-    /// The gaps already noted below (no POk news on first contact, no dark-nebula early exit) apply
-    /// equally to that caller — real Pascal's Scout has both; this port's stand-in has neither yet,
-    /// tracked here, not duplicated as a second gap description at the new call site.
     /// </summary>
     internal static void ScoutAdjacent(Coordinate center, Empire empire, Game game)
     {
-        foreach (var (dx, dy) in _adjacentOffsets) {
+        // Same fixed clockwise-from-center order ProbeScout uses (_probeScoutOffsets' own doc comment)
+        // -- order matters here too: the dark-nebula check below can stop the scan partway through the
+        // ring, so which offsets come before it is real behavior, not an implementation detail.
+        foreach (var (dx, dy) in _probeScoutOffsets) {
             var x = center.X + dx;
             var y = center.Y + dy;
 
@@ -245,31 +246,55 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
             // Scout all objects at this location.
             foreach (var planet in game.Galaxy.Planets) {
                 if (planet.Location == adj) {
-                    empire.Planets.MarkScouted(planet);
+                    ScoutOneEntity(planet, empire.Planets, empire);
                 }
             }
 
             foreach (var starbase in game.Galaxy.Starbases) {
                 if (starbase.Location == adj) {
-                    empire.Starbases.MarkScouted(starbase);
+                    ScoutOneEntity(starbase, empire.Starbases, empire);
                 }
             }
 
             foreach (var stargate in game.Galaxy.Stargates) {
                 if (stargate.Location == adj) {
-                    empire.Stargates.MarkScouted(stargate);
+                    ScoutOneEntity(stargate, empire.Stargates, empire);
                 }
             }
 
             foreach (var constr in game.Galaxy.ConstructionSites) {
                 if (constr.Location == adj) {
-                    empire.ConstructionSites.MarkScouted(constr);
+                    ScoutOneEntity(constr, empire.ConstructionSites, empire);
                 }
             }
 
-            // Dark nebula blocks further adjacent scouting (INTRFACE.PAS:Scout line 132-133).
-            // TODO: implement when nebula mechanics are added.
+            // Dark nebula blocks further adjacent scouting (INTRFACE.PAS:Scout line 132-133): the
+            // cell the scan just landed on still gets scouted (above), but nothing farther around the
+            // ring does once it's Dark Nebula.
+            if (game.Galaxy.GetNebula(adj) == Types.NebulaType.DarkNebula) {
+                return;
+            }
         }
+    }
+
+    /// <summary>
+    /// Scout's own per-object body (INTRFACE.PAS:119-130): first contact with something not yet
+    /// Known and not the scouting empire's own fires <c>POk</c> news (real Pascal's message text is
+    /// "Imperial probe has scouted *." even here — this same news item is <c>ProbeScout</c>'s too,
+    /// NEWS.PAS:34/126 confirms it's genuinely one shared constant, not a coincidentally similar
+    /// name), then the entity is marked Scouted either way. A no-op if already Scouted.
+    /// </summary>
+    private static void ScoutOneEntity<T>(T entity, EntityVisibility<T> visibility, Empire empire) where T : notnull, ISectorObject
+    {
+        if (visibility.Scouted.Contains(entity)) {
+            return;
+        }
+
+        if (!visibility.Known.Contains(entity) && entity.Owner != empire) {
+            empire.AddNews(Types.NewsType.ProbeOk, entity);
+        }
+
+        visibility.MarkScouted(entity);
     }
 
     /// <summary>
@@ -370,7 +395,14 @@ public sealed class VisibilityHandler(Random random) : IVisibilityHandler
 
     private static bool IsInRangeOfPlanet(Coordinate location, Empire empire, Game game)
     {
-        // INTRFACE.PAS:1411 — distance <= 5, not in nebula (deferred).
+        // INTRFACE.PAS:1411 — distance <= 5, and the *target* cell itself must have no nebula at all
+        // (GetNebula(ObjXY)=NoNeb) -- Nebula/DarkNebula/DenseNebula all block a planet's own passive
+        // detection range the same way, not just DarkNebula's stronger "stop scouting past this cell"
+        // rule ScoutAdjacent enforces below.
+        if (game.Galaxy.GetNebula(location) != Types.NebulaType.None) {
+            return false;
+        }
+
         return game.Galaxy.Planets.Any(p =>
             p.Owner == empire &&
             Chebyshev(p.Location, location) <= PlanetDetectRadius);

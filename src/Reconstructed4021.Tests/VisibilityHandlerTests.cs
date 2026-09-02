@@ -625,4 +625,144 @@ public class VisibilityHandlerTests
         await Assert.That(human.Starbases.Known).DoesNotContain(starbase);
         await Assert.That(human.Starbases.Scouted).DoesNotContain(starbase);
     }
+
+    [Test]
+    public async Task FleetInRangeOfOwnedPlanetIsMarkedKnown()
+    {
+        var human = new Empire { Name = "Human" };
+        var enemy = new Empire { Name = "Enemy" };
+        var game = BuildGame(null, ("Human", human), ("Enemy", enemy));
+
+        var planet = new Planet { Owner = human, Location = new Coordinate(10, 10) };
+        game.Galaxy.Planets.Add(planet);
+
+        var enemyFleet = new Fleet {
+            Owner = enemy,
+            Location = new Coordinate(15, 10), // Chebyshev distance 5 -- in range (<=5), not adjacent
+            Status = FleetStatus.Ready,
+        };
+        enemyFleet.Ships.Starships = 1;
+        game.Galaxy.Fleets.Add(enemyFleet);
+
+        var handler = new VisibilityHandler(_alwaysFails);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.Fleets.Known).Contains(enemyFleet);
+        await Assert.That(human.Fleets.Scouted).DoesNotContain(enemyFleet);
+    }
+
+    /// <summary>INTRFACE.PAS:1411 -- InRangeOfPlanet requires GetNebula(ObjXY)=NoNeb; even a plain (non-Dark, non-Dense) Nebula on the target cell blocks a planet's own passive detection range, not just adjacency-independent Dark Nebula scan-stopping.</summary>
+    [Test]
+    public async Task FleetInRangeOfPlanetButCellHasNebula_NotMarkedKnown()
+    {
+        var human = new Empire { Name = "Human" };
+        var enemy = new Empire { Name = "Enemy" };
+        var game = BuildGame(null, ("Human", human), ("Enemy", enemy));
+
+        var planet = new Planet { Owner = human, Location = new Coordinate(10, 10) };
+        game.Galaxy.Planets.Add(planet);
+
+        var enemyFleet = new Fleet {
+            Owner = enemy,
+            Location = new Coordinate(15, 10),
+            Status = FleetStatus.Ready,
+        };
+        enemyFleet.Ships.Starships = 1;
+        game.Galaxy.Fleets.Add(enemyFleet);
+        game.Galaxy.SetNebula(enemyFleet.Location, NebulaType.Nebula);
+
+        var handler = new VisibilityHandler(_alwaysFails);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.Fleets.Known).DoesNotContain(enemyFleet);
+    }
+
+    /// <summary>
+    /// INTRFACE.PAS:Scout (:91-137) stops scanning the rest of the 3x3 ring once it processes a Dark
+    /// Nebula cell -- the cell itself still gets scouted, but nothing later in the fixed clockwise
+    /// order does, matching ProbeScout's own analogous rule. _probeScoutOffsets order: (0,0) center,
+    /// (0,-1) N, (1,-1) NE, ... -- North (index 1) is Dark Nebula here, so North itself is scouted but
+    /// Northeast (index 2, immediately after it in the fixed order) is not.
+    /// </summary>
+    [Test]
+    public async Task ScoutAdjacent_DarkNebulaCellIsScoutedButStopsTheRestOfTheRing()
+    {
+        var human = new Empire { Name = "Human" };
+        var game = BuildGame(null, ("Human", human));
+
+        var ownPlanet = new Planet { Owner = human, Location = new Coordinate(10, 10) };
+        game.Galaxy.Planets.Add(ownPlanet);
+
+        game.Galaxy.SetNebula(new Coordinate(10, 9), NebulaType.DarkNebula); // North of (10,10)
+
+        var onDarkNebulaCell = new Planet { Owner = Empire.Independent, Location = new Coordinate(10, 9) }; // North
+        var afterInScanOrder = new Planet { Owner = Empire.Independent, Location = new Coordinate(11, 9) }; // Northeast
+        game.Galaxy.Planets.Add(onDarkNebulaCell);
+        game.Galaxy.Planets.Add(afterInScanOrder);
+
+        var handler = new VisibilityHandler(_alwaysFails);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.Planets.Scouted).Contains(onDarkNebulaCell);
+        await Assert.That(human.Planets.Scouted).DoesNotContain(afterInScanOrder);
+    }
+
+    /// <summary>INTRFACE.PAS:Scout (:119-127): first contact (not yet Known) with something that isn't the scouting empire's own fires POk news -- the same news item ProbeScout fires (NEWS.PAS:34/126), not a coincidentally similar one.</summary>
+    [Test]
+    public async Task ScoutAdjacent_FirstContactWithUnknownEntity_FiresProbeOkNews()
+    {
+        var human = new Empire { Name = "Human" };
+        var game = BuildGame(null, ("Human", human));
+
+        var ownPlanet = new Planet { Owner = human, Location = new Coordinate(10, 10) };
+        game.Galaxy.Planets.Add(ownPlanet);
+
+        var unknownWorld = new Planet { Owner = Empire.Independent, Location = new Coordinate(10, 9) }; // Adjacent
+        game.Galaxy.Planets.Add(unknownWorld);
+
+        var handler = new VisibilityHandler(_alwaysFails);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.News).Count().IsEqualTo(1);
+        await Assert.That(human.News[0].Headline).IsEqualTo(NewsType.ProbeOk);
+        await Assert.That(human.News[0].Subject).IsSameReferenceAs(unknownWorld);
+    }
+
+    [Test]
+    public async Task ScoutAdjacent_OwnEntity_NeverFiresProbeOkNews()
+    {
+        var human = new Empire { Name = "Human" };
+        var game = BuildGame(null, ("Human", human));
+
+        var ownPlanet = new Planet { Owner = human, Location = new Coordinate(10, 10) };
+        var ownAdjacentPlanet = new Planet { Owner = human, Location = new Coordinate(10, 9) };
+        game.Galaxy.Planets.Add(ownPlanet);
+        game.Galaxy.Planets.Add(ownAdjacentPlanet);
+
+        var handler = new VisibilityHandler(_alwaysFails);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.News).IsEmpty();
+    }
+
+    /// <summary>An entity already Known (just not yet Scouted this turn -- e.g. re-detected via capital range on a prior turn) is a re-contact, not a first contact -- no POk news, even though it still gets (re-)Scouted.</summary>
+    [Test]
+    public async Task ScoutAdjacent_AlreadyKnownEntity_ReScoutedWithoutFiringNewsAgain()
+    {
+        var human = new Empire { Name = "Human" };
+        var game = BuildGame(null, ("Human", human));
+
+        var ownPlanet = new Planet { Owner = human, Location = new Coordinate(10, 10) };
+        game.Galaxy.Planets.Add(ownPlanet);
+
+        var alreadyKnownWorld = new Planet { Owner = Empire.Independent, Location = new Coordinate(10, 9) };
+        game.Galaxy.Planets.Add(alreadyKnownWorld);
+        human.Planets.MarkKnown(alreadyKnownWorld);
+
+        var handler = new VisibilityHandler(_alwaysFails);
+        handler.RefreshVisibility(human, game);
+
+        await Assert.That(human.News).IsEmpty();
+        await Assert.That(human.Planets.Scouted).Contains(alreadyKnownWorld);
+    }
 }

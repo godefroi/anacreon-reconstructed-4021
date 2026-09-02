@@ -34,8 +34,7 @@ public static class CombatOutcome
         ChangeRevolutionIndexOnConquest(world, random);
 
         // Scout(Emp,XY) (INTRFACE.PAS) -- VisibilityHandler.ScoutAdjacent is this port's own stand-in
-        // for that exact primitive (see its own doc comment for the gaps it still has: no POk news on
-        // first contact, no dark-nebula early exit).
+        // for that exact primitive.
         VisibilityHandler.ScoutAdjacent(world.Location, conqueror, game);
     }
 
