@@ -1154,5 +1154,9 @@ Not scheduled, pull in only if/when needed: v2 gameplay changes and new features
 - options-based enable/disable v2 features, as well as other future enhancements
 - fleet orders to build a minefield across an entire area, either a list of coordinates, or a bounded area
 - improved scenario format without so many "magic" numbers
+- Tactical Battle Display: named attack-pattern profiles (per-ship-type targeting rules, saved and
+  reapplied across engagements/turns) as a further layer on top of the auto-target toggle (§8m/8n) --
+  no Pascal precedent, a genuinely port-invented convenience, bigger than auto-target alone (needs a
+  profile editor + persistence) so scoped as a later addition, not part of the initial auto-target work
 - address shortcomings mentioned (or implied) in Jerry Pournelle's review: https://archive.org/details/byte-magazine-1989-01/page/n137/mode/2up
 - counter-based prng for reproduceability: https://chatgpt.com/share/6a945a34-8f90-83e8-83c3-35ef26d6abc0
