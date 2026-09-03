@@ -213,4 +213,83 @@ public class InteractiveCombatTests
         }
         await Assert.That(state.Groups).IsEmpty();
     }
+
+    [Test]
+    public async Task AutoTarget_Off_LeavesTrgUnsetDespiteRealCandidatesExisting()
+    {
+        var enemy = new EnemyForces();
+        enemy[ShellPosition.DeepSpace, AttackType.Fighter] = 50;
+        var group = Group(AttackType.Fighter, ShellPosition.DeepSpace);
+        var state = new InteractiveCombatState([group], enemy, PlanetCombatData); // AutoTarget defaults false
+
+        state.Engage(new FixedRandom(0));
+
+        await Assert.That(group.Trg).IsNull();
+    }
+
+    [Test]
+    public async Task AutoTarget_On_AssignsTargetToUnpinnedGroup()
+    {
+        var enemy = new EnemyForces();
+        enemy[ShellPosition.DeepSpace, AttackType.Fighter] = 50;
+        var group = Group(AttackType.Fighter, ShellPosition.DeepSpace);
+        var state = new InteractiveCombatState([group], enemy, PlanetCombatData) { AutoTarget = true };
+
+        state.Engage(new FixedRandom(0));
+
+        await Assert.That(group.Trg).IsEqualTo(AttackType.Fighter); // the only real candidate present
+    }
+
+    [Test]
+    public async Task AutoTarget_On_PreservesManuallyPinnedTarget_ButStillAssignsUnpinnedGroups()
+    {
+        var enemy = new EnemyForces();
+        enemy[ShellPosition.DeepSpace, AttackType.Fighter] = 50; // no Gdm forces at all -- auto would never pick Gdm on its own
+        var pinnedGroup = Group(AttackType.Fighter, ShellPosition.DeepSpace);
+        var unpinnedGroup = Group(AttackType.Fighter, ShellPosition.DeepSpace);
+        var state = new InteractiveCombatState([pinnedGroup, unpinnedGroup], enemy, PlanetCombatData) { AutoTarget = true };
+        state.SetTarget(pinnedGroup, AttackType.Gdm);
+
+        state.Engage(new FixedRandom(0));
+
+        await Assert.That(pinnedGroup.Trg).IsEqualTo(AttackType.Gdm); // preserved despite no real Gdm candidates
+        await Assert.That(unpinnedGroup.Trg).IsEqualTo(AttackType.Fighter); // auto picked the only real candidate
+    }
+
+    [Test]
+    public async Task SetTarget_Null_UnpinsGroup_AutoTakesOverNextRound()
+    {
+        var enemy = new EnemyForces();
+        enemy[ShellPosition.DeepSpace, AttackType.Fighter] = 50;
+        var group = Group(AttackType.Fighter, ShellPosition.DeepSpace);
+        var state = new InteractiveCombatState([group], enemy, PlanetCombatData) { AutoTarget = true };
+        state.SetTarget(group, AttackType.Gdm);
+        state.SetTarget(group, null); // un-pin
+
+        state.Engage(new FixedRandom(0));
+
+        await Assert.That(group.Trg).IsEqualTo(AttackType.Fighter); // auto took back over once the pin was cleared
+    }
+
+    [Test]
+    public async Task AutoTarget_WorldTarget_GroupAtGround_AlwaysTargetsLegion()
+    {
+        var group = Group(AttackType.Fighter, ShellPosition.Ground);
+        var state = new InteractiveCombatState([group], new EnemyForces(), PlanetCombatData) { AutoTarget = true };
+
+        state.Engage(new FixedRandom(0));
+
+        await Assert.That(group.Trg).IsEqualTo(AttackType.Legion); // WorldEngageTargetting's own unconditional Ground override
+    }
+
+    [Test]
+    public async Task AutoTarget_FleetTarget_DoesNotForceGroundGroupToLegion()
+    {
+        var group = Group(AttackType.Fighter, ShellPosition.Ground);
+        var state = new InteractiveCombatState([group], new EnemyForces(), FleetCombatData) { AutoTarget = true };
+
+        state.Engage(new FixedRandom(0));
+
+        await Assert.That(group.Trg).IsNull(); // no real candidates, and no Ground override for a Fleet target
+    }
 }

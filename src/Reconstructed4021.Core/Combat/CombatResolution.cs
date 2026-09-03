@@ -271,6 +271,41 @@ public static class CombatResolution
         }
     }
 
+    /// <summary>
+    /// AssignAutoTargets — not real Pascal, this port's own opt-in addition
+    /// (<see cref="Combat.InteractiveCombatState.AutoTarget"/>): reuses this unit's own per-group
+    /// target-assignment rule (<see cref="GetTargetCandidates"/>/<see cref="PrioritizeTargetCandidates"/>/
+    /// <see cref="GetBestTarget"/>, the same logic <see cref="FleetEngageTargetting"/>/
+    /// <see cref="WorldEngageTargetting"/> use for the fully automatic engine) without their own
+    /// no-target-anywhere fallback (<see cref="AllAdvance"/>/<see cref="TrnAdvance"/>) — that fallback
+    /// also drives *movement*, which the interactive engine's own Move command already owns, and
+    /// auto-targeting shouldn't silently override a player's own queued Advance/Retreat. Deliberately a
+    /// new method rather than factoring the assignment loop out of <see cref="FleetEngageTargetting"/>/
+    /// <see cref="WorldEngageTargetting"/> themselves — those two are exercised by
+    /// <c>NpeAttackTests</c>' own golden-file coverage, and refactoring them for reuse risks regressing
+    /// that for a small de-duplication gain. A group at Ground targets Legion unconditionally when
+    /// <paramref name="isWorldTarget"/>, matching <see cref="WorldEngageTargetting"/>'s own override; a
+    /// Fleet target has no such rule (fleets have no Ground shell to reach).
+    /// </summary>
+    internal static void AssignAutoTargets(IReadOnlyList<GroupRecord> groups, EnemyForces enemy, AttackIntentionType intent, bool isWorldTarget)
+    {
+        foreach (var g in groups) {
+            if (g.Sta == GroupStatus.Destroyed) {
+                continue;
+            }
+
+            var candidates = GetTargetCandidates(g.Pos, enemy);
+            if (candidates.Count > 0) {
+                PrioritizeTargetCandidates(g.Typ, g.Num, intent, candidates);
+                g.Trg = GetBestTarget(candidates);
+            }
+
+            if (isWorldTarget && g.Pos == ShellPosition.Ground) {
+                g.Trg = AttackType.Legion;
+            }
+        }
+    }
+
     /// <summary>One candidate an attacking group could aim at, with its computed priority (ATTNPE.PAS:38-43's TargetRecord — a different shape from ATTACK.PAS's own, unrelated, TargetArray).</summary>
     private sealed class TargetCandidate(AttackType targTyp, int targNum)
     {

@@ -12,7 +12,8 @@ namespace Reconstructed4021.Core.Combat;
 /// call instead of a loop to completion, and manual <see cref="SetTarget"/> instead of ATTNPE.PAS's own
 /// <c>Targetting</c>/<c>GetBestTarget</c> auto-aim, which real Pascal's interactive <c>Engage</c> never
 /// calls at all — a group with no player-chosen target does zero damage while still taking return fire,
-/// confirmed against source, not a bug.
+/// confirmed against source, not a bug. <see cref="AutoTarget"/> is this port's own opt-in escape hatch
+/// from that tedium (not real Pascal) — see its own doc comment.
 /// </summary>
 public sealed class InteractiveCombatState
 {
@@ -33,6 +34,18 @@ public sealed class InteractiveCombatState
 
     public AttackResultType Result { get; private set; } = AttackResultType.None;
     public bool IsOver => Result != AttackResultType.None;
+
+    /// <summary>
+    /// Not real Pascal — this port's own opt-in addition. When on, any group the player hasn't
+    /// manually aimed via <see cref="SetTarget"/> gets re-aimed automatically every round
+    /// (<see cref="CombatResolution.AssignAutoTargets"/>, the same priority rule the fully automatic
+    /// engine uses); a group the player *has* aimed stays exactly where they put it until they clear
+    /// it. Off by default — off reproduces real Pascal's own interactive `Engage` exactly (no
+    /// auto-aim at all, see this class's own doc comment).
+    /// </summary>
+    public bool AutoTarget { get; set; }
+
+    private readonly HashSet<GroupRecord> _pinnedTargets = [];
 
     public InteractiveCombatState(List<GroupRecord> groups, EnemyForces enemy, CombatDataRecord combatData)
     {
@@ -71,6 +84,17 @@ public sealed class InteractiveCombatState
     /// <summary>GroupEngage (ATTCOMM.PAS:247-350 / ATTNPE.PAS:135-158): one pass of Battle across every shell, then AdvanceGroups, then the end-of-round checks. Unguarded by <see cref="IsOver"/> — <see cref="Retreat"/> needs Result already set going in.</summary>
     private void RunRound(Random random)
     {
+        if (AutoTarget) {
+            // Snapshot pinned groups' own Trg first -- AssignAutoTargets below will overwrite every
+            // live group's Trg, pinned or not, so the only way to "protect" a manually-aimed group is
+            // to restore it right after.
+            var pinned = _pinnedTargets.ToDictionary(g => g, g => g.Trg);
+            CombatResolution.AssignAutoTargets(Groups, Enemy, AttackIntentionType.Conquer, CombatData.Target is not Fleet);
+            foreach (var (g, trg) in pinned) {
+                g.Trg = trg;
+            }
+        }
+
         var details = new CombatDetails();
         foreach (var pos in _allShellPositions) {
             CombatEngine.Battle(Groups, Enemy, pos, CombatData, details, Casualties, Killed, random);
@@ -86,8 +110,22 @@ public sealed class InteractiveCombatState
         }
     }
 
-    /// <summary>Target ('T', ATTCOMM.PAS:509-546): pure manual re-aim, consumes no round. <paramref name="target"/> null clears Trg (Pascal's '-'/NoRes).</summary>
-    public void SetTarget(GroupRecord group, Types.AttackType? target) => group.Trg = target;
+    /// <summary>
+    /// Target ('T', ATTCOMM.PAS:509-546): pure manual re-aim, consumes no round. <paramref name="target"/>
+    /// null clears Trg (Pascal's '-'/NoRes) — and, since this is the only way a group's target ever
+    /// changes outside <see cref="AutoTarget"/>'s own pass, doubles as the un-pin gesture: clearing a
+    /// group's target hands it back to auto-aim (if <see cref="AutoTarget"/> is on) instead of leaving
+    /// it permanently pinned to "none."
+    /// </summary>
+    public void SetTarget(GroupRecord group, Types.AttackType? target)
+    {
+        group.Trg = target;
+        if (target is null) {
+            _pinnedTargets.Remove(group);
+        } else {
+            _pinnedTargets.Add(group);
+        }
+    }
 
     /// <summary>
     /// Advance legality, GroupMove's own per-group gate (ATTCOMM.PAS:352-461's
