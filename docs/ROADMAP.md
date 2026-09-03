@@ -1304,12 +1304,6 @@ Direct2D) surfaced; see the README's Known Issues section.
     garrisoned-outpost-battle.txt` replays cursor navigation, Ministry of War > Attack, standard
     config, targeting, advancing, engaging, `AskToCapture`, and the conquest report end to end,
     headless, deterministic, exit code 0 — no pty, no external process.
-  - `dotnet-inspect` rough edges hit along the way (kept for filing, not filed yet): intermittent
-    `'C:\Program' is not recognized...` failures calling `dnx dotnet-inspect` from the Bash tool that
-    PowerShell didn't reproduce; a backslash-escaped backtick-arity type name
-    (`InputProcessorImpl\`1`) silently corrupting into the literal string rather than erroring clearly;
-    `--library <package-name>` (as opposed to a `.dll`/project path) failing with a bare
-    "file not found" instead of suggesting `--platform`.
 
 ## 9. Async/hotseat turn mode
 
