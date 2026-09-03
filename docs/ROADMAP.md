@@ -1264,6 +1264,52 @@ Direct2D) surfaced; see the README's Known Issues section.
     Kingdom capital), and the plain `Result: AttackerRetreats` fallback after retreating out of the
     second fight rather than chasing the outpost's orbit-shell defense satellites (a pre-existing shell/
     targeting mechanic, unrelated to this pass).
+- **8r, a headless driver replacing psmux.** User asked whether Terminal.Gui had any first-party
+  functional-UI-testing support, given how much of 8o/8p/8q's own verification leaned on psmux
+  (external tmux-alike process, real pty, sleep-after-every-send-keys timing, ANSI-art screenshots that
+  had to be eyeballed). It does: `Terminal.Gui.Testing`, confirmed live in a throwaway probe run with no
+  pty attached at all (`Application.Create().Init()` picks the `ansi` driver headless; `InjectKey` +
+  `Driver.Contents` work with zero terminal). New `src/Reconstructed4021.TuiDriver` (added to
+  `Reconstructed4021.slnx`): a separate project, not a `--headless` flag on `Reconstructed4021.Tui`
+  itself, so a future Tui test project can reuse it without Program.cs's own interactive bootstrap;
+  `GameShell` made `public` so it can be constructed directly from a loaded save. Takes `--load
+  <save.json> --script <path>`, runs a plain-text instruction script (`DUMP`, `SLEEP <ms>`, or
+  space-separated `Key.TryParse` tokens) against a live `GameShell`, and prints the rendered screen
+  (`Driver.Contents`' `Grapheme`s, trimmed) on request.
+  - **Two real deadlocks, found by decompiling Terminal.Gui itself (`dotnet-inspect`'s decompiler
+    skill) rather than guessing after two more naive designs hung.** First design: single-threaded
+    `InjectKey`+manual iteration pump — hung the instant a script opened a `MessageBox.Query` (GameShell
+    has several, e.g. "Standard battle configuration?"), because `IApplication.InjectKey` defaults to
+    `InputInjectionMode.Direct` (`ResolveMode(Auto) == Direct`), which calls
+    `IInputProcessor.RaiseKeyDownEvent` *synchronously* — runs the key's whole handler chain, including
+    entering `MessageBox.Query`'s own nested `Run()`, before `InjectKey` itself returns. That nested
+    `Run()` can't return until its own answer is injected by a later script line, and that line can
+    never execute because the call that would let script execution continue hasn't returned. Second
+    design: moved `app.Run(gameShell, null)` to a dedicated thread and drove the script from a second
+    thread via `IApplication.Invoke` — still hung, because `Invoke`'s callback runs the exact same
+    `InjectKey` Direct-mode dispatch on the UI thread, so the UI thread was what got stuck this time,
+    regardless of which thread called it. Fix, confirmed by decompiling
+    `InputProcessorImpl<T>.InjectKeyDownEvent`/`ProcessQueue`: use
+    `app.GetInputInjector().InjectKey(key, new InputInjectionOptions { Mode = Pipeline, AutoProcess =
+    false })` instead of the `InjectKey` extension method — Pipeline mode just enqueues onto the input
+    processor's own `InputQueue`, a real thread-safe queue, and `ProcessQueue()` (called once per
+    iteration by *whichever* `Run()` loop is currently live, nested or not — the same mechanism a real
+    keyboard-reading thread uses) drains it in order, so a key queued while a dialog is open reaches
+    that dialog's own next iteration exactly like a real keypress would. `app.Run` stays on the main
+    thread (it has to keep iterating for Pipeline-mode queuing to ever drain); a second thread walks the
+    script, queuing input with a short real sleep between actions for pacing. `RequestStop()` needed the
+    same `Invoke` marshaling — calling it directly from the script thread didn't reliably unblock
+    `app.Run`.
+  - Verified against the exact battle 8q drove by hand over psmux: `assets/tui-driver-scripts/
+    garrisoned-outpost-battle.txt` replays cursor navigation, Ministry of War > Attack, standard
+    config, targeting, advancing, engaging, `AskToCapture`, and the conquest report end to end,
+    headless, deterministic, exit code 0 — no pty, no external process.
+  - `dotnet-inspect` rough edges hit along the way (kept for filing, not filed yet): intermittent
+    `'C:\Program' is not recognized...` failures calling `dnx dotnet-inspect` from the Bash tool that
+    PowerShell didn't reproduce; a backslash-escaped backtick-arity type name
+    (`InputProcessorImpl\`1`) silently corrupting into the literal string rather than erroring clearly;
+    `--library <package-name>` (as opposed to a `.dll`/project path) failing with a bare
+    "file not found" instead of suggesting `--platform`.
 
 ## 9. Async/hotseat turn mode
 
