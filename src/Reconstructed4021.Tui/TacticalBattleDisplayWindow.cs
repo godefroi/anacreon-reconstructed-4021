@@ -15,9 +15,11 @@ namespace Reconstructed4021.Tui;
 /// <summary>
 /// Engage (ATTCOMM.PAS:220-635) — the Tactical Battle Display: a full-screen, round-by-round view over
 /// an <see cref="InteractiveCombatState"/> with a fixed menu (Engage/Move/Group status/Target/Details/
-/// Retreat) and no Esc — real Pascal's own <c>Menu</c> has no cancel key at all, the only ways out are
-/// <see cref="InteractiveCombatState.IsOver"/> becoming true. Added to <see cref="GameShell"/> via
-/// <c>AddModal(..., dismissOnOutsideClick: false)</c> for exactly that reason.
+/// Retreat, plus this port's own <c>&lt;A&gt;uto-target</c> — see
+/// <see cref="InteractiveCombatState.AutoTarget"/>'s own doc comment) and no Esc — real Pascal's own
+/// <c>Menu</c> has no cancel key at all, the only ways out are <see cref="InteractiveCombatState.IsOver"/>
+/// becoming true. Added to <see cref="GameShell"/> via <c>AddModal(..., dismissOnOutsideClick: false)</c>
+/// for exactly that reason.
 ///
 /// <c>DrawScreen</c>'s whole visual complex was twice mischaracterized here as decoration before this
 /// pass — it isn't, and <see cref="BattleMapView"/> now reproduces all of it, not just the parts judged
@@ -62,6 +64,7 @@ internal sealed class TacticalBattleDisplayWindow : Window
     private readonly Label messageLabel;
     private readonly BattleMapView mapView;
     private readonly Label enemyLabel;
+    private readonly Label autoTargetLabel;
     private object? pendingMessageTimeout;
 
     /// <summary>Fired exactly once, when <see cref="InteractiveCombatState.IsOver"/> first becomes true. The caller applies the outcome (RestoreCombatant/ResolveAttack) and dismisses this window.</summary>
@@ -81,6 +84,9 @@ internal sealed class TacticalBattleDisplayWindow : Window
         SetScheme(new Scheme(DispWindAttribute));
 
         AddAt(0, 0, $"Attacking {targetName}.");
+        // Not real Pascal -- AutoTarget's own always-visible state readout (see InteractiveCombatState.
+        // AutoTarget's doc comment); off by default, matching real Pascal's own fully-manual behavior.
+        autoTargetLabel = AddAt(60, 0, string.Empty);
         messageLabel = AddAt(0, 1, string.Empty);
 
         // DrawGrid/DrawStars/DrawObject/DrawEnemyShips/DrawGroupShips, all together (see this class's
@@ -89,18 +95,22 @@ internal sealed class TacticalBattleDisplayWindow : Window
         Add(mapView);
 
         // GroupWindow (ATTCOMM.PAS:1176) -- the always-visible command box, bordered same as source
-        // (ThinBRD), positioned bottom-left same as source (col 1, row 14).
+        // (ThinBRD), positioned bottom-left same as source (col 1, row 14). Height 12 (10 interior
+        // rows) -- 7 commands (rows 1-7, <A>uto being this port's own addition, not real Pascal) plus
+        // a blank spacer row before the "Command" prompt at row 9. (An earlier Height=10 pass left
+        // only 8 interior rows, colliding the last command with the prompt row -- sized with a real
+        // margin this time instead of exactly the minimum.)
         var commandBox = new Window {
-            X = 0, Y = 14, Width = 35, Height = 10,
+            X = 0, Y = 14, Width = 35, Height = 12,
             BorderStyle = LineStyle.Single, CanFocus = false,
         };
         commandBox.SetScheme(new Scheme(DispWindAttribute));
         commandBox.Border.View?.SetScheme(new Scheme(BorderAttribute));
-        var commands = new[] { "<E>ngage", "<M>ove", "<G>roup status", "<T>arget", "<D>etails", "<R>etreat" };
+        var commands = new[] { "<E>ngage", "<M>ove", "<G>roup status", "<T>arget", "<D>etails", "<R>etreat", "<A>uto-target" };
         for (var i = 0; i < commands.Length; i++) {
             commandBox.Add(new Label { X = 1, Y = 1 + i, Text = commands[i] });
         }
-        commandBox.Add(new Label { X = 1, Y = Pos.AnchorEnd(2), Text = "Command" });
+        commandBox.Add(new Label { X = 1, Y = 9, Text = "Command" });
         Add(commandBox);
 
         // EnemyWindow (ATTCOMM.PAS:1177) -- bottom-right, beside GroupWindow.
@@ -108,6 +118,7 @@ internal sealed class TacticalBattleDisplayWindow : Window
 
         KeyDown += OnKeyDown;
         RefreshEnemyTable();
+        RefreshAutoTargetLabel();
 
         // DrawScreen's own opening flavor line (ATTCOMM.PAS:1192-1196): one Rnd(1,3) draw, consumed
         // after DrawStars' own RNG use inside BattleMapView's constructor above -- matching Pascal's
@@ -152,6 +163,17 @@ internal sealed class TacticalBattleDisplayWindow : Window
         enemyLabel.Text = string.Join('\n', lines);
     }
 
+    private void RefreshAutoTargetLabel() => autoTargetLabel.Text = state.AutoTarget ? "Auto-target: ON" : "Auto-target: OFF";
+
+    // Not real Pascal -- toggles InteractiveCombatState.AutoTarget (see its own doc comment). No round
+    // consumed, same as Target itself.
+    private void HandleAutoTargetToggle()
+    {
+        state.AutoTarget = !state.AutoTarget;
+        RefreshAutoTargetLabel();
+        FlashMessage(state.AutoTarget ? "Auto-targeting ON." : "Auto-targeting OFF.");
+    }
+
     private void OnKeyDown(object? sender, Key key)
     {
         var ch = char.ToUpperInvariant((char)key.AsRune.Value);
@@ -178,6 +200,10 @@ internal sealed class TacticalBattleDisplayWindow : Window
                 break;
             case 'D':
                 ShowDetails();
+                key.Handled = true;
+                break;
+            case 'A':
+                HandleAutoTargetToggle();
                 key.Handled = true;
                 break;
         }
@@ -346,6 +372,10 @@ internal sealed class TacticalBattleDisplayWindow : Window
         };
         var listView = new ListView { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill() };
         listView.SetSource(new System.Collections.ObjectModel.ObservableCollection<string>(items));
+        listView.SelectedItem = 0; // SetSource alone leaves nothing selected -- default to the first item
+                             // (ShowObjectPicker's own precedent, GameShell.cs). Without this, the
+                             // first Down keypress only activates the selection instead of moving it,
+                             // so Down-Down lands one item short of where it looks like it should.
         picker.Add(listView);
 
         var dismiss = AddModal(picker);
