@@ -3,4 +3,5 @@
   <Project Path="src/Reconstructed4021.Core/Reconstructed4021.Core.csproj" />
   <Project Path="src/Reconstructed4021.Tests/Reconstructed4021.Tests.csproj" />
   <Project Path="src/Reconstructed4021.Tui/Reconstructed4021.Tui.csproj" />
+  <Project Path="src/Reconstructed4021.TuiDriver/Reconstructed4021.TuiDriver.csproj" />
 </Solution>

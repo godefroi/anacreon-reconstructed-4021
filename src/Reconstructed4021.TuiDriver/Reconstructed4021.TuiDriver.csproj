@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Referencing the Tui exe project as a library is fine: its public types (GameShell,
+         TurnEngine wiring) are what this driver needs. A separate project, not a mode flag on
+         Reconstructed4021.Tui itself, so a future Tui test project can reference this same driver
+         without pulling in Program.cs's own interactive bootstrap. -->
+    <ProjectReference Include="..\Reconstructed4021.Tui\Reconstructed4021.Tui.csproj" />
+  </ItemGroup>
+
+</Project>

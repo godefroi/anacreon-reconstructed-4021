@@ -28,7 +28,7 @@ namespace Reconstructed4021.Tui;
 /// <see cref="TurnEngine.EndTurn"/>, and hands control back to that loop -- nothing here loops across
 /// multiple empires itself.
 /// </summary>
-internal sealed class GameShell : Window
+public sealed class GameShell : Window
 {
     // COLORS.INC's ColorScrColor (the color-mode palette; BW/Mono variants aren't relevant here). DOS
     // attribute byte = (bg &lt;&lt; 4) | fg, decoded against the standard 16-color CGA/EGA palette.

@@ -1,0 +1,33 @@
+# Example / smoke-test script for Reconstructed4021.TuiDriver, run against
+# assets/saves/Garrisoned Outpost.json:
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Garrisoned Outpost.json" --script assets/tui-driver-scripts/garrisoned-outpost-battle.txt
+#
+# Moves the map cursor onto the human attack fleet (already sitting at the target sector), opens
+# Ministry of War > Attack, accepts standard battle configuration, targets and advances both groups
+# into the Kingdom garrison's shell, engages, answers AskToCapture, and dismisses the conquest report.
+# Exercises the exact sequence this session drove once by hand over psmux (see docs/ROADMAP.md's 8q
+# entry) -- now headless and deterministic.
+Right Right Right Right Down
+DUMP
+m
+Enter
+DUMP
+Left
+Enter
+DUMP
+t
+f
+f
+m
+a
+a
+y
+DUMP
+e
+DUMP
+n
+DUMP
+Enter
+DUMP
