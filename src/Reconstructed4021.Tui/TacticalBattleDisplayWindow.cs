@@ -13,59 +13,87 @@ using TgAttribute = Terminal.Gui.Drawing.Attribute;
 namespace Reconstructed4021.Tui;
 
 /// <summary>
-/// Engage (ATTCOMM.PAS:220-635) — the Tactical Battle Display: a full-screen, round-by-round view over
-/// an <see cref="InteractiveCombatState"/> with a fixed menu (Engage/Move/Group status/Target/Details/
-/// Retreat, plus this port's own <c>&lt;A&gt;uto-target</c> — see
-/// <see cref="InteractiveCombatState.AutoTarget"/>'s own doc comment) and no Esc — real Pascal's own
-/// <c>Menu</c> has no cancel key at all, the only ways out are <see cref="InteractiveCombatState.IsOver"/>
-/// becoming true. Added to <see cref="GameShell"/> via <c>AddModal(..., dismissOnOutsideClick: false)</c>
-/// for exactly that reason.
+/// Engage (ATTCOMM.PAS:220-635) — the Tactical Battle Display: a fixed-size 80x28 window centered
+/// over the map (same convention <see cref="CloseUpWindow"/> established — not full-terminal
+/// <c>Dim.Fill()</c>, an earlier pass here got that wrong), round-by-round, over an
+/// <see cref="InteractiveCombatState"/>.
 ///
-/// <c>DrawScreen</c>'s whole visual complex was twice mischaracterized here as decoration before this
-/// pass — it isn't, and <see cref="BattleMapView"/> now reproduces all of it, not just the parts judged
-/// "important enough": <c>TYPES.PAS</c>'s <c>ObjectTypes</c> is declared
-/// <c>(Void,Con,Pln,Base,Gate,...)</c>, so <c>DrawScreen</c>'s own
-/// <c>IF Obj IN [Con..Gate] THEN DrawGrid ELSE DrawStars</c> actually means "attacking a Planet or
-/// Base" (the common case) draws the range grid, not the rare one; only a Fleet target gets the
-/// starfield. <c>DrawGroupShips</c> (called every round from <c>GroupEngage</c>, right alongside
-/// <c>Battle</c>) draws each live group's marker at its *current shell*, continuously. <c>DrawObject</c>
-/// draws the target's own ASCII silhouette (verbatim CP437 bytes, extracted with a raw codepage-437
-/// read of ATTCOMM.PAS — this project's own established caveat that normal file reads corrupt those
-/// bytes). <c>DrawEnemyShips</c> draws an abstracted per-shell enemy-ship-cluster glyph alongside the
-/// exact counts <see cref="RefreshEnemyTable"/> already shows. All four use real Pascal's own constant
-/// tables (<c>OrbLoc</c>, <c>PlayerOffset</c>, <c>EnemyOffset</c>, <c>Disp</c>/<c>Disp2</c>,
-/// ATTCOMM.PAS:46-65,1136-1142), decoded from DOS video-memory byte offsets (<c>row*160+col*2</c>) to
-/// plain row/column deltas — the real curve/cluster math, not an approximation of it. Not reproduced:
-/// the literal DOS video-memory poke mechanism itself (a rendering trick, not a game mechanic, same
-/// precedent <see cref="ResourceDistributionEditor"/>'s own doc comment already establishes) and the
-/// screen's animated reveal (<c>WarpIn</c>/<c>AdvanceGroupsSFX</c>/<c>GroupsDestroyedSFX</c>'s own
-/// per-frame motion) — the end state each of those settles into is what's drawn, immediately.
-/// <c>DrawStars</c>' own 100 <c>Rnd(1,720)</c> draws are still consumed from the same RNG stream even
-/// though the result is purely decorative, for stream-order fidelity with real Pascal (same reasoning
-/// this project applies everywhere else), and so is <c>DrawScreen</c>'s own opening
-/// <c>Rnd(1,3)</c> flavor-line pick.
+/// Move/Retreat/Target/Group Status all happen *inside GroupWindow itself* (the persistent command
+/// box), not as separate popups — confirmed by re-reading source directly: <c>GroupMove</c>
+/// (ATTCOMM.PAS:352-461), <c>GroupRetreat</c> (:463-507), <c>GroupTarget</c> (:509-546), and
+/// <c>GroupStatus</c> (:548-574) all open with <c>ActivateWindow(GroupWindow); ClrScr;</c> and then
+/// <c>Writeln</c> their own prompts directly into that same window, accumulating lines without
+/// clearing between steps within one flow (so earlier groups' answered prompts stay visible while
+/// later ones are asked) until the interaction ends and <c>Menu</c>'s own <c>ClrScr</c> redraws the
+/// standard command list. An earlier pass here used separate popup <c>Window</c>s for these — wrong,
+/// fixed by giving <see cref="commandBoxContent"/> a swappable-content design instead: <see cref="activePrompt"/>
+/// non-null means the next keypress routes to whatever sub-interaction is live instead of the
+/// top-level E/M/T/R/G/D/A dispatch. <c>AttackDetails</c> (:576-607) is the one real exception — it
+/// opens its own separate window over the *AttackWindow* area, not GroupWindow, so it's left as a
+/// separate popup here too (not restyled to the same box-content mechanism as the others).
+///
+/// <c>DrawScreen</c>'s whole visual complex (<c>DrawGrid</c>/<c>DrawStars</c>/<c>DrawObject</c>/
+/// <c>DrawEnemyShips</c>/<c>DrawGroupShips</c>) is reproduced in <see cref="BattleMapView"/>, using
+/// real Pascal's own byte-offset constant tables (<c>OrbLoc</c>/<c>PlayerOffset</c>/<c>EnemyOffset</c>/
+/// <c>Disp</c>/<c>Disp2</c>, ATTCOMM.PAS:46-65,1136-1142) decoded from DOS video-memory byte offsets
+/// (<c>row*160+col*2</c>) to plain row/column deltas, plus <c>DrawObject</c>'s exact CP437 bytes
+/// (extracted via a raw codepage-437 read of ATTCOMM.PAS — this project's own established caveat that
+/// normal file reads corrupt those bytes). <c>WarpIn</c>'s own reveal animation (every group sliding
+/// in from off-screen to DeepSpace when the screen first opens) is reproduced too, as a short
+/// <c>Application.AddTimeout</c>-driven slide rather than the literal per-pixel Mem-poke choreography.
+/// Not reproduced: the DOS video-memory poke mechanism itself (a rendering trick, not a game mechanic,
+/// same precedent <see cref="ResourceDistributionEditor"/>'s own doc comment already establishes).
+/// <c>DrawStars</c>' own 100 <c>Rnd(1,720)</c> draws and <c>DrawScreen</c>'s own opening
+/// <c>Rnd(1,3)</c> flavor-line pick are still consumed from the same RNG stream even though the
+/// result is purely decorative, for stream-order fidelity with real Pascal.
+///
+/// COLORS.INC's own <c>ColorScrColor</c> block, not <c>SYSDispWind</c> (which an earlier pass here
+/// wrongly painted the whole window with): <c>AttackWind=15</c> (White/Black), <c>GroupWind=23</c>
+/// (LightGray/Blue), <c>EnemyWind=4</c> (Red/Black), <c>SYSWBorder=7</c> (LightGray/Black) same as
+/// every other window in this port.
 ///
 /// One real, deliberate adaptation from source: <c>AttReport</c>'s non-empty calls block for a full
 /// second (<c>Delay(1000)</c>) before the next screen update -- freezing the whole game loop is a
 /// DOS-era artifact, not a mechanic worth reproducing, so this class shows the message immediately and
 /// clears it on a one-shot <c>Application.AddTimeout</c> (the <see cref="TmaLogoWindow"/> idiom)
-/// instead, without blocking input.
+/// instead, without blocking input. No Esc anywhere in the top-level menu either — real Pascal's own
+/// <c>Menu</c> has no cancel key at all, the only ways out are <see cref="InteractiveCombatState.IsOver"/>
+/// becoming true. Added to <see cref="GameShell"/> via <c>AddModal(..., dismissOnOutsideClick: false)</c>
+/// for exactly that reason.
 /// </summary>
 internal sealed class TacticalBattleDisplayWindow : Window
 {
-    private static readonly TgAttribute DispWindAttribute = new(StandardColor.LightGray, StandardColor.Blue); // SYSDispWind = 23
-    private static readonly TgAttribute BorderAttribute = new(StandardColor.LightGray, StandardColor.Black); // SYSWBorder = 7
+    private static readonly TgAttribute AttackWindAttribute = new(StandardColor.White, StandardColor.Black);
+    private static readonly TgAttribute GroupWindAttribute = new(StandardColor.LightGray, StandardColor.Blue);
+    private static readonly TgAttribute EnemyWindAttribute = new(DosColors.Red, StandardColor.Black);
+    private static readonly TgAttribute BorderAttribute = new(StandardColor.LightGray, StandardColor.Black);
     private static readonly ShellPosition[] _allShellPositions = Enum.GetValues<ShellPosition>();
     private static readonly AttackType[] _allAttackTypes = Enum.GetValues<AttackType>();
+
+    // ATSymb (ATTCOMM.PAS:49-50): '-LDGIFHJTPSRMN' for AttackTypes NoRes..nnj -- GroupTarget's own
+    // single-keypress selection, not a ListView (an earlier pass here built a picker; real Pascal
+    // types one letter per group, no navigation).
+    private static readonly (AttackType? Type, char Key)[] TargetChoices = [
+        (null, '-'),
+        (AttackType.Lam, 'L'), (AttackType.DefenseSatellite, 'D'), (AttackType.Gdm, 'G'), (AttackType.IonCannon, 'I'),
+        (AttackType.Fighter, 'F'), (AttackType.HunterKiller, 'H'), (AttackType.Jumpship, 'J'),
+        (AttackType.Jumptransport, 'T'), (AttackType.Penetrator, 'P'), (AttackType.Starship, 'S'),
+        (AttackType.Transport, 'R'), (AttackType.Legion, 'M'), (AttackType.NinjaLegion, 'N'),
+    ];
 
     private readonly InteractiveCombatState state;
     private readonly Random random;
 
     private readonly Label messageLabel;
     private readonly BattleMapView mapView;
+    private readonly Label commandBoxContent;
     private readonly Label enemyLabel;
     private readonly Label autoTargetLabel;
     private object? pendingMessageTimeout;
+
+    // Non-null while a sub-interaction (Move/Retreat/Target/GroupStatus, all drawn into GroupWindow
+    // itself) owns the next keypress instead of the top-level E/M/T/R/G/D/A dispatch.
+    private Action<Key>? activePrompt;
 
     /// <summary>Fired exactly once, when <see cref="InteractiveCombatState.IsOver"/> first becomes true. The caller applies the outcome (RestoreCombatant/ResolveAttack) and dismisses this window.</summary>
     public event EventHandler? BattleEnded;
@@ -75,13 +103,20 @@ internal sealed class TacticalBattleDisplayWindow : Window
         this.state = state;
         this.random = random;
 
+        // AttackWindow+GroupWindow+EnemyWindow together (ATTCOMM.PAS:1175-1177) fill the real DOS
+        // screen edge to edge (80x25) -- reproduced here as a real fixed-size (80x28: 26 content rows
+        // plus a real border, one row taller than the DOS original to leave the same small margin
+        // CloseUpWindow's own 80x21 already leaves under its own 80x19 content) bordered `Window`
+        // centered over the map.
         Title = "Tactical Battle Display";
-        Width = Dim.Fill();
-        Height = Dim.Fill();
-        BorderStyle = LineStyle.None;
-        Border.Thickness = new Thickness(0);
+        Width = 80;
+        Height = 28;
+        X = Pos.Center();
+        Y = Pos.Center();
+        BorderStyle = LineStyle.Single;
         CanFocus = true;
-        SetScheme(new Scheme(DispWindAttribute));
+        SetScheme(new Scheme(AttackWindAttribute)); // the header/message lines sit in AttackWindow's own area
+        Border.View?.SetScheme(new Scheme(BorderAttribute));
 
         AddAt(0, 0, $"Attacking {targetName}.");
         // Not real Pascal -- AutoTarget's own always-visible state readout (see InteractiveCombatState.
@@ -94,44 +129,41 @@ internal sealed class TacticalBattleDisplayWindow : Window
         mapView = new BattleMapView(state, random) { X = 0, Y = 2, Width = 80, Height = 13 };
         Add(mapView);
 
-        // GroupWindow (ATTCOMM.PAS:1176) -- the always-visible command box, bordered same as source
-        // (ThinBRD), positioned bottom-left same as source (col 1, row 14). Height 12 (10 interior
-        // rows) -- 7 commands (rows 1-7, <A>uto being this port's own addition, not real Pascal) plus
-        // a blank spacer row before the "Command" prompt at row 9. (An earlier Height=10 pass left
-        // only 8 interior rows, colliding the last command with the prompt row -- sized with a real
-        // margin this time instead of exactly the minimum.)
+        // GroupWindow (ATTCOMM.PAS:1176) -- the persistent, content-swapped command box, bordered same
+        // as source (ThinBRD), positioned bottom-left same as source (col 1, row 14). One single
+        // multi-line Label fills its whole interior (10 rows -- Height 12 minus 2 border) rather than
+        // one Label per line, since its content is replaced wholesale by every sub-interaction.
         var commandBox = new Window {
             X = 0, Y = 14, Width = 35, Height = 12,
             BorderStyle = LineStyle.Single, CanFocus = false,
         };
-        commandBox.SetScheme(new Scheme(DispWindAttribute));
+        commandBox.SetScheme(new Scheme(GroupWindAttribute));
         commandBox.Border.View?.SetScheme(new Scheme(BorderAttribute));
-        var commands = new[] { "<E>ngage", "<M>ove", "<G>roup status", "<T>arget", "<D>etails", "<R>etreat", "<A>uto-target" };
-        for (var i = 0; i < commands.Length; i++) {
-            commandBox.Add(new Label { X = 1, Y = 1 + i, Text = commands[i] });
-        }
-        commandBox.Add(new Label { X = 1, Y = 9, Text = "Command" });
+        commandBoxContent = new Label { X = 1, Y = 0, Width = Dim.Fill(1), Height = Dim.Fill() };
+        commandBox.Add(commandBoxContent);
         Add(commandBox);
 
         // EnemyWindow (ATTCOMM.PAS:1177) -- bottom-right, beside GroupWindow.
         enemyLabel = AddAt(36, 14, string.Empty);
+        enemyLabel.SetScheme(new Scheme(EnemyWindAttribute));
 
         KeyDown += OnKeyDown;
         RefreshEnemyTable();
         RefreshAutoTargetLabel();
+        ShowCommandMenu();
 
-        // DrawScreen's own opening flavor line (ATTCOMM.PAS:1192-1196): one Rnd(1,3) draw, consumed
-        // after DrawStars' own RNG use inside BattleMapView's constructor above -- matching Pascal's
-        // real call order inside DrawScreen exactly (Grid/Stars, then Object, then EnemyStatus, then
-        // this pick). Deferred to Initialized, same reason as TmaLogoWindow's own timer: App isn't
-        // assigned yet during construction -- this window is only ever added as a child via
-        // GameShell's AddModal (called right after this constructor returns), never run directly via
-        // Application.Run, so FlashMessage's own App!.AddTimeout would null-ref if called here instead
-        // (App walks the SuperView chain, and there's no SuperView yet at construction time). AddAt's
-        // own BeginInit/EndInit call for a view added to an already-initialized parent fires this
-        // synchronously during that Add() call, so the relative RNG-consumption order versus
-        // everything else is unchanged.
+        // DrawScreen's own opening flavor line (ATTCOMM.PAS:1192-1196) and WarpIn's own reveal
+        // animation (ATTCOMM.PAS:1198-1199) -- both deferred to Initialized, same reason as
+        // TmaLogoWindow's own timer: App isn't assigned yet during construction -- this window is only
+        // ever added as a child via GameShell's AddModal (called right after this constructor
+        // returns), never run directly via Application.Run, so App!.AddTimeout would null-ref if
+        // called here instead (App walks the SuperView chain, and there's no SuperView yet at
+        // construction time). AddAt's own BeginInit/EndInit call for a view added to an
+        // already-initialized parent fires this synchronously during that Add() call, so the relative
+        // RNG-consumption order versus everything else (DrawStars' own draws inside BattleMapView's
+        // constructor above) is unchanged.
         Initialized += (_, _) => {
+            mapView.StartWarpIn(App!);
             var flavor = PascalMath.Rnd(random, 1, 3) switch {
                 1 => "Fleet entering real space...",
                 2 => "Fleet now coming out of hyperspace...",
@@ -146,6 +178,26 @@ internal sealed class TacticalBattleDisplayWindow : Window
         var label = new Label { X = x, Y = y, Text = text };
         Add(label);
         return label;
+    }
+
+    // Menu (ATTCOMM.PAS:232-245): the standard command list, redrawn every time control returns to
+    // top-level (matching real Pascal calling Menu() fresh at the top of every loop iteration).
+    private void ShowCommandMenu()
+    {
+        activePrompt = null;
+        SetCommandBoxContent([
+            "", "<E>ngage", "<M>ove", "<G>roup status", "<T>arget", "<D>etails", "<R>etreat", "<A>uto-target", "", "Command",
+        ]);
+    }
+
+    // GroupWindow's own real behavior once content exceeds its 10 interior rows: real Pascal's CRT
+    // window auto-scrolls, keeping the newest lines visible -- approximated here by only ever showing
+    // the last 10 lines of whatever's accumulated so far.
+    private void SetCommandBoxContent(IReadOnlyList<string> lines)
+    {
+        const int interiorHeight = 10;
+        var visible = lines.Count > interiorHeight ? lines.Skip(lines.Count - interiorHeight) : lines;
+        commandBoxContent.Text = string.Join('\n', visible);
     }
 
     // EnemyStatus/UpdateEnemyWindow (ATTCOMM.PAS:149-186): a plain table instead of Pascal's own
@@ -166,7 +218,7 @@ internal sealed class TacticalBattleDisplayWindow : Window
     private void RefreshAutoTargetLabel() => autoTargetLabel.Text = state.AutoTarget ? "Auto-target: ON" : "Auto-target: OFF";
 
     // Not real Pascal -- toggles InteractiveCombatState.AutoTarget (see its own doc comment). No round
-    // consumed, same as Target itself.
+    // consumed, same as Target itself; doesn't touch GroupWindow's own content at all.
     private void HandleAutoTargetToggle()
     {
         state.AutoTarget = !state.AutoTarget;
@@ -176,6 +228,11 @@ internal sealed class TacticalBattleDisplayWindow : Window
 
     private void OnKeyDown(object? sender, Key key)
     {
+        if (activePrompt is { } prompt) {
+            prompt(key);
+            return;
+        }
+
         var ch = char.ToUpperInvariant((char)key.AsRune.Value);
         switch (ch) {
             case 'E':
@@ -195,7 +252,7 @@ internal sealed class TacticalBattleDisplayWindow : Window
                 key.Handled = true;
                 break;
             case 'G':
-                ShowGroupStatus();
+                ShowGroupStatusInBox();
                 key.Handled = true;
                 break;
             case 'D':
@@ -217,19 +274,32 @@ internal sealed class TacticalBattleDisplayWindow : Window
         var wasDestroyed = state.Groups.Select(g => g.Sta == GroupStatus.Destroyed).ToArray();
         state.Engage(random);
         AfterRound(wasDestroyed);
+        ShowCommandMenu();
     }
 
+    // GroupRetreat (ATTCOMM.PAS:463-507): "Are you sure (y/N)" restricted to Y/N only, matching
+    // GetCharacter(['Y','N'],...) exactly -- no Enter/Esc shortcut (real Pascal's GetCharacter with an
+    // explicit char set simply keeps waiting for a legal key).
     private void HandleRetreat()
     {
         if (state.IsOver) {
             return;
         }
-        if (MessageBox.Query(App!, "Retreat", "Are you sure?", "_Yes", "_No") != 0) {
-            return;
-        }
-        var wasDestroyed = state.Groups.Select(g => g.Sta == GroupStatus.Destroyed).ToArray();
-        state.Retreat(random);
-        AfterRound(wasDestroyed, retreated: true);
+
+        SetCommandBoxContent(["Are you sure (y/N) → "]);
+        activePrompt = key => {
+            var ch = char.ToUpperInvariant((char)key.AsRune.Value);
+            if (ch != 'Y' && ch != 'N') {
+                return;
+            }
+            key.Handled = true;
+            if (ch == 'Y') {
+                var wasDestroyed = state.Groups.Select(g => g.Sta == GroupStatus.Destroyed).ToArray();
+                state.Retreat(random);
+                AfterRound(wasDestroyed, retreated: true);
+            }
+            ShowCommandMenu();
+        };
     }
 
     // BuildRoundMessage/AttReport's own priority (ATTCOMM.PAS:326-350,483): ALL GROUPS DESTROYED and
@@ -282,127 +352,164 @@ internal sealed class TacticalBattleDisplayWindow : Window
         }
     }
 
-    // GroupMove (ATTCOMM.PAS:352-461): a group not currently eligible for either Advance or Retreat is
-    // silently skipped, matching Pascal exactly -- no prompt shown for it at all. Esc at any point
-    // reverts every move queued this pass and ends the sequence early; this port's own simplification
-    // of GroupMove's real "Esc mid-loop, then still maybe ask Maneuver?" edge case (ambiguous even
-    // against source) to "Esc always cancels immediately" -- net-equivalent in practice, since real
-    // Pascal's own CancelAdvance fires on every path that isn't an explicit Y to Maneuver anyway.
+    // GroupMove (ATTCOMM.PAS:352-461): ActivateWindow(GroupWindow); ClrScr; once, then each group's
+    // own status+prompt lines accumulate below the last, without clearing between groups. A group not
+    // currently eligible for either Advance or Retreat is silently skipped -- no lines for it at all.
+    // Esc at any point cancels every move queued this pass and returns straight to the menu; this
+    // port's own simplification of GroupMove's real "Esc mid-loop, then still maybe ask Maneuver?"
+    // edge case (ambiguous even against source) to "Esc always cancels immediately" -- net-equivalent
+    // in practice, since real Pascal's own CancelAdvance fires on every path that isn't an explicit Y
+    // to Maneuver anyway.
     private void HandleMove()
     {
         if (state.IsOver) {
             return;
         }
+        MoveNextGroup(state.Groups, 0, [], anyQueued: false);
+    }
 
-        var anyQueued = false;
-        foreach (var g in state.Groups) {
-            var canAdvance = state.CanAdvance(g);
-            var canRetreat = state.CanRetreat(g);
-            if (!canAdvance && !canRetreat) {
-                continue;
-            }
+    private void MoveNextGroup(IReadOnlyList<GroupRecord> groups, int index, List<string> lines, bool anyQueued)
+    {
+        if (index >= groups.Count) {
+            FinishMove(lines, anyQueued);
+            return;
+        }
 
-            var index = state.Groups.IndexOf(g) + 1;
-            var buttons = new List<string>();
-            if (canAdvance) {
-                buttons.Add("_Advance");
-            }
-            if (canRetreat) {
-                buttons.Add("_Retreat");
-            }
-            buttons.Add("_Stay");
+        var g = groups[index];
+        var canAdvance = state.CanAdvance(g);
+        var canRetreat = state.CanRetreat(g);
+        if (g.Sta == GroupStatus.Destroyed || (!canAdvance && !canRetreat)) {
+            MoveNextGroup(groups, index + 1, lines, anyQueued);
+            return;
+        }
 
-            var choice = MessageBox.Query(App!, "Move",
-                $"Group {index}: {g.Num} {TypeName(g.Typ)} at {PosName(g.Pos)}.", buttons.ToArray());
-            if (choice is null) {
+        var choices = "S" + (canAdvance ? "/A" : "") + (canRetreat ? "/R" : "");
+        lines.Add(GroupLine(g, index + 1));
+        lines.Add($"  Move ({choices}/Esc) → ");
+        SetCommandBoxContent(lines);
+
+        activePrompt = key => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode == KeyCode.Esc) {
+                key.Handled = true;
                 state.CancelAllQueuedMoves();
+                ShowCommandMenu();
                 return;
             }
 
-            var picked = buttons[choice.Value];
-            if (picked == "_Advance") {
+            var ch = char.ToUpperInvariant((char)key.AsRune.Value);
+            if (ch != 'S' && !(ch == 'A' && canAdvance) && !(ch == 'R' && canRetreat)) {
+                return;
+            }
+            key.Handled = true;
+
+            var queued = anyQueued;
+            if (ch == 'A') {
                 state.QueueAdvance(g);
-                anyQueued = true;
-            } else if (picked == "_Retreat") {
+                queued = true;
+            } else if (ch == 'R') {
                 state.QueueRetreat(g);
-                anyQueued = true;
+                queued = true;
             }
-        }
+            MoveNextGroup(groups, index + 1, lines, queued);
+        };
+    }
 
+    private void FinishMove(List<string> lines, bool anyQueued)
+    {
         if (!anyQueued) {
+            ShowCommandMenu();
             return;
         }
 
-        if (MessageBox.Query(App!, "Move", "Designated groups ready for maneuver. Maneuver?", "_Yes", "_No") != 0) {
-            state.CancelAllQueuedMoves();
-            return;
-        }
-
-        var wasDestroyed = state.Groups.Select(g => g.Sta == GroupStatus.Destroyed).ToArray();
-        state.Engage(random);
-        AfterRound(wasDestroyed);
-    }
-
-    // GroupTarget (ATTCOMM.PAS:509-546): every still-live group gets a target picker in turn; Esc aborts
-    // the rest of the sequence (groups already handled this pass keep their new Trg). No round consumed.
-    private void HandleTarget()
-    {
-        var live = state.Groups.Where(g => g.Sta != GroupStatus.Destroyed).ToList();
-        PromptTargetForGroup(live, 0);
-    }
-
-    private void PromptTargetForGroup(List<GroupRecord> live, int index)
-    {
-        if (index >= live.Count) {
-            return;
-        }
-
-        var group = live[index];
-        var groupNumber = state.Groups.IndexOf(group) + 1;
-        var items = new List<string> { "(clear target)" };
-        items.AddRange(_allAttackTypes.Select(TypeName));
-
-        var picker = new Window {
-            Title = $"Group {groupNumber} target ({TypeName(group.Typ)}, currently {(group.Trg is { } t ? TypeName(t) : "none")})",
-            Width = 40,
-            Height = 17,
-            X = Pos.Center(),
-            Y = Pos.Center(),
-            BorderStyle = LineStyle.Single,
-        };
-        var listView = new ListView { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill() };
-        listView.SetSource(new System.Collections.ObjectModel.ObservableCollection<string>(items));
-        listView.SelectedItem = 0; // SetSource alone leaves nothing selected -- default to the first item
-                             // (ShowObjectPicker's own precedent, GameShell.cs). Without this, the
-                             // first Down keypress only activates the selection instead of moving it,
-                             // so Down-Down lands one item short of where it looks like it should.
-        picker.Add(listView);
-
-        var dismiss = AddModal(picker);
-        picker.KeyDown += (_, key) => {
-            if (key.NoAlt.NoCtrl.NoShift.KeyCode == KeyCode.Enter) {
-                var selected = listView.SelectedItem ?? 0;
-                state.SetTarget(group, selected == 0 ? null : _allAttackTypes[selected - 1]);
-                dismiss();
-                key.Handled = true;
-                PromptTargetForGroup(live, index + 1);
-            } else if (key.NoAlt.NoCtrl.NoShift.KeyCode == KeyCode.Esc) {
-                dismiss();
-                key.Handled = true;
-                // Abort the rest of the sequence -- groups already handled keep their new Trg.
+        SetCommandBoxContent(["Designated groups ready", "for maneuver, Your Highness.", "", "Maneuver (y/N) → "]);
+        activePrompt = key => {
+            var ch = char.ToUpperInvariant((char)key.AsRune.Value);
+            if (ch != 'Y' && ch != 'N') {
+                return;
             }
+            key.Handled = true;
+            if (ch == 'Y') {
+                var wasDestroyed = state.Groups.Select(g => g.Sta == GroupStatus.Destroyed).ToArray();
+                state.Engage(random);
+                AfterRound(wasDestroyed);
+            } else {
+                state.CancelAllQueuedMoves();
+            }
+            ShowCommandMenu();
         };
-        listView.SetFocus();
     }
 
-    // GroupStatus (ATTCOMM.PAS:548-574): per-group Num/Typ/Pos/Trg, plus Dst/GAT-count/Clk tail.
-    private void ShowGroupStatus() =>
-        MessageBox.Query(App!, "Group Status", string.Join('\n', state.Groups.Select(GroupStatusLine)), "OK");
+    // GroupTarget (ATTCOMM.PAS:509-546): ActivateWindow(GroupWindow); ClrScr; once, then each live
+    // group's status line plus a "New target" prompt accumulate the same way GroupMove's do. A single
+    // ATSymb keypress selects the target (TargetChoices, matching source's own restricted GetCharacter
+    // set exactly -- not a ListView, an earlier pass here built a picker that doesn't match how real
+    // Pascal actually does this at all). Enter keeps the group's current target; Esc aborts the rest
+    // of the sequence (groups already handled keep their new Trg). No round consumed.
+    private void HandleTarget() => TargetNextGroup(state.Groups, 0, []);
 
+    private void TargetNextGroup(IReadOnlyList<GroupRecord> groups, int index, List<string> lines)
+    {
+        if (index >= groups.Count) {
+            ShowCommandMenu();
+            return;
+        }
+
+        var g = groups[index];
+        if (g.Sta == GroupStatus.Destroyed) {
+            TargetNextGroup(groups, index + 1, lines);
+            return;
+        }
+
+        lines.Add(GroupLine(g, index + 1));
+        lines.Add("   New target → ");
+        SetCommandBoxContent(lines);
+
+        activePrompt = key => {
+            var code = key.NoAlt.NoCtrl.NoShift.KeyCode;
+            if (code == KeyCode.Enter) {
+                key.Handled = true;
+                TargetNextGroup(groups, index + 1, lines);
+                return;
+            }
+            if (code == KeyCode.Esc) {
+                key.Handled = true;
+                ShowCommandMenu();
+                return;
+            }
+
+            var ch = char.ToUpperInvariant((char)key.AsRune.Value);
+            var match = Array.Find(TargetChoices, c => c.Key == ch);
+            if (match.Key == '\0') {
+                return; // not a legal key -- ignored, matches GetCharacter's own restricted set
+            }
+            key.Handled = true;
+            state.SetTarget(g, match.Type);
+            TargetNextGroup(groups, index + 1, lines);
+        };
+    }
+
+    // GroupStatus (ATTCOMM.PAS:548-574): ActivateWindow(GroupWindow); ClrScr; the full listing, then
+    // GetCharacter(AnyKey,...) -- any keypress at all dismisses back to the menu.
+    private void ShowGroupStatusInBox()
+    {
+        SetCommandBoxContent(state.Groups.Select(GroupStatusLine).ToList());
+        activePrompt = key => {
+            key.Handled = true;
+            ShowCommandMenu();
+        };
+    }
+
+    // GroupMove/GroupTarget's own per-group status line (ATTCOMM.PAS:414,526): "i: Num Typ O:Pos (Trg)",
+    // no Dst/GAT/Clk tail -- that tail is specific to GroupStatus's own separate Write call.
+    private static string GroupLine(GroupRecord g, int number) =>
+        $"{number,2}: {g.Num,4} {TypeName(g.Typ)} O:{PosName(g.Pos)} ({(g.Trg is { } t ? TypeName(t) : "-")})";
+
+    // GroupStatus's own per-group line (ATTCOMM.PAS:560-571): the same status line plus Dst (destroyed)
+    // / GAT count (transport groups) / Clk (uncloaked hunter-killer check) tail.
     private string GroupStatusLine(GroupRecord g)
     {
         var i = state.Groups.IndexOf(g) + 1;
-        var line = $"{i,2}: {g.Num,4} {TypeName(g.Typ)}  O:{PosName(g.Pos)} ({(g.Trg is { } t ? TypeName(t) : "-")})";
+        var line = GroupLine(g, i);
         if (g.Sta == GroupStatus.Destroyed) {
             line += "  Dst";
         } else if (g.Typ is AttackType.Transport or AttackType.Jumptransport) {
@@ -413,8 +520,11 @@ internal sealed class TacticalBattleDisplayWindow : Window
         return line;
     }
 
-    // AttackDetails (ATTCOMM.PAS:576-607): last round's per-(AttackType,group) damage -- Details is
-    // FillChar'd at the top of every GroupEngage round in real Pascal too, so this is never cumulative.
+    // AttackDetails (ATTCOMM.PAS:576-607): the one real exception to "everything happens in
+    // GroupWindow" -- real Pascal opens this as its own separate window over the AttackWindow/map
+    // area (OpenWindow(1,1,80,13,...)), not GroupWindow, so it stays a separate popup here too. Last
+    // round's per-(AttackType,group) damage -- Details is FillChar'd at the top of every GroupEngage
+    // round in real Pascal too, so this is never cumulative.
     private void ShowDetails()
     {
         var lines = new List<string>();
@@ -444,32 +554,12 @@ internal sealed class TacticalBattleDisplayWindow : Window
         ShellPosition.SubOrbit => "sub-orbit", ShellPosition.Ground => "ground", _ => pos.ToString(),
     };
 
-    // Same shape as GameShell's own AddModal (backdrop + add/remove) -- this window hosts its own
-    // nested pickers (the Target list) rather than reaching back into GameShell for every sub-prompt,
-    // since it has no menu bar to enable/disable and is otherwise self-contained.
-    private Action AddModal(View popup)
-    {
-        var backdrop = new View { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(), CanFocus = false };
-
-        void Dismiss()
-        {
-            Remove(popup);
-            Remove(backdrop);
-            SetFocus();
-        }
-
-        Add(backdrop);
-        Add(popup);
-        popup.SetFocus();
-        return Dismiss;
-    }
-
     /// <summary>
-    /// AttackWindow's whole drawn contents (ATTCOMM.PAS:1093-1212, minus the DOS-poke mechanism and the
-    /// frame-by-frame animation itself -- see the outer class's own doc comment): the range grid or
-    /// starfield background, the target's own silhouette, the abstracted enemy-ship-cluster glyphs, and
-    /// every live group's own marker at its current shell. All positions are decoded from real Pascal's
-    /// own byte-offset constants (<c>OrbLoc</c>/<c>PlayerOffset</c>/<c>EnemyOffset</c>/<c>Disp</c>/
+    /// AttackWindow's whole drawn contents (ATTCOMM.PAS:1093-1212, minus the DOS-poke mechanism itself
+    /// -- see the outer class's own doc comment): the range grid or starfield background, the target's
+    /// own silhouette, the abstracted enemy-ship-cluster glyphs, every live group's own marker at its
+    /// current shell, and the initial WarpIn reveal. All positions are decoded from real Pascal's own
+    /// byte-offset constants (<c>OrbLoc</c>/<c>PlayerOffset</c>/<c>EnemyOffset</c>/<c>Disp</c>/
     /// <c>Disp2</c>, ATTCOMM.PAS:46-65,1136-1142) to plain (row,col) deltas: a DOS text-mode byte offset
     /// is <c>row*160+col*2</c> (80 columns * 2 bytes/cell), so each constant was decoded once by solving
     /// for the (row,col) pair nearest that value and hasn't been re-derived here.
@@ -514,6 +604,14 @@ internal sealed class TacticalBattleDisplayWindow : Window
         private readonly bool isFleetTarget;
         private readonly List<(int Row, int Col)> stars = [];
 
+        // WarpIn (ATTCOMM.PAS:91-124): every group starts at DeepSpace and slides in from off-screen
+        // when DrawScreen first runs. Reproduced as a short slide rather than the literal per-pixel
+        // Mem-poke choreography -- ticksRemaining counts down from WarpInTicks to 0, and
+        // DrawGroupMarkers interpolates each DeepSpace group's column from off-screen toward its real
+        // position while it's still counting down.
+        private const int WarpInTicks = 12;
+        private int warpInTicksRemaining;
+
         public BattleMapView(InteractiveCombatState state, Random random)
         {
             this.state = state;
@@ -533,10 +631,20 @@ internal sealed class TacticalBattleDisplayWindow : Window
             DrawingContent += OnDrawingContent;
         }
 
+        public void StartWarpIn(Terminal.Gui.App.IApplication app)
+        {
+            warpInTicksRemaining = WarpInTicks;
+            app.AddTimeout(TimeSpan.FromMilliseconds(40), () => {
+                warpInTicksRemaining--;
+                SetNeedsDraw();
+                return warpInTicksRemaining > 0;
+            });
+        }
+
         private void OnDrawingContent(object? sender, DrawEventArgs e)
         {
             e.Cancel = true;
-            SetAttribute(new TgAttribute(StandardColor.LightGray, StandardColor.Blue));
+            SetAttribute(new TgAttribute(StandardColor.White, StandardColor.Black)); // AttackWind = 15
 
             if (isFleetTarget) {
                 DrawStars();
@@ -669,9 +777,12 @@ internal sealed class TacticalBattleDisplayWindow : Window
         // DrawGroupShips (ATTCOMM.PAS:259-278): a Destroyed group simply stops being drawn anywhere,
         // matching source exactly (real Pascal never shows a "destroyed" marker here -- that's Group
         // Status/Details' own job). Indexed by each group's fixed position in the configured list, same
-        // as PlayerOffset's own real Pascal indexing.
+        // as PlayerOffset's own real Pascal indexing. A group still at DeepSpace during the WarpIn
+        // countdown draws at an interpolated column sliding in from off-screen instead of its real one.
         private void DrawGroupMarkers()
         {
+            var warpFraction = warpInTicksRemaining > 0 ? warpInTicksRemaining / (double)WarpInTicks : 0.0;
+
             for (var i = 0; i < state.Groups.Count; i++) {
                 var g = state.Groups[i];
                 if (g.Sta == GroupStatus.Destroyed) {
@@ -680,6 +791,9 @@ internal sealed class TacticalBattleDisplayWindow : Window
                 var (rowDelta, colDelta) = PlayerOffset[i % PlayerOffset.Length];
                 var row = CenterRow + rowDelta;
                 var col = ShellColumn[(int)g.Pos] + colDelta;
+                if (warpFraction > 0 && g.Pos == ShellPosition.DeepSpace) {
+                    col -= (int)(warpFraction * 20);
+                }
                 if (row >= 0 && row < Viewport.Height && col >= 0 && col < Viewport.Width) {
                     Move(col, row);
                     AddRune(PlayerMarkerRune);
