@@ -1240,7 +1240,30 @@ Direct2D) surfaced; see the README's Known Issues section.
     reuses) all still render and dismiss correctly. The live playtest fleet ran out of trillum four
     sectors short of the target before actually reaching combat, so the three new dialogs themselves
     were not exercised end-to-end in a real battle this round — noting that gap rather than claiming
-    more than was actually seen.
+    more than was actually seen. Closed in 8q below.
+- **8q, a combat-ready fixture, and the three post-battle dialogs actually seen live.** 8p's playtest
+  never reached a real battle — reaching one from "Border Skirmish" means several turns of transit
+  first, and the user asked for a fixture that skips that. New
+  `assets/saves/Garrisoned Outpost.json`: the human attack fleet starts already at the target sector
+  (`Ready`, no `Destination`), which shares its coordinate with both a Kingdom garrison fleet and a
+  Kingdom outpost. `GameShell.Attack`'s own target search picks the sole enemy fleet first (matching
+  real `GetTarget`'s own priority), so attacking once reaches the garrison fleet; attacking again with
+  no Kingdom fleet left there reaches the outpost instead — one fixture, no travel, both target kinds.
+  Built through the same Core APIs `GameJsonFixtureTests`'s "Border Skirmish" already uses
+  (`GalaxySetup.CreateWorld`, plain `Fleet` construction), not hand-authored JSON — confirmed by
+  re-reading that file's own doc comment, which names this as the user's explicit prior direction, not
+  a style guess. Both fixture test classes also gained a `[Explicit]` `RegenerateFixture` test:
+  excluded from the default `dotnet test` run (it overwrites a committed file) but runnable by name
+  (`dotnet test -- --treenode-filter "/*/*/<Class>/RegenerateFixture"`) after editing a fixture's
+  `BuildGame`, so a save no longer means hand-editing JSON or a throwaway generator script each time.
+  - Live psmux run against the new fixture actually reached combat this time, no turns needed: `T`arget
+    both groups, `M`ove/Advance into the garrison's shell, `E`ngage. All three `DosMessageWindow` paths
+    fired for real and rendered/dismissed cleanly, menu bar and map still responsive after each —
+    `AskToCapture`'s confirm (captured 15 surviving `HunterKiller`s answering "N"), the conquest report
+    against the outpost on the second attack (`ConquestMessage`'s `Message2` text, since it isn't the
+    Kingdom capital), and the plain `Result: AttackerRetreats` fallback after retreating out of the
+    second fight rather than chasing the outpost's orbit-shell defense satellites (a pre-existing shell/
+    targeting mechanic, unrelated to this pass).
 
 ## 9. Async/hotseat turn mode
 
