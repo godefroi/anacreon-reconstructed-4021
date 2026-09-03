@@ -877,6 +877,15 @@ internal sealed class GameShell : Window
     // 'A:' condition reads the target's *current* (pre-conquest) owner, so calling it after would mean
     // it can never match (see docs/ROADMAP.md and ScenarioLoaderWorldBackgroundTests for the ordering
     // bug this fixed).
+    //
+    // Split into a continuation chain (ShowOldShipsFound -> the capture confirm -> FinishAttackOutcome)
+    // rather than the straight-line sequence this used to be: DosMessageWindow is a real AddModal popup
+    // (Terminal.Gui's own MessageBox has no color/scheme API at all, confirmed via dotnet-inspect, so it
+    // couldn't give these screens DOS-accurate colors), and AddModal's popups are event-driven, not
+    // blocking -- unlike the MessageBox.Query calls they replace, GameShell has no other precedent for a
+    // reentrant blocking Application.Run from inside an already-running one, so this follows the same
+    // callback style every other multi-step GameShell flow (Deploy Fleet, Fleet Group Configuration)
+    // already uses instead.
     private void ApplyAttackOutcome(Fleet attackerFleet, object target, InteractiveCombatState state)
     {
         var subject = (ISectorObject)target;
@@ -885,33 +894,72 @@ internal sealed class GameShell : Window
         CombatOutcome.RestoreCombatant(attackerFleet, state.Casualties);
         CombatOutcome.RestoreCombatant(target, state.Killed);
 
-        var capture = true;
-        string? report = null;
-
-        if (state.Result == AttackResultType.DefenderConquered) {
-            ShowOldShipsFound(target);
-
-            if (target is Fleet targetFleet && HasAnyShips(targetFleet.Ships)) {
-                // AskToCapture's own inverted polarity (ATTCOMM.PAS:1358-1380): "Y" (destroy) sets
-                // Capture:=False; anything else -- the default -- sets Capture:=True.
-                capture = MessageBox.Query(App!, "Attack", "Do you wish to destroy the enemy fleet?", "_Yes", "_No") != 0;
-            }
-
-            report = Game.FindWorldBackgroundText(game, subject, human, conquer: true) is { } lines
-                ? string.Join('\n', lines)
-                : ConquestMessage(attackerFleet, subject);
+        if (state.Result != AttackResultType.DefenderConquered) {
+            FinishAttackOutcome(attackerFleet, target, state, hkSurprise, capture: true, report: null);
+            return;
         }
 
+        ShowOldShipsFound(target, () => {
+            if (target is Fleet targetFleet && HasAnyShips(targetFleet.Ships)) {
+                // AskToCapture's own body (ATTCOMM.PAS:1349-1356) and its inverted polarity
+                // (:1358-1380): "Y" (destroy) sets Capture:=False; anything else -- the default,
+                // including a bare Enter -- sets Capture:=True. The random "commander begs for his
+                // life" flavor line (:1358-1372) is skipped -- it costs an extra Rnd(1,3) call this
+                // port would need to place very carefully relative to ConquestMessage's own Rnd(1,3)
+                // (EnemyConquered's later, separate draw for Message1/2/3), and it's flavor text, not
+                // content.
+                var captured = Enum.GetValues<ShipType>()
+                    .Where(t => targetFleet.Ships[t] > 0)
+                    .Select(t => $"{targetFleet.Ships[t]} {t}");
+                var body = $"You have captured:\n{string.Join('\n', captured)}";
+                var confirm = new DosMessageWindow(game, human, body, confirmDestroy: true);
+                var dismissConfirm = AddModal(confirm, dismissOnOutsideClick: false);
+                confirm.Answered += (_, _) => {
+                    dismissConfirm();
+                    // Deferred one tick (see DosMessageWindow's own doc comment): without this, opening
+                    // the next popup happens synchronously inside the very key dispatch that just
+                    // dismissed this one, and a fast-repeated key (mashing Enter through a chain of
+                    // dialogs, or psmux sending keys back-to-back) can land on the new popup before the
+                    // player ever sees it -- silently picking Capture's default for a choice they never
+                    // actually saw.
+                    App!.AddTimeout(TimeSpan.Zero, () => {
+                        FinishConquest(attackerFleet, subject, target, state, hkSurprise, capture: !confirm.Destroy);
+                        return false;
+                    });
+                };
+            } else {
+                FinishConquest(attackerFleet, subject, target, state, hkSurprise, capture: true);
+            }
+        });
+    }
+
+    private void FinishConquest(Fleet attackerFleet, ISectorObject subject, object target, InteractiveCombatState state, bool hkSurprise, bool capture)
+    {
+        var report = Game.FindWorldBackgroundText(game, subject, human, conquer: true) is { } lines
+            ? string.Join('\n', lines)
+            : ConquestMessage(attackerFleet, subject);
+
+        FinishAttackOutcome(attackerFleet, target, state, hkSurprise, capture, report);
+    }
+
+    private void FinishAttackOutcome(Fleet attackerFleet, object target, InteractiveCombatState state, bool hkSurprise, bool capture, string? report)
+    {
         CombatOutcome.ResolveAttack(state.Result, attackerFleet, target, hkSurprise, capture, state.Casualties, state.Killed, game, random);
 
-        MessageBox.Query(App!, "Attack", report ?? $"Result: {state.Result}", "OK");
+        var result = new DosMessageWindow(game, human, report ?? $"Result: {state.Result}");
+        var dismissResult = AddModal(result, dismissOnOutsideClick: false);
+        result.Answered += (_, _) => dismissResult();
     }
 
     // OldShipsFound (ATTCOMM.PAS:1485-1526): an Independent planet may hold ships too obsolete for its
     // own tech level (left behind by a since-advanced empire) -- read-only info, no state effect.
-    private void ShowOldShipsFound(object target)
+    // `continuation` runs immediately when there's nothing to show, matching real Pascal's own
+    // unconditional fall-through into EnemyConquered right after (ATTCOMM.PAS:1376-1381 calls this
+    // before EnemyConquered regardless of whether it found anything).
+    private void ShowOldShipsFound(object target, Action continuation)
     {
         if (target is not Planet planet || !planet.Owner.IsIndependent) {
+            continuation();
             return;
         }
 
@@ -920,8 +968,102 @@ internal sealed class GameShell : Window
             .Select(t => $"{planet.Ships[t]} {t}")
             .ToList();
 
-        if (obsolete.Count > 0) {
-            MessageBox.Query(App!, "Attack", $"We have found the following ships in orbit:\n{string.Join('\n', obsolete)}", "OK");
+        if (obsolete.Count == 0) {
+            continuation();
+            return;
+        }
+
+        var dialog = new DosMessageWindow(game, human, $"We have found the following ships in orbit:\n{string.Join('\n', obsolete)}");
+        var dismiss = AddModal(dialog, dismissOnOutsideClick: false);
+        dialog.Answered += (_, _) => {
+            dismiss();
+            // Deferred one tick -- see the AskToCapture confirm's own comment on why chaining straight
+            // into the next popup here is unsafe.
+            App!.AddTimeout(TimeSpan.Zero, () => {
+                continuation();
+                return false;
+            });
+        };
+    }
+
+    /// <summary>
+    /// Post-battle report screens (ATTCOMM.PAS's OldShipsFound/AskToCapture, and the final Result line)
+    /// all draw into the exact same DisplayWindow <see cref="CloseUpWindow"/> already reproduces
+    /// (DISPLAY.PAS:161-162: ThinBRD border, C.SYSDispWind content / C.SYSWBorder border), with an
+    /// "Attack:" header line in C.SYSDispHigh repeated verbatim at the top of every one of these
+    /// procedures (e.g. ATTCOMM.PAS:1347,1520). Terminal.Gui's <c>MessageBox</c> has no color/scheme
+    /// parameter at all (confirmed via dotnet-inspect), so it can never reproduce this -- these three
+    /// call sites needed a real window instead.
+    /// </summary>
+    private sealed class DosMessageWindow : Window
+    {
+        private static readonly TgAttribute DispWindAttribute = new(StandardColor.LightGray, StandardColor.Blue);
+        private static readonly TgAttribute DispHighAttribute = new(StandardColor.White, StandardColor.Blue);
+        private static readonly TgAttribute BorderAttribute = new(StandardColor.LightGray, StandardColor.Black);
+
+        /// <summary>Fires once, on whatever key dismisses the dialog. For a confirm dialog, read <see cref="Destroy"/> at that point.</summary>
+        public event EventHandler? Answered;
+
+        public bool Destroy { get; private set; }
+
+        public DosMessageWindow(Game game, Empire viewer, string body, bool confirmDestroy = false)
+        {
+            Title = CloseUpWindow.DisplayWindowTitle(game, viewer);
+            Width = 80;
+            Height = 21;
+            X = Pos.Center();
+            Y = Pos.Center();
+            BorderStyle = LineStyle.Single;
+            CanFocus = true;
+            SetScheme(new Scheme(DispWindAttribute));
+            Border.View?.SetScheme(new Scheme(BorderAttribute));
+
+            var header = new Label { X = 1, Y = 0, Text = "Attack:" };
+            header.SetScheme(new Scheme(DispHighAttribute));
+            Add(header);
+            Add(new Label { X = 1, Y = 2, Width = Dim.Fill(1), Height = Dim.Fill(2), Text = body });
+
+            // AskToCapture's own prompt sits right under its content (WriteString at Lines+5,
+            // ATTCOMM.PAS:1376), not pinned to the bottom of the screen -- only the plain OK dialogs
+            // (which have no equivalent "right under the content" line in source) anchor to the bottom,
+            // matching TurnStartGreetingWindow's own established "press any key" convention.
+            var bodyLineCount = body.Length == 0 ? 0 : body.Split('\n').Length;
+            Add(new Label {
+                X = 1,
+                Y = confirmDestroy ? 2 + bodyLineCount + 1 : Pos.AnchorEnd(1),
+                Text = confirmDestroy ? "Do you wish to destroy the enemy fleet (y/N) ? " : "Press any key to continue...",
+            });
+
+            // Latched, not just "one key handled": AddModal's Dismiss (GameShell.cs) has no
+            // idempotence guard of its own, and every other AddModal caller only ever fires its
+            // Committed/similar event once. This is the first popup where *any* key dismisses -- OS key
+            // repeat (or two sends arriving close together, e.g. over psmux) can otherwise deliver a
+            // second KeyDown before Remove(popup) has taken this window out of the tree, firing
+            // Answered twice and driving GameShell's openModalCount negative, which permanently
+            // disables the menu bar and map for the rest of the turn.
+            var answered = false;
+            KeyDown += (_, key) => {
+                if (answered) {
+                    return;
+                }
+
+                if (!confirmDestroy) {
+                    answered = true;
+                    key.Handled = true;
+                    Answered?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+
+                var ch = char.ToUpperInvariant((char)key.AsRune.Value);
+                if (ch != 'Y' && ch != 'N' && key.KeyCode != KeyCode.Enter) {
+                    return;
+                }
+
+                answered = true;
+                key.Handled = true;
+                Destroy = ch == 'Y';
+                Answered?.Invoke(this, EventArgs.Empty);
+            };
         }
     }
 

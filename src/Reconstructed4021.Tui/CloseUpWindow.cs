@@ -101,7 +101,7 @@ internal sealed class CloseUpWindow : Window
     /// standard English ordinals, with the 11th-13th "always th" exception baked into its own
     /// Penultim=1 check.
     /// </summary>
-    private static string DisplayWindowTitle(Game game, Empire viewer)
+    internal static string DisplayWindowTitle(Game game, Empire viewer)
     {
         var age = game.Year - viewer.FoundingYear + 1;
         return $"Anacreon: {game.Year} ({age}{DisplayText.OrdinalSuffix(age)} year of your reign.)";
