@@ -1305,6 +1305,48 @@ Direct2D) surfaced; see the README's Known Issues section.
     config, targeting, advancing, engaging, `AskToCapture`, and the conquest report end to end,
     headless, deterministic, exit code 0 — no pty, no external process.
 
+- **8s, the rest of the Fleet menu (Change Destination/SRM Sweep/Probe), plus contextual fleet
+  actions on the Sector Selected Popup and Close Up.** Picked this cluster out of `OPEN_GAPS.md`'s
+  "most of the menu bar is still stubs" bullet: all three live together in `FLTCOMM.PAS` right next
+  to Transfer/Abort-Join/Refuel (already done), and all three already had full Core support sitting
+  unused before this — `FleetLifecycle.SetFleetDestination`, `Galaxy.GetMineOwner`/`ClearMine`/
+  `ClearMineScouted` (built for scenario loading's `CreateSRMs`), and `Empire.TryLaunchProbe` (already
+  wired into `VisibilityHandler`'s turn resolution). No new Core code needed, only `GameShell` wiring:
+  `ChangeDestination`/`SrmSweep` reuse `PickOwnFleetAtCursor` (Change Destination just calls
+  `BeginPick` for the new coordinate; SRM Sweep reads the mine at the fleet's own location, matching
+  `MineSweeperCommand`'s `GetCoord(FltID,XY)`); `LaunchProbe` skips the fleet-pick step entirely since
+  real Pascal's `LaunchProbeCommand` never takes one either.
+
+  Then decided to add a second piece in the same branch: from the Sector Selected Popup and Close Up,
+  when the selected item is one of the player's own fleets, reach Change Destination/Transfer/
+  Abort-Join/Attack directly (C/T/J/A) instead of going back through `PickOwnFleetAtCursor`'s own
+  map-cursor pick. `TransferFleet`/`AbortJoinFleet`/`Attack` each split into a parameterless
+  cursor-picking entry point (still used by the menu bar) plus a `Fleet`-accepting overload the new
+  hotkeys call directly — same split `ChangeDestination` already needed. `ShowObjectPicker` gained an
+  `allowFleetActions` flag (true only for `ShowSectorPicker`, since its other two callers, `PickGround`
+  and Attack's own enemy-fleet picker, already give Enter a specific meaning); `ShowCloseUp` checks the
+  same four letters directly since Close Up has no shared picker method to gate.
+
+  **One real bug, found by decompiling `Terminal.Gui.Views.ListView` (`dotnet-inspect`) rather than
+  guessing after two live-tested "it just doesn't fire" runs.** C/T/J/A worked immediately in Close Up
+  (no `ListView`, so its own `KeyDown` fires unconditionally) but silently did nothing in the Sector
+  Selected Popup, even though Enter/Esc worked fine there. Confirmed via instrumenting every level
+  (`GameShell.KeyDown`, `picker.KeyDown`, `listView.KeyDown`) that a bare letter key produced *zero*
+  `KeyDown` events anywhere in the chain, while arrow keys and Enter reached `listView.KeyDown` every
+  time. Root cause, from decompiling `ListView.OnKeyDown`: its own type-ahead search
+  (`KeystrokeNavigator`) runs as the base `View`'s protected `OnKeyDown` hook, which the public
+  `KeyDown` *event* wrapper only raises if that hook itself returns `false` — and `GetNextMatchingItem`
+  counts "no better match, selection unchanged" as a handled result, not a miss, so it swallows every
+  plain letter unconditionally, match or not. Fix: `listView.KeystrokeNavigator = null` when
+  `allowFleetActions` (none of "Outpost"/"Fleet"/"Warfleet" benefit from letter-search anyway), then
+  attach the C/T/J/A handling to `listView.KeyDown` directly rather than the picker Window's own
+  `KeyDown` (confirmed necessary: even with the navigator disabled, a letter key with no other
+  `ListView` binding still reaches the *focused* view's own `KeyDown` first, not the container's).
+  Verified via the headless driver (8r): `assets/saves/Garrisoned Outpost.json`, Warfleet in the
+  Sector Selected Popup answering C (destination round-trips through `BeginPick`/`Enter` cleanly) and
+  J (opens the real Abort/Join ground picker), plus Close Up answering A (opens the real "Standard
+  battle configuration?" dialog) — same code path both surfaces share.
+
 ## 9. Async/hotseat turn mode
 
 Deferred multiplayer option — sequential mode (already built) is the only mode a solo player sees.
