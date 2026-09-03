@@ -300,15 +300,48 @@ public sealed class GameShell : Window
 
     // Both overlays below are added/removed directly as children of this running Toplevel rather
     // than run via a nested Application.Run -- see CloseUpWindow's own doc comment.
+    //
+    // Fleet action shortcuts (per the user's own explicit request): when obj is one of the player's
+    // own fleets, C/T/J/A run the same Change Destination/Transfer/Abort-Join/Attack commands the
+    // Fleet/Ministry-of-War menus expose, using this already-selected fleet directly instead of going
+    // back through PickOwnFleetAtCursor's own map-cursor pick. CloseUpWindow itself renders the hint
+    // line (LayoutFleet's own "owned" branch) -- no Pascal precedent to transcribe here, this is a
+    // TUI-only convenience layered on top of an already-open Close Up. Any other key keeps the
+    // original "any key dismisses" behavior (CloseUpWindow's own doc comment on why that's already a
+    // deviation from real Pascal's non-modal CloseUpCom).
     private void ShowCloseUp(ISectorObject obj)
     {
         var window = new CloseUpWindow(obj, human, game);
         var dismiss = AddModal(window);
         window.KeyDown += (_, key) => {
+            if (obj is Fleet fleet && ReferenceEquals(fleet.Owner, human) &&
+                ResolveFleetContextAction(char.ToUpperInvariant((char)key.AsRune.Value)) is { } action) {
+                dismiss();
+                action(fleet);
+                key.Handled = true;
+                return;
+            }
+
             dismiss();
             key.Handled = true;
         };
     }
+
+    /// <summary>
+    /// C/T/J/A -- Change Destination/Transfer/Abort-Join/Attack, the four Fleet/Ministry-of-War
+    /// commands reachable directly off a selected fleet (Close Up and the Sector Selected Popup),
+    /// shared so the two surfaces can't drift on which letter maps to which command. Not gated on
+    /// "is this action actually useful right now" (e.g. Attack with no enemy present) -- same idiom
+    /// PickOwnFleetAtCursor/Attack/PickGround already use everywhere else in this file: offer the
+    /// command, let its own existing MessageBox explain why it didn't apply.
+    /// </summary>
+    private Action<Fleet>? ResolveFleetContextAction(char key) => key switch {
+        'C' => ChangeDestination,
+        'T' => TransferFleet,
+        'J' => AbortJoinFleet,
+        'A' => Attack,
+        _ => null,
+    };
 
     // DISPLAY.PAS's own GetIDMenuChoice/DisplayMenu (DISPLAY.PAS:51-74, MENU.PAS:116-156) -- the
     // shared "ID/menu choice picker" primitive real Pascal builds every target/ground/empire picker
@@ -322,7 +355,7 @@ public sealed class GameShell : Window
     private static readonly TgAttribute PickerSelectedAttribute = new(StandardColor.Black, StandardColor.LightGray); // SYSDispSelect = 112
 
     private void ShowSectorPicker(List<ISectorObject> objects) =>
-        ShowObjectPicker(string.Empty, objects, ShowCloseUp);
+        ShowObjectPicker(string.Empty, objects, ShowCloseUp, allowFleetActions: true);
 
     /// <summary>
     /// Shared "pick one of these objects" popup -- DISPLAY.PAS's own GetIDMenuChoice/DisplayMenu, the
@@ -332,14 +365,19 @@ public sealed class GameShell : Window
     /// those procedures' own AddGround/CreateMenu (MAPWIND.PAS:858-859, FLTCOMM.PAS:87-88) verbatim
     /// -- identical text in both sources, not a coincidence.
     /// </summary>
-    private void ShowObjectPicker(string title, IReadOnlyList<ISectorObject> objects, Action<ISectorObject> onChosen)
+    /// <param name="allowFleetActions">
+    /// Only true for <see cref="ShowSectorPicker"/> -- the other two callers (<see cref="PickGround"/>,
+    /// Attack's own enemy-fleet target picker) already give Enter a specific meaning ("this is the
+    /// transfer/abort/attack target"), so C/T/J/A must not double as fleet-command shortcuts there.
+    /// </param>
+    private void ShowObjectPicker(string title, IReadOnlyList<ISectorObject> objects, Action<ISectorObject> onChosen, bool allowFleetActions = false)
     {
         var picker = new Window {
             Title = title, // DisplayMenu's own OpenWindow passes '' for the sector-picker case too.
             X = Pos.Center(),
             Y = Pos.Center(),
-            Width = 45,
-            Height = 7,
+            Width = allowFleetActions ? 55 : 45, // wide enough for the fleet-action hint line below
+            Height = allowFleetActions ? 8 : 7,
             BorderStyle = LineStyle.Single, // ThinBRD
             CanFocus = true,
         };
@@ -349,14 +387,48 @@ public sealed class GameShell : Window
         // No in-window "Enter: choose  Esc: cancel" hint: real Pascal's own GetIDMenuChoice puts
         // that on the shared help line (WriteHelpLine) instead of inside the menu window itself --
         // not reproduced, same simplification depth as CloseUpWindow dropping its own former
-        // "Press any key" line for the same reason (it isn't real Pascal content either).
-        var listView = new ListView<ObjectListItem> { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill() };
+        // "Press any key" line for the same reason (it isn't real Pascal content either). The
+        // fleet-action hint line below is the one exception -- no Pascal equivalent exists to match,
+        // so it gets an explicit legend instead of staying silent like Enter/Esc do.
+        var listView = new ListView<ObjectListItem> { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(allowFleetActions ? 1 : 0) };
         listView.SetScheme(new Scheme { Normal = PickerNormalAttribute, Focus = PickerSelectedAttribute });
         listView.SetSource(new ObservableCollection<ObjectListItem>(objects.Select(o => new ObjectListItem(o, human))));
         listView.Index = 0; // SetSource alone leaves nothing selected -- default to the first item.
+        if (allowFleetActions) {
+            // ListView's own type-ahead search (KeystrokeNavigator) intercepts every plain letter
+            // key inside its own OnKeyDown override, BEFORE the public KeyDown event ever fires --
+            // confirmed by decompiling it (dotnet-inspect): it returns true even when nothing
+            // matches, since GetNextMatchingItem's "no better match" result still counts as
+            // handled. That swallows C/T/J/A silently. None of these object names ("Outpost",
+            // "Fleet", "Warfleet"...) benefit from letter-search anyway, so disabling it here is a
+            // clean fix, not a workaround for a real feature this popup needs.
+            listView.KeystrokeNavigator = null;
+        }
         picker.Add(listView);
 
+        if (allowFleetActions) {
+            picker.Add(new Label { X = 0, Y = Pos.AnchorEnd(1), Text = "Your fleet: C:dest T:transfer J:abort/join A:attack" });
+        }
+
         var dismiss = AddModal(picker);
+
+        // Fleet-action letters are wired on listView's own KeyDown, not picker's: ListView has a
+        // built-in type-ahead-search key binding that consumes a bare letter internally before it
+        // ever bubbles up to the picker Window's KeyDown (confirmed by instrumenting both -- Enter/Esc
+        // reach picker.KeyDown fine since ListView leaves those unhandled, but C/T/J/A never did).
+        // View.KeyDown (the C# event) fires before a view's own internal key-binding table, so
+        // attaching here pre-empts that search feature for exactly the four letters we care about.
+        if (allowFleetActions) {
+            listView.KeyDown += (_, key) => {
+                if (listView.Value?.Object is Fleet fleet && ReferenceEquals(fleet.Owner, human) &&
+                    ResolveFleetContextAction(char.ToUpperInvariant((char)key.AsRune.Value)) is { } action) {
+                    dismiss();
+                    action(fleet);
+                    key.Handled = true;
+                }
+            };
+        }
+
         picker.KeyDown += (_, key) => {
             switch (key.NoAlt.NoCtrl.NoShift.KeyCode) {
                 case KeyCode.Enter:
@@ -639,10 +711,12 @@ public sealed class GameShell : Window
     /// fleets under the map cursor and whatever <see cref="PickGround"/> picks as the other side
     /// (any owner, matching TransferFleetCommand's own GetGround(...,PlayerOnly:=False,...)).
     /// </summary>
-    private void TransferFleet() => PickOwnFleetAtCursor("Transfer Fleet", fleet =>
+    private void TransferFleet() => PickOwnFleetAtCursor("Transfer Fleet", TransferFleet);
+
+    private void TransferFleet(Fleet fleet) =>
         PickGround(fleet, playerOnly: false, includeFleet: false, "Transfer Fleet",
             "There is nothing here to transfer with.",
-            ground => BeginTransferDistribution(fleet, ground)));
+            ground => BeginTransferDistribution(fleet, ground));
 
     private void BeginTransferDistribution(Fleet fleet, ISectorObject ground)
     {
@@ -682,10 +756,12 @@ public sealed class GameShell : Window
     /// identical either way) -- declining here returns immediately instead of asking a second,
     /// already-moot question.
     /// </summary>
-    private void AbortJoinFleet() => PickOwnFleetAtCursor("Abort/Join Fleet", fleet =>
+    private void AbortJoinFleet() => PickOwnFleetAtCursor("Abort/Join Fleet", AbortJoinFleet);
+
+    private void AbortJoinFleet(Fleet fleet) =>
         PickGround(fleet, playerOnly: false, includeFleet: false, "Abort/Join Fleet",
             "There is nothing here to abort the fleet to.",
-            ground => ConfirmAbortJoin(fleet, ground)));
+            ground => ConfirmAbortJoin(fleet, ground));
 
     private void ConfirmAbortJoin(Fleet fleet, ISectorObject ground)
     {
@@ -787,6 +863,68 @@ public sealed class GameShell : Window
     }
 
     /// <summary>
+    /// Fleet menu > Change Destination (FLTCOMM.PAS: ChangeDestinationCommand, :614-630): reuses the
+    /// same map-cursor destination pick Deploy's own XYParm step already uses. Real Pascal's
+    /// SetFleetDestination is unconditional -- no legality check on the new destination beyond "a
+    /// coordinate" -- matching FleetLifecycle.SetFleetDestination exactly (works whether the fleet is
+    /// Ready or already InTransit).
+    /// </summary>
+    private void ChangeDestination() => PickOwnFleetAtCursor("Change Destination", ChangeDestination);
+
+    private void ChangeDestination(Fleet fleet) =>
+        BeginPick("Change Destination -- move cursor to new destination, Enter: select, Esc: cancel",
+            destination => {
+                FleetLifecycle.SetFleetDestination(fleet, destination);
+                galaxyView.Refresh();
+            });
+
+    /// <summary>
+    /// Fleet menu > SRM Sweep (FLTCOMM.PAS: MineSweeperCommand, :788-812): reads the mine at the
+    /// selected fleet's own location (<c>GetCoord(FltID,XY)</c>), same as real Pascal -- there's no
+    /// separate destination pick, the fleet has to already be sitting on the minefield.
+    /// <c>PutMine(XY,Indep)</c> is <see cref="Galaxy.ClearMine"/> (Indep-owned and unmined are the
+    /// same "no mine" state on this side -- see <see cref="Galaxy.GetMineOwner"/>'s own doc comment);
+    /// <c>AddNews</c> only fires when the mine belonged to someone else, matching the source's own
+    /// <c>IF Emp&lt;&gt;Player THEN AddNews(...)</c> guard.
+    /// </summary>
+    private void SrmSweep() => PickOwnFleetAtCursor("SRM Sweep", SrmSweep);
+
+    private void SrmSweep(Fleet fleet)
+    {
+        var location = fleet.Location;
+        var mineOwner = game.Galaxy.GetMineOwner(location);
+        if (mineOwner is null) {
+            MessageBox.Query(App!, "SRM Sweep", "No SRMs found.", "OK");
+            return;
+        }
+
+        if (!ReferenceEquals(mineOwner, human)) {
+            mineOwner.AddNews(NewsType.MineFieldCleared, position: location, otherEmpire: human);
+        }
+
+        game.Galaxy.ClearMine(location);
+        game.Galaxy.ClearMineScouted(location);
+        galaxyView.Refresh();
+        MessageBox.Query(App!, "SRM Sweep", "Mine sweeping completed.", "OK");
+    }
+
+    /// <summary>
+    /// Fleet menu > Probe (FLTCOMM.PAS: LaunchProbeCommand, :761-786): unlike every other Fleet-menu
+    /// command, real Pascal never ties this to a specific fleet (<c>GetProbe</c>/<c>LaunchProbe</c>
+    /// take no FltID at all) -- just a destination coordinate, reusing the map cursor the same way
+    /// Deploy's own destination pick does, with no source-fleet step first.
+    /// </summary>
+    private void LaunchProbe() =>
+        BeginPick("Launch Probe -- move cursor to target, Enter: select, Esc: cancel", destination => {
+            if (!human.TryLaunchProbe(destination)) {
+                MessageBox.Query(App!, "Probe", "There are no more probes available.", "OK");
+                return;
+            }
+
+            MessageBox.Query(App!, "Probe", $"Probe launched to {destination.X},{destination.Y}.", "OK");
+        });
+
+    /// <summary>
     /// Ministry of War menu > Attack (ATTCOMM.PAS: GetTarget/AttackCommand/CleanUp/EnemyConquered).
     /// Target selection order is transcribed directly from GetTarget's own nested CreateMenu
     /// (ATTCOMM.PAS:663-715): every enemy Fleet in the sector goes on the target list first (a picker
@@ -800,7 +938,9 @@ public sealed class GameShell : Window
     /// rather than silent: attacker and target must already be in the same sector (i.e. the fleet has
     /// arrived) -- real Pascal's exact range rule wasn't re-derived here.
     /// </summary>
-    private void Attack() => PickOwnFleetAtCursor("Attack", attacker => {
+    private void Attack() => PickOwnFleetAtCursor("Attack", Attack);
+
+    private void Attack(Fleet attacker) {
         var cursor = attacker.Location;
         var enemyFleets = game.Galaxy.Fleets.Where(f => f.Location == cursor && !ReferenceEquals(f.Owner, human)).ToList();
 
@@ -819,7 +959,7 @@ public sealed class GameShell : Window
         }
 
         BeginAttack(attacker, target);
-    });
+    }
 
     // AttackCommand's own "Standard battle configuration (Y/n)?" fork (ATTCOMM.PAS:1608-1616): Y
     // (default) skips Fleet Group Configuration and uses DefaultDistribution, matching what this
@@ -1119,14 +1259,14 @@ public sealed class GameShell : Window
         }),
         new MenuBarItem("_Fleet", new MenuItem[] {
             new("_Deploy", Key.Empty, DeployFleet),
-            new("_Change Destination", Key.Empty, () => Stub("Change Destination")),
+            new("_Change Destination", Key.Empty, ChangeDestination),
             new("_Transfer", Key.Empty, TransferFleet),
             new("_Abort/Join", Key.Empty, AbortJoinFleet),
             new("_Refuel", Key.Empty, RefuelFleet),
-            new("_SRM Sweep", Key.Empty, () => Stub("Mine Sweeper")),
+            new("_SRM Sweep", Key.Empty, SrmSweep),
             new("_Orders", Key.Empty, () => Stub("Fleet Orders")),
             new("Canc_el Orders", Key.Empty, () => Stub("Cancel Orders")),
-            new("_Probe", Key.Empty, () => Stub("Launch Probe")),
+            new("_Probe", Key.Empty, LaunchProbe),
         }),
         new MenuBarItem("_Build", new MenuItem[] {
             new("_Site Status", Key.Empty, () => Stub("Construction Site Status")),
