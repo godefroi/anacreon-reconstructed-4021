@@ -1203,13 +1203,44 @@ Direct2D) surfaced; see the README's Known Issues section.
   - **Checked, not changed**: Ministry of War's own hotkey. `PLAYTURN.PAS:1188,1219` give
     `Worlds='W'`, `Ministry of War='M'` in real Pascal — already what this port has. Switching
     Ministry of War to `W` would collide with `Worlds`' own real hotkey and be less faithful.
-  - **Still open, not fixed this pass**: `GameShell`'s own post-battle dialogs (`OldShipsFound`,
-    `AskToCapture`, the final result report) are still stock `MessageBox.Query`, which has no color/
-    scheme override at all (confirmed via its full member list) — real Pascal draws these with
-    `SYSDispWind`, matching `CloseUpWindow`'s own scheme, not `AttackWind`. Fixing this properly means
-    replacing those `MessageBox.Query` calls with custom `SYSDispWind`-styled windows, the same
-    treatment this entry gave `TacticalBattleDisplayWindow`'s own prompts — not done here to keep this
-    already-large pass bounded; flagged for the next round rather than silently left wrong.
+  - **Flagged, fixed next**: `GameShell`'s own post-battle dialogs (`OldShipsFound`, `AskToCapture`,
+    the final result report) were still stock `MessageBox.Query`, which has no color/scheme override
+    at all — see 8p below.
+- **8p, post-battle dialogs recolored.** `MessageBox.Query` genuinely has no scheme parameter
+  (confirmed via `dotnet-inspect`'s full member list), so the three post-battle call sites 8o flagged
+  (`OldShipsFound`, `AskToCapture`, the final result report) are now a new `DosMessageWindow` popup
+  instead: `DISPLAY.PAS:161-162`'s own `DisplayWindow` (`ThinBRD`, `SYSDispWind` content /
+  `SYSWBorder` border, the exact window every one of these procedures — and `CloseUpWindow` — already
+  draws into) with the `SYSDispHigh` "Attack:" header line every one of them writes at the top
+  (ATTCOMM.PAS:1347,1520 etc.). `CloseUpWindow.DisplayWindowTitle` made `internal` and reused verbatim
+  rather than duplicated, now that there are two callers.
+  - Restructured `ApplyAttackOutcome` into a continuation chain (`ShowOldShipsFound` →
+    the capture confirm → `FinishConquest`/`FinishAttackOutcome`) instead of the straight-line sequence
+    it used to be: `AddModal`'s popups are event-driven, not blocking, unlike the `MessageBox.Query`
+    calls they replace, and this repo has no precedent for a reentrant blocking `Application.Run`
+    from inside an already-running one — same callback shape Deploy Fleet and Fleet Group
+    Configuration already use.
+  - `AskToCapture`'s own content (`'You have captured:'` + the ship list, ATTCOMM.PAS:1349-1356) is
+    now shown in the confirm dialog's body instead of a blank box with the question pinned to the
+    bottom — its three random "commander begs for his life" flavor lines (:1358-1372) are still
+    skipped, since porting them means placing an extra `Rnd(1,3)` call correctly relative to
+    `EnemyConquered`'s own, and they're flavor text, not content.
+  - Caught in review before playtesting, not by the playtest itself (advisor flagged both): `AddModal`'s
+    `Dismiss` has no idempotence guard, and `DosMessageWindow` is the first popup where *any* key
+    dismisses it — a repeated key landing between `Answered` firing and the popup's removal could fire
+    it twice, driving `openModalCount` negative and permanently disabling the menu bar and map for the
+    rest of the turn. Fixed with a one-shot `answered` latch. Also: chaining straight into the next
+    popup from inside the key handler that just dismissed the previous one meant a fast-repeated key
+    (mashing Enter through a chain of dialogs, or two sends arriving close together) could land on the
+    new popup before the player ever saw it, silently picking `Capture`'s default. Fixed by deferring
+    each next-popup open one tick via `AddTimeout(TimeSpan.Zero, ...)`.
+  - Verified: `dotnet test` (564 passed, all Core — this repo still has no Tui test harness) plus a
+    psmux session confirming Deploy Fleet, the Resource Distribution Editor, turn advancement, and
+    `CloseUpWindow`'s own `DisplayWindowTitle`-formatted title (the exact title `DosMessageWindow` now
+    reuses) all still render and dismiss correctly. The live playtest fleet ran out of trillum four
+    sectors short of the target before actually reaching combat, so the three new dialogs themselves
+    were not exercised end-to-end in a real battle this round — noting that gap rather than claiming
+    more than was actually seen.
 
 ## 9. Async/hotseat turn mode
 
