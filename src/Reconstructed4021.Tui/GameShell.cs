@@ -448,13 +448,19 @@ internal sealed class GameShell : Window
         // been clicked -- confirmed from real testing: hovering it while a modal popup (e.g. the
         // Resource Distribution Editor) was open stole focus straight off the popup with no click at
         // all, since that hover tracking isn't gated by z-order the way a click is. Disabling it for
-        // the popup's lifetime blocks that regardless of the exact internal mechanism. A depth
+        // the popup's lifetime blocks that regardless of the exact internal mechanism. galaxyView
+        // gets the same treatment for the same reason, found later: a popup whose own KeyDown handler
+        // doesn't mark Tab as handled (Fleet Group Configuration) lets Terminal.Gui's default
+        // focus-advance binding fire, which can hand focus to galaxyView -- a sibling child of this
+        // Window, not gated by z-order either -- and its own arrow-key handler then moves the map
+        // cursor instead of the popup's own grid, with no visible sign focus ever moved. A depth
         // counter, not a bare bool: AddModal isn't reentrant on its own (Deploy Fleet chains a
         // name-prompt popup straight into the distribution-editor popup), and a bare
-        // `menuBar.Enabled = true` on Dismiss would re-enable the bar the moment the inner popup of
-        // two ever closed while the outer one was still up.
+        // `menuBar.Enabled = true` on Dismiss would re-enable the bar (and the map) the moment the
+        // inner popup of two ever closed while the outer one was still up.
         openModalCount++;
         menuBar.Enabled = false;
+        galaxyView.Enabled = false;
 
         void Dismiss()
         {
@@ -462,6 +468,7 @@ internal sealed class GameShell : Window
             Remove(backdrop);
             openModalCount--;
             menuBar.Enabled = openModalCount == 0;
+            galaxyView.Enabled = openModalCount == 0;
             galaxyView.SetFocus();
         }
 
@@ -494,39 +501,25 @@ internal sealed class GameShell : Window
     }
 
     /// <summary>
-    /// Fleet menu > Deploy (FLTCOMM.PAS: LaunchFleetCommand): source and destination both reuse the
-    /// map cursor (matching TUI_SURFACES_MAPPING.md's own "map cursor reuse for launch/destination"),
-    /// a name prompt (LaunchFleetCommand's own FleetName parameter), and the real Resource
-    /// Distribution Editor (<see cref="ResourceDistributionEditor"/>, InputNewDistribution) for
-    /// picking which ships/cargo actually go -- not an all-or-nothing dump of the source world's
-    /// Ships anymore.
+    /// Fleet menu > Deploy (FLTCOMM.PAS: LaunchFleetCommand). Prompt order transcribed from
+    /// PLAYTURN.PAS's own <c>ParameterData</c> table (:209-218) — the real per-command parameter
+    /// list for <c>FLaunchCom</c> is <c>NewNameParm, IDParm2 (source), XYParm (destination)</c>, in
+    /// that fixed order (real Pascal asks whichever of these wasn't already typed on the command
+    /// line, in this order); <c>LaunchFleetCommand</c> itself then calls <c>InputNewDistribution</c>
+    /// (the Resource Distribution Editor) last, before actually deploying. An earlier pass here had
+    /// source before the name and put the editor before the destination pick — fixed to match source:
+    /// name, then source, then destination, then composition. Source and destination both reuse the
+    /// map cursor (matching TUI_SURFACES_MAPPING.md's own "map cursor reuse for launch/destination").
     /// </summary>
-    private void DeployFleet() =>
-        BeginPick("Deploy Fleet -- move cursor to a world to launch from, Enter: select, Esc: cancel", PickDeploySource);
-
-    private void PickDeploySource(Coordinate location)
-    {
-        var source = FindWorldAt(location);
-        if (source is null || !ReferenceEquals(source.Owner, human)) {
-            MessageBox.Query(App!, "Deploy Fleet", "That isn't one of your own worlds.", "OK");
-            return;
-        }
-
-        if (!HasAnyShips(source.Ships)) {
-            MessageBox.Query(App!, "Deploy Fleet", "This world has no ships to deploy.", "OK");
-            return;
-        }
-
-        PromptForFleetName(source);
-    }
+    private void DeployFleet() => PromptForFleetName();
 
     private static readonly TgAttribute DialogNormalAttribute = new(StandardColor.LightGray, StandardColor.Black); // SYSWBorder = 7, matching the sector picker's own popup style
     private static readonly TgAttribute DialogBorderAttribute = new(StandardColor.LightGray, StandardColor.Black);
 
-    // FleetName (FLTCOMM.PAS's own LaunchFleetCommand parameter) -- a small text prompt, matching
-    // PlayerSetupWindow's own established TextField-in-a-popup pattern rather than a nested
-    // Application.Run.
-    private void PromptForFleetName(IEconomicWorld source)
+    // FleetName (FLTCOMM.PAS's own LaunchFleetCommand parameter, Question 7 "What name shall we use
+    // for this fleet?") -- a small text prompt, matching PlayerSetupWindow's own established
+    // TextField-in-a-popup pattern rather than a nested Application.Run.
+    private void PromptForFleetName()
     {
         var dialog = new Window {
             Title = "Name This Fleet",
@@ -553,7 +546,8 @@ internal sealed class GameShell : Window
 
             var name = nameField.Text?.Trim() ?? "";
             dismiss();
-            BeginDeployDistribution(source, name);
+            BeginPick("Deploy Fleet -- move cursor to a world to launch from, Enter: select, Esc: cancel",
+                location => PickDeploySource(location, name));
             key.Handled = true;
         };
         dialog.KeyDown += (_, key) => {
@@ -566,7 +560,26 @@ internal sealed class GameShell : Window
         };
     }
 
-    private void BeginDeployDistribution(IEconomicWorld source, string fleetName)
+    // IDParm2 (Question 8, "Where shall we deploy the fleet from?").
+    private void PickDeploySource(Coordinate location, string fleetName)
+    {
+        var source = FindWorldAt(location);
+        if (source is null || !ReferenceEquals(source.Owner, human)) {
+            MessageBox.Query(App!, "Deploy Fleet", "That isn't one of your own worlds.", "OK");
+            return;
+        }
+
+        if (!HasAnyShips(source.Ships)) {
+            MessageBox.Query(App!, "Deploy Fleet", "This world has no ships to deploy.", "OK");
+            return;
+        }
+
+        // XYParm (Question 9, "What shall its destination be?").
+        BeginPick("Deploy Fleet -- move cursor to destination, Enter: select, Esc: cancel",
+            destination => BeginDeployDistribution(source, fleetName, destination));
+    }
+
+    private void BeginDeployDistribution(IEconomicWorld source, string fleetName, Coordinate destination)
     {
         var groundShips = CloneShips(source.Ships);
         var groundCargo = CloneCargo(source.Cargo);
@@ -589,15 +602,13 @@ internal sealed class GameShell : Window
                 return;
             }
 
-            BeginPick($"Deploy Fleet -- move cursor to destination, Enter: launch, Esc: cancel", destination => {
-                var fleet = FleetLifecycle.DeployFleet(human, source, fleetShips, fleetCargo, destination, game);
-                if (!string.IsNullOrWhiteSpace(fleetName)) {
-                    // LaunchFleetCommand's own FleetName[1]:=UpCase(FleetName[1]) (FLTCOMM.PAS:517).
-                    fleet.Names[human] = char.ToUpperInvariant(fleetName[0]) + fleetName[1..];
-                }
+            var fleet = FleetLifecycle.DeployFleet(human, source, fleetShips, fleetCargo, destination, game);
+            if (!string.IsNullOrWhiteSpace(fleetName)) {
+                // LaunchFleetCommand's own FleetName[1]:=UpCase(FleetName[1]) (FLTCOMM.PAS:517).
+                fleet.Names[human] = char.ToUpperInvariant(fleetName[0]) + fleetName[1..];
+            }
 
-                galaxyView.Refresh();
-            });
+            galaxyView.Refresh();
         };
     }
 
@@ -850,8 +861,12 @@ internal sealed class GameShell : Window
         var dismiss = AddModal(display, dismissOnOutsideClick: false);
         display.BattleEnded += (_, _) => {
             dismiss();
-            ApplyAttackOutcome(attacker, target, state);
+            // Refresh (data rebuild + its own SetNeedsDraw, see that method's own doc comment) before
+            // the outcome dialogs below, not after -- otherwise the map sat behind those dialogs still
+            // showing whatever it looked like before the whole battle, dismissed popup or not, until
+            // every dialog closed and this line was finally reached.
             galaxyView.Refresh();
+            ApplyAttackOutcome(attacker, target, state);
         };
     }
 
