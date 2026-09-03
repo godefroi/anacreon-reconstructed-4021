@@ -1137,6 +1137,39 @@ Direct2D) surfaced; see the README's Known Issues section.
     `Disp`/`Disp2`, ATTCOMM.PAS:46-65,1136-1142) decoded to plain row/column deltas. Explicitly told
     not to defer any of this a second time once asked — built all four pieces in this same pass
     rather than re-triaging by perceived value again.
+- **8n, opt-in auto-targeting for the Tactical Battle Display.** Not real Pascal — user feedback after
+  playtesting 8m: manually aiming every group every round (the interactive engine's own faithfully-
+  reproduced lack of auto-aim, see 8m above) is real tedium once it's not just a design curiosity but
+  something being actually played. `InteractiveCombatState.AutoTarget` (off by default, preserving
+  8m's own fully-manual behavior exactly) reuses the fully automatic NPE engine's own per-group
+  priority rule (`GetTargetCandidates`/`PrioritizeTargetCandidates`/`GetBestTarget`) via a new
+  `CombatResolution.AssignAutoTargets`, called once per round for every group the player hasn't
+  manually pinned via `SetTarget`. Deliberately a new method rather than factoring
+  `FleetEngageTargetting`/`WorldEngageTargetting`'s own assignment loop out for reuse — those two are
+  `NpeAttackTests`' own golden-file subjects, not worth refactoring-for-reuse risk — and deliberately
+  omits their own `AllAdvance`/`TrnAdvance` no-target-anywhere fallback, since that fallback also
+  drives movement, which the interactive engine's own Move command already owns; auto-targeting
+  shouldn't silently override a player's queued Advance/Retreat. `<A>uto-target` in the Tactical
+  Battle Display toggles it, with an always-visible "Auto-target: ON/OFF" label so the state is never
+  ambiguous mid-battle. Attack-pattern profiles (per-ship-type targeting rules, saved/reapplied) were
+  raised as a further layer on top of this but explicitly deferred — see the "Long-term future
+  possibilities" list at the end of this document.
+  - Also fixed while building this: the command box's `Height` left only 8 interior rows for 6
+    command lines (rows 1-6) plus a `Command` prompt at `AnchorEnd(2)` (also row 6) — the two
+    collided, overwriting the tail of `<R>etreat` on screen (`Commandat` instead of `Command`).
+    Caught by the user's own playtest, not self-caught; fixed with real margin (not just +1 row) once
+    the 7th command (`<A>uto-target`) needed room too.
+  - Also fixed: a `NullReferenceException` crash immediately after answering "Standard battle
+    configuration?" — `TacticalBattleDisplayWindow`'s own constructor called `FlashMessage`
+    (`App!.AddTimeout`) for the opening flavor line before `GameShell.StartEngagement` had actually
+    added the window via `AddModal`; `View.App` resolves by walking the `SuperView` chain, and
+    there's no `SuperView` yet during construction. Deferred to the `Initialized` event, same fix
+    `TmaLogoWindow` already applies to its own `AddTimeout` call for the identical reason.
+  - Also fixed: the Target picker's `ListView` never had its initial selection set, so the first
+    `Down` keypress only activated the selection at the top instead of moving off it — two `Down`
+    presses landed one item short of where they looked like they should. Same fix
+    `GameShell.ShowObjectPicker` already documents for the identical issue, missed here the first
+    time.
 
 ## 9. Async/hotseat turn mode
 
