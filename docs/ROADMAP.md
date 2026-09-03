@@ -1170,6 +1170,46 @@ Direct2D) surfaced; see the README's Known Issues section.
     presses landed one item short of where they looked like they should. Same fix
     `GameShell.ShowObjectPicker` already documents for the identical issue, missed here the first
     time.
+- **8o, another playtest round: focus leak, Deploy Fleet's real prompt order, and Move/Retreat/
+  Target/Group Status moved into GroupWindow itself.** The biggest correction: re-reading
+  `GroupMove`/`GroupRetreat`/`GroupTarget`/`GroupStatus` fresh (ATTCOMM.PAS:352-574) at the user's own
+  prompt showed all four open with `ActivateWindow(GroupWindow); ClrScr;` and write their own prompts
+  directly into that persistent window, accumulating lines without clearing between steps — not
+  separate popups, which is what 8m/8n had built. Rewired around a single swappable-content Label
+  (`commandBoxContent`) plus an `activePrompt` field routing the next keypress to whichever
+  sub-interaction is live; `GroupTarget`'s own single-ATSymb-keypress selection replaced the
+  `ListView` picker 8m built (real Pascal types one letter, never navigates a list).
+  `AttackDetails` stays a separate popup — it really is one in source too (over `AttackWindow`, not
+  `GroupWindow`).
+  - **Colors were wrong**: the whole window used `SYSDispWind` (Blue); `COLORS.INC`'s own
+    `ColorScrColor` gives `AttackWind=15` (White/Black), `GroupWind=23` (LightGray/Blue),
+    `EnemyWind=4` (Red/Black) — three genuinely different windows, not one.
+  - **Sizing was wrong**: full-terminal borderless `Dim.Fill()` instead of a fixed 80x28 bordered
+    window centered over the map, `CloseUpWindow`'s own established convention.
+  - **`WarpIn`'s reveal animation** (every group sliding in from off-screen to DeepSpace when the
+    screen opens, ATTCOMM.PAS:91-124) is now reproduced as a short timer-driven slide.
+  - **`AddModal` never disabled `galaxyView`**, only the menu bar — a popup whose own `KeyDown`
+    doesn't mark Tab as handled (Fleet Group Configuration) let Terminal.Gui's default focus-advance
+    binding hand focus to `galaxyView`, a sibling not gated by z-order, and arrow keys then moved the
+    map cursor instead of the popup's own grid. Fixed with the same `Enabled=false/true` treatment
+    the menu bar already had.
+  - **Deploy Fleet's prompt order was wrong**: source before name, composition before destination.
+    `PLAYTURN.PAS`'s own `ParameterData` table (:209-218) gives `FLaunchCom`'s real order as name,
+    then source, then destination, with `InputNewDistribution` called last inside
+    `LaunchFleetCommand` itself — fixed to match exactly.
+  - **Post-battle dialogs ran before `galaxyView.Refresh()`**, so the map behind them showed stale
+    (or blank-looking) state until every dialog closed. `Refresh` now runs immediately after
+    dismissing the battle display.
+  - **Checked, not changed**: Ministry of War's own hotkey. `PLAYTURN.PAS:1188,1219` give
+    `Worlds='W'`, `Ministry of War='M'` in real Pascal — already what this port has. Switching
+    Ministry of War to `W` would collide with `Worlds`' own real hotkey and be less faithful.
+  - **Still open, not fixed this pass**: `GameShell`'s own post-battle dialogs (`OldShipsFound`,
+    `AskToCapture`, the final result report) are still stock `MessageBox.Query`, which has no color/
+    scheme override at all (confirmed via its full member list) — real Pascal draws these with
+    `SYSDispWind`, matching `CloseUpWindow`'s own scheme, not `AttackWind`. Fixing this properly means
+    replacing those `MessageBox.Query` calls with custom `SYSDispWind`-styled windows, the same
+    treatment this entry gave `TacticalBattleDisplayWindow`'s own prompts — not done here to keep this
+    already-large pass bounded; flagged for the next round rather than silently left wrong.
 
 ## 9. Async/hotseat turn mode
 
