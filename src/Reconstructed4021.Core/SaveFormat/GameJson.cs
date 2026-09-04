@@ -288,11 +288,23 @@ public static class GameJson
         }
     }
 
+    // Same dangling-reference window as WriteFleetStates'/EncodeObjectRef's own doc comments describe
+    // (this port's Dictionary-keyed EntityIndex throws on a stale key where Pascal's own fixed-slot
+    // arrays wouldn't), but general here rather than Fleet-specific: any empire's own Known/Scouted
+    // set (Planets/Starbases/Fleets/Stargates/ConstructionSites all share this one helper) can hold an
+    // entity destroyed since that empire's own last RefreshVisibility -- confirmed live, a second real
+    // crash from the exact same underlying cause, this time via empire.Fleets.Known/Scouted rather
+    // than KingdomTurnHandler.FleetStates. Skipping a stale id is exactly what that empire's own next
+    // RefreshVisibility would already remove (VisibilityHandler.RefreshVisibility rebuilds fleet
+    // visibility from scratch every turn, and re-derives Known/Scouted for everything else from
+    // scratch too) -- there's nothing meaningful to persist for it in the meantime.
     private static JsonArray WriteIds<T>(IEnumerable<T> entities, Dictionary<T, int> ids) where T : notnull
     {
         var array = new JsonArray();
         foreach (var entity in entities) {
-            array.Add(ids[entity]);
+            if (ids.TryGetValue(entity, out var id)) {
+                array.Add(id);
+            }
         }
         return array;
     }
@@ -791,18 +803,23 @@ public static class GameJson
             return id;
         }
 
+        // Any reference here (a mission's own Target/HomeBase, a fleet order's own DestinationObject,
+        // an empire's own Capital) can outlive the object it points to -- same dangling-reference
+        // window WriteIds' own doc comment describes, just one level removed (the referencing entity
+        // is still alive; whatever it was pointing at isn't anymore). Fleet is the case actually
+        // confirmed live (combat is by far the most common way something disappears mid-turn), but
+        // Stargates and ConstructionSites are real CombatOutcome/CombatStandalone destruction targets
+        // too, so all five degrade the same way rather than leaving four of them still one crash away.
+        // Degrades to null rather than throwing -- exactly what that empire's own next
+        // RefreshVisibility (or, for FleetStates specifically, EnforceNpeDataLinks) would already
+        // leave this pointing at anyway.
         public JsonNode? EncodeObjectRef(object? obj) => obj switch {
             null => null,
-            Planet p => new JsonObject { ["kind"] = "Planet", ["id"] = Planets[p] },
-            Starbase s => new JsonObject { ["kind"] = "Starbase", ["id"] = Starbases[s] },
-            // A Fleet reference (a mission's own Target/HomeBase) can outlive the fleet it points to
-            // -- same dangling-reference window WriteFleetStates' own doc comment describes, just one
-            // level removed (this fleet is still alive; whatever it was aiming at isn't anymore).
-            // Degrades to null rather than throwing -- exactly what EnforceNpeDataLinks would leave
-            // this mission pointing at anyway once it re-evaluates on that empire's own next turn.
-            Fleet f => Fleets.TryGetValue(f, out var fleetId) ? new JsonObject { ["kind"] = "Fleet", ["id"] = fleetId } : null,
-            Stargate g => new JsonObject { ["kind"] = "Stargate", ["id"] = Stargates[g] },
-            ConstructionSite c => new JsonObject { ["kind"] = "ConstructionSite", ["id"] = ConstructionSites[c] },
+            Planet p => Planets.TryGetValue(p, out var id) ? new JsonObject { ["kind"] = "Planet", ["id"] = id } : null,
+            Starbase s => Starbases.TryGetValue(s, out var id) ? new JsonObject { ["kind"] = "Starbase", ["id"] = id } : null,
+            Fleet f => Fleets.TryGetValue(f, out var id) ? new JsonObject { ["kind"] = "Fleet", ["id"] = id } : null,
+            Stargate g => Stargates.TryGetValue(g, out var id) ? new JsonObject { ["kind"] = "Stargate", ["id"] = id } : null,
+            ConstructionSite c => ConstructionSites.TryGetValue(c, out var id) ? new JsonObject { ["kind"] = "ConstructionSite", ["id"] = id } : null,
             _ => throw new NotSupportedException($"Unexpected object reference type {obj.GetType()}."),
         };
     }
