@@ -563,13 +563,26 @@ public static class GameJson
         return array;
     }
 
+    // A KingdomTurnHandler's own FleetStates can genuinely hold a key for a fleet that's no longer in
+    // game.Galaxy.Fleets: NpeToolkit.EnforceNpeDataLinks (its own real pruning, NPEINTR.PAS's
+    // EnforceNPEDataLinks) only runs at the start of that empire's own PlayTurn, so a Kingdom fleet
+    // destroyed mid-turn by the human (combat, most directly) leaves a dangling entry until that
+    // Kingdom's own next turn -- a real, live window, not a corrupted state, and Serialize can be
+    // called (via Save Game) at any point during the human's own turn, well inside it. Confirmed via a
+    // real crash (KeyNotFoundException) hit live, not a hypothetical. Skipping a stale entry here
+    // matches what EnforceNpeDataLinks would remove anyway on that empire's own next turn -- there's
+    // nothing meaningful left to persist for a fleet that's already gone.
     private static JsonArray WriteFleetStates(IReadOnlyDictionary<Fleet, KingdomFleetState> fleetStates, EntityIndex index)
     {
         var array = new JsonArray();
 
         foreach (var (fleet, state) in fleetStates) {
+            if (!index.Fleets.TryGetValue(fleet, out var fleetId)) {
+                continue;
+            }
+
             array.Add(new JsonObject {
-                ["fleetId"] = index.Fleets[fleet],
+                ["fleetId"] = fleetId,
                 ["mission"] = state.Mission.ToString(),
                 ["target"] = index.EncodeObjectRef(state.Target),
                 ["homeBase"] = index.EncodeObjectRef(state.HomeBase),
@@ -782,7 +795,12 @@ public static class GameJson
             null => null,
             Planet p => new JsonObject { ["kind"] = "Planet", ["id"] = Planets[p] },
             Starbase s => new JsonObject { ["kind"] = "Starbase", ["id"] = Starbases[s] },
-            Fleet f => new JsonObject { ["kind"] = "Fleet", ["id"] = Fleets[f] },
+            // A Fleet reference (a mission's own Target/HomeBase) can outlive the fleet it points to
+            // -- same dangling-reference window WriteFleetStates' own doc comment describes, just one
+            // level removed (this fleet is still alive; whatever it was aiming at isn't anymore).
+            // Degrades to null rather than throwing -- exactly what EnforceNpeDataLinks would leave
+            // this mission pointing at anyway once it re-evaluates on that empire's own next turn.
+            Fleet f => Fleets.TryGetValue(f, out var fleetId) ? new JsonObject { ["kind"] = "Fleet", ["id"] = fleetId } : null,
             Stargate g => new JsonObject { ["kind"] = "Stargate", ["id"] = Stargates[g] },
             ConstructionSite c => new JsonObject { ["kind"] = "ConstructionSite", ["id"] = ConstructionSites[c] },
             _ => throw new NotSupportedException($"Unexpected object reference type {obj.GetType()}."),
