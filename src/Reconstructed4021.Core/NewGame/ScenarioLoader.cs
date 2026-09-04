@@ -153,16 +153,31 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
                 case "TECHTABLE": _techTable = LoadTechArray(tokenizer); break;
                 case "SETTRILLUMRESERVES": _trillumReserveBase = RunSetTrillumReserves(tokenizer); break;
                 case "ENDSCENARIO":
-                    ResolveWorldBackground(galaxy, game);
-                    return game;
+                    return FinishLoad(galaxy, game);
                 default: throw new FormatException($"ERROR: Unknown command \"{command}\"");
             }
 
             if (tokenizer.AtEnd) {
-                ResolveWorldBackground(galaxy, game);
-                return game;
+                return FinishLoad(galaxy, game);
             }
         }
+    }
+
+    /// <summary>
+    /// NEWGAME.PAS:1796's own <c>Player:=Empire1</c>, run once the command loop ends (whether via
+    /// <c>ENDSCENARIO</c> or simply running out of file) -- the first player slot (0 here, matching
+    /// <c>_empireBySlot</c>'s own 0-based numbering against <paramref name="players"/> -- Empire1 is
+    /// Pascal's 1-based slot 1) always becomes the active empire once loading finishes. Missing here
+    /// before: nothing else in this port ever set <see cref="Game.CurrentEmpire"/> for a freshly
+    /// loaded scenario (only <see cref="SaveFormat.SavGameLoader"/>/<see cref="SaveFormat.GameJson"/>
+    /// did, for a save being reloaded) -- <c>TurnEngine.BeginTurn</c>'s own null-guard caught it as an
+    /// exception the moment a real New Game session tried to start, confirmed live.
+    /// </summary>
+    private Game FinishLoad(Galaxy.Galaxy galaxy, Game game)
+    {
+        ResolveWorldBackground(galaxy, game);
+        game.CurrentEmpire = _empireBySlot.GetValueOrDefault(0);
+        return game;
     }
 
     public sealed record ScenarioHeader(string Title, int MinPlayers, int MaxPlayers, int GalaxySize);
