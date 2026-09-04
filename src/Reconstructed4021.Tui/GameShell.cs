@@ -1131,15 +1131,19 @@ public sealed class GameShell : Window
     /// take no FltID at all) -- just a destination coordinate, reusing the map cursor the same way
     /// Deploy's own destination pick does, with no source-fleet step first.
     /// </summary>
-    private void LaunchProbe() =>
-        BeginPick("Launch Probe -- move cursor to target, Enter: select, Esc: cancel", destination => {
-            if (!human.TryLaunchProbe(destination)) {
-                ShowInfo("Probe", "There are no more probes available.");
-                return;
-            }
+    private void LaunchProbe()
+    {
+        if (human.ProbesInTransit.Count >= Empire.MaxProbesInTransit) {
+            ShowInfo("Probe", "There are no more probes available.");
+            return;
+        }
 
-            ShowInfo("Probe", $"Probe launched to {destination.X},{destination.Y}.");
+        BeginPick("Launch Probe -- move cursor to target, Enter: select, Esc: cancel", destination => {
+            var probeNumber = human.ProbesInTransit.Count + 1;
+            human.TryLaunchProbe(destination);
+            ShowInfo("Probe", $"Probe {probeNumber} of {Empire.MaxProbesInTransit} sent.");
         });
+    }
 
     /// <summary>
     /// Ministry of War menu > Attack (ATTCOMM.PAS: GetTarget/AttackCommand/CleanUp/EnemyConquered).
