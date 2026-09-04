@@ -1367,6 +1367,16 @@ public sealed class GameShell : Window
         _ => throw new ArgumentOutOfRangeException(nameof(defense)),
     };
 
+    // Ministry of War > Defenses (MSCCOMM.PAS: DefenseCommand) -- see DefensesEditor's own doc
+    // comment for the grid itself; this just opens it over the player's own DefenseSettings.Fleets
+    // the same way BeginAttack opens FleetGroupConfigurationWindow.
+    private void Defenses()
+    {
+        var editor = new DefensesEditor(human.DefenseSettings.Fleets);
+        var dismiss = AddModal(editor, dismissOnOutsideClick: false);
+        editor.Done += (_, _) => dismiss();
+    }
+
     // ResultMessage (ATTCOMM.PAS:1652-1686) -- only these three cases are ever reached (DefCapturedART
     // is declared but never assigned anywhere in real Pascal, see CombatOutcome.cs's own note).
     private string AutoAttackResultText(AttackResultType result, ISectorObject subject) => result switch {
@@ -1705,7 +1715,7 @@ public sealed class GameShell : Window
             new("_Attack", Key.Empty, Attack),
             new("Auto A_ttack", Key.Empty, AutoAttack),
             new("Launch _LAMs", Key.Empty, LaunchLams),
-            new("_Defenses", Key.Empty, () => Stub("Defenses")),
+            new("_Defenses", Key.Empty, Defenses),
         }),
     ];
 

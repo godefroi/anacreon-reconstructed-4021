@@ -32,13 +32,11 @@ codebase is in a test file.
 ## Human interactive turn handler / TUI
 
 - **Most of the menu bar is still stubs.** `Fleet > Orders`/`Cancel Orders` (`Change Destination`/
-  `SRM Sweep`/`Probe` are done), all of `Build`/`Empire`/`Worlds`, `Ministry of War > Defenses`
-  (`Attack`/`Auto Attack`/`Launch LAMs` are done), and every status-bar F-key panel are a `MessageBox`
-  stub. `Orders` is
-  `FLTCOMM.PAS: FleetOrdersCommand` — a full mini scripting language (`ORDERS.PAS`'s own
-  compile/decompile pair over a captive text editor), not a quick add; `Cancel Orders` is trivial but
-  pointless before `Orders` exists. `Defenses` needs its own custom grid (ship type × orbital shell
-  percentages) — a different widget from the Resource Distribution Editor, not yet built.
+  `SRM Sweep`/`Probe` are done), all of `Build`/`Empire`/`Worlds`, every status-bar F-key panel, and
+  all of `Ministry of War` (`Attack`/`Auto Attack`/`Launch LAMs`/`Defenses` are done) are a
+  `MessageBox` stub. `Orders` is `FLTCOMM.PAS: FleetOrdersCommand` — a full mini scripting language
+  (`ORDERS.PAS`'s own compile/decompile pair over a captive text editor), not a quick add; `Cancel
+  Orders` is trivial but pointless before `Orders` exists.
 - **No post-conquest world-list report.** `ATTACK.PAS: ConquerEmpire`'s own `Booty` (the set of
   world indices that joined the conqueror mid-`ConquerEmpire`) is declared and threaded through
   real Pascal's call chain but never read anywhere in it — dropped entirely by this port, confirmed
