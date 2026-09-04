@@ -185,6 +185,11 @@ internal sealed class TacticalBattleDisplayWindow : Window
     private void ShowCommandMenu()
     {
         activePrompt = null;
+        // Every Move/Target sub-flow returns here to end (Esc, running out of groups, or finishing a
+        // round) -- clearing the map highlight in this one shared spot covers all of those exits
+        // without needing a matching clear at each one.
+        mapView.HighlightedGroupIndex = null;
+        mapView.SetNeedsDraw();
         SetCommandBoxContent([
             "", "<E>ngage", "<M>ove", "<G>roup status", "<T>arget", "<D>etails", "<R>etreat", "<A>uto-target", "", "Command",
         ]);
@@ -365,12 +370,19 @@ internal sealed class TacticalBattleDisplayWindow : Window
         if (state.IsOver) {
             return;
         }
-        MoveNextGroup(state.Groups, 0, [], anyQueued: false);
+        // No Pascal equivalent -- MoveNextGroup used to repeat its own "S/A/R/Esc" hint after every
+        // group's own line, which is what actually overflowed GroupWindow's 10-row interior for any
+        // fleet with more than a few groups (each group cost 2 lines, not 1). One hint line up front
+        // instead -- per the user's own explicit request -- with each group's own line updated in
+        // place once answered, rather than a second line appended per group.
+        MoveNextGroup(state.Groups, 0, ["S:stay  A:advance  R:retreat  Esc:cancel all"], anyQueued: false);
     }
 
     private void MoveNextGroup(IReadOnlyList<GroupRecord> groups, int index, List<string> lines, bool anyQueued)
     {
         if (index >= groups.Count) {
+            mapView.HighlightedGroupIndex = null;
+            mapView.SetNeedsDraw();
             FinishMove(lines, anyQueued);
             return;
         }
@@ -383,10 +395,10 @@ internal sealed class TacticalBattleDisplayWindow : Window
             return;
         }
 
-        var choices = "S" + (canAdvance ? "/A" : "") + (canRetreat ? "/R" : "");
         lines.Add(GroupLine(g, index + 1));
-        lines.Add($"  Move ({choices}/Esc) → ");
         SetCommandBoxContent(lines);
+        mapView.HighlightedGroupIndex = index; // per the user's own explicit request -- the group this prompt is asking about, not just named in text
+        mapView.SetNeedsDraw();
 
         activePrompt = key => {
             if (key.NoAlt.NoCtrl.NoShift.KeyCode == KeyCode.Esc) {
@@ -403,13 +415,17 @@ internal sealed class TacticalBattleDisplayWindow : Window
             key.Handled = true;
 
             var queued = anyQueued;
+            var chosen = "Stay";
             if (ch == 'A') {
                 state.QueueAdvance(g);
                 queued = true;
+                chosen = "Advance";
             } else if (ch == 'R') {
                 state.QueueRetreat(g);
                 queued = true;
+                chosen = "Retreat";
             }
+            lines[^1] = $"{GroupLine(g, index + 1)} -> {chosen}";
             MoveNextGroup(groups, index + 1, lines, queued);
         };
     }
@@ -445,7 +461,8 @@ internal sealed class TacticalBattleDisplayWindow : Window
     // set exactly -- not a ListView, an earlier pass here built a picker that doesn't match how real
     // Pascal actually does this at all). Enter keeps the group's current target; Esc aborts the rest
     // of the sequence (groups already handled keep their new Trg). No round consumed.
-    private void HandleTarget() => TargetNextGroup(state.Groups, 0, []);
+    // Same one-time-hint consolidation as MoveNextGroup, see its own doc comment.
+    private void HandleTarget() => TargetNextGroup(state.Groups, 0, ["Enter:keep current  -:clear  Esc:cancel"]);
 
     private void TargetNextGroup(IReadOnlyList<GroupRecord> groups, int index, List<string> lines)
     {
@@ -461,8 +478,9 @@ internal sealed class TacticalBattleDisplayWindow : Window
         }
 
         lines.Add(GroupLine(g, index + 1));
-        lines.Add("   New target → ");
         SetCommandBoxContent(lines);
+        mapView.HighlightedGroupIndex = index;
+        mapView.SetNeedsDraw();
 
         activePrompt = key => {
             var code = key.NoAlt.NoCtrl.NoShift.KeyCode;
@@ -484,6 +502,7 @@ internal sealed class TacticalBattleDisplayWindow : Window
             }
             key.Handled = true;
             state.SetTarget(g, match.Type);
+            lines[^1] = $"{GroupLine(g, index + 1)} -> {(match.Type is { } t ? TypeName(t) : "(cleared)")}";
             TargetNextGroup(groups, index + 1, lines);
         };
     }
@@ -570,6 +589,12 @@ internal sealed class TacticalBattleDisplayWindow : Window
         private static readonly Rune PlayerMarkerRune = new('►'); // CP437 #16
         private static readonly Rune EnemyMarkerRune = new('▼'); // CP437 #17
 
+        // No Pascal equivalent -- HighlightedGroupIndex's own marker color (green: distinct from a
+        // plain friendly marker's White and the enemy's own Red, and reads as "this one's actionable"
+        // rather than either of those).
+        private static readonly TgAttribute NormalMarkerAttribute = new(StandardColor.White, StandardColor.Black);
+        private static readonly TgAttribute HighlightedMarkerAttribute = new(StandardColor.BrightGreen, StandardColor.Black);
+
         // OrbLoc (ATTCOMM.PAS:59-60): (990,1024,1054,1078,1100) decoded -- all land on the same row
         // (6), at columns (15,32,47,59,70) for DpSpc,HiOrb,Orbit,SbOrb,Grnd in that order (ShellPosition's
         // own declared order matches, so indexing by (int)ShellPosition works directly).
@@ -603,6 +628,14 @@ internal sealed class TacticalBattleDisplayWindow : Window
         private readonly InteractiveCombatState state;
         private readonly bool isFleetTarget;
         private readonly List<(int Row, int Col)> stars = [];
+
+        /// <summary>
+        /// No Pascal equivalent -- the group Move/Target prompts (<see cref="TacticalBattleDisplayWindow.MoveNextGroup"/>/
+        /// <see cref="TacticalBattleDisplayWindow.TargetNextGroup"/>) set this to whichever group index
+        /// they're currently asking about, so its marker draws in a different color instead of blending
+        /// in with every other friendly group. Cleared (null) once that prompt sequence ends.
+        /// </summary>
+        public int? HighlightedGroupIndex { get; set; }
 
         // WarpIn (ATTCOMM.PAS:91-124): every group starts at DeepSpace and slides in from off-screen
         // when DrawScreen first runs. Reproduced as a short slide rather than the literal per-pixel
@@ -795,6 +828,7 @@ internal sealed class TacticalBattleDisplayWindow : Window
                     col -= (int)(warpFraction * 20);
                 }
                 if (row >= 0 && row < Viewport.Height && col >= 0 && col < Viewport.Width) {
+                    SetAttribute(i == HighlightedGroupIndex ? HighlightedMarkerAttribute : NormalMarkerAttribute);
                     Move(col, row);
                     AddRune(PlayerMarkerRune);
                 }

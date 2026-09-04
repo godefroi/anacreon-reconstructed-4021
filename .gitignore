@@ -31,7 +31,11 @@ reference/verify/dos_131_callgraph.json
 
 # Reconstructed4021.Tui's own crash logs (Program.cs's WriteCrashLog) -- local diagnostic history,
 # never committed.
-logs/
+/logs/
+
+# Reconstructed4021.Tui's own player save files (GameShell.SaveGameAs) -- never committed. Distinct
+# from assets/saves/, a directory of committed test fixtures.
+/saves/
 
 # User-specific files
 *.rsuser
