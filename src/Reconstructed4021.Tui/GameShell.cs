@@ -1165,12 +1165,16 @@ public sealed class GameShell : Window
     /// </summary>
     private void Attack() => PickOwnFleetAtCursor("Attack", Attack);
 
-    private void Attack(Fleet attacker) {
+    private void Attack(Fleet attacker) => FindAttackTarget(attacker, target => BeginAttack(attacker, target));
+
+    /// <summary>GetTarget (ATTCOMM.PAS:663-715), shared by both AttackCommand and AutoAttackCommand.</summary>
+    private void FindAttackTarget(Fleet attacker, Action<object> onTargetFound)
+    {
         var cursor = attacker.Location;
         var enemyFleets = game.Galaxy.Fleets.Where(f => f.Location == cursor && !ReferenceEquals(f.Owner, human) && Game.Scouted(human, f)).ToList();
 
         if (enemyFleets.Count > 1) {
-            ShowObjectPicker("Attack", enemyFleets.Cast<ISectorObject>().ToList(), o => BeginAttack(attacker, o));
+            ShowObjectPicker("Attack", enemyFleets.Cast<ISectorObject>().ToList(), onTargetFound);
             return;
         }
 
@@ -1183,8 +1187,69 @@ public sealed class GameShell : Window
             return;
         }
 
-        BeginAttack(attacker, target);
+        onTargetFound(target);
     }
+
+    private void AutoAttack() => PickOwnFleetAtCursor("Auto Attack", AutoAttack);
+
+    private void AutoAttack(Fleet attacker) => FindAttackTarget(attacker, target => BeginAutoAttack(attacker, target));
+
+    /// <summary>
+    /// AutoAttackCommand (ATTCOMM.PAS:1640-1746): same target pick as Attack, but skips Fleet Group
+    /// Configuration/Tactical Battle Display entirely -- one confirm, then the whole engagement
+    /// resolves in a single call to <see cref="CombatResolution.NPEAttack"/>, the same headless engine
+    /// the Kingdom AI itself already uses (DefaultDistribution, hardcoded <see
+    /// cref="AttackIntentionType.Conquer"/> -- Pascal's own hardcoded ConquerAIT). No
+    /// OldShipsFound/AskToCapture/scenario background text here: NPEAttack already runs ResolveAttack
+    /// internally with Capture hardcoded true, matching AutoAttackCommand's own plain ResultMessage +
+    /// CasualtyReport pair rather than CleanUp's fuller EnemyConquered flow. The random "commander
+    /// fought bravely"/"perhaps if you had been there" flavor line on a wipeout is dropped, same
+    /// precedent as AskToCapture's own flavor text.
+    /// </summary>
+    private void BeginAutoAttack(Fleet attacker, object target)
+    {
+        var subject = (ISectorObject)target;
+        ShowConfirm("Auto Attack", $"{DisplayName(attacker)} ready to attack {DisplayName(subject)}.\nGive confirmation order?", choice => {
+            if (choice != 0) {
+                return;
+            }
+
+            var before = new ShipCounts();
+            foreach (var shipType in Enum.GetValues<ShipType>()) {
+                before[shipType] = attacker.Ships[shipType];
+            }
+
+            var engagement = CombatResolution.NPEAttack(human, attacker, target, AttackIntentionType.Conquer, game, random);
+            galaxyView.Refresh();
+
+            var casualties = Enum.GetValues<ShipType>().Select(t => $"{ShipThingName(t)}: {Math.Max(0, before[t] - attacker.Ships[t])}");
+            var report = $"{AutoAttackResultText(engagement.Result, subject)}\n\nCasualties:\n{string.Join('\n', casualties)}";
+            ShowInfo("Auto Attack", report);
+        });
+    }
+
+    // ThingNames (DATACNST.PAS:100-112), fgt..trn only -- same names as EmpireStatusWindow's own copy.
+    private static string ShipThingName(ShipType ship) => ship switch {
+        ShipType.Fighter => "fighter squadrons",
+        ShipType.HunterKiller => "hunter-killers",
+        ShipType.Jumpship => "jumpships",
+        ShipType.Jumptransport => "jumptransports",
+        ShipType.Penetrator => "penetrators",
+        ShipType.Starship => "starships",
+        ShipType.Transport => "transports",
+        _ => throw new ArgumentOutOfRangeException(nameof(ship)),
+    };
+
+    // ResultMessage (ATTCOMM.PAS:1652-1686) -- only these three cases are ever reached (DefCapturedART
+    // is declared but never assigned anywhere in real Pascal, see CombatOutcome.cs's own note).
+    private string AutoAttackResultText(AttackResultType result, ISectorObject subject) => result switch {
+        AttackResultType.AttackerDestroyed => $"I'm sorry, {MyLord()}, the entire attack force has been destroyed.",
+        AttackResultType.AttackerRetreats => $"I'm sorry, {MyLord()}, the fleet was forced to retreat.",
+        AttackResultType.DefenderConquered => subject is Fleet
+            ? $"The enemy fleet has been destroyed, {MyLord()}."
+            : SovereigntyDeclaration(subject),
+        _ => $"Result: {result}",
+    };
 
     // AttackCommand's own "Standard battle configuration (Y/n)?" fork (ATTCOMM.PAS:1608-1616): Y
     // (default) skips Fleet Group Configuration and uses DefaultDistribution, matching what this
@@ -1439,18 +1504,27 @@ public sealed class GameShell : Window
     // random, consuming exactly one Rnd(1,3) call to match Pascal's own RNG-order contract.
     private string ConquestMessage(Fleet attackerFleet, ISectorObject subject)
     {
-        var empireName = human.Name;
         var isCapital = subject is IEconomicWorld { Type: WorldType.Capital };
         var messageNumber = isCapital ? 1 : PascalMath.Rnd(random, 1, 3);
-        var noun = subject switch { Fleet => "fleet", Starbase => "starbase", _ => "planet" };
 
         return messageNumber switch {
-            1 => human.IsEmpress
-                ? $"In the name of Her Imperial Majesty, Lady of {empireName}, I hereby declare\nthis {noun} to be under the sovereign jurisdiction of the\n{empireName} Empire."
-                : $"In the name of His Imperial Majesty, Lord of {empireName}, I hereby declare\nthis {noun} to be under the sovereign jurisdiction of the\n{empireName} Empire.",
+            1 => SovereigntyDeclaration(subject),
             2 => $"Congratulations {MyLord()}, {DisplayName(attackerFleet)} has succeeded in its attack against\n{DisplayName(subject)}.  No doubt some of your enemies will in the future\nbe more careful when challenging this empire.",
             _ => $"Congratulations on your victory, {MyLord()}, but remember that not\nall battles will be this easy.",
         };
+    }
+
+    // EnemyConquered's own Message1 (ATTCOMM.PAS:1403-1412) -- shared verbatim with AutoAttackCommand's
+    // own DefConqueredART/non-Fleet branch (ATTCOMM.PAS:1673-1683), which duplicates this exact text
+    // rather than calling EnemyConquered itself.
+    private string SovereigntyDeclaration(ISectorObject subject)
+    {
+        var empireName = human.Name;
+        var noun = subject switch { Fleet => "fleet", Starbase => "starbase", _ => "planet" };
+
+        return human.IsEmpress
+            ? $"In the name of Her Imperial Majesty, Lady of {empireName}, I hereby declare\nthis {noun} to be under the sovereign jurisdiction of the\n{empireName} Empire."
+            : $"In the name of His Imperial Majesty, Lord of {empireName}, I hereby declare\nthis {noun} to be under the sovereign jurisdiction of the\n{empireName} Empire.";
     }
 
     private string DisplayName(ISectorObject obj) => obj.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(obj);
@@ -1502,7 +1576,7 @@ public sealed class GameShell : Window
         }),
         new MenuBarItem("_Ministry of War", new MenuItem[] {
             new("_Attack", Key.Empty, Attack),
-            new("Auto A_ttack", Key.Empty, () => Stub("Auto Attack")),
+            new("Auto A_ttack", Key.Empty, AutoAttack),
             new("Launch _LAMs", Key.Empty, () => Stub("Launch LAMs")),
             new("_Defenses", Key.Empty, () => Stub("Defenses")),
         }),

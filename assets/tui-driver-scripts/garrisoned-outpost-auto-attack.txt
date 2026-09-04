@@ -1,0 +1,18 @@
+# Example / smoke-test script for Reconstructed4021.TuiDriver, run against
+# assets/saves/Garrisoned Outpost.json:
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Garrisoned Outpost.json" --script assets/tui-driver-scripts/garrisoned-outpost-auto-attack.txt
+#
+# Moves the map cursor onto the human attack fleet, opens Ministry of War > Auto Attack, confirms
+# the order, and dismisses the result -- no Fleet Group Configuration or Tactical Battle Display at
+# all, matching AutoAttackCommand's own headless resolution (ATTCOMM.PAS:1640-1746).
+Right Right Right Right Down
+m
+Down
+Enter
+DUMP
+y
+DUMP
+Enter
+DUMP
