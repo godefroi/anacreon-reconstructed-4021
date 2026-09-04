@@ -8,7 +8,13 @@ using Reconstructed4021.Core.Types;
 using Reconstructed4021.Tui;
 using Game = Reconstructed4021.Core.Game;
 
-var random = new Random(4021);
+// No fixed seed: real Pascal's own Seed=0 branch (NEWGAME.PAS:1735-1738, "IF Seed=0 THEN Randomize")
+// is what every one of the 12 real shipped .SCN files actually uses (see ScenarioLoader's own doc
+// comment) -- real play is never reproducible run to run. A hardcoded seed here before would have
+// made every fresh New Game -- galaxy layout, empire placement, suggested names, all of it --
+// identical on every single launch, which is what TuiDriver's own fixed Random(4021) is *for*
+// (deterministic test scripts), not what the real game should do.
+var random = new Random();
 
 // One TurnEngine for the whole process -- stateless itself, just wraps three handlers that all
 // share this same random, matching every other scenario-load/setup component below.
