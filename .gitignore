@@ -29,6 +29,10 @@ reference/verify/dos_131_callgraph.json
 # dotenv files
 .env
 
+# Reconstructed4021.Tui's own crash logs (Program.cs's WriteCrashLog) -- local diagnostic history,
+# never committed.
+logs/
+
 # User-specific files
 *.rsuser
 *.suo

@@ -59,11 +59,21 @@ IApplication app = Application.Create().Init();
 // try/finally was added for) would otherwise skip every app.Dispose() call below it, leaving the
 // console in whatever raw mode/alt-screen-buffer state Init() put it in -- garbled colors and all,
 // even after the process exits. finally guarantees Dispose() (which restores the console) always runs.
+//
+// The catch below is a separate, later fix: an uncaught exception here used to just propagate past
+// this whole block to the runtime's own default handler, which does print to stderr -- but by then
+// Dispose() (in finally) has already run, and depending on the terminal, an unhandled-exception exit
+// can still close the window before that text is ever read (confirmed as a real complaint: "the game
+// crashes with no output" after a genuine crash -- ScenarioLoader.Load never setting
+// Game.CurrentEmpire, found and fixed separately). Catching here instead prints a clear banner *and*
+// writes the same detail to a timestamped file under logs/ (gitignored), so there's always a durable
+// record even if the console output scrolls away or the window closes before it's read.
+Exception? crashException = null;
 try {
     if (introOnly) {
         app.Run(new TmaLogoWindow(), null);
         app.Run(new AnacreonTitleWindow(), null);
-        return;
+        return 0;
     }
 
     if (!noIntro) {
@@ -73,7 +83,7 @@ try {
     if (loadPath is not null) {
         var loadedGame = GameJson.Deserialize(File.ReadAllText(loadPath), random);
         if (RunGame(loadedGame) == GameShell.ExitChoice.ExitToOs) {
-            return;
+            return 0;
         }
         // MainMenu: fall through into the normal main-menu loop below for whatever comes next.
     }
@@ -87,7 +97,7 @@ try {
         // without setting Choice at all, and the old "!= Quit" check mistook that leftover None for
         // NewGame and opened the picker anyway.
         if (titleWindow.Choice == AnacreonTitleWindow.MenuChoice.Quit) {
-            return;
+            return 0;
         }
 
         if (titleWindow.Choice != AnacreonTitleWindow.MenuChoice.NewGame) {
@@ -151,9 +161,23 @@ try {
 
         break; // ExitToOs, or any other/unexpected way this Run ended
     }
+} catch (Exception ex) {
+    crashException = ex;
 } finally {
     app.Dispose();
 }
+
+if (crashException is not null) {
+    var logPath = WriteCrashLog(crashException);
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("Reconstructed4021 crashed with an unhandled exception:");
+    Console.Error.WriteLine(crashException);
+    Console.Error.WriteLine();
+    Console.Error.WriteLine($"Details saved to {logPath}");
+    return 1;
+}
+
+return 0;
 
 // Real per-empire turn cycle for one whole game session: ANACREON.PAS's own main loop plays every
 // empire's turn, human or NPE, one after another, wrapping back to the first when it runs out --
@@ -250,4 +274,14 @@ static string FindRepoRoot(string start)
 
     return dir?.FullName
         ?? throw new InvalidOperationException($"Could not locate repo root (Reconstructed4021.slnx) above {start}.");
+}
+
+// logs/ is gitignored -- these are the player's own local crash history, never committed.
+static string WriteCrashLog(Exception ex)
+{
+    var logsDir = Path.Combine(FindRepoRoot(AppContext.BaseDirectory), "logs");
+    Directory.CreateDirectory(logsDir);
+    var path = Path.Combine(logsDir, $"crash-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+    File.WriteAllText(path, $"{DateTime.Now:O}{Environment.NewLine}{ex}{Environment.NewLine}");
+    return path;
 }
