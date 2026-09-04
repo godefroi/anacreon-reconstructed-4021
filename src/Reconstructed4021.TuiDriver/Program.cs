@@ -21,6 +21,9 @@ using Reconstructed4021.Tui;
 //          (drives a standalone PlayerSetupWindow instead of a loaded GameShell -- for New Game
 //          flow screens that don't need a real Game at all; PlayerSetupWindow/NewGameWindow made
 //          public for exactly this, same precedent as GameShell.)
+//        dotnet run --project src/Reconstructed4021.TuiDriver --
+//          --save-picker --script path/to/script.txt [--cols 100] [--rows 40]
+//          (drives a standalone SaveGamePickerWindow over assets/saves/*.json -- Main Menu > Load Game.)
 //
 // Two real bugs, found and fixed by decompiling Terminal.Gui itself (dotnet-inspect) rather than
 // guessing after the first two designs deadlocked:
@@ -71,6 +74,7 @@ using Reconstructed4021.Tui;
 const int ActionPacingMs = 60;
 
 var playerSetupMode = args.Contains("--player-setup");
+var savePickerMode = args.Contains("--save-picker");
 var scriptPath = RequireArg("--script");
 var cols = OptionalIntArg("--cols") ?? 100;
 var rows = OptionalIntArg("--rows") ?? 40;
@@ -90,6 +94,14 @@ if (playerSetupMode) {
     var setup = new PlayerSetupWindow("Test Scenario", 1, "TestName");
     window = setup;
     describeResult = () => setup.PlayerInfo is { } info ? $"PlayerInfo: Name={info.Name} IsEmpress={info.IsEmpress}" : "PlayerInfo: null (cancelled)";
+} else if (savePickerMode) {
+    var saveDir = Path.Combine(repoRoot, "assets", "saves");
+    var saves = Directory.GetFiles(saveDir, "*.json")
+        .Select(path => new SaveGamePickerWindow.SaveChoice(path, Path.GetFileNameWithoutExtension(path)))
+        .ToList();
+    var picker = new SaveGamePickerWindow(saves);
+    window = picker;
+    describeResult = () => $"SelectedPath: {picker.SelectedPath ?? "null (cancelled)"}";
 } else {
     var loadPath = RequireArg("--load");
     var resolvedLoadPath = Path.IsPathRooted(loadPath) ? loadPath : Path.Combine(repoRoot, loadPath);

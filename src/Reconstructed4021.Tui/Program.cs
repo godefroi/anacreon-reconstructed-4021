@@ -106,6 +106,28 @@ try {
             return 0;
         }
 
+        if (titleWindow.Choice == AnacreonTitleWindow.MenuChoice.LoadGame) {
+            var saveDir = Path.Combine(FindRepoRoot(AppContext.BaseDirectory), "saves");
+            Directory.CreateDirectory(saveDir);
+            var saves = Directory.GetFiles(saveDir, "*.json")
+                .OrderByDescending(File.GetLastWriteTime)
+                .Select(path => new SaveGamePickerWindow.SaveChoice(path, $"{Path.GetFileNameWithoutExtension(path),-30} {File.GetLastWriteTime(path):yyyy-MM-dd HH:mm}"))
+                .ToList();
+
+            var saveGamePicker = new SaveGamePickerWindow(saves);
+            app.Run(saveGamePicker, null);
+            if (saveGamePicker.SelectedPath is null) {
+                continue; // Esc, or no saves found -- back to the main menu
+            }
+
+            var loadedGame = GameJson.Deserialize(File.ReadAllText(saveGamePicker.SelectedPath), random);
+            if (RunGame(loadedGame) == GameShell.ExitChoice.MainMenu) {
+                continue;
+            }
+
+            break; // ExitToOs
+        }
+
         if (titleWindow.Choice != AnacreonTitleWindow.MenuChoice.NewGame) {
             continue;
         }

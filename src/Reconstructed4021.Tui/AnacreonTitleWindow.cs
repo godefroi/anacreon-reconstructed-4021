@@ -16,7 +16,7 @@ namespace Reconstructed4021.Tui;
 /// items (⌂/Game/Options/Configure) covering ~20 commands total -- config toggles, save-game slots,
 /// multi-empire setup -- most of which this project has no backing feature for yet, so reproducing that
 /// exact menu shape isn't worth it before those features exist; see docs/TUI_SURFACES_MAPPING.md's
-/// "Pre-game setup" entry. Load Game/Options are still stubs; New Game and Quit are wired up (see
+/// "Pre-game setup" entry. Options is still a stub; New Game, Load Game, and Quit are wired up (see
 /// <see cref="Choice"/>).
 /// </summary>
 /// <remarks>
@@ -36,7 +36,7 @@ namespace Reconstructed4021.Tui;
 /// </remarks>
 internal sealed class AnacreonTitleWindow : Window
 {
-    public enum MenuChoice { None, NewGame, Quit }
+    public enum MenuChoice { None, NewGame, LoadGame, Quit }
 
     /// <summary>Which menu item ended the window's run -- <see cref="MenuChoice.None"/> if it's still showing (Load Game/Options don't dismiss it).</summary>
     public MenuChoice Choice { get; private set; }
@@ -133,7 +133,7 @@ internal sealed class AnacreonTitleWindow : Window
 
         var newGameButton = CreateMenuButton(0, "_New Game", Key.N, () => Choose(MenuChoice.NewGame));
         Add(newGameButton);
-        Add(CreateMenuButton(1, "_Load Game", Key.L, () => Stub("Load Game")));
+        Add(CreateMenuButton(1, "_Load Game", Key.L, () => Choose(MenuChoice.LoadGame)));
         Add(CreateMenuButton(2, "_Options", Key.O, () => Stub("Options")));
         Add(CreateMenuButton(3, "_Quit", Key.Q, () => Choose(MenuChoice.Quit)));
 
