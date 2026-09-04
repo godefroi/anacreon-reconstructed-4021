@@ -2,6 +2,7 @@ using System.Drawing;
 using Terminal.Gui.App;
 using Terminal.Gui.Input;
 using Terminal.Gui.Testing;
+using Terminal.Gui.Views;
 using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Tui;
@@ -15,6 +16,11 @@ using Reconstructed4021.Tui;
 //
 // Usage: dotnet run --project src/Reconstructed4021.TuiDriver --
 //          --load "assets/saves/Garrisoned Outpost.json" --script path/to/script.txt [--cols 100] [--rows 40]
+//        dotnet run --project src/Reconstructed4021.TuiDriver --
+//          --player-setup --script path/to/script.txt [--cols 100] [--rows 40]
+//          (drives a standalone PlayerSetupWindow instead of a loaded GameShell -- for New Game
+//          flow screens that don't need a real Game at all; PlayerSetupWindow/NewGameWindow made
+//          public for exactly this, same precedent as GameShell.)
 //
 // Two real bugs, found and fixed by decompiling Terminal.Gui itself (dotnet-inspect) rather than
 // guessing after the first two designs deadlocked:
@@ -64,31 +70,41 @@ using Reconstructed4021.Tui;
 
 const int ActionPacingMs = 60;
 
-var loadPath = RequireArg("--load");
+var playerSetupMode = args.Contains("--player-setup");
 var scriptPath = RequireArg("--script");
 var cols = OptionalIntArg("--cols") ?? 100;
 var rows = OptionalIntArg("--rows") ?? 40;
 
 var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
-var resolvedLoadPath = Path.IsPathRooted(loadPath) ? loadPath : Path.Combine(repoRoot, loadPath);
 var resolvedScriptPath = Path.IsPathRooted(scriptPath) ? scriptPath : Path.Combine(repoRoot, scriptPath);
-
-if (!File.Exists(resolvedLoadPath)) {
-    Console.Error.WriteLine($"Save file not found: {resolvedLoadPath}");
-    return 1;
-}
 
 if (!File.Exists(resolvedScriptPath)) {
     Console.Error.WriteLine($"Script file not found: {resolvedScriptPath}");
     return 1;
 }
 
-var random = new Random(4021);
-var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random));
-var game = GameJson.Deserialize(File.ReadAllText(resolvedLoadPath), random);
+Window window;
+Func<string>? describeResult = null;
 
-var human = game.CurrentEmpire ?? throw new InvalidOperationException("Save has no CurrentEmpire set -- nothing to drive.");
-turnEngine.BeginTurn(game);
+if (playerSetupMode) {
+    var setup = new PlayerSetupWindow("Test Scenario", 1, "TestName");
+    window = setup;
+    describeResult = () => setup.PlayerInfo is { } info ? $"PlayerInfo: Name={info.Name} IsEmpress={info.IsEmpress}" : "PlayerInfo: null (cancelled)";
+} else {
+    var loadPath = RequireArg("--load");
+    var resolvedLoadPath = Path.IsPathRooted(loadPath) ? loadPath : Path.Combine(repoRoot, loadPath);
+    if (!File.Exists(resolvedLoadPath)) {
+        Console.Error.WriteLine($"Save file not found: {resolvedLoadPath}");
+        return 1;
+    }
+
+    var random = new Random(4021);
+    var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random));
+    var game = GameJson.Deserialize(File.ReadAllText(resolvedLoadPath), random);
+    var human = game.CurrentEmpire ?? throw new InvalidOperationException("Save has no CurrentEmpire set -- nothing to drive.");
+    turnEngine.BeginTurn(game);
+    window = new GameShell(game, turnEngine, human, random);
+}
 
 IApplication app = Application.Create().Init();
 Application.MaximumIterationsPerSecond = 240; // Program.cs's own setting -- shortens the queue-drain latency below.
@@ -98,7 +114,6 @@ app.Screen = new Rectangle(0, 0, cols, rows);
 var injector = app.GetInputInjector();
 var injectOptions = new InputInjectionOptions { Mode = InputInjectionMode.Pipeline, AutoProcess = false };
 
-var gameShell = new GameShell(game, turnEngine, human, random);
 var exitCode = 0;
 
 var scriptThread = new Thread(() => {
@@ -116,9 +131,13 @@ scriptThread.IsBackground = true;
 scriptThread.Start();
 
 try {
-    app.Run(gameShell, null);
+    app.Run(window, null);
 } finally {
     app.Dispose();
+}
+
+if (describeResult is not null) {
+    Console.WriteLine(describeResult());
 }
 
 return exitCode;

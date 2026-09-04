@@ -21,7 +21,7 @@ namespace Reconstructed4021.Tui;
 /// turn yet (GameShell always plays Empires[0]), so collecting one now would have no consumer. Add it
 /// back alongside real hot-seat turn-taking.
 /// </summary>
-internal sealed class PlayerSetupWindow : NewGameWindow
+public sealed class PlayerSetupWindow : NewGameWindow
 {
     private enum Gender { Male, Female }
 
@@ -76,16 +76,30 @@ internal sealed class PlayerSetupWindow : NewGameWindow
         }
 
         // ValueChanged instead of a KeyDown-based "confirm" step: OptionSelector's own child CheckBoxes
-        // (not the OptionSelector itself) are what actually take focus and handle Enter/click, so a
+        // (not the OptionSelector itself) are what actually take focus and handle Space/click, so a
         // handler attached to genderSelector.KeyDown never saw those key presses -- confirmed from real
         // testing (mouse-picking an option worked, but nothing then dismissed the screen). ValueChanged
-        // fires regardless of which internal child raised it, from either a click or an arrow+Enter
-        // pick, so picking a gender is itself "confirm" -- no separate step needed.
+        // fires regardless of which internal child raised it, from either a click or Space, so picking
+        // a gender that way is itself "confirm" -- no separate step needed. Enter is a separate case,
+        // handled explicitly below (View's own Enter/Space split means it never reaches this event at
+        // all -- see that handler's own doc comment).
         genderSelector.ValueChanged += (_, args) => {
             if (args.Value is { } gender) {
                 ConfirmGender(gender);
             }
         };
+
+        // Enter never reaches OptionSelector's own selection logic (Space/click does, via
+        // ValueChanged above): View's base KeyBindings map Space to Command.Activate (what
+        // OptionSelector.OnActivated handles) and Enter to the separate Command.Accept, which
+        // OptionSelector never overrides -- confirmed by decompiling View.SetupKeyboard and
+        // OptionSelector.OnActivated (dotnet-inspect). Command.Accept isn't a plain KeyDown either
+        // (a KeyDown handler on genderSelector itself, or this Window, never saw it -- confirmed live:
+        // whichever child CheckBox is focused consumes the key at that level) -- it's Terminal.Gui's
+        // own separate Accept-dispatch system, and genderSelector's own Accepted event does fire
+        // regardless of which child actually held focus (confirmed live too), so reading its current
+        // Value there is the real "arrows+Enter: pick gender" confirm path.
+        genderSelector.Accepted += (_, _) => ConfirmGender(genderSelector.Value ?? Gender.Male);
 
         // Attached directly to the field, not a bubbled Window-level Accepting/Command.Accept handler
         // (that crashed here in testing) -- same proven pattern as AnacreonTitleWindow's menu buttons: a

@@ -18,7 +18,7 @@ namespace Reconstructed4021.Tui;
 /// Content plus the starfield draw, and stays the actual Application.Run top-level so KeyDown/App wiring
 /// in subclasses (attached to `this`, same as before this existed) keeps working unchanged.
 /// </summary>
-internal abstract class NewGameWindow : Window
+public abstract class NewGameWindow : Window
 {
     // COLORS.INC's ColorScrColor: SYSDispWind=23 -> LightGray on Blue.
     private static readonly TgAttribute SysDispWindAttribute = new(StandardColor.LightGray, StandardColor.Blue);
