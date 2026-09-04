@@ -41,6 +41,37 @@ public class ScenarioLoaderTests
         await Assert.That(game.Empires).IsEmpty();
     }
 
+    /// <summary>
+    /// NEWGAME.PAS:1796's own Player:=Empire1: found missing here entirely (TurnEngine.BeginTurn's
+    /// own null-guard threw the moment a real New Game session tried to start, confirmed live) --
+    /// nothing set Game.CurrentEmpire for a freshly loaded scenario before (only SavGameLoader/
+    /// GameJson did, reloading a save). NPE created first, at a slot number lower than the player's,
+    /// so this only passes if CurrentEmpire resolves by player *slot* (0) rather than list position
+    /// (Empires[0] would be the NPE here).
+    /// </summary>
+    [Test]
+    public async Task Load_SetsCurrentEmpireToPlayerSlotZero()
+    {
+        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0));
+        var text = Header(20) + "CREATENPEMPIRE 4 3 RndName 0 1 0\r\nCREATEPLAYEREMPIRE 0 5 3 0\r\nENDSCENARIO";
+
+        var game = loader.Load(text, _onePlayer);
+
+        await Assert.That(game.CurrentEmpire).IsNotNull();
+        await Assert.That(game.CurrentEmpire!.Name).IsEqualTo("Terra");
+    }
+
+    /// <summary>Mirrors NEWGAME.PAS's own Abort branch, which never reaches Player:=Empire1 at all.</summary>
+    [Test]
+    public async Task Load_WithNoPlayersLeavesCurrentEmpireNull()
+    {
+        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0));
+
+        var game = loader.Load(Header(20) + "ENDSCENARIO", players: []);
+
+        await Assert.That(game.CurrentEmpire).IsNull();
+    }
+
     [Test]
     public async Task Load_CreatePlayerEmpireBelowVersion12SkipsModifiers()
     {
