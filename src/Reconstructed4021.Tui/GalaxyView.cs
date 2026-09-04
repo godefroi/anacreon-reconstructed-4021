@@ -70,6 +70,7 @@ internal sealed class GalaxyView : View
 
     private static readonly TgAttribute PlayerAttribute = new(StandardColor.White, StandardColor.Black);
     private static readonly TgAttribute OtherAttribute = new(StandardColor.LightGray, StandardColor.Black);
+    private static readonly TgAttribute UnownedAttribute = new(StandardColor.DarkGray, StandardColor.Black); // COLORS.INC has no such distinction -- our own addition, dimming Independent-owned worlds so owned ones stand out more.
     private static readonly TgAttribute NebulaAttribute = new(StandardColor.Magenta, StandardColor.Black);
     private static readonly TgAttribute EmptyAttribute = new(StandardColor.Black, StandardColor.Black);
     private static readonly TgAttribute UnscoutedAttribute = new(DosColors.Red, StandardColor.Black); // COLORS.INC's UnscoutedColor = 4
@@ -281,7 +282,8 @@ internal sealed class GalaxyView : View
         return (new Rune(' '), EmptyAttribute);
     }
 
-    private TgAttribute OwnerAttribute(Empire owner) => ReferenceEquals(owner, _player) ? PlayerAttribute : OtherAttribute;
+    private TgAttribute OwnerAttribute(Empire owner) =>
+        ReferenceEquals(owner, _player) ? PlayerAttribute : owner.IsIndependent ? UnownedAttribute : OtherAttribute;
 
     private bool FleetPresent(Coordinate coordinate, bool wantPlayerOwned)
     {
