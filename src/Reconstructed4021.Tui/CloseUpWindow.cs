@@ -3,6 +3,7 @@ using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.Types;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
 
@@ -190,15 +191,16 @@ internal sealed class CloseUpWindow : Window
     {
         var owned = ReferenceEquals(fleet.Owner, viewer);
         var scouted = Game.ScoutedOrOwned(viewer, fleet);
+        var origin = viewer.Capital?.Location ?? new Coordinate(game.Galaxy.Size / 2, game.Galaxy.Size / 2);
 
         AddAt(1, 2, "   Position:");
-        AddAt(14, 2, $"{fleet.Location.X},{fleet.Location.Y}");
+        AddAt(14, 2, RelativeCoordinate.Format(fleet.Location, origin));
 
         AddAt(1, 3, "     Status:");
         AddAt(14, 3, DescribeFleetStatus(fleet, viewer, game));
 
         AddAt(1, 4, "Destination:");
-        AddAt(14, 4, DescribeFleetDestination(fleet, viewer));
+        AddAt(14, 4, DescribeFleetDestination(fleet, viewer, origin));
 
         AddAt(1, 5, "      Range:");
         AddAt(14, 5, owned ? FleetLifecycle.EstimatedRange(fleet).ToString() : "(unknown)");
@@ -235,7 +237,7 @@ internal sealed class CloseUpWindow : Window
     /// fleet's destination only shows while that fleet is <see cref="FleetStatus.Ready"/> -- while
     /// it's still in transit, where it's headed stays hidden regardless.
     /// </summary>
-    private static string DescribeFleetDestination(Fleet fleet, Empire viewer)
+    private static string DescribeFleetDestination(Fleet fleet, Empire viewer, Coordinate origin)
     {
         var visible = ReferenceEquals(fleet.Owner, viewer) ||
             (fleet.Status == FleetStatus.Ready && Game.Scouted(viewer, fleet));
@@ -244,7 +246,7 @@ internal sealed class CloseUpWindow : Window
             return "(unknown)";
         }
 
-        return fleet.Destination is { } dest ? $"{dest.X},{dest.Y}" : "(none)";
+        return fleet.Destination is { } dest ? RelativeCoordinate.Format(dest, origin) : "(none)";
     }
 
     /// <summary>

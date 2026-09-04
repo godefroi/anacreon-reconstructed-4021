@@ -429,7 +429,7 @@ internal sealed class GalaxyView : View
     public event EventHandler<Coordinate>? SectorActivated;
 
     /// <summary>PRIMINTR.PAS's GetCoordName format: cursor position relative to <see cref="_origin"/>, e.g. "0,0" at the origin.</summary>
-    public string CursorCoordinateText => $"{_cursor.X - _origin.X},{_origin.Y - _cursor.Y}";
+    public string CursorCoordinateText => RelativeCoordinate.Format(_cursor, _origin);
 
     /// <summary>Maps a click's screen position (relative to this View's own Viewport) to a galaxy sector -- false if it lands outside the actual grid, not clamped to the nearest edge.</summary>
     private bool TryGetSectorAt(Point screenPosition, out Coordinate sector)
