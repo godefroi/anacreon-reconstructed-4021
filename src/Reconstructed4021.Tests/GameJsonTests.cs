@@ -201,6 +201,80 @@ public class GameJsonTests
         await Assert.That(roundTrippedKingdom.DefeatedBy?.Name).IsEqualTo(conqueror.Name);
     }
 
+    /// <summary>
+    /// The exact crash reported live: WriteEmpires -> WriteIds threw KeyNotFoundException, because
+    /// empire.Fleets.Known/Scouted can hold a Fleet that's no longer in game.Galaxy.Fleets.
+    /// VisibilityHandler.RefreshVisibility only rebuilds fleet visibility once per turn ("Fleet
+    /// visibility is ephemeral", its own doc comment) -- a fleet destroyed mid-turn (combat, most
+    /// directly, via CombatOutcome.DestroyFleet) leaves a dangling Known/Scouted entry in every
+    /// empire that had scouted it until that empire's own next turn, and Save Game can run at any
+    /// point well inside that window. WriteIds now skips a stale id instead of throwing.
+    /// </summary>
+    [Test]
+    public async Task Serialize_SkipsFleetNoLongerInGalaxyFromEmpireVisibilitySets()
+    {
+        var galaxy = new Galaxy(10);
+        var game = new Game(galaxy);
+
+        var viewer = new Empire { Name = "Viewer" };
+        var owner = new Empire { Name = "FleetOwner" };
+        game.Empires.Add(viewer);
+        game.Empires.Add(owner);
+        game.CurrentEmpire = viewer;
+        game.TurnHandlers[viewer] = new HumanTurnHandler();
+        game.TurnHandlers[owner] = new HumanTurnHandler();
+
+        var fleet = new Fleet { Location = new Coordinate(2, 2), Owner = owner };
+        galaxy.Fleets.Add(fleet);
+        viewer.Fleets.MarkScouted(fleet); // implies Known too (EntityVisibility's own invariant)
+
+        // Destroyed mid-turn, matching CombatOutcome.DestroyFleet -- removed from the galaxy, but
+        // nothing eagerly prunes viewer.Fleets' own stale entry (that's RefreshVisibility's job, not
+        // due again until viewer's own next turn).
+        galaxy.Fleets.Remove(fleet);
+
+        var json = GameJson.Serialize(game); // must not throw
+        var roundTripped = GameJson.Deserialize(json, new Random(0));
+
+        var roundTrippedViewer = roundTripped.Empires.Single(e => e.Name == "Viewer");
+        await Assert.That(roundTrippedViewer.Fleets.Known).IsEmpty();
+        await Assert.That(roundTrippedViewer.Fleets.Scouted).IsEmpty();
+    }
+
+    /// <summary>
+    /// Same underlying cause as <see cref="Serialize_SkipsFleetNoLongerInGalaxyFromEmpireVisibilitySets"/>,
+    /// one level removed: EncodeObjectRef's own Fleet case (a fleet order's own DestinationObject, a
+    /// Kingdom mission's Target/HomeBase) had the identical unguarded-indexer problem. A live fleet's
+    /// own order can point at another fleet that's since been destroyed -- degrades to a null
+    /// destinationObject instead of throwing.
+    /// </summary>
+    [Test]
+    public async Task Serialize_SkipsFleetOrderDestinationNoLongerInGalaxy()
+    {
+        var galaxy = new Galaxy(10);
+        var game = new Game(galaxy);
+
+        var empire = new Empire { Name = "Test Empire" };
+        game.Empires.Add(empire);
+        game.CurrentEmpire = empire;
+        game.TurnHandlers[empire] = new HumanTurnHandler();
+
+        var movingFleet = new Fleet { Location = new Coordinate(1, 1), Owner = empire };
+        var targetFleet = new Fleet { Location = new Coordinate(3, 3), Owner = empire };
+        galaxy.Fleets.Add(movingFleet);
+        galaxy.Fleets.Add(targetFleet);
+        movingFleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationObject: targetFleet));
+
+        galaxy.Fleets.Remove(targetFleet); // destroyed after the order was compiled against it
+
+        var json = GameJson.Serialize(game); // must not throw
+        var roundTripped = GameJson.Deserialize(json, new Random(0));
+
+        var roundTrippedFleet = roundTripped.Galaxy.Fleets.Single(f => f.Location == new Coordinate(1, 1));
+        await Assert.That(roundTrippedFleet.Orders).Count().IsEqualTo(1);
+        await Assert.That(roundTrippedFleet.Orders[0].DestinationObject).IsNull();
+    }
+
     [Test]
     public async Task RoundTrips_Intro2()
     {
