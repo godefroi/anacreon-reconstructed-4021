@@ -32,8 +32,8 @@ codebase is in a test file.
 ## Human interactive turn handler / TUI
 
 - **Most of the menu bar is still stubs.** `Fleet > Orders`/`Cancel Orders` (`Change Destination`/
-  `SRM Sweep`/`Probe` are done), all of `Build`/`Empire`/`Worlds`, `Ministry of War > Launch LAMs`/
-  `Defenses` (`Attack`/`Auto Attack` are done), and every status-bar F-key panel are a `MessageBox`
+  `SRM Sweep`/`Probe` are done), all of `Build`/`Empire`/`Worlds`, `Ministry of War > Defenses`
+  (`Attack`/`Auto Attack`/`Launch LAMs` are done), and every status-bar F-key panel are a `MessageBox`
   stub. `Orders` is
   `FLTCOMM.PAS: FleetOrdersCommand` — a full mini scripting language (`ORDERS.PAS`'s own
   compile/decompile pair over a captive text editor), not a quick add; `Cancel Orders` is trivial but

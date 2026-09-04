@@ -1240,6 +1240,133 @@ public sealed class GameShell : Window
         _ => throw new ArgumentOutOfRangeException(nameof(ship)),
     };
 
+    /// <summary>
+    /// Ministry of War > Launch LAMs (DESIGN.PAS: LaunchLAM, :48-261). The launching world (BaseID)
+    /// resolution matches PLAYTURN.PAS's own ParameterData row for LAMCom (ErrorCond: NotPartOfEmp,
+    /// NotAWorld, NoLAMs -- one of the player's own worlds, gated on actually having LAMs) via
+    /// <see cref="FindWorldAt"/>, the same helper Close Up/Deploy already use for "the world at this
+    /// coordinate." GetTarget's own nested target list (:68-180) is transcribed directly below rather
+    /// than reusing <see cref="FindAttackTarget"/>: its filter (Known, not Scouted; Distance&lt;=5 of
+    /// the launching world, not "same sector as the attacking fleet") is a genuinely different rule.
+    /// </summary>
+    private void LaunchLams()
+    {
+        var source = FindWorldAt(galaxyView.CursorLocation);
+        if (source is null || !ReferenceEquals(source.Owner, human) || source.Defenses[DefenseType.Lam] <= 0) {
+            ShowInfo("Launch LAMs", "Move the cursor onto one of your own worlds with LAMs first.");
+            return;
+        }
+
+        var baseLocation = source.Location;
+        var targets = game.Galaxy.Fleets.Cast<ISectorObject>()
+            .Concat(game.Galaxy.Planets.Cast<ISectorObject>())
+            .Concat(game.Galaxy.Starbases.Cast<ISectorObject>())
+            .Where(o => Game.Known(human, o) && !ReferenceEquals(o.Owner, human) && baseLocation.DistanceTo(o.Location) <= 5)
+            .ToList();
+
+        if (targets.Count == 0) {
+            ShowInfo("Launch LAMs", $"No targets can be reached from {DisplayName(source)}.");
+            return;
+        }
+
+        ShowObjectPicker("Launch LAMs", targets, target => PromptForLamCount(source, target));
+    }
+
+    // GetTarget's own InputIntegerDisplayScreen prompt (DESIGN.PAS:201-209): a positive number no
+    // greater than the base's own LAM count, re-prompting (not closing) on an out-of-range answer --
+    // same REPEAT...UNTIL-as-retry-loop idiom as PromptForTrillum's own amountField handler.
+    private void PromptForLamCount(IEconomicWorld source, ISectorObject target)
+    {
+        var maxLams = source.Defenses[DefenseType.Lam];
+        var sourceName = DisplayName(source);
+        var targetName = DisplayName(target);
+
+        var dialog = new Window {
+            Title = "Launch LAMs",
+            X = Pos.Center(), Y = Pos.Center(),
+            Width = 60, Height = 7,
+            BorderStyle = LineStyle.Single,
+            CanFocus = true,
+        };
+        dialog.SetScheme(new Scheme(DialogNormalAttribute));
+        dialog.Border.View?.SetScheme(new Scheme(DialogBorderAttribute));
+
+        var amountField = new TextField { X = 1, Y = 2, Width = Dim.Fill(1) };
+        var errorLabel = new Label { X = 1, Y = 3 };
+        dialog.Add(new Label { X = 1, Y = 0, Text = $"{sourceName} targeting {targetName}." });
+        dialog.Add(new Label { X = 1, Y = 1, Text = $"There are {maxLams} LAMs here.  Launch how many?" });
+        dialog.Add(amountField);
+        dialog.Add(errorLabel);
+        dialog.Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "Enter: confirm   Esc: cancel" });
+
+        var dismiss = AddModal(dialog, dismissOnOutsideClick: false);
+        amountField.SetFocus();
+
+        amountField.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Enter) {
+                return;
+            }
+            key.Handled = true;
+
+            var text = amountField.Text?.Trim() ?? "";
+            if (!int.TryParse(text, out var amount) || amount < 0) {
+                errorLabel.Text = $"You must use a positive number, {MyLord()}!";
+                return;
+            }
+            if (amount > maxLams) {
+                errorLabel.Text = $"There aren't that many LAMs at {sourceName}, {MyLord()}.";
+                return;
+            }
+
+            dismiss();
+            FinishLaunchLams(source, target, amount);
+        };
+        dialog.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Esc) {
+                return;
+            }
+
+            dismiss();
+            key.Handled = true;
+        };
+    }
+
+    // LaunchLAM's own tail (DESIGN.PAS:211-247): CombatStandalone.LAMAttack already applies the
+    // outcome (news, fleet destruction, defense reduction) the same way NpeToolkit's own LAM strikes
+    // do -- only the base's own LAM count and the casualty report are this command's responsibility.
+    private void FinishLaunchLams(IEconomicWorld source, ISectorObject target, int lamsToUse)
+    {
+        var lines = new List<string>();
+        if (lamsToUse > 0) {
+            var (shipsDestroyed, defensesDestroyed) = CombatStandalone.LAMAttack(human, lamsToUse, (IShipCargoHolder)target, game);
+            source.Defenses[DefenseType.Lam] -= lamsToUse;
+            galaxyView.Refresh();
+
+            if (target is Fleet) {
+                lines.AddRange(Enum.GetValues<ShipType>().Where(t => shipsDestroyed[t] > 0).Select(t => $"{shipsDestroyed[t]} {ShipThingName(t)} were destroyed."));
+            } else {
+                lines.AddRange(Enum.GetValues<DefenseType>().Where(t => defensesDestroyed[t] > 0).Select(t => $"{defensesDestroyed[t]} {DefenseThingName(t)} were destroyed."));
+            }
+        }
+
+        if (lines.Count == 0) {
+            lines.Add(target is Fleet ? "No ships were destroyed." : "No defenses were destroyed.");
+        }
+
+        ShowInfo("Launch LAMs", string.Join('\n', lines));
+    }
+
+    // ThingNames (DATACNST.PAS:100-112), LAM..ion only -- same spelling TacticalBattleDisplayWindow's
+    // own TypeName already settled on ("def. satellites"/"ion cannons", not Pascal's raw "defense
+    // satellites"/"ion canons").
+    private static string DefenseThingName(DefenseType defense) => defense switch {
+        DefenseType.Lam => "LAMs",
+        DefenseType.DefenseSatellite => "def. satellites",
+        DefenseType.Gdm => "GDMs",
+        DefenseType.IonCannon => "ion cannons",
+        _ => throw new ArgumentOutOfRangeException(nameof(defense)),
+    };
+
     // ResultMessage (ATTCOMM.PAS:1652-1686) -- only these three cases are ever reached (DefCapturedART
     // is declared but never assigned anywhere in real Pascal, see CombatOutcome.cs's own note).
     private string AutoAttackResultText(AttackResultType result, ISectorObject subject) => result switch {
@@ -1577,7 +1704,7 @@ public sealed class GameShell : Window
         new MenuBarItem("_Ministry of War", new MenuItem[] {
             new("_Attack", Key.Empty, Attack),
             new("Auto A_ttack", Key.Empty, AutoAttack),
-            new("Launch _LAMs", Key.Empty, () => Stub("Launch LAMs")),
+            new("Launch _LAMs", Key.Empty, LaunchLams),
             new("_Defenses", Key.Empty, () => Stub("Defenses")),
         }),
     ];
