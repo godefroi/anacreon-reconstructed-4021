@@ -8,6 +8,7 @@ using Reconstructed4021.Core;
 using Reconstructed4021.Core.Combat;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
+using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
@@ -229,6 +230,94 @@ public sealed class GameShell : Window
                 App?.RequestStop();
             }
         });
+    }
+
+    // SaveTheGame (PROLOG.PAS:694-755): prompts for a filename (real Pascal prefills it with
+    // CurrentGame, the already-loaded save's own name -- this port has no such tracked state, so it
+    // suggests {empire name}-{year} instead), Esc cancels with no message, matching source.
+    private void PromptForSaveName()
+    {
+        var dialog = new Window {
+            Title = "Save Game",
+            X = Pos.Center(), Y = Pos.Center(),
+            Width = 55, Height = 5,
+            BorderStyle = LineStyle.Single,
+            CanFocus = true,
+        };
+        dialog.SetScheme(new Scheme(DialogNormalAttribute));
+        dialog.Border.View?.SetScheme(new Scheme(DialogBorderAttribute));
+
+        var nameField = new TextField { X = 1, Y = 1, Width = Dim.Fill(1), Text = $"{human.Name}-{game.Year}" };
+        dialog.Add(new Label { X = 1, Y = 0, Text = "Filename to save to:" });
+        dialog.Add(nameField);
+        dialog.Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "Enter: confirm   Esc: cancel" });
+
+        var dismiss = AddModal(dialog, dismissOnOutsideClick: false);
+        nameField.SetFocus();
+
+        nameField.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Enter) {
+                return;
+            }
+            key.Handled = true;
+
+            var name = nameField.Text?.Trim() ?? "";
+            if (name.Length == 0) {
+                return; // nothing to save to -- stay open rather than write a blank filename
+            }
+
+            dismiss();
+            SaveGameAs(name);
+        };
+        dialog.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Esc) {
+                return;
+            }
+
+            dismiss();
+            key.Handled = true;
+        };
+    }
+
+    /// <summary>
+    /// SaveGame (LOADSAVE.PAS:645-714): real Pascal writes to a temp <c>.BAK</c> file first and only
+    /// swaps it in on success, so a failed write can never corrupt an existing save -- kept here even
+    /// though this port's own format is JSON, not the DOS binary layout, since it's a real correctness
+    /// property, not a DOS-era artifact. Real Pascal shows no "saved successfully" popup at all
+    /// (silent on success, PROLOG.PAS:751-753 just closes the window) -- this port adds one anyway,
+    /// matching this file's own established convention of a brief confirmation wherever Pascal's own
+    /// comm-line text has no TUI equivalent (e.g. SrmSweep's own "completed" message).
+    /// </summary>
+    private void SaveGameAs(string name)
+    {
+        var fileName = name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? name : $"{name}.json";
+        var path = Path.Combine(FindSaveDirectory(), fileName);
+        var tempPath = path + ".tmp";
+
+        try {
+            File.WriteAllText(tempPath, GameJson.Serialize(game));
+            File.Move(tempPath, path, overwrite: true);
+        } catch (IOException ex) {
+            ShowInfo("Save Game", $"Could not save: {ex.Message}");
+            return;
+        }
+
+        ShowInfo("Save Game", $"Game saved to {fileName}.");
+    }
+
+    // saves/ is gitignored (same precedent as Program.cs's own logs/, for crash logs) -- a player's
+    // own save files, never committed. Not assets/saves/, which is a directory of committed test
+    // fixtures (GarrisonedOutpostFixtureTests etc.), not a save destination.
+    private static string FindSaveDirectory()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Reconstructed4021.slnx"))) {
+            dir = dir.Parent;
+        }
+
+        var savesDir = Path.Combine(dir?.FullName ?? AppContext.BaseDirectory, "saves");
+        Directory.CreateDirectory(savesDir);
+        return savesDir;
     }
 
     private void Stub(string label) => ShowInfo(label, "Not yet implemented.");
@@ -1371,6 +1460,7 @@ public sealed class GameShell : Window
         new MenuBarItem("_Game", new MenuItem[] {
             new("_Pause", Key.Empty, () => ShowInfo("Paused", "Time has stopped. Press any key to continue.")),
             new("_Status Hardcopy", Key.Empty, () => Stub("Status Hardcopy")),
+            new("Sa_ve", Key.Empty, PromptForSaveName),
             new("_Next Turn", Key.Empty, EndTurn),
             new("_Quit", Key.Empty, ConfirmQuit),
             new("E_xit to OS", Key.Empty, ConfirmExitToOs),
