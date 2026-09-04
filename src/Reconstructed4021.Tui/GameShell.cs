@@ -355,6 +355,26 @@ public sealed class GameShell : Window
         _ => null,
     };
 
+    /// <summary>
+    /// Sector Selected Popup hint line, contextual to <paramref name="obj"/> (per the user's own
+    /// explicit request -- an earlier pass always showed every letter regardless of the highlighted
+    /// item, which read as confusing/misleading for objects none of them actually apply to). D shows
+    /// for your own world or your own fleet (the two cases <see cref="DeployFleet(ISectorObject)"/>
+    /// itself directly supports); C/T/J/A only for your own fleet. Empty for anything else --
+    /// <see cref="ListView{T}.ValueChanged"/> keeps this in sync as the highlighted item changes.
+    /// </summary>
+    private string FleetActionHint(ISectorObject? obj)
+    {
+        var isOwnedWorld = obj is IEconomicWorld world && ReferenceEquals(world.Owner, human);
+        var isOwnedFleet = obj is Fleet fleet && ReferenceEquals(fleet.Owner, human);
+
+        if (isOwnedFleet) {
+            return "D:deploy  C:dest  T:transfer  J:abort/join  A:attack";
+        }
+
+        return isOwnedWorld ? "D:deploy" : "";
+    }
+
     // DISPLAY.PAS's own GetIDMenuChoice/DisplayMenu (DISPLAY.PAS:51-74, MENU.PAS:116-156) -- the
     // shared "ID/menu choice picker" primitive real Pascal builds every target/ground/empire picker
     // on top of (TUI_SURFACES_MAPPING.md's own "Prompts & dialogs" section), and specifically what
@@ -388,8 +408,8 @@ public sealed class GameShell : Window
             Title = title, // DisplayMenu's own OpenWindow passes '' for the sector-picker case too.
             X = Pos.Center(),
             Y = Pos.Center(),
-            Width = allowFleetActions ? 55 : 45, // wide enough for the fleet-action hint lines below
-            Height = allowFleetActions ? 9 : 7, // two hint lines: Deploy (any object), then the fleet-only four
+            Width = allowFleetActions ? 55 : 45, // wide enough for the fleet-action hint line below
+            Height = allowFleetActions ? 8 : 7, // one hint line, contextual to the highlighted item
             BorderStyle = LineStyle.Single, // ThinBRD
             CanFocus = true,
         };
@@ -402,7 +422,7 @@ public sealed class GameShell : Window
         // "Press any key" line for the same reason (it isn't real Pascal content either). The
         // fleet-action hint line below is the one exception -- no Pascal equivalent exists to match,
         // so it gets an explicit legend instead of staying silent like Enter/Esc do.
-        var listView = new ListView<ObjectListItem> { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(allowFleetActions ? 2 : 0) };
+        var listView = new ListView<ObjectListItem> { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(allowFleetActions ? 1 : 0) };
         listView.SetScheme(new Scheme { Normal = PickerNormalAttribute, Focus = PickerSelectedAttribute });
         listView.SetSource(new ObservableCollection<ObjectListItem>(objects.Select(o => new ObjectListItem(o, human))));
         listView.Index = 0; // SetSource alone leaves nothing selected -- default to the first item.
@@ -418,9 +438,11 @@ public sealed class GameShell : Window
         }
         picker.Add(listView);
 
+        Label? hintLabel = null;
         if (allowFleetActions) {
-            picker.Add(new Label { X = 0, Y = Pos.AnchorEnd(2), Text = "D:Deploy from here (any object)" });
-            picker.Add(new Label { X = 0, Y = Pos.AnchorEnd(1), Text = "Your fleet: C:dest T:transfer J:abort/join A:attack" });
+            hintLabel = new Label { X = 0, Y = Pos.AnchorEnd(1), Text = FleetActionHint(listView.Value?.Object) };
+            picker.Add(hintLabel);
+            listView.ValueChanged += (_, _) => hintLabel.Text = FleetActionHint(listView.Value?.Object);
         }
 
         var dismiss = AddModal(picker);
@@ -431,24 +453,29 @@ public sealed class GameShell : Window
         // reach picker.KeyDown fine since ListView leaves those unhandled, but C/T/J/A never did).
         // View.KeyDown (the C# event) fires before a view's own internal key-binding table, so
         // attaching here pre-empts that search feature for exactly the four letters we care about.
+        // Gated to exactly the letters FleetActionHint actually advertises for the highlighted item
+        // -- offering a key the on-screen hint doesn't list would be the same "confusing" complaint
+        // that made the hint contextual in the first place.
         if (allowFleetActions) {
             listView.KeyDown += (_, key) => {
                 if (listView.Value?.Object is not { } obj) {
                     return;
                 }
 
+                var isOwnedWorld = obj is IEconomicWorld world && ReferenceEquals(world.Owner, human);
+                var isOwnedFleet = obj is Fleet fleet && ReferenceEquals(fleet.Owner, human);
                 var letter = char.ToUpperInvariant((char)key.AsRune.Value);
-                if (letter == 'D') {
+
+                if (letter == 'D' && (isOwnedWorld || isOwnedFleet)) {
                     dismiss();
                     DeployFleet(obj);
                     key.Handled = true;
                     return;
                 }
 
-                if (obj is Fleet fleet && ReferenceEquals(fleet.Owner, human) &&
-                    ResolveFleetContextAction(letter) is { } action) {
+                if (isOwnedFleet && ResolveFleetContextAction(letter) is { } action) {
                     dismiss();
-                    action(fleet);
+                    action((Fleet)obj);
                     key.Handled = true;
                 }
             };
@@ -1028,9 +1055,13 @@ public sealed class GameShell : Window
     /// <summary>
     /// Ministry of War menu > Attack (ATTCOMM.PAS: GetTarget/AttackCommand/CleanUp/EnemyConquered).
     /// Target selection order is transcribed directly from GetTarget's own nested CreateMenu
-    /// (ATTCOMM.PAS:663-715): every enemy Fleet in the sector goes on the target list first (a picker
-    /// if there's more than one), and the world itself (Planet/Starbase) is only ever offered "if no
-    /// fleets" (ListSize=0) -- a world defended by any enemy fleet cannot be attacked directly, the
+    /// (ATTCOMM.PAS:663-715): every enemy Fleet in the sector <see cref="Game.Scouted"/> by the
+    /// player goes on the target list first (a picker if there's more than one) -- CreateMenu's own
+    /// <c>IF (Status&lt;&gt;Player) AND Scouted(Player,Target)</c> guard, missed in an earlier pass
+    /// here (dropped the Scouted half, so an unscouted enemy fleet the player couldn't even see on
+    /// the map still got attacked instead of the world under it) -- and the world itself
+    /// (Planet/Starbase) is only ever offered "if no fleets" (ListSize=0, no Scouted check of its
+    /// own) -- a world defended by any (scouted) enemy fleet cannot be attacked directly, the
     /// fleet(s) must be dealt with first. Confirmed with the user after an initial pass got this
     /// backwards (checked the world before any defending fleet) and produced a wildly wrong result:
     /// an undamaged 50-ship Kingdom defense fleet sat next to a heavily-refortified capital, and
@@ -1043,7 +1074,7 @@ public sealed class GameShell : Window
 
     private void Attack(Fleet attacker) {
         var cursor = attacker.Location;
-        var enemyFleets = game.Galaxy.Fleets.Where(f => f.Location == cursor && !ReferenceEquals(f.Owner, human)).ToList();
+        var enemyFleets = game.Galaxy.Fleets.Where(f => f.Location == cursor && !ReferenceEquals(f.Owner, human) && Game.Scouted(human, f)).ToList();
 
         if (enemyFleets.Count > 1) {
             ShowObjectPicker("Attack", enemyFleets.Cast<ISectorObject>().ToList(), o => BeginAttack(attacker, o));
