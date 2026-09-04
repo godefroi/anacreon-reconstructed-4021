@@ -1,5 +1,4 @@
 using Terminal.Gui.App;
-using Terminal.Gui.Views;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.NewGame;
@@ -206,13 +205,13 @@ GameShell.ExitChoice RunGame(Game game)
         }
 
         if (!game.AnyHumanPlayersRemain) {
-            MessageBox.Query(app, "Defeat", "Your empire has fallen.", "OK");
+            DosDialogWindow.ShowInfo(app, "Defeat", "Your empire has fallen.");
             return GameShell.ExitChoice.MainMenu;
         }
 
         var npeEmpires = game.Empires.Where(e => e.NpeType is not null).ToList();
         if (npeEmpires.Count > 0 && npeEmpires.All(e => e.Status == EmpireStatus.Eliminated)) {
-            MessageBox.Query(app, "Victory", "Every enemy empire has been destroyed.", "OK");
+            DosDialogWindow.ShowInfo(app, "Victory", "Every enemy empire has been destroyed.");
             return GameShell.ExitChoice.MainMenu;
         }
     }
@@ -239,7 +238,7 @@ void ShowCapitalFallenReport(Empire defeated)
         "I have arranged an honorable course of action for Your Majesty; you will find\n" +
         $"necessary materials by your bedside.  Good luck, {lord}.\n\n" +
         "- Your Loyal Servant";
-    MessageBox.Query(app, "Capital Fallen", text, "OK");
+    DosDialogWindow.ShowInfo(app, "Capital Fallen", text);
 }
 
 static string FindRepoRoot(string start)

@@ -92,6 +92,16 @@ internal sealed class CloseUpWindow : Window
         } else if (obj is IEconomicWorld world) {
             LayoutWorld(world, viewer, game);
         }
+
+        // No Pascal equivalent -- TUI-only shortcut legend for GameShell.ShowCloseUp's own D/C/T/J/A
+        // handling (per the user's own explicit request). D deploys from whatever world is at obj's
+        // own Location and is offered regardless of obj's type -- see
+        // GameShell.DeployFleet(Coordinate)'s own doc comment; C/T/J/A only ever act on one of your
+        // own fleets, so that half of the line is fleet-owned-only.
+        var fleetOwned = fleet is not null && ReferenceEquals(fleet.Owner, viewer);
+        AddAt(1, 17, fleetOwned
+            ? "D:Deploy  C:Change Destination  T:Transfer  J:Abort/Join  A:Attack  (other key: close)"
+            : "D:Deploy from here  (other key: close)");
     }
 
     /// <summary>
@@ -201,14 +211,6 @@ internal sealed class CloseUpWindow : Window
         AddAt(0, 8,
             $"{ShipLevel(s.Fighters),5}{ShipLevel(s.HunterKillers),5}{ShipLevel(s.Jumpships),5}{ShipLevel(s.Jumptransports),5}{ShipLevel(s.Penetrators),5}{ShipLevel(s.Starships),5}{ShipLevel(s.Transports),5}" +
             $"{CargoLevel(c.Legions),5}{CargoLevel(c.NinjaLegions),5}{CargoLevel(c.Ambrosia),5}{CargoLevel(c.Chemicals),5}{CargoLevel(c.Metals),5}{CargoLevel(c.Supplies),5}{CargoLevel(c.Trillum),5}");
-
-        // No Pascal equivalent -- TUI-only shortcut legend for GameShell.ShowCloseUp's own C/T/J/A
-        // handling (per the user's own explicit request to reach Change Destination/Transfer/
-        // Abort-Join/Attack directly off an already-selected fleet). Only shown for your own fleet,
-        // since those commands only ever act on one of your own.
-        if (owned) {
-            AddAt(1, 17, "C:Change Destination  T:Transfer  J:Abort/Join  A:Attack  (other key: close)");
-        }
     }
 
     /// <summary>MISC.PAS's YesNo (:78-96) -- a coarse magnitude bucket for a Scouted-but-not-owned count, not a real number. Width padding comes from each call site's own <c>{,5}</c> format, matching Pascal's own pre-padded 5-char literals.</summary>

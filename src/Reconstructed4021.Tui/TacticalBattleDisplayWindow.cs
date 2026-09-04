@@ -538,7 +538,7 @@ internal sealed class TacticalBattleDisplayWindow : Window
         lines.Add("");
         lines.AddRange(state.Groups.Select(GroupStatusLine));
 
-        MessageBox.Query(App!, "Engage Results", string.Join('\n', lines), "OK");
+        DosDialogWindow.ShowInfo(App!, "Engage Results", string.Join('\n', lines));
     }
 
     private static string TypeName(AttackType type) => type switch {

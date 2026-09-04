@@ -219,7 +219,7 @@ internal sealed class AnacreonTitleWindow : Window
         Dismiss();
     }
 
-    private void Stub(string label) => MessageBox.Query(App!, label, "Not yet implemented.", "OK");
+    private void Stub(string label) => DosDialogWindow.ShowInfo(App!, label, "Not yet implemented.");
 
     private object ScheduleTimeout(TimeSpan delay, Func<bool> callback)
     {

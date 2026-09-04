@@ -208,14 +208,13 @@ public sealed class GameShell : Window
     {
         // PLAYTURN.PAS:1075/1178 (XXXCom) -- Quit here just sets ExitGame:=True, which unwinds the
         // per-turn loop back to ANACREON.PAS's outer REPEAT, landing back on Prologue (the main menu),
-        // not a full process exit. MessageBox's last button is the default (focused) one -- "No" here,
-        // so a stray Enter doesn't quit. The leading underscores give Y/N as hotkeys too (same
-        // HotKeyBindings mechanism as the menu items below -- both the bare key and Alt+key are bound,
-        // and it works regardless of which button currently has focus).
-        if (MessageBox.Query(App!, "Quit", "Are you sure you want to quit? You'll return to the main menu.", "_Yes", "_No") == 0) {
-            Choice = ExitChoice.MainMenu;
-            App?.RequestStop();
-        }
+        // not a full process exit. 0 = Yes here (DosDialogWindow's own null/0/1 shape).
+        ShowConfirm("Quit", "Are you sure you want to quit? You'll return to the main menu.", choice => {
+            if (choice == 0) {
+                Choice = ExitChoice.MainMenu;
+                App?.RequestStop();
+            }
+        });
     }
 
     // No Pascal equivalent -- real Quit (PLAYTURN.PAS's XXXCom) only ever returns to the main menu; a
@@ -224,13 +223,15 @@ public sealed class GameShell : Window
     // one-step way out instead of forcing a trip back through the main menu first.
     private void ConfirmExitToOs()
     {
-        if (MessageBox.Query(App!, "Exit to OS", "Are you sure you want to exit to the operating system?", "_Yes", "_No") == 0) {
-            Choice = ExitChoice.ExitToOs;
-            App?.RequestStop();
-        }
+        ShowConfirm("Exit to OS", "Are you sure you want to exit to the operating system?", choice => {
+            if (choice == 0) {
+                Choice = ExitChoice.ExitToOs;
+                App?.RequestStop();
+            }
+        });
     }
 
-    private void Stub(string label) => MessageBox.Query(App!, label, "Not yet implemented.", "OK");
+    private void Stub(string label) => ShowInfo(label, "Not yet implemented.");
 
     private IEconomicWorld? FindWorldAt(Coordinate location) =>
         (IEconomicWorld?)game.Galaxy.Planets.FirstOrDefault(p => p.Location == location)
@@ -251,7 +252,7 @@ public sealed class GameShell : Window
         var fleets = game.Galaxy.Fleets.Where(f => f.Location == galaxyView.CursorLocation && ReferenceEquals(f.Owner, human)).ToList();
         switch (fleets.Count) {
             case 0:
-                MessageBox.Query(App!, title, "Move the cursor onto one of your own fleets first.", "OK");
+                ShowInfo(title, "Move the cursor onto one of your own fleets first.");
                 break;
             case 1:
                 onChosen(fleets[0]);
@@ -301,21 +302,30 @@ public sealed class GameShell : Window
     // Both overlays below are added/removed directly as children of this running Toplevel rather
     // than run via a nested Application.Run -- see CloseUpWindow's own doc comment.
     //
-    // Fleet action shortcuts (per the user's own explicit request): when obj is one of the player's
-    // own fleets, C/T/J/A run the same Change Destination/Transfer/Abort-Join/Attack commands the
-    // Fleet/Ministry-of-War menus expose, using this already-selected fleet directly instead of going
-    // back through PickOwnFleetAtCursor's own map-cursor pick. CloseUpWindow itself renders the hint
-    // line (LayoutFleet's own "owned" branch) -- no Pascal precedent to transcribe here, this is a
-    // TUI-only convenience layered on top of an already-open Close Up. Any other key keeps the
-    // original "any key dismisses" behavior (CloseUpWindow's own doc comment on why that's already a
-    // deviation from real Pascal's non-modal CloseUpCom).
+    // Fleet/Deploy action shortcuts (per the user's own explicit request): D deploys from whatever
+    // world is at obj's own Location, regardless of obj's own type (see DeployFleet(Coordinate)'s own
+    // doc comment); C/T/J/A additionally run Change Destination/Transfer/Abort-Join/Attack when obj is
+    // one of the player's own fleets, using it directly instead of going back through
+    // PickOwnFleetAtCursor's own map-cursor pick. CloseUpWindow itself renders the matching hint line
+    // -- no Pascal precedent to transcribe here, this is a TUI-only convenience layered on top of an
+    // already-open Close Up. Any other key keeps the original "any key dismisses" behavior
+    // (CloseUpWindow's own doc comment on why that's already a deviation from real Pascal's non-modal
+    // CloseUpCom).
     private void ShowCloseUp(ISectorObject obj)
     {
         var window = new CloseUpWindow(obj, human, game);
         var dismiss = AddModal(window);
         window.KeyDown += (_, key) => {
+            var letter = char.ToUpperInvariant((char)key.AsRune.Value);
+            if (letter == 'D') {
+                dismiss();
+                DeployFleet(obj);
+                key.Handled = true;
+                return;
+            }
+
             if (obj is Fleet fleet && ReferenceEquals(fleet.Owner, human) &&
-                ResolveFleetContextAction(char.ToUpperInvariant((char)key.AsRune.Value)) is { } action) {
+                ResolveFleetContextAction(letter) is { } action) {
                 dismiss();
                 action(fleet);
                 key.Handled = true;
@@ -330,10 +340,12 @@ public sealed class GameShell : Window
     /// <summary>
     /// C/T/J/A -- Change Destination/Transfer/Abort-Join/Attack, the four Fleet/Ministry-of-War
     /// commands reachable directly off a selected fleet (Close Up and the Sector Selected Popup),
-    /// shared so the two surfaces can't drift on which letter maps to which command. Not gated on
-    /// "is this action actually useful right now" (e.g. Attack with no enemy present) -- same idiom
-    /// PickOwnFleetAtCursor/Attack/PickGround already use everywhere else in this file: offer the
-    /// command, let its own existing MessageBox explain why it didn't apply.
+    /// shared so the two surfaces can't drift on which letter maps to which command. Deploy (D) isn't
+    /// here -- it's handled separately by both call sites since it applies to any selected object, not
+    /// just the player's own fleets. Not gated on "is this action actually useful right now" (e.g.
+    /// Attack with no enemy present) -- same idiom PickOwnFleetAtCursor/Attack/PickGround already use
+    /// everywhere else in this file: offer the command, let its own existing MessageBox explain why it
+    /// didn't apply.
     /// </summary>
     private Action<Fleet>? ResolveFleetContextAction(char key) => key switch {
         'C' => ChangeDestination,
@@ -376,8 +388,8 @@ public sealed class GameShell : Window
             Title = title, // DisplayMenu's own OpenWindow passes '' for the sector-picker case too.
             X = Pos.Center(),
             Y = Pos.Center(),
-            Width = allowFleetActions ? 55 : 45, // wide enough for the fleet-action hint line below
-            Height = allowFleetActions ? 8 : 7,
+            Width = allowFleetActions ? 55 : 45, // wide enough for the fleet-action hint lines below
+            Height = allowFleetActions ? 9 : 7, // two hint lines: Deploy (any object), then the fleet-only four
             BorderStyle = LineStyle.Single, // ThinBRD
             CanFocus = true,
         };
@@ -390,7 +402,7 @@ public sealed class GameShell : Window
         // "Press any key" line for the same reason (it isn't real Pascal content either). The
         // fleet-action hint line below is the one exception -- no Pascal equivalent exists to match,
         // so it gets an explicit legend instead of staying silent like Enter/Esc do.
-        var listView = new ListView<ObjectListItem> { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(allowFleetActions ? 1 : 0) };
+        var listView = new ListView<ObjectListItem> { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(allowFleetActions ? 2 : 0) };
         listView.SetScheme(new Scheme { Normal = PickerNormalAttribute, Focus = PickerSelectedAttribute });
         listView.SetSource(new ObservableCollection<ObjectListItem>(objects.Select(o => new ObjectListItem(o, human))));
         listView.Index = 0; // SetSource alone leaves nothing selected -- default to the first item.
@@ -407,6 +419,7 @@ public sealed class GameShell : Window
         picker.Add(listView);
 
         if (allowFleetActions) {
+            picker.Add(new Label { X = 0, Y = Pos.AnchorEnd(2), Text = "D:Deploy from here (any object)" });
             picker.Add(new Label { X = 0, Y = Pos.AnchorEnd(1), Text = "Your fleet: C:dest T:transfer J:abort/join A:attack" });
         }
 
@@ -420,8 +433,20 @@ public sealed class GameShell : Window
         // attaching here pre-empts that search feature for exactly the four letters we care about.
         if (allowFleetActions) {
             listView.KeyDown += (_, key) => {
-                if (listView.Value?.Object is Fleet fleet && ReferenceEquals(fleet.Owner, human) &&
-                    ResolveFleetContextAction(char.ToUpperInvariant((char)key.AsRune.Value)) is { } action) {
+                if (listView.Value?.Object is not { } obj) {
+                    return;
+                }
+
+                var letter = char.ToUpperInvariant((char)key.AsRune.Value);
+                if (letter == 'D') {
+                    dismiss();
+                    DeployFleet(obj);
+                    key.Handled = true;
+                    return;
+                }
+
+                if (obj is Fleet fleet && ReferenceEquals(fleet.Owner, human) &&
+                    ResolveFleetContextAction(letter) is { } action) {
                     dismiss();
                     action(fleet);
                     key.Handled = true;
@@ -481,7 +506,7 @@ public sealed class GameShell : Window
         }
 
         if (candidates.Count == 0) {
-            MessageBox.Query(App!, title, emptyMessage, "OK");
+            ShowInfo(title, emptyMessage);
             return;
         }
 
@@ -562,6 +587,42 @@ public sealed class GameShell : Window
     }
 
     /// <summary>
+    /// Styled "press any key" notice (<see cref="DosDialogWindow"/>), added via <see cref="AddModal"/>
+    /// rather than <see cref="DosDialogWindow.ShowInfo"/>'s own blocking nested <c>Application.Run</c>
+    /// -- found the hard way (live-tested, not guessed): a nested <c>Run</c> never touches this
+    /// Window's own <c>Focused</c> child, so <see cref="galaxyView"/> stays focused throughout, and
+    /// this constructor's own Esc-opens-the-Game-menu shortcut (<c>KeyDown</c>, above) steals Esc
+    /// before the nested dialog's own handler ever sees it. <c>AddModal</c> doesn't have this problem
+    /// -- it calls <c>popup.SetFocus()</c>, which is what <see cref="DosMessageWindow"/> (the
+    /// Attack-specific version of this same idea) already relied on. <see cref="DosDialogWindow.ShowInfo"/>'s
+    /// static blocking form stays right for contexts with no such shortcut to collide with
+    /// (<c>Program.cs</c>'s top-level script, <c>AnacreonTitleWindow</c>, <c>TacticalBattleDisplayWindow</c>'s
+    /// own already-focus-redirected popup).
+    /// </summary>
+    private void ShowInfo(string title, string body)
+    {
+        var dialog = new DosDialogWindow(title, body);
+        var dismiss = AddModal(dialog, dismissOnOutsideClick: false);
+        dialog.Answered += (_, _) => dismiss();
+    }
+
+    /// <summary>
+    /// Styled Yes/No/Esc confirm (<see cref="DosDialogWindow"/>), AddModal-based for the same reason
+    /// as <see cref="ShowInfo"/>. <paramref name="onAnswered"/> gets the same null/0/1 shape
+    /// <c>MessageBox.Query</c> always returned (null = Esc/cancel, 0 = Yes, 1 = No), so a caller
+    /// converting from that just wraps its old post-call branching in this lambda instead.
+    /// </summary>
+    private void ShowConfirm(string title, string body, Action<int?> onAnswered)
+    {
+        var dialog = new DosDialogWindow(title, body, isConfirm: true);
+        var dismiss = AddModal(dialog, dismissOnOutsideClick: false);
+        dialog.Answered += (_, _) => {
+            dismiss();
+            onAnswered(dialog.ButtonIndex);
+        };
+    }
+
+    /// <summary>
     /// Display wrapper for <see cref="ShowSectorPicker"/>'s ListView -- ISectorObject implementors
     /// are plain domain entities with no display-formatting concern of their own. Text format
     /// matches GetMapObject's own CreateMenu (MAPWIND.PAS:858-859): "Name  (Owner)".
@@ -583,7 +644,20 @@ public sealed class GameShell : Window
     /// name, then source, then destination, then composition. Source and destination both reuse the
     /// map cursor (matching TUI_SURFACES_MAPPING.md's own "map cursor reuse for launch/destination").
     /// </summary>
-    private void DeployFleet() => PromptForFleetName();
+    private void DeployFleet() => PromptForFleetName(knownSource: null);
+
+    /// <summary>
+    /// Contextual Deploy from the Sector Selected Popup or Close Up: when <paramref name="contextObject"/>
+    /// is one of the player's own fleets, that fleet is the deploy source itself -- splitting off a
+    /// new fleet from it, no map-cursor source pick needed. <see cref="FleetLifecycle.DeployFleet"/>
+    /// accepts a Fleet source generically (its own doc comment: "must be a Fleet or IEconomicWorld"),
+    /// same primitive NpeToolkit's own Deploy*Fleet procedures already use, just not previously
+    /// reachable by the player. For anything else, falls back to whatever world is at
+    /// <paramref name="contextObject"/>'s own <see cref="ISectorObject.Location"/>, same as picking
+    /// that world directly. Still asks the fleet name first regardless, matching
+    /// <c>LaunchFleetCommand</c>'s own real parameter order (name before source is ever validated).
+    /// </summary>
+    private void DeployFleet(ISectorObject contextObject) => PromptForFleetName(contextObject);
 
     private static readonly TgAttribute DialogNormalAttribute = new(StandardColor.LightGray, StandardColor.Black); // SYSWBorder = 7, matching the sector picker's own popup style
     private static readonly TgAttribute DialogBorderAttribute = new(StandardColor.LightGray, StandardColor.Black);
@@ -591,7 +665,7 @@ public sealed class GameShell : Window
     // FleetName (FLTCOMM.PAS's own LaunchFleetCommand parameter, Question 7 "What name shall we use
     // for this fleet?") -- a small text prompt, matching PlayerSetupWindow's own established
     // TextField-in-a-popup pattern rather than a nested Application.Run.
-    private void PromptForFleetName()
+    private void PromptForFleetName(ISectorObject? knownSource)
     {
         var dialog = new Window {
             Title = "Name This Fleet",
@@ -618,8 +692,14 @@ public sealed class GameShell : Window
 
             var name = nameField.Text?.Trim() ?? "";
             dismiss();
-            BeginPick("Deploy Fleet -- move cursor to a world to launch from, Enter: select, Esc: cancel",
-                location => PickDeploySource(location, name));
+            if (knownSource is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, human)) {
+                ValidateDeploySource(ownFleet, name);
+            } else if (knownSource is not null) {
+                PickDeploySource(knownSource.Location, name);
+            } else {
+                BeginPick("Deploy Fleet -- move cursor to a world to launch from, Enter: select, Esc: cancel",
+                    pickedLocation => PickDeploySource(pickedLocation, name));
+            }
             key.Handled = true;
         };
         dialog.KeyDown += (_, key) => {
@@ -632,17 +712,25 @@ public sealed class GameShell : Window
         };
     }
 
-    // IDParm2 (Question 8, "Where shall we deploy the fleet from?").
+    // IDParm2 (Question 8, "Where shall we deploy the fleet from?") -- the map-cursor and
+    // world-under-a-selected-object paths both land here.
     private void PickDeploySource(Coordinate location, string fleetName)
     {
         var source = FindWorldAt(location);
         if (source is null || !ReferenceEquals(source.Owner, human)) {
-            MessageBox.Query(App!, "Deploy Fleet", "That isn't one of your own worlds.", "OK");
+            ShowInfo("Deploy Fleet", "That isn't one of your own worlds.");
             return;
         }
 
-        if (!HasAnyShips(source.Ships)) {
-            MessageBox.Query(App!, "Deploy Fleet", "This world has no ships to deploy.", "OK");
+        ValidateDeploySource(source, fleetName);
+    }
+
+    // Shared source validation for both a world (PickDeploySource) and a player-owned fleet
+    // (DeployFleet(ISectorObject)'s own fleet-as-source branch).
+    private void ValidateDeploySource(ISectorObject source, string fleetName)
+    {
+        if (!HasAnyShips(((IShipCargoHolder)source).Ships)) {
+            ShowInfo("Deploy Fleet", "There are no ships here to deploy.");
             return;
         }
 
@@ -651,17 +739,18 @@ public sealed class GameShell : Window
             destination => BeginDeployDistribution(source, fleetName, destination));
     }
 
-    private void BeginDeployDistribution(IEconomicWorld source, string fleetName, Coordinate destination)
+    private void BeginDeployDistribution(ISectorObject source, string fleetName, Coordinate destination)
     {
-        var groundShips = CloneShips(source.Ships);
-        var groundCargo = CloneCargo(source.Cargo);
+        var holder = (IShipCargoHolder)source;
+        var groundShips = CloneShips(holder.Ships);
+        var groundCargo = CloneCargo(holder.Cargo);
         var fleetShips = new ShipCounts();
         var fleetCargo = new CargoHold();
         var sourceName = source.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(source);
 
         var editor = new ResourceDistributionEditor(
             fleetShips, fleetCargo, groundShips, groundCargo,
-            groundIsPlayerOwned: true, groundIsAFleet: false,
+            groundIsPlayerOwned: true, groundIsAFleet: source is Fleet,
             title: $"Deploy Fleet from {sourceName}");
         var dismiss = AddModal(editor, dismissOnOutsideClick: false);
 
@@ -674,7 +763,7 @@ public sealed class GameShell : Window
                 return;
             }
 
-            var fleet = FleetLifecycle.DeployFleet(human, source, fleetShips, fleetCargo, destination, game);
+            var fleet = FleetLifecycle.DeployFleet(human, holder, fleetShips, fleetCargo, destination, game);
             if (!string.IsNullOrWhiteSpace(fleetName)) {
                 // LaunchFleetCommand's own FleetName[1]:=UpCase(FleetName[1]) (FLTCOMM.PAS:517).
                 fleet.Names[human] = char.ToUpperInvariant(fleetName[0]) + fleetName[1..];
@@ -767,17 +856,29 @@ public sealed class GameShell : Window
     {
         if (!ReferenceEquals(ground.Owner, human)) {
             var groundName = ground.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(ground);
-            if (MessageBox.Query(App!, "Abort/Join Fleet", $"{groundName} is not part of your empire. Are you sure you want to abort the fleet?", "_Yes", "_No") != 0) {
-                return;
-            }
+            ShowConfirm("Abort/Join Fleet", $"{groundName} is not part of your empire. Are you sure you want to abort the fleet?", choice => {
+                if (choice == 0) {
+                    ConfirmAbortJoinOverflow(fleet, ground);
+                }
+            });
+            return;
         }
 
+        ConfirmAbortJoinOverflow(fleet, ground);
+    }
+
+    private void ConfirmAbortJoinOverflow(Fleet fleet, ISectorObject ground)
+    {
         var groundHolder = (IShipCargoHolder)ground;
         var overflow = Enum.GetValues<ShipType>().Any(t => groundHolder.Ships[t] + fleet.Ships[t] > ResourceDistribution.MaxResources);
         if (overflow) {
-            if (MessageBox.Query(App!, "Abort/Join Fleet", "An object cannot hold so many ships -- some will be lost. Are you sure?", "_Yes", "_No") != 0) {
-                return;
-            }
+            ShowConfirm("Abort/Join Fleet", "An object cannot hold so many ships -- some will be lost. Are you sure?", choice => {
+                if (choice == 0) {
+                    FleetLifecycle.AbortFleet(fleet, groundHolder, game);
+                    galaxyView.Refresh();
+                }
+            });
+            return;
         }
 
         FleetLifecycle.AbortFleet(fleet, groundHolder, game);
@@ -800,7 +901,7 @@ public sealed class GameShell : Window
     {
         var maxTri = FleetLifecycle.MaxTrillumToRefuel(fleet, ground);
         if (maxTri <= 0) {
-            MessageBox.Query(App!, "Refuel Fleet", "There is no trillum available to refuel with.", "OK");
+            ShowInfo("Refuel Fleet", "There is no trillum available to refuel with.");
             return;
         }
 
@@ -894,7 +995,7 @@ public sealed class GameShell : Window
         var location = fleet.Location;
         var mineOwner = game.Galaxy.GetMineOwner(location);
         if (mineOwner is null) {
-            MessageBox.Query(App!, "SRM Sweep", "No SRMs found.", "OK");
+            ShowInfo("SRM Sweep", "No SRMs found.");
             return;
         }
 
@@ -905,7 +1006,7 @@ public sealed class GameShell : Window
         game.Galaxy.ClearMine(location);
         game.Galaxy.ClearMineScouted(location);
         galaxyView.Refresh();
-        MessageBox.Query(App!, "SRM Sweep", "Mine sweeping completed.", "OK");
+        ShowInfo("SRM Sweep", "Mine sweeping completed.");
     }
 
     /// <summary>
@@ -917,11 +1018,11 @@ public sealed class GameShell : Window
     private void LaunchProbe() =>
         BeginPick("Launch Probe -- move cursor to target, Enter: select, Esc: cancel", destination => {
             if (!human.TryLaunchProbe(destination)) {
-                MessageBox.Query(App!, "Probe", "There are no more probes available.", "OK");
+                ShowInfo("Probe", "There are no more probes available.");
                 return;
             }
 
-            MessageBox.Query(App!, "Probe", $"Probe launched to {destination.X},{destination.Y}.", "OK");
+            ShowInfo("Probe", $"Probe launched to {destination.X},{destination.Y}.");
         });
 
     /// <summary>
@@ -954,7 +1055,7 @@ public sealed class GameShell : Window
               ?? game.Galaxy.Starbases.FirstOrDefault(s => s.Location == cursor && !ReferenceEquals(s.Owner, human));
 
         if (target is null) {
-            MessageBox.Query(App!, "Attack", "No enemy target in this sector.", "OK");
+            ShowInfo("Attack", "No enemy target in this sector.");
             return;
         }
 
@@ -965,25 +1066,24 @@ public sealed class GameShell : Window
     // (default) skips Fleet Group Configuration and uses DefaultDistribution, matching what this
     // command always did before this screen existed; N opens the real GetGroups-equivalent screen.
     // Esc abandons the attack entirely (IF Ans<>EscKey), matching AttackCommand's own guard.
-    private void BeginAttack(Fleet attacker, object target)
-    {
-        var choice = MessageBox.Query(App!, "Attack", "Standard battle configuration?", "_Yes", "_No");
-        if (choice is null) {
-            return;
-        }
+    private void BeginAttack(Fleet attacker, object target) =>
+        ShowConfirm("Attack", "Standard battle configuration?", choice => {
+            if (choice is null) {
+                return;
+            }
 
-        if (choice == 0) {
-            StartEngagement(attacker, target, CombatEngine.DefaultDistribution(attacker));
-            return;
-        }
+            if (choice == 0) {
+                StartEngagement(attacker, target, CombatEngine.DefaultDistribution(attacker));
+                return;
+            }
 
-        var configWindow = new FleetGroupConfigurationWindow(attacker.Ships, attacker.Cargo);
-        var dismiss = AddModal(configWindow, dismissOnOutsideClick: false);
-        configWindow.Committed += (_, _) => {
-            dismiss();
-            StartEngagement(attacker, target, [.. configWindow.Groups]);
-        };
-    }
+            var configWindow = new FleetGroupConfigurationWindow(attacker.Ships, attacker.Cargo);
+            var dismiss = AddModal(configWindow, dismissOnOutsideClick: false);
+            configWindow.Committed += (_, _) => {
+                dismiss();
+                StartEngagement(attacker, target, [.. configWindow.Groups]);
+            };
+        });
 
     private void StartEngagement(Fleet attacker, object target, List<GroupRecord> groups)
     {
@@ -1021,11 +1121,13 @@ public sealed class GameShell : Window
     // Split into a continuation chain (ShowOldShipsFound -> the capture confirm -> FinishAttackOutcome)
     // rather than the straight-line sequence this used to be: DosMessageWindow is a real AddModal popup
     // (Terminal.Gui's own MessageBox has no color/scheme API at all, confirmed via dotnet-inspect, so it
-    // couldn't give these screens DOS-accurate colors), and AddModal's popups are event-driven, not
-    // blocking -- unlike the MessageBox.Query calls they replace, GameShell has no other precedent for a
-    // reentrant blocking Application.Run from inside an already-running one, so this follows the same
-    // callback style every other multi-step GameShell flow (Deploy Fleet, Fleet Group Configuration)
-    // already uses instead.
+    // couldn't give these screens DOS-accurate colors). AddModal's popups are event-driven, not blocking
+    // -- a later pass (DosDialogWindow, used everywhere else this same MessageBox-styling gap existed)
+    // showed a hand-rolled nested Application.Run works fine for a single confirm, but this specific
+    // chain -- three dialogs where whether the second and third even appear depends on the first two's
+    // own answers -- reads more clearly as a callback chain than three sequential blocking calls
+    // threaded through shared locals, so it keeps the callback style Deploy Fleet/Fleet Group
+    // Configuration already use for the same reason.
     private void ApplyAttackOutcome(Fleet attackerFleet, object target, InteractiveCombatState state)
     {
         var subject = (ISectorObject)target;
@@ -1236,7 +1338,7 @@ public sealed class GameShell : Window
             new("_About Anacreon", Key.Empty, () => Stub("About Anacreon")),
         }),
         new MenuBarItem("_Game", new MenuItem[] {
-            new("_Pause", Key.Empty, () => MessageBox.Query(App!, "Paused", "Time has stopped. Press OK to continue.", "OK")),
+            new("_Pause", Key.Empty, () => ShowInfo("Paused", "Time has stopped. Press any key to continue.")),
             new("_Status Hardcopy", Key.Empty, () => Stub("Status Hardcopy")),
             new("_Next Turn", Key.Empty, EndTurn),
             new("_Quit", Key.Empty, ConfirmQuit),
