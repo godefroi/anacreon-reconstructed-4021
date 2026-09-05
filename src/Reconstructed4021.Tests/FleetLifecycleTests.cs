@@ -242,6 +242,23 @@ public class FleetLifecycleTests
     }
 
     [Test]
+    public async Task RefuelFleet_ArrivedFleetWithNullDestination_ResolvesToReadyNotInTransit()
+    {
+        // Regression: a fleet whose Destination FleetMovementHandler already nulled out on arrival
+        // was falling through to InTransit here (null never equals a real Coordinate), leaving a
+        // Status/Destination combination CloseUpWindow's own EstimatedDateOfArrival call correctly
+        // refuses to handle -- crashing Close Up on any fleet refueled after arriving.
+        var target = new Fleet { Location = new Coordinate(3, 3), Owner = NewEmpire("Owner"), Fuel = 0.0, Destination = null };
+        target.Ships.Starships = 10;
+        var ground = new Planet { Location = new Coordinate(3, 3), Owner = target.Owner, Type = WorldType.Base };
+        ground.Cargo.Trillum = 100;
+
+        FleetLifecycle.RefuelFleet(target, ground, trillum: 1);
+
+        await Assert.That(target.Status).IsEqualTo(FleetStatus.Ready);
+    }
+
+    [Test]
     public async Task RefuelFleet_TargetIsStarbase_FuelSideIsNoOpButTrillumStillSpent()
     {
         var target = new Starbase { Location = new Coordinate(3, 3), Owner = NewEmpire("Owner") };

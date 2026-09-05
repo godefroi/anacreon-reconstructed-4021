@@ -204,7 +204,13 @@ public static class FleetLifecycle
 
         if (targetFuel > FleetLogistics.FuelConsumption(target.Ships, target.Cargo) && target is IMovable movable) {
             var location = ((ISectorObject)target).Location;
-            movable.Status = movable.Destination == location ? FleetStatus.Ready : FleetStatus.InTransit;
+            // Real Pascal's GetFleetDestination always returns a real coordinate (defaulting to the
+            // fleet's own location once arrived) -- this port instead nulls Destination out on arrival
+            // (FleetMovementHandler's own doc comment), so a null Destination here means the same thing
+            // SameXY(FPos,FDes) would: already there, no real ternary needed to reach FReady.
+            movable.Status = movable.Destination is null || movable.Destination == location
+                ? FleetStatus.Ready
+                : FleetStatus.InTransit;
         }
     }
 
