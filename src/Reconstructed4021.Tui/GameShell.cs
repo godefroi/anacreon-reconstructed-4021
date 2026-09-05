@@ -342,9 +342,11 @@ public sealed class GameShell : Window
     /// picker; declining a risky choice's confirm re-opens this same picker rather than cancelling
     /// the whole command, matching DesignateCommand's own outer REPEAT.
     /// </summary>
-    private void Designate()
+    private void Designate() => Designate(FindWorldAt(galaxyView.CursorLocation));
+
+    /// <summary>Contextual entry from Close Up's own N shortcut -- the world is already known there, no cursor re-resolution needed.</summary>
+    private void Designate(IEconomicWorld? world)
     {
-        var world = FindWorldAt(galaxyView.CursorLocation);
         if (world is null || !ReferenceEquals(world.Owner, human)) {
             ShowInfo("Designate", "Move the cursor onto one of your own worlds first.");
             return;
@@ -367,9 +369,11 @@ public sealed class GameShell : Window
     /// per-starbase field in real Pascal either (<see cref="IEconomicWorld"/>'s own doc comment), so
     /// there's nothing for this screen to edit there.
     /// </summary>
-    private void Issp()
+    private void Issp() => Issp(FindWorldAt(galaxyView.CursorLocation));
+
+    /// <summary>Contextual entry from Close Up's own I shortcut.</summary>
+    private void Issp(IEconomicWorld? world)
     {
-        var world = FindWorldAt(galaxyView.CursorLocation);
         if (world is not Planet planet || !ReferenceEquals(planet.Owner, human)) {
             ShowInfo("ISSP", "Move the cursor onto one of your own worlds first.");
             return;
@@ -378,6 +382,29 @@ public sealed class GameShell : Window
         var editor = new IsspEditor(planet.SelfSufficiency, DisplayName(planet));
         var dismiss = AddModal(editor, dismissOnOutsideClick: false);
         editor.Done += (_, _) => dismiss();
+    }
+
+    /// <summary>
+    /// Worlds menu > Production (CLSCOMM.PAS: ProductionCom). Restricted to the player's own worlds,
+    /// same as Designate/ISSP -- the report shows full unredacted industry/ISSP internals that
+    /// wouldn't be legible for a world the player doesn't own.
+    /// </summary>
+    private void Production() => Production(FindWorldAt(galaxyView.CursorLocation));
+
+    /// <summary>Contextual entry from Close Up's own P shortcut.</summary>
+    private void Production(IEconomicWorld? world)
+    {
+        if (world is null || !ReferenceEquals(world.Owner, human)) {
+            ShowInfo("Production", "Move the cursor onto one of your own worlds first.");
+            return;
+        }
+
+        var window = new ProductionWindow(world, DisplayName(world), random);
+        var dismiss = AddModal(window);
+        window.KeyDown += (_, key) => {
+            dismiss();
+            key.Handled = true;
+        };
     }
 
     // GetDesignation's own menu line (DESIGN.PAS:733-744): type name, left-padded, then main
@@ -626,10 +653,26 @@ public sealed class GameShell : Window
                 return;
             }
 
+            if (obj is IEconomicWorld world && ReferenceEquals(world.Owner, human) &&
+                ResolveWorldContextAction(letter) is { } worldAction) {
+                dismiss();
+                worldAction(world);
+                key.Handled = true;
+                return;
+            }
+
             dismiss();
             key.Handled = true;
         };
     }
+
+    /// <summary>N/I/P -- Designate/ISSP/Production, the three Worlds-menu commands reachable directly off a selected owned world (Close Up and the Sector Selected Popup), matching ResolveFleetContextAction's own shape for fleets.</summary>
+    private Action<IEconomicWorld>? ResolveWorldContextAction(char key) => key switch {
+        'N' => Designate,
+        'I' => Issp,
+        'P' => Production,
+        _ => null,
+    };
 
     /// <summary>
     /// C/T/J/A -- Change Destination/Transfer/Abort-Join/Attack, the four Fleet/Ministry-of-War
@@ -666,7 +709,7 @@ public sealed class GameShell : Window
             return "D:deploy  C:dest  T:transfer  J:abort/join  A:attack";
         }
 
-        return isOwnedWorld ? "D:deploy" : "";
+        return isOwnedWorld ? "D:deploy  N:designate  I:issp  P:production" : "";
     }
 
     // DISPLAY.PAS's own GetIDMenuChoice/DisplayMenu (DISPLAY.PAS:51-74, MENU.PAS:116-156) -- the
@@ -770,6 +813,13 @@ public sealed class GameShell : Window
                 if (isOwnedFleet && ResolveFleetContextAction(letter) is { } action) {
                     dismiss();
                     action((Fleet)obj);
+                    key.Handled = true;
+                    return;
+                }
+
+                if (isOwnedWorld && ResolveWorldContextAction(letter) is { } worldAction) {
+                    dismiss();
+                    worldAction((IEconomicWorld)obj);
                     key.Handled = true;
                 }
             };
@@ -1893,7 +1943,7 @@ public sealed class GameShell : Window
         new MenuBarItem("_Worlds", new MenuItem[] {
             new("_Close Up", Key.Empty, ExamineCursor),
             new("_Designate", Key.Empty, Designate),
-            new("P_roduction", Key.Empty, () => Stub("Production")),
+            new("P_roduction", Key.Empty, Production),
             new("_ISSP", Key.Empty, Issp),
             new("_Add Name", Key.Empty, () => Stub("Add Name")),
             new("Delete _Name", Key.Empty, () => Stub("Delete Name")),

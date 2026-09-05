@@ -36,7 +36,7 @@ codebase is in a test file.
   - [ ] `⌂ > About Anacreon`
   - [ ] `Game > Status Hardcopy`
   - [ ] `Empire > Send Message` / `Read Messages` / `Trade Technology`
-  - [ ] `Worlds > Production` / `Add Name` / `Delete Name` / `Liberate` / `Self-Destruct`
+  - [ ] `Worlds > Add Name` / `Delete Name` / `Liberate` / `Self-Destruct`
   - [ ] `Fleet > Orders` / `Cancel Orders` — `Orders` (`FLTCOMM.PAS: FleetOrdersCommand`) is a full
         mini scripting language (`ORDERS.PAS`'s own compile/decompile pair over a captive text
         editor), not a quick add; `Cancel Orders` is trivial but pointless before `Orders` exists.
