@@ -43,8 +43,9 @@ internal sealed class CloseUpWindow : Window
 
     // DisplayFleetInfo's FltStatusName (CLSCOMM.PAS:664-668) -- ordinal-aligned with FleetStatus.
     // InTransit's real text is built specially below (EDA for your own fleet, "(?)" otherwise), so
-    // this entry is never read as-is.
-    private static readonly string[] FleetStatusNames = ["at destination", "In transit", "out of trillum", "lost"];
+    // this entry is never read as-is. Internal: FleetWindow reuses this for its own starbase rows
+    // (Command Center/Fortress), which have no separate redaction path of their own to go through.
+    internal static readonly string[] FleetStatusNames = ["at destination", "In transit", "out of trillum", "lost"];
 
     // COLORS.INC's ColorScrColor: SYSDispWind = 23 (LightGray on Blue, the content area) vs
     // SYSWBorder = 7 (LightGray on Black, the border/title) -- real Pascal genuinely uses two
@@ -237,9 +238,10 @@ internal sealed class CloseUpWindow : Window
     /// <summary>
     /// DisplayFleetInfo's own destination gate (CLSCOMM.PAS:720-732): even Scouted, a non-owned
     /// fleet's destination only shows while that fleet is <see cref="FleetStatus.Ready"/> -- while
-    /// it's still in transit, where it's headed stays hidden regardless.
+    /// it's still in transit, where it's headed stays hidden regardless. Internal: <see cref="FleetWindow"/>
+    /// reuses this rather than re-deriving the same redaction rule.
     /// </summary>
-    private static string DescribeFleetDestination(Fleet fleet, Empire viewer, Coordinate origin)
+    internal static string DescribeFleetDestination(Fleet fleet, Empire viewer, Coordinate origin)
     {
         var visible = ReferenceEquals(fleet.Owner, viewer) ||
             (fleet.Status == FleetStatus.Ready && Game.Scouted(viewer, fleet));
@@ -256,8 +258,11 @@ internal sealed class CloseUpWindow : Window
     /// shows its real ETA (EstimatedDateOfArrival); a Scouted-but-not-owned one shows the literal
     /// "(?)" placeholder baked into Pascal's own <c>FltStatusName[FInTrans]</c> ('In transit (?)'),
     /// since nothing here computes another empire's ETA; anything less than Scouted is "(unknown)".
+    /// Internal: <see cref="FleetWindow"/> reuses this rather than re-deriving the same redaction
+    /// rule (and the same EstimatedDateOfArrival-needs-a-real-Destination guard this method already
+    /// gets right by only calling it inside the InTransit branch).
     /// </summary>
-    private static string DescribeFleetStatus(Fleet fleet, Empire viewer, Game game)
+    internal static string DescribeFleetStatus(Fleet fleet, Empire viewer, Game game)
     {
         var owned = ReferenceEquals(fleet.Owner, viewer);
         if (!owned && !Game.Scouted(viewer, fleet)) {
