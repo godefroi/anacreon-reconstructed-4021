@@ -182,6 +182,16 @@ public static class TechCatalog
     };
 
     /// <summary>
+    /// Every catalog entry, in catalog order, tagged with whether <paramref name="owned"/> already has
+    /// it -- the full picture <see cref="MissingTechAt"/>/<see cref="UnlockedBeyond"/> only ever give
+    /// filtered slices of. Read by the Empire menu's Tech Tree screen, a UI real Pascal never had (tech
+    /// advancement there is a per-turn random roll, not a player-directed research queue -- nothing to
+    /// browse toward).
+    /// </summary>
+    public static IEnumerable<(TechGrantIdentity Identity, TechLevel MinTech, bool Owned)> AllEntries(UnlockedTechnology owned) =>
+        _catalog.Select(e => (e.Identity, e.MinTech, e.IsUnlocked(owned)));
+
+    /// <summary>
     /// A single named grant, for callers building an explicit tech list by real type (e.g. empire
     /// creation's scenario-specified "extra techs") rather than walking the whole catalog. Kept here
     /// rather than callers writing <c>t => t.Ships.Add(type)</c> inline so every grant of a given
