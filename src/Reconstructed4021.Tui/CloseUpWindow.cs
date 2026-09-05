@@ -217,8 +217,8 @@ internal sealed class CloseUpWindow : Window
             $"{CargoLevel(c.Legions),5}{CargoLevel(c.NinjaLegions),5}{CargoLevel(c.Ambrosia),5}{CargoLevel(c.Chemicals),5}{CargoLevel(c.Metals),5}{CargoLevel(c.Supplies),5}{CargoLevel(c.Trillum),5}");
     }
 
-    /// <summary>MISC.PAS's YesNo (:78-96) -- a coarse magnitude bucket for a Scouted-but-not-owned count, not a real number. Width padding comes from each call site's own <c>{,5}</c> format, matching Pascal's own pre-padded 5-char literals.</summary>
-    private static string YesNo(int level) => level switch {
+    /// <summary>MISC.PAS's YesNo (:78-96) -- a coarse magnitude bucket for a Scouted-but-not-owned count, not a real number. Width padding comes from each call site's own <c>{,5}</c> format, matching Pascal's own pre-padded 5-char literals. Internal: <see cref="StatusWindow"/> reuses this same bucket table rather than duplicating it.</summary>
+    internal static string YesNo(int level) => level switch {
         0 => "no",
         >= 1 and <= 500 => "yes-",
         >= 501 and <= 1500 => "yes1",
