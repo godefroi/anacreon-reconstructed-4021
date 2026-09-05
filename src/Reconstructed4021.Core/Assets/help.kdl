@@ -1,0 +1,367 @@
+// F1 Help (HLPWIND.PAS). Real Pascal reads this from a compiled binary help file (ANACREON.HLP -- a
+// FILE OF HelpPage, HelpPage = ARRAY[1..19] OF STRING[80]) that isn't part of this repo -- the pages
+// below are that file's own text, decoded once (14 pages, confirmed against the real file's exact
+// byte length: 21546 = 1539 * 14, where 1539 = 19 lines * 81 bytes per length-prefixed STRING[80])
+// and transcribed here, not shipped as a binary asset. Numbered 1-14 in physical record order (the
+// order they were decoded in); `page N` below is the (N)th physical record, 1-based.
+//
+// `index` mirrors GetIndexEntry's own 15-line menu (HLPWIND.PAS:133-149) verbatim, including its own
+// dotted-leader label text and the two pairs of topics that intentionally share one page (Function
+// Keys/Windows -> page 3, Materials/Raw Materials -> page 8, Ships/Defenses -> page 7) -- but each
+// entry's own `page` property here is IndexPageNo's real value (HLPWIND.PAS:46-49) PLUS ONE, not the
+// literal array value: Turbo Pascal's Seek(HelpFile, n) is 0-based ("the first component has value
+// 0"), so a PageNo of 6 (Defenses' real IndexPageNo entry) actually seeks to the *7th* physical
+// record -- confirmed the hard way, by first transcribing IndexPageNo's literal values here and
+// finding Defenses landed on the Technology page instead of Ships and Defenses when driven live.
+// InitializeHelpWindow's own PageNo:=1 default is the same story: it opens on the *2nd* physical
+// record ("Help!", the quick-start page) as this window's real first screen, not the 1st ("Index", a
+// microscopic cursor-instructions blurb that turns out to be unreachable through any real navigation
+// path at all -- PageDown's own guard floors PageNo at 1, so PageNo can never become 0 and Seek can
+// never reach record 0 in play). Kept here anyway, as page 1, for provenance -- it's real decoded
+// content from the shipped file, just dead code as far as the original game went; HelpWindow's own
+// navigation floor starts at page 2 to match.
+//
+// One correction to the source file's own content: its page 2 ("Status Windows") lists a separate
+// <F2> Display Window / <F4> Military Status / <F6> Fleet Status -- stale by the time 1.31 shipped.
+// SWINDOWS.PAS's own live help-line string (the actual in-game hint bar, drawn every turn, confirmed
+// at SWINDOWS.PAS:245/253/261) reads exactly "F1:Help F3:Status F5:Fleets F7:News F8:Empire F9:Names
+// F10:Map" -- no F2/F4/F6 at all, World and Military status already merged into F3, Fleet position
+// and composition already merged into F5. Corrected here to match that authoritative, load-bearing
+// string rather than the unmaintained help text (everything else on every other page is transcribed
+// as-is, typos included).
+
+help {
+    index {
+        entry "Combat............................11" page=12
+        entry "Construction......................10" page=11
+        entry "Defenses...........................6" page=7
+        entry "Fleet Orders......................12" page=13
+        entry "Function Keys......................2" page=3
+        entry "ISSP..............................13" page=14
+        entry "Materials..........................7" page=8
+        entry "Raw Materials......................7" page=8
+        entry "Ships..............................6" page=7
+        entry "Technology Levels..................5" page=6
+        entry "Windows............................2" page=3
+        entry "   Map.............................8" page=9
+        entry "   World Status....................9" page=10
+        entry "World Classes......................4" page=5
+        entry "World Types......................3" page=4
+    }
+
+    // Page 1 -- the index menu's own legend, and (PageNo:=1 in InitializeHelpWindow) the very first
+    // screen shown when Help opens, before any navigation.
+    page 1 {
+        text #"""
+ Index
+
+     ,   Moves the cursor.
+ <Enter>   Selects an entry.
+   <Esc>   Exits the index.
+"""#
+    }
+
+    // Page 2 -- "Help!"
+    page 2 {
+        text #"""
+ Help!
+
+ The on-line screens have charts and tables that you might need while
+ playing. Use the <PgUp> and <PgDn> keys to move through the screens. Press
+ the <End> key to see the index.
+
+ If you have NOT read the manual, here are some quick hints to play the game:
+
+ ■ You can refer to planets by their coordinates. The coordinate system is
+   cartessian (positive x to the right, positive y towards the top) and
+   centered on your capital.
+
+ ■ You must deploy fleets to attack worlds or move ships about. Fleets do not
+   move until you end your turn.
+
+ ■ To get back to the main menu, end your turn with <Game/Next Turn>. When
+   the computer asks for your password, press <Esc>.
+"""#
+    }
+
+    // Page 3 -- "Status Windows" (Function Keys / Windows index entries). F-key list corrected --
+    // see this file's own header comment.
+    page 3 {
+        text #"""
+ Status Windows                                                  Page 2
+
+  <F1>        Help Window.
+  <F3>        Status.                World and military status: class, type,
+                                      tech level, materials, ships, defenses.
+  <F5>        Fleets.                Position, destination, and composition.
+  <F7>        News.
+  <F8>        Empire Status.         Industrial and military totals.
+  <F9>        Names.                 Currently defined names.
+  <F10>       Map.                   Map of the galaxy.
+
+  <Esc>       Exit a window.
+
+ Windows are very useful because they provide the emperor or empress with
+ instant information from any point in the program.
+"""#
+    }
+
+    // Page 4 -- "World Types"
+    page 4 {
+        text #"""
+ World Types                                                     Page 3
+
+  a     agricultural            sup
+  A     ambrosia                amb            1 and A class worlds only
+  b     base planet             ships          produce LAMs as well
+  C     capital                 ships          center of the empire
+  c     chemical                che
+  i     independent             ships          non-aligned worlds
+  j     jumpship base           hkr,jmp,jtn
+  m     metal mining            met
+  N     ninja base              amb,nnj        need ambrosia
+  o     outpost                 -              starbase designation
+  r     raw material mine       che,met,tri
+  s     starship base           str,pen
+  t     transport base          fgt,trn
+  U     research university     -              helps empire increase tech
+  z     trillum mine            tri
+"""#
+    }
+
+    // Page 5 -- "World Classes"
+    page 5 {
+        text #"""
+ World Classes                                                   Page 4
+
+  0  artificial     (starbase)           j  class j       (standard)
+  1  paradise       (good for all)       k  class k       (standard)
+  2  ruins          (ancient tech)       l  class l       (standard)
+  A  ambrosia       (ambrosia)           m  class m       (standard)
+  a  arid           (dry, need sup)      O  ocean         (poor for mining)
+  B  barren         (air-less)           P  poisonous     (good for che)
+  D  desert         (good for tri)       U  underground   (good for mining)
+  E  earth-like     (standard)           V  volcanic      (good for mining)
+  F  forest         (good for sup)
+  G  gas giant      (good for che)
+  h  hostile life   (alien life)
+  I  ice world      (poor for all)
+  J  jungle         (good for sup)
+
+ The class of a world is an indication of its natural environment.  Different
+ environments affect industries differently.  E.g. ocean worlds are good for
+ the production of supplies, but poor for metal mining.
+"""#
+    }
+
+    // Page 6 -- "Technology"
+    page 6 {
+        text #"""
+ Technology                                                      Page 5
+
+  pt    pre-technological    sup
+  p     primitive            men, met
+  pa    pre-atomic           che
+  a     atomic               GDM, tri
+  pw    pre-warp             fgt
+  w     warp                 trn
+  j     jump                 jmp, jtn, ion
+  b     bio-technology       hkr, pen, def, amb, OUTPOST
+  s     starship             str, nnj, SRM, COMPLEX, COMMAND, LAM
+  pg    pre-gate             frt, LINK, DISRUPTOR
+  g     gate                 GATE
+
+ Attaining a given tech level is a pre-requisite to attaining any of its
+ technologies.  All technologies for a given level must be acquired before
+ the next tech level can be reached.  For example, a capital must be bio-tech
+ level before it can acquire hunter-killers, but ALL the technologies must be
+ acquired before the capital can reach starship level.
+"""#
+    }
+
+    // Page 7 -- "Ships and Defenses"
+    page 7 {
+        text #"""
+ Ships and Defenses                                              Page 6
+
+ Ships                Drv    Arms/Armor   Tech  Notes
+  fgt fighters        Wrp   light/none     pw
+  hkr hunter-killers  Jmp  medium/light     b   stealth/cloaking
+  jmp jumpships       Jmp   light/light     j
+  jtn jumptransports  Jmp    none/light     j
+  pen penetrators     Wrp2 medium/medium    b   stealth/warp 2 sectors
+  str starships       Wrp   heavy/heavy     s
+  trn transports      Wrp    none/none      w
+
+ Defenses                    Arms/Armor   Tech  Notes
+  def defense satellites    heavy/heavy     b
+  GDM ground defense       medium/none      a
+  ion ion cannons          medium/medium    j
+  LAM attack missiles       heavy/none      s   only base planets build these
+  men GAT, troops             ---/---       p
+  nnj ninja                   ---/---       s   very powerful against men
+"""#
+    }
+
+    // Page 8 -- "Materials"
+    page 8 {
+        text #"""
+ Materials                                                       Page 7
+
+ Materials        Units  Tech  Notes
+
+  amb ambrosia    KTons    b   a drug that increases worker productivity.
+  che chemicals   MTons   pa   used to build ships and make ambrosia.
+  met metals      MTons    p   used to build ships and industry.
+  sup supplies    MTons   pt   food, medicine, etc.
+  tri trillum     KTons    a   used to build and power ships.
+
+ Any world that has ambrosia will run the risk of addicting its population.
+ Once the population is addicted, workers will be more efficient, but there-
+ after any interruption in their supply will cause widespread riots.
+
+ Trillum is needed on all worlds that deploy fleets.  The amount will vary
+ depending on the size and composition of the fleet, but you should try to
+ keep at least 200 Ktons on all your worlds.
+"""#
+    }
+
+    // Page 9 -- "Map Window"
+    page 9 {
+        text #"""
+ Map Window                                                      Page 8
+
+ ─┼─ ·  ·  ·  · ─┼─░░░░░░░░░░░░─┼─          #  Construction Site
+  ·  p Unknown   ·    ░░░░░░░░░░░░          +  SRMs
+  ·     World    · ░░░░░░░░░░░░░░░          π  Industrial Complex
+  ·              · ░░Dark Nebula░░          ■  Command Base
+  ·   Fleet      ·    ░░░░░░░░░░░░          ≡  Fortress
+ ─┼─ · · ·  · ─C─ ·  · ░░░░░░░░░
+  ·      Enemy Fleet         ▒▒▒▒▒            Warp Link
+  ·              ·    ▒▒▒▒▒▒▒▒▒▒▒▒            Gate
+  ·              · ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒
+  ·          ▒▒▒▒▒▒▒▒▒▒▒▒Nebula▒▒▒
+ ─┼─ ·  ·  ·  · ─┼─ · ▒▒▒▒▒▒ · ─┼─
+
+ The scan window displays the positions of all the planets in the galaxy.  If
+ the world has been scouted by the empire, then the letter designating its
+ type will appear on the map, otherwise the letter 'p' will show its
+ position.  Other symbols are identified above.
+
+"""#
+    }
+
+    // Page 10 -- "World Status Window"
+    page 10 {
+        text #"""
+ World Status Window                                             Page 9
+
+ Name or coordinates       Ambrosia
+ of the world               addiction
+     │                        │          Revolution
+     │   Empire to which      │           index         Raw materials
+     │   it belongs           │            │             on the world
+     │     │                  │            │                │
+ PlntName Sta C T Tl  Pop Eff A Impt Expt Rev  jtn  trn  amb..tri
+              │ │  │   │   │      └─┬─┘         │    │
+              │ │  │   │   │     ISSP setting   │    │
+              │ │  │   │   │                    │    │
+              │ │  │   │  Efficiency (%)        │   Number of transports
+              │ │  │  Population (in billions)  │       on the world
+              │ │  Technology Level             │
+              │ World Type                     Number of jumptransports
+         World Class                               on the world
+"""#
+    }
+
+    // Page 11 -- "Construction"
+    page 11 {
+        text #"""
+ Construction                                                    Page 10
+
+ Construction         Tech   che/yr  met/yr  tri/yr   Years
+
+  command base           s      460    2300    180       6
+  industrial complex     s      590    2600    150      10
+  disruptor             pg     1100    1180   1120      10
+  fortress              pg      840    2870    250      12
+  stargate               g     2530    3920   1450      15
+  outpost                b      350    1120    150       3
+  mines                  s      110     500     80       2
+  warp link             pg     1560    2550    290       5
+
+ Every year you must supply the construction site with the necessary raw
+ materials.  For example, if you're building a stargate, every year you must
+ have a fleet at the site with at least 2530 megatons of chemicals, 3920
+ megatons of metals, and 1450 kilotons of trillum.
+"""#
+    }
+
+    // Page 12 -- "Combat"
+    page 12 {
+        text #"""
+ Combat                                                          Page 11
+
+ The best way to learn how to attack is to read the manual, but if your must
+ try right away, follow these guidelines:
+
+ ■ First, target all your groups with the <T>arget command. Pressing <-> for
+   a target means that the group is defending.
+
+ ■ If there are enemy ships in the same orbit with you, press <E>ngage to
+   carry out the attack.  If there are no ships opposing you, press <M>ove to
+   advance to the next orbit.
+
+ ■ In the <M>ove command, the options for each group are: <S>tay, <R>etreat,
+   or <A>dvance.
+
+ ■ Once your transports have landed on the ground, press <E>ngage until
+   the enemy surrenders, or all your men are killed.
+"""#
+    }
+
+    // Page 13 -- "Fleet Orders"
+    page 13 {
+        text #"""
+ Fleet Orders                                                    Page 12
+
+ Fleets may be given the following orders:
+
+ DESTination <xy>:  Changes the destination of the fleet to the given
+ coordinate or name.  For example: "DEST Home" or "DEST 0,7".
+
+ REPEat:  Repeats the sequence of commands from the beginning until
+ the player cancels the orders. If no repeat command if found at the end,
+ the fleet forgets its orders when it is done.
+
+ TRANsfer <amt> <res>:  Transfers the given number of materials of the
+ given resource to or from the planet. If the number is positive, the
+ materials are transferred to the fleet. If the number is negative,
+ the materials are transferred to the world. For example, "TRAN 1000 met"
+ moves 1000 megatons of metals to the fleet.
+
+ WAIT:  Waits at the current destination for one year.
+"""#
+    }
+
+    // Page 14 -- "Industrial Self Sufficiency Percentage"
+    page 14 {
+        text #"""
+ Industrial Self Sufficiency Percentage                          Page 13
+
+ Changing the ISSP of a world is one way in which an empire can increase
+ the production of ships. Normally a world devotes a portion of its industry
+ to produce the chemicals, metals, and trillum needed to build ships.
+ By lowering the ISSP for each of these raw materials, an empire can
+ instruct a world to concentrate more industry on its shipyards.
+
+ For example, a base planet normally uses 50% of its industrial capacity
+ to build ships, 15% to mine metals, 10% to mine trillum, 10% to produce
+ chemicals, and 15% to produce supplies. By lowering the ISSP for
+ metals, the world can be instructed to produce fewer metals and instead
+ concentrate its industry on building ships. Although the world will build
+ more ships, the emperor or empress must insure that metals are brought in
+ from other worlds.
+"""#
+    }
+}
