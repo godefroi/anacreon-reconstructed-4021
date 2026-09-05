@@ -173,7 +173,7 @@ internal sealed class NewsWindow : Window
     }
 
     private string LocationName(NewsItem item) => item.Subject switch {
-        { } subject => subject.Names.GetValueOrDefault(_viewer) ?? CloseUpWindow.DescribeKind(subject),
+        { } subject => subject.Names.GetValueOrDefault(_viewer) ?? CloseUpWindow.DescribeLocationLong(subject, _viewer),
         null when item.Position is { } position => RelativeCoordinate.Format(position, _origin),
         null => "(unknown location)",
     };

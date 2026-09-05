@@ -172,7 +172,7 @@ internal sealed class StatusWindow : Window
     private string FormatWorldStatus(IEconomicWorld world)
     {
         var owned = ReferenceEquals(world.Owner, _viewer);
-        var name = (world.Names.GetValueOrDefault(_viewer) ?? CloseUpWindow.DescribeKind(world)).PadRight(8)[..8];
+        var name = (world.Names.GetValueOrDefault(_viewer) ?? CloseUpWindow.DescribeLocation(world, _viewer)).PadRight(8)[..8];
         var ownerName = world.Owner.Name.PadRight(3)[..3];
         var pop = world.Population > 9 ? $"{world.Population / 100.0,4:0.0}" : "<0.1";
         var s = world.Ships;
@@ -190,7 +190,7 @@ internal sealed class StatusWindow : Window
     private string FormatMilitaryStatus(IEconomicWorld world)
     {
         var owned = ReferenceEquals(world.Owner, _viewer);
-        var name = (world.Names.GetValueOrDefault(_viewer) ?? CloseUpWindow.DescribeKind(world)).PadRight(8)[..8];
+        var name = (world.Names.GetValueOrDefault(_viewer) ?? CloseUpWindow.DescribeLocation(world, _viewer)).PadRight(8)[..8];
         var ownerName = world.Owner.Name.PadRight(3)[..3];
         var s = world.Ships;
         var c = world.Cargo;

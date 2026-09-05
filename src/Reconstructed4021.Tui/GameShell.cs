@@ -954,7 +954,7 @@ public sealed class GameShell : Window
     private sealed record ObjectListItem(ISectorObject Object, Empire Viewer)
     {
         public override string ToString() =>
-            $"{Object.Names.GetValueOrDefault(Viewer) ?? CloseUpWindow.DescribeKind(Object)}  ({Object.Owner.Name})";
+            $"{Object.Names.GetValueOrDefault(Viewer) ?? CloseUpWindow.DescribeLocation(Object, Viewer)}  ({Object.Owner.Name})";
     }
 
     /// <summary>
@@ -1070,7 +1070,7 @@ public sealed class GameShell : Window
         var groundCargo = CloneCargo(holder.Cargo);
         var fleetShips = new ShipCounts();
         var fleetCargo = new CargoHold();
-        var sourceName = source.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(source);
+        var sourceName = source.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeLocation(source, human);
 
         var editor = new ResourceDistributionEditor(
             fleetShips, fleetCargo, groundShips, groundCargo,
@@ -1138,8 +1138,8 @@ public sealed class GameShell : Window
         var fleetCargo = CloneCargo(fleet.Cargo);
         var groundShips = CloneShips(groundHolder.Ships);
         var groundCargo = CloneCargo(groundHolder.Cargo);
-        var fleetName = fleet.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(fleet);
-        var groundName = ground.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(ground);
+        var fleetName = fleet.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeLocation(fleet, human);
+        var groundName = ground.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeLocation(ground, human);
 
         var editor = new ResourceDistributionEditor(
             fleetShips, fleetCargo, groundShips, groundCargo,
@@ -1179,7 +1179,7 @@ public sealed class GameShell : Window
     private void ConfirmAbortJoin(Fleet fleet, ISectorObject ground)
     {
         if (!ReferenceEquals(ground.Owner, human)) {
-            var groundName = ground.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(ground);
+            var groundName = ground.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeLocation(ground, human);
             ShowConfirm("Abort/Join Fleet", $"{groundName} is not part of your empire. Are you sure you want to abort the fleet?", choice => {
                 if (choice == 0) {
                     ConfirmAbortJoinOverflow(fleet, ground);
@@ -1872,7 +1872,7 @@ public sealed class GameShell : Window
             : $"In the name of His Imperial Majesty, Lord of {empireName}, I hereby declare\nthis {noun} to be under the sovereign jurisdiction of the\n{empireName} Empire.";
     }
 
-    private string DisplayName(ISectorObject obj) => obj.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeKind(obj);
+    private string DisplayName(ISectorObject obj) => obj.Names.GetValueOrDefault(human) ?? CloseUpWindow.DescribeLocation(obj, human);
 
     private string MyLord() => Honorifics.MyLord(human.IsEmpress);
 

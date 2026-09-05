@@ -159,7 +159,7 @@ internal sealed class FleetWindow : Window
 
     private string FormatPositionStatus(ISectorObject obj)
     {
-        var name = (obj.Names.GetValueOrDefault(_viewer) ?? CloseUpWindow.DescribeKind(obj)).PadRight(8)[..8];
+        var name = (obj.Names.GetValueOrDefault(_viewer) ?? CloseUpWindow.DescribeLocation(obj, _viewer)).PadRight(8)[..8];
         var pos = RelativeCoordinate.Format(obj.Location, _origin);
         var des = FormatDestination(obj);
         var status = FormatStatus(obj);
@@ -185,7 +185,7 @@ internal sealed class FleetWindow : Window
 
     private string FormatShipCargo(ISectorObject obj)
     {
-        var name = (obj.Names.GetValueOrDefault(_viewer) ?? CloseUpWindow.DescribeKind(obj)).PadRight(8)[..8];
+        var name = (obj.Names.GetValueOrDefault(_viewer) ?? CloseUpWindow.DescribeLocation(obj, _viewer)).PadRight(8)[..8];
         var owned = ReferenceEquals(obj.Owner, _viewer);
         var scouted = obj is Fleet fleet && Game.Scouted(_viewer, fleet);
 

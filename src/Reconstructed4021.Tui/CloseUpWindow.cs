@@ -65,7 +65,7 @@ internal sealed class CloseUpWindow : Window
         SetScheme(new Scheme(DispWindAttribute));
         Border.View?.SetScheme(new Scheme(BorderAttribute));
 
-        var name = obj.Names.GetValueOrDefault(viewer) ?? DescribeKind(obj);
+        var name = obj.Names.GetValueOrDefault(viewer) ?? DescribeLocation(obj, viewer);
         var fleet = obj as Fleet;
 
         // DisplayBasicInfo's own owner-name gate (Known) vs DisplayFleetInfo's (Scouted, CLSCOMM.PAS:
@@ -121,7 +121,8 @@ internal sealed class CloseUpWindow : Window
         return $"Anacreon: {game.Year} ({age}{DisplayText.OrdinalSuffix(age)} year of your reign.)";
     }
 
-    /// <summary>Fallback label for an object with no player-given name -- shared with <see cref="GameShell"/>'s sector picker overlay. For a Fleet this is a generic placeholder, not its real type -- see the header's own FleetTypeNames lookup for that.</summary>
+    /// <summary>"Kind" label shown alongside a name (this window's own header "type" column) -- not a
+    /// name-fallback itself. See <see cref="DescribeLocation"/> for that job.</summary>
     public static string DescribeKind(ISectorObject obj) => obj switch {
         Planet p => p.Type.ToString(),
         Starbase s => s.Kind.ToString(),
@@ -129,6 +130,38 @@ internal sealed class CloseUpWindow : Window
         Stargate g => g.Kind.ToString(),
         ConstructionSite c => $"{c.Building} site",
         _ => "Unknown",
+    };
+
+    /// <summary>
+    /// GetName's own ShortFormat fallback (PRIMINTR.PAS:1467-1528) for an object with no player-given
+    /// name: a plain relative coordinate, never the object's own type/designation -- confirmed by
+    /// reading real Pascal's GetName after a user report that an unnamed Independent-designated world
+    /// showed literally "Independent" wherever a name was expected, reading like an empire name rather
+    /// than a placeholder. <see cref="DescribeKind"/> is genuinely a different job (a "kind" label
+    /// shown *alongside* a name); it was being reused here too, which was the bug.
+    /// </summary>
+    public static string DescribeLocation(ISectorObject obj, Empire viewer) => obj switch {
+        Fleet => "Fleet", // GetFleetName's own "Fleet<N>"/"Enemy<N>" -- no slot index in this port to mirror exactly
+        _ => RelativeCoordinate.Format(obj.Location, viewer.Capital?.Location ?? new Coordinate(0, 0)),
+    };
+
+    /// <summary>
+    /// GetName's own LongFormat fallback (same source): the coarse object kind plus coordinate, e.g.
+    /// "planet at 5,10" -- real Pascal's own literal example in GetName's doc comment. For contexts
+    /// where a full sentence reads better with a kind word (<see cref="NewsWindow"/>) than
+    /// <see cref="DescribeLocation"/>'s bare coordinate.
+    /// </summary>
+    public static string DescribeLocationLong(ISectorObject obj, Empire viewer) => obj switch {
+        Fleet => "Fleet",
+        _ => $"{LongKindWord(obj)} at {RelativeCoordinate.Format(obj.Location, viewer.Capital?.Location ?? new Coordinate(0, 0))}",
+    };
+
+    private static string LongKindWord(ISectorObject obj) => obj switch {
+        Planet => "planet",
+        Starbase => "starbase",
+        Stargate => "gate",
+        ConstructionSite => "construction site",
+        _ => "object",
     };
 
     /// <summary>
