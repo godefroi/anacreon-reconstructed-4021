@@ -68,7 +68,7 @@ internal sealed class IsspEditor : Window
 
         Title = $"ISSP: {worldName}";
         Width = 66;
-        Height = 13;
+        Height = 14;
         X = Pos.Center();
         Y = Pos.Center();
         BorderStyle = LineStyle.Single;
@@ -76,13 +76,18 @@ internal sealed class IsspEditor : Window
         SetScheme(new Scheme(DispWindAttribute));
         Border.View?.SetScheme(new Scheme(BorderAttribute));
 
+        // Deliberately doesn't say "imports"/"exports" happen -- confirmed against source and the
+        // manual: nothing ships anywhere on its own except a narrow starbase/adjacency case this
+        // screen has no bearing on (SupplyLink/SurplusLink, UPDATE.PAS:517-604). This dial only sets
+        // how much the world itself produces versus needs; moving the difference is still the
+        // player's own job, by transport fleet.
         Add(new Label {
-            X = 1, Y = 0, Width = Dim.Fill(1), Height = 3,
-            Text = "How much of a raw material a world produces relative to what it needs -- under 100% imports the rest, over 100% exports the surplus.",
+            X = 1, Y = 0, Width = Dim.Fill(1), Height = 4,
+            Text = "How much of a raw material a world produces relative to what it needs. Below 100%, the shortfall must be shipped in by transport; above 100%, the surplus sits there for you to ship out.",
         });
 
         for (var i = 0; i < Rows.Length; i++) {
-            rowLabels[i] = new Label { X = 1, Y = 4 + i, Text = string.Empty };
+            rowLabels[i] = new Label { X = 1, Y = 5 + i, Text = string.Empty };
             Add(rowLabels[i]);
         }
 
