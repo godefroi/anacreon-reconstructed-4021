@@ -201,6 +201,7 @@ public sealed class GameShell : Window
     private void EndTurn()
     {
         turnEngine.EndTurn(game);
+        AutoSave();
         Choice = ExitChoice.EndTurn;
         App?.RequestStop();
     }
@@ -280,34 +281,77 @@ public sealed class GameShell : Window
     }
 
     /// <summary>
-    /// SaveGame (LOADSAVE.PAS:645-714): real Pascal writes to a temp <c>.BAK</c> file first and only
-    /// swaps it in on success, so a failed write can never corrupt an existing save -- kept here even
-    /// though this port's own format is JSON, not the DOS binary layout, since it's a real correctness
-    /// property, not a DOS-era artifact. Real Pascal shows no "saved successfully" popup at all
+    /// SaveGame (LOADSAVE.PAS:645-714). Real Pascal shows no "saved successfully" popup at all
     /// (silent on success, PROLOG.PAS:751-753 just closes the window) -- this port adds one anyway,
     /// matching this file's own established convention of a brief confirmation wherever Pascal's own
-    /// comm-line text has no TUI equivalent (e.g. SrmSweep's own "completed" message).
+    /// comm-line text has no TUI equivalent (e.g. SrmSweep's own "completed" message). The actual
+    /// write is <see cref="WriteSaveFile"/>, shared with <see cref="AutoSave"/>.
     /// </summary>
     private void SaveGameAs(string name)
     {
         var fileName = name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? name : $"{name}.json";
-        var path = Path.Combine(FindSaveDirectory(), fileName);
-        var tempPath = path + ".tmp";
-
-        try {
-            File.WriteAllText(tempPath, GameJson.Serialize(game));
-            File.Move(tempPath, path, overwrite: true);
-        } catch (IOException ex) {
-            ShowInfo("Save Game", $"Could not save: {ex.Message}");
+        if (!WriteSaveFile(FindSaveDirectory(), fileName, out var error)) {
+            ShowInfo("Save Game", $"Could not save: {error}");
             return;
         }
 
         ShowInfo("Save Game", $"Game saved to {fileName}.");
     }
 
+    private const int MaxAutoSaves = 10;
+
+    /// <summary>
+    /// No Pascal equivalent -- a TUI-only convenience, one snapshot after every turn so a crash mid-
+    /// session (the very thing this port's own crash log exists for) never costs more than one turn's
+    /// progress. Silent on both success and failure: surfacing a popup every single turn would defeat
+    /// the point of it being automatic, and a failed autosave isn't worth interrupting play over the
+    /// way a failed *manual* save is. Capped at <see cref="MaxAutoSaves"/> files (oldest by write time
+    /// first) so a long game doesn't grow this directory without bound.
+    /// </summary>
+    private void AutoSave()
+    {
+        var autoDir = Path.Combine(FindSaveDirectory(), "auto");
+        Directory.CreateDirectory(autoDir);
+        WriteSaveFile(autoDir, $"{human.Name}-{game.Year}.json", out _);
+
+        var stale = new DirectoryInfo(autoDir).GetFiles("*.json")
+            .OrderByDescending(f => f.LastWriteTimeUtc)
+            .Skip(MaxAutoSaves);
+        foreach (var file in stale) {
+            try {
+                file.Delete();
+            } catch (IOException) {
+                // Best-effort pruning -- same "don't interrupt play over this" reasoning as the save itself.
+            }
+        }
+    }
+
+    /// <summary>
+    /// SaveGame (LOADSAVE.PAS:645-714): real Pascal writes to a temp <c>.BAK</c> file first and only
+    /// swaps it in on success, so a failed write can never corrupt an existing save -- kept here even
+    /// though this port's own format is JSON, not the DOS binary layout, since it's a real correctness
+    /// property, not a DOS-era artifact.
+    /// </summary>
+    private bool WriteSaveFile(string directory, string fileName, out string? error)
+    {
+        var path = Path.Combine(directory, fileName);
+        var tempPath = path + ".tmp";
+
+        try {
+            File.WriteAllText(tempPath, GameJson.Serialize(game));
+            File.Move(tempPath, path, overwrite: true);
+            error = null;
+            return true;
+        } catch (IOException ex) {
+            error = ex.Message;
+            return false;
+        }
+    }
+
     // saves/ is gitignored (same precedent as Program.cs's own logs/, for crash logs) -- a player's
     // own save files, never committed. Not assets/saves/, which is a directory of committed test
-    // fixtures (GarrisonedOutpostFixtureTests etc.), not a save destination.
+    // fixtures (GarrisonedOutpostFixtureTests etc.), not a save destination. auto/ (AutoSave's own
+    // subdirectory) lives under here too -- same gitignore already covers it.
     private static string FindSaveDirectory()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
