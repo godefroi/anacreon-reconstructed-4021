@@ -46,9 +46,20 @@ for how that comparison works and what it takes to add to it.
 to Windows Terminal's own rendering pipeline, not the app -- Terminal.Gui tracks it upstream as
 [tui-cs/Terminal.Gui#4588](https://github.com/tui-cs/Terminal.Gui/issues/4588) (open; the one fix
 attempt, [#4589](https://github.com/tui-cs/Terminal.Gui/pull/4589), was closed unmerged). Switching
-Windows Terminal's text renderer from its default to Direct2D (Settings -> Rendering) has resolved
-it in practice. See also `src/Reconstructed4021.Tui/Program.cs`'s own notes on a related
+Windows Terminal's text renderer from its default (DirectX 11/AtlasEngine) to Direct2D
+(Settings -> Rendering) has resolved it in practice. See also
+`src/Reconstructed4021.Tui/Program.cs`'s own notes on a related
 ConPTY tearing issue ([#5323](https://github.com/tui-cs/Terminal.Gui/issues/5323)).
+
+**TUI freezes for several seconds after Windows Terminal is minimized/backgrounded, or after the PC
+wakes from sleep:** a separate issue from the lag above -- reproduces under both the default
+renderer and Direct2D, so it isn't a text-renderer problem. Doesn't reproduce under `conhost.exe`,
+and doesn't reproduce on screens that redraw continuously while idle (e.g. the main menu's orbit
+animation) -- only ones that only redraw in response to input (e.g. the galaxy map). Decompiling
+Terminal.Gui's own iteration-pacing and console-input-polling code found no elapsed-wall-clock-time
+catch-up logic there, so this points at Windows Terminal/ConPTY itself deferring or throttling a
+backgrounded session's servicing, not this app or Terminal.Gui. No known workaround besides
+avoiding Windows Terminal.
 
 ## Repository layout
 
