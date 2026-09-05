@@ -290,12 +290,38 @@ public sealed class GameShell : Window
     private void SaveGameAs(string name)
     {
         var fileName = name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? name : $"{name}.json";
-        if (!WriteSaveFile(FindSaveDirectory(), fileName, out var error)) {
+        var saveDir = FindSaveDirectory();
+        fileName = AvoidCollision(saveDir, fileName);
+        if (!WriteSaveFile(saveDir, fileName, out var error)) {
             ShowInfo("Save Game", $"Could not save: {error}");
             return;
         }
 
         ShowInfo("Save Game", $"Game saved to {fileName}.");
+    }
+
+    /// <summary>
+    /// No Pascal equivalent -- real Pascal's own SaveGame just overwrites whatever file already sits
+    /// at that name. This port's own default suggested name (<see cref="PromptForSaveName"/>'s
+    /// <c>"{human.Name}-{game.Year}"</c>) makes picking the same name twice easy to do by accident, so
+    /// a second save under that name would otherwise silently destroy the first one with no
+    /// confirmation. Appends " (1)", " (2)", etc. instead, matching the familiar file-manager
+    /// convention -- every distinct save the player actually made is kept.
+    /// </summary>
+    private static string AvoidCollision(string directory, string fileName)
+    {
+        if (!File.Exists(Path.Combine(directory, fileName))) {
+            return fileName;
+        }
+
+        var baseName = Path.GetFileNameWithoutExtension(fileName);
+        var extension = Path.GetExtension(fileName);
+        for (var i = 1; ; i++) {
+            var candidate = $"{baseName} ({i}){extension}";
+            if (!File.Exists(Path.Combine(directory, candidate))) {
+                return candidate;
+            }
+        }
     }
 
     private const int MaxAutoSaves = 10;
@@ -603,6 +629,12 @@ public sealed class GameShell : Window
     // CloseUpCom).
     private void ShowCloseUp(ISectorObject obj)
     {
+        // Picking a row in the Status/Fleet/News windows can name an object anywhere on the map, far
+        // from wherever the cursor already was -- move it there so the map (and its coordinate
+        // readout) reflects what Close Up is now showing, not stale prior state. A no-op when the
+        // cursor's own map-driven route already put it here (MoveCursorTo's own same-coordinate guard).
+        galaxyView.MoveCursorTo(obj.Location);
+
         // One of the player's own worlds gets the full tabbed WorldInfoWindow (Close Up is just its
         // first tab) instead of the standalone CloseUpWindow -- see WorldInfoWindow's own doc comment.
         if (obj is IEconomicWorld ownWorld && ReferenceEquals(ownWorld.Owner, human)) {

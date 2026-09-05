@@ -447,7 +447,10 @@ internal sealed class GalaxyView : View
         return true;
     }
 
-    private void MoveCursorTo(Coordinate target)
+    /// <summary>Internal: <see cref="GameShell.ShowCloseUp"/> reuses this so picking a row in the
+    /// Status/Fleet/News windows moves the map cursor to that object's own sector, not just the
+    /// Close Up window that opens on top of it.</summary>
+    internal void MoveCursorTo(Coordinate target)
     {
         if (target.X == _cursor.X && target.Y == _cursor.Y) {
             return;
