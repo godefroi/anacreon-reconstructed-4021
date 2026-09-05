@@ -82,7 +82,7 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 | Mine Sweeper | Fleet menu → SRM Sweep | `FLTCOMM.PAS: MineSweeperCommand` | **Done** (`GameShell.SrmSweep`) — one-line `MessageBox` result, `Galaxy.GetMineOwner`/`ClearMine`/`ClearMineScouted` (already built for scenario loading's `CreateSRMs`) |
 | Fleet Orders Editor | Fleet menu → Orders | `FLTCOMM.PAS: FleetOrdersCommand` + `EDIT.PAS` | `TextView` (multi-line) in a `Dialog`/`Window`; `MessageBox` for line-numbered compile errors on Esc |
 | Cancel Orders | Fleet menu → Cancel Orders | `FLTCOMM.PAS: FleetCancelOrdersCommand` | `MessageBox` confirm |
-| Fleet Window | F5 | `FLTWIND.PAS` | `TableView` (full-screen panel) |
+| Fleet Window | F5 | `FLTWIND.PAS` | **Done** (`FleetWindow.cs`, `Core.Entities.FleetStatusReport`) — same shape as `StatusWindow` (its own doc comment covers the shared design), over the viewer's own active fleets, then their own Command Base/Fortress starbases, then known-and-scouted enemy fleets, then known-but-not-scouted ones left in whatever order `Galaxy.Fleets` already has them (matching `InitializeFleetDataArray`'s own last block, which has no `SortSection` call after it, unlike the three before it). Position/Destination show as capital-relative coordinates rather than Pascal's own resolved place name, reusing the same simplification `CloseUpWindow`'s fleet layout already made; Status/Destination redaction for fleet rows reuses `CloseUpWindow.DescribeFleetStatus`/`DescribeFleetDestination` verbatim rather than re-deriving them |
 
 ## Attack / combat
 

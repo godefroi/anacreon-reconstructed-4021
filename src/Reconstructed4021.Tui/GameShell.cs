@@ -420,6 +420,22 @@ public sealed class GameShell : Window
         };
     }
 
+    private void ShowFleetWindow()
+    {
+        Action dismiss = null!; // assigned right below -- FleetWindow's own Enter handler needs it to close this window before opening Close Up.
+        var window = new FleetWindow(game, human, obj => {
+            dismiss();
+            ShowCloseUp(obj);
+        });
+        dismiss = AddModal(window);
+        window.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode is KeyCode.Esc or KeyCode.F5) {
+                dismiss();
+                key.Handled = true;
+            }
+        };
+    }
+
     private void Designate() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "Designate");
     private void Issp() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "ISSP");
     private void Production() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "Production");
@@ -1898,7 +1914,7 @@ public sealed class GameShell : Window
     private StatusBar BuildStatusBar() => new([
         new Shortcut(Key.F1, "Help", () => Stub("Help"), ""),
         new Shortcut(Key.F3, "Status", Status, ""),
-        new Shortcut(Key.F5, "Fleet", () => Stub("Fleet"), ""),
+        new Shortcut(Key.F5, "Fleet", ShowFleetWindow, ""),
         new Shortcut(Key.F7, "News", () => Stub("News"), ""),
         new Shortcut(Key.F8, "Empire", () => Stub("Empire"), ""),
         new Shortcut(Key.F9, "Names", () => Stub("Names"), ""),
