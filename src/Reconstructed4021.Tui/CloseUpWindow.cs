@@ -103,9 +103,14 @@ internal sealed class CloseUpWindow : Window
         // GameShell.ShowCloseUp routes that case to WorldInfoWindow instead -- so there's no
         // world-owned branch here to show.
         var fleetOwned = fleet is not null && ReferenceEquals(fleet.Owner, viewer);
-        AddAt(1, 17, fleetOwned
-            ? "D:Deploy  C:Change Destination  T:Transfer  J:Abort/Join  A:Attack  (other key: close)"
-            : "D:Deploy from here  (other key: close)");
+        if (fleetOwned) {
+            // Split across two rows -- the full line runs to 88 columns, past this window's own
+            // 78-column content width (Width=80 minus the border), and Label doesn't wrap on its own.
+            AddAt(1, 17, "D:Deploy  C:Change Destination  T:Transfer  J:Abort/Join  A:Attack");
+            AddAt(1, 18, "(other key: close)");
+        } else {
+            AddAt(1, 17, "D:Deploy from here  (other key: close)");
+        }
     }
 
     /// <summary>
