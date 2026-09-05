@@ -1547,16 +1547,17 @@ public static class NpeToolkit
     }
 
     /// <summary>
-    /// GetEmpireStatus (INTRFACE.PAS:654-719), scoped to what StateDeptReport actually reads —
-    /// Planets, SInd, and TotalShips. TotalPop is a real Pascal out-param too, but nothing in
-    /// StateDeptReport ever reads it back after the call, so it's not computed here at all (no C#
-    /// consumer to derive it for). Starbases only add to SInd when <see cref="StarbaseKind.IndustrialComplex"/>
-    /// (Pascal's <c>STyp=cmp</c> guard), matching the real per-kind gate; every starbase kind still
-    /// counts toward Planets/TotalShips regardless.
+    /// GetEmpireStatus (INTRFACE.PAS:654-719) — Planets, TotalPop, SInd, and TotalShips for one
+    /// empire. Internal rather than StateDeptReport-private: <see cref="Entities.EmpireStatusReport"/>
+    /// reuses this for the F8 Empire Window, which is also the first C# consumer of TotalPop (real
+    /// Pascal's own out-param StateDeptReport never reads back). Starbases only add to SInd when
+    /// <see cref="StarbaseKind.IndustrialComplex"/> (Pascal's <c>STyp=cmp</c> guard), matching the real
+    /// per-kind gate; every starbase kind still counts toward Planets/TotalPop/TotalShips regardless.
     /// </summary>
-    private static (int Worlds, int ShipyardIndustry, ShipCounts TotalShips) GetEmpireStatus(Empire emp, Game game)
+    internal static (int Worlds, int TotalPop, int ShipyardIndustry, ShipCounts TotalShips) GetEmpireStatus(Empire emp, Game game)
     {
         var worlds = 0;
+        var totalPop = 0;
         var shipyardIndustry = 0.0;
         var totalShips = new ShipCounts();
 
@@ -1572,6 +1573,7 @@ public static class NpeToolkit
                 continue;
             }
             worlds++;
+            totalPop += planet.Population;
             shipyardIndustry += ShipyardIndustryOf(planet);
             AddShips(planet.Ships);
         }
@@ -1581,6 +1583,7 @@ public static class NpeToolkit
                 continue;
             }
             worlds++;
+            totalPop += starbase.Population;
             AddShips(starbase.Ships);
             if (starbase.Kind == StarbaseKind.IndustrialComplex) {
                 shipyardIndustry += ShipyardIndustryOf(starbase);
@@ -1593,7 +1596,7 @@ public static class NpeToolkit
             }
         }
 
-        return (worlds, PascalRound(shipyardIndustry), totalShips);
+        return (worlds, totalPop, PascalRound(shipyardIndustry), totalShips);
     }
 
     /// <summary>EmpireMilitary/TotalMilitary (StateDeptReport, NPEINTR.PAS:1588-1590,1605-1607) — 1 plus each ship type's thousands-of-hulls count times its MPower weight.</summary>
@@ -1619,7 +1622,7 @@ public static class NpeToolkit
     /// </summary>
     public static void StateDeptReport(Empire emp, Dictionary<Empire, StateDeptRecord> state, PolicyType defaultPolicy, Game game)
     {
-        var (empireWorlds, empireSInd, empireShips) = GetEmpireStatus(emp, game);
+        var (empireWorlds, _, empireSInd, empireShips) = GetEmpireStatus(emp, game);
         var empireMilitary = MilitaryTotal(empireShips);
         var empireTech = emp.Capital?.TechLevel ?? TechLevel.PreTech;
 
@@ -1632,7 +1635,7 @@ public static class NpeToolkit
                 continue;
             }
 
-            var (worlds, enemySInd, enemyShips) = GetEmpireStatus(enemyEmp, game);
+            var (worlds, _, enemySInd, enemyShips) = GetEmpireStatus(enemyEmp, game);
             var enemyMilitary = MilitaryTotal(enemyShips);
 
             var enemyState = GetOrCreateState(state, enemyEmp, defaultPolicy);
