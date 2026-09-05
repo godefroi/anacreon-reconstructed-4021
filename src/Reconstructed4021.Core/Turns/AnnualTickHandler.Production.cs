@@ -303,7 +303,12 @@ public sealed partial class AnnualTickHandler
     /// which specifically depends on Cargo holding values above MaxResources mid-pipeline, before that
     /// final clamp.
     /// </summary>
-    private void RunProductionPipeline(IEconomicWorld world, HashSet<CargoType> reportedShortfalls, Action? beforeProduce = null, Action? afterProduce = null)
+    /// <summary>
+    /// Public, not private: <see cref="Entities.WorldProductionPreview"/> calls this same real pipeline
+    /// against a throwaway world clone for the Production screen's own preview, rather than
+    /// reimplementing the math a second time the way real Pascal's own GetProdInfo/GetIndusInfo do.
+    /// </summary>
+    public void RunProductionPipeline(IEconomicWorld world, HashSet<CargoType> reportedShortfalls, Action? beforeProduce = null, Action? afterProduce = null)
     {
         beforeProduce?.Invoke();
 
@@ -424,8 +429,8 @@ public sealed partial class AnnualTickHandler
         return world.Owner.IsIndependent || world.Owner.Technology.Ships.Contains(ship);
     }
 
-    /// <summary>Total Industrial Production of a world given population and tech level (MISC.PAS:247-265). Internal: also read directly by <see cref="EmpireStatusReport"/>'s own average-industry figure (PROLOG.PAS's EmpireStatus reads the exact same formula).</summary>
-    internal static int TotalProd(int population, TechLevel tech)
+    /// <summary>Total Industrial Production of a world given population and tech level (MISC.PAS:247-265). Public: also read directly by <see cref="EmpireStatusReport"/>'s own average-industry figure (PROLOG.PAS's EmpireStatus reads the exact same formula), and by <see cref="Entities.WorldProductionPreview"/> for the Production screen's own optimal-industry-target column.</summary>
+    public static int TotalProd(int population, TechLevel tech)
     {
         if (population <= 0)
             population = 1;
@@ -492,11 +497,12 @@ public sealed partial class AnnualTickHandler
 
     /// <summary>
     /// Calculates the optimum industrial distribution for a world (INTRFACE.PAS:223-342). Purely a
-    /// function of the world's current stats — computed fresh each tick, not stored. Internal (not
+    /// function of the world's current stats — computed fresh each tick, not stored. Public (not
     /// private) and static (no instance state involved): new-game world placement (Core/NewGame/) is
-    /// a second real consumer, via GetOptimumIndustry below.
+    /// one real consumer, via GetOptimumIndustry below; <see cref="Entities.WorldProductionPreview"/>
+    /// is another, for the Production screen's own display.
     /// </summary>
-    internal static Dictionary<IndustryType, double> GetIndustrialDistribution(IEconomicWorld world)
+    public static Dictionary<IndustryType, double> GetIndustrialDistribution(IEconomicWorld world)
     {
         var dist = new Dictionary<IndustryType, double>();
         foreach (var industry in Enum.GetValues<IndustryType>())
