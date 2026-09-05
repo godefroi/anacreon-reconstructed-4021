@@ -13,19 +13,24 @@ namespace Reconstructed4021.Tui;
 /// <see cref="SelfSufficiencySettings"/>'s own Chemical/Metal(Mining)/Supply/Trillum dials, each
 /// 0-10 (<see cref="SelfSufficiencySettings.Multipliers"/>'s own 11 bands). Left/Right nudges the
 /// selected row by one step, clamped at both ends (no wrap, unlike the row cursor itself); Up/Down/
-/// PageUp/PageDown moves the row cursor, wrapping. Esc or Enter both exit -- ChangeISSPCom's own
-/// DisplayISSP loop always applies whatever's currently set (<c>SetISSPArray</c> runs unconditionally
-/// right after), so there's no cancel path here either, same as Fleet Group Configuration/Defenses.
+/// PageUp/PageDown moves the row cursor, wrapping. No separate commit/cancel step -- edits apply
+/// directly to <see cref="settings"/> as they're made (ChangeISSPCom's own DisplayISSP loop always
+/// applies whatever's currently set regardless of Esc vs Enter, so there was never really a
+/// "cancel" to preserve). Switching away to another tab in <see cref="WorldInfoWindow"/> just leaves
+/// whatever's set.
 ///
 /// Only reachable for a <see cref="Planet"/>: real Pascal's own GetISSP/SetISSP hardcode a
 /// starbase's own dial at 0 with no real per-starbase field to write (<see cref="IEconomicWorld"/>'s
 /// own doc comment) -- GameShell's own caller only ever constructs this over
 /// <see cref="Planet.SelfSufficiency"/>, the one place a settable dial actually exists.
+///
+/// A plain <see cref="View"/>, not a <see cref="Window"/>: this is one tab page swapped into
+/// <see cref="WorldInfoWindow"/>'s content area, which already draws the border -- an inner Window
+/// border here would double up against that.
 /// </summary>
-internal sealed class IsspEditor : Window
+internal sealed class IsspEditor : View
 {
     private static readonly TgAttribute DispWindAttribute = new(StandardColor.LightGray, StandardColor.Blue); // SYSDispWind = 23
-    private static readonly TgAttribute BorderAttribute = new(StandardColor.LightGray, StandardColor.Black); // SYSWBorder = 7
     private static readonly TgAttribute SelectedAttribute = new(StandardColor.Black, StandardColor.LightGray); // SYSDispSelect = 112
 
     // ChangeISSPCom's own ISSPStr (DESIGN.PAS:305-317), minus its fixed trailing padding.
@@ -55,26 +60,14 @@ internal sealed class IsspEditor : Window
     private readonly Label[] rowLabels = new Label[Rows.Length];
     private int row;
 
-    /// <summary>Fired on Esc or Enter -- ChangeISSPCom's own unconditional SetISSPArray, already live since this edits <see cref="settings"/> in place.</summary>
-    public event EventHandler? Done;
-
-    // ProductionCom's own header line ('Production: '+Name, CLSCOMM.PAS:124) shows which world a
-    // per-world screen is for -- real ChangeISSPCom's own title is bare "ISSP:" with no name at all,
-    // but that's fine for a single-player typing a command by hand; here, with no way to ask "which
-    // world?" first, showing the name avoids editing the wrong one by mistake.
-    public IsspEditor(SelfSufficiencySettings settings, string worldName)
+    public IsspEditor(SelfSufficiencySettings settings)
     {
         this.settings = settings;
 
-        Title = $"ISSP: {worldName}";
-        Width = 66;
-        Height = 14;
-        X = Pos.Center();
-        Y = Pos.Center();
-        BorderStyle = LineStyle.Single;
+        Width = Dim.Fill();
+        Height = Dim.Fill();
         CanFocus = true;
         SetScheme(new Scheme(DispWindAttribute));
-        Border.View?.SetScheme(new Scheme(BorderAttribute));
 
         // Deliberately doesn't say "imports"/"exports" happen -- confirmed against source and the
         // manual: nothing ships anywhere on its own except a narrow starbase/adjacency case this
@@ -91,7 +84,7 @@ internal sealed class IsspEditor : Window
             Add(rowLabels[i]);
         }
 
-        Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "Up/Down: select industry   Left/Right: change   Esc/Enter: done" });
+        Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "Up/Down: select industry   Left/Right: change" });
 
         KeyDown += OnKeyDown;
         UpdateDisplay();
@@ -117,6 +110,13 @@ internal sealed class IsspEditor : Window
 
     private void OnKeyDown(object? sender, Key key)
     {
+        // Ctrl+PageUp/Ctrl+PageDown is WorldInfoWindow's own tab-switch chord -- bail before the
+        // modifier-stripped switch below would otherwise treat it as bare PageUp/PageDown and
+        // swallow it here instead of letting it bubble up.
+        if (key.IsCtrl) {
+            return;
+        }
+
         switch (key.NoAlt.NoCtrl.NoShift.KeyCode) {
             case KeyCode.CursorLeft: {
                 var value = Rows[row].Get(settings);
@@ -146,11 +146,6 @@ internal sealed class IsspEditor : Window
             case KeyCode.PageDown:
                 row = row == Rows.Length - 1 ? 0 : row + 1;
                 UpdatePointerHighlight();
-                key.Handled = true;
-                return;
-            case KeyCode.Enter:
-            case KeyCode.Esc:
-                Done?.Invoke(this, EventArgs.Empty);
                 key.Handled = true;
                 return;
         }

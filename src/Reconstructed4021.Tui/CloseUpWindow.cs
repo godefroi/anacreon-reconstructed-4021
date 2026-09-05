@@ -94,18 +94,17 @@ internal sealed class CloseUpWindow : Window
             LayoutWorld(world, viewer, game);
         }
 
-        // No Pascal equivalent -- TUI-only shortcut legend for GameShell.ShowCloseUp's own
-        // D/C/T/J/A/N/I/P handling (per the user's own explicit request). D deploys from whatever
-        // world is at obj's own Location and is offered regardless of obj's type -- see
+        // No Pascal equivalent -- TUI-only shortcut legend for GameShell.ShowCloseUp's own D/C/T/J/A
+        // handling (per the user's own explicit request). D deploys from whatever world is at obj's
+        // own Location and is offered regardless of obj's type -- see
         // GameShell.DeployFleet(Coordinate)'s own doc comment; C/T/J/A only ever act on one of your
-        // own fleets; N/I/P (Designate/ISSP/Production) only ever act on one of your own worlds.
+        // own fleets. This window never opens on one of the player's own worlds at all any more --
+        // GameShell.ShowCloseUp routes that case to WorldInfoWindow instead -- so there's no
+        // world-owned branch here to show.
         var fleetOwned = fleet is not null && ReferenceEquals(fleet.Owner, viewer);
-        var worldOwned = obj is IEconomicWorld && ReferenceEquals(obj.Owner, viewer);
-        AddAt(1, 17, (fleetOwned, worldOwned) switch {
-            (true, _) => "D:Deploy  C:Change Destination  T:Transfer  J:Abort/Join  A:Attack  (other key: close)",
-            (_, true) => "D:Deploy  N:Designate  I:ISSP  P:Production  (other key: close)",
-            _ => "D:Deploy from here  (other key: close)",
-        });
+        AddAt(1, 17, fleetOwned
+            ? "D:Deploy  C:Change Destination  T:Transfer  J:Abort/Join  A:Attack  (other key: close)"
+            : "D:Deploy from here  (other key: close)");
     }
 
     /// <summary>

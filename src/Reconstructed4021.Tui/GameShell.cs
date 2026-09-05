@@ -326,106 +326,34 @@ public sealed class GameShell : Window
         (IEconomicWorld?)game.Galaxy.Planets.FirstOrDefault(p => p.Location == location)
         ?? game.Galaxy.Starbases.FirstOrDefault(s => s.Location == location);
 
-    // GetDesignation's own menu filter (DESIGN.PAS:725-746): these 7 types are never offered here at
-    // all, regardless of tech -- the 5 starbase-variant types are set only when a starbase is first
-    // built, Outpost only by construction, Terraform only by the separate Terraform command.
-    private static readonly HashSet<WorldType> NeverDesignable = [
-        WorldType.Outpost, WorldType.BaseStarbase, WorldType.JumpshipBaseStarbase,
-        WorldType.StarshipBaseStarbase, WorldType.TransportBaseStarbase, WorldType.RawMaterialMineStarbase,
-        WorldType.Terraform,
-    ];
-
     /// <summary>
-    /// Worlds menu > Designate (DESIGN.PAS: DesignateCommand, :656-861). Picks the world at the
-    /// cursor (must be the player's own), builds the same eligible-type list GetDesignation's own
-    /// loop does (tech gate, the 7 never-designable types, Ambrosia's own class gate), and opens a
-    /// picker; declining a risky choice's confirm re-opens this same picker rather than cancelling
-    /// the whole command, matching DesignateCommand's own outer REPEAT.
+    /// Worlds menu > Designate/ISSP/Production, and Close Up on one of the player's own worlds --
+    /// all four now live as tabs in one <see cref="WorldInfoWindow"/> rather than four separate
+    /// screens (see that class's own doc comment for why). <paramref name="initialTab"/> just picks
+    /// which tab is focused when it opens; every tab is always built and always reachable from
+    /// there, so a wrong initial guess costs nothing.
     /// </summary>
-    private void Designate() => Designate(FindWorldAt(galaxyView.CursorLocation));
-
-    /// <summary>Contextual entry from Close Up's own N shortcut -- the world is already known there, no cursor re-resolution needed.</summary>
-    private void Designate(IEconomicWorld? world)
+    private void ShowWorldInfo(IEconomicWorld? world, string initialTab)
     {
         if (world is null || !ReferenceEquals(world.Owner, human)) {
-            ShowInfo("Designate", "Move the cursor onto one of your own worlds first.");
+            ShowInfo(initialTab, "Move the cursor onto one of your own worlds first.");
             return;
         }
 
-        var cls = world.EffectiveClass;
-        var choices = Enum.GetValues<WorldType>()
-            .Where(t => !NeverDesignable.Contains(t))
-            .Where(t => WorldDesignation.MinTechForType[t] <= world.TechLevel)
-            .Where(t => t != WorldType.Ambrosia || cls is WorldClass.Ambrosia or WorldClass.Paradise)
-            .Select(t => new WorldTypeChoice(t, DesignationMenuLine(t, cls)))
-            .ToList();
-
-        ShowWorldTypePicker("Designate", world, choices, newType => ConfirmDesignate(world, newType));
-    }
-
-    /// <summary>
-    /// Worlds menu > ISSP (DESIGN.PAS: ChangeISSPCom, :263-390). Only reachable for a
-    /// <see cref="Planet"/> the player owns -- a starbase's own dial is hardcoded at 0 with no real
-    /// per-starbase field in real Pascal either (<see cref="IEconomicWorld"/>'s own doc comment), so
-    /// there's nothing for this screen to edit there.
-    /// </summary>
-    private void Issp() => Issp(FindWorldAt(galaxyView.CursorLocation));
-
-    /// <summary>Contextual entry from Close Up's own I shortcut.</summary>
-    private void Issp(IEconomicWorld? world)
-    {
-        if (world is not Planet planet || !ReferenceEquals(planet.Owner, human)) {
-            ShowInfo("ISSP", "Move the cursor onto one of your own worlds first.");
-            return;
-        }
-
-        var editor = new IsspEditor(planet.SelfSufficiency, DisplayName(planet));
-        var dismiss = AddModal(editor, dismissOnOutsideClick: false);
-        editor.Done += (_, _) => dismiss();
-    }
-
-    /// <summary>
-    /// Worlds menu > Production (CLSCOMM.PAS: ProductionCom). Restricted to the player's own worlds,
-    /// same as Designate/ISSP -- the report shows full unredacted industry/ISSP internals that
-    /// wouldn't be legible for a world the player doesn't own.
-    /// </summary>
-    private void Production() => Production(FindWorldAt(galaxyView.CursorLocation));
-
-    /// <summary>Contextual entry from Close Up's own P shortcut.</summary>
-    private void Production(IEconomicWorld? world)
-    {
-        if (world is null || !ReferenceEquals(world.Owner, human)) {
-            ShowInfo("Production", "Move the cursor onto one of your own worlds first.");
-            return;
-        }
-
-        var window = new ProductionWindow(world, DisplayName(world), random);
+        var window = new WorldInfoWindow(world, DisplayName(world), game, human, random, initialTab,
+            newType => ConfirmDesignate(world, newType));
         var dismiss = AddModal(window);
         window.KeyDown += (_, key) => {
-            dismiss();
-            key.Handled = true;
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode == KeyCode.Esc) {
+                dismiss();
+                key.Handled = true;
+            }
         };
     }
 
-    // GetDesignation's own menu line (DESIGN.PAS:733-744): type name, left-padded, then main
-    // industry -- three hardcoded overrides (University/RawMaterialMine/Capital) instead of
-    // PrincipalIndustry's own entry for those. The trailing suitability percentage
-    // (ClassIndustryAdjustment for that industry, 100% = average) is this port's own addition, in its
-    // own column so every candidate's number is visible at a glance rather than one at a time in a
-    // hint line -- see WorldDesignation.DesignationHint's own doc comment for the rest of the info.
-    private static string DesignationMenuLine(WorldType type, WorldClass cls)
-    {
-        var name = WorldDesignation.TypeName(type);
-        var capitalized = char.ToUpperInvariant(name[0]) + name[1..];
-        var industry = type switch {
-            WorldType.University => "(research)",
-            WorldType.RawMaterialMine or WorldType.RawMaterialMineStarbase => "raw material mining",
-            WorldType.Capital => "administration",
-            _ => IndustryConstants.Name(WorldDesignation.PrincipalIndustry[type]),
-        };
-        var suitability = AnnualTickHandler.ClassIndustryAdjustment[(cls, WorldDesignation.PrincipalIndustry[type])];
-        return $"{capitalized,-30}{industry,-22}{suitability,4}%";
-    }
+    private void Designate() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "Designate");
+    private void Issp() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "ISSP");
+    private void Production() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "Production");
 
     // DesignateCommand's own local TypeN (DESIGN.PAS:672-694) -- "a/an X" phrasing for its own
     // confirm dialogs and final report; distinct from WorldDesignation.TypeName's bare noun (read
@@ -456,8 +384,9 @@ public sealed class GameShell : Window
     };
 
     // DesignateCommand's own risk-confirm chain (DESIGN.PAS:785-832): at most one of these fires,
-    // in this exact order (an ELSE IF chain in real Pascal) -- declining re-opens the type picker
-    // rather than cancelling the command, matching the outer REPEAT's own retry.
+    // in this exact order (an ELSE IF chain in real Pascal). Declining used to re-open the type
+    // picker (matching DesignateCommand's own outer REPEAT); now that Designate is a persistent tab
+    // rather than a transient picker, there's nothing left to "reopen" -- the tab's still right there.
     private void ConfirmDesignate(IEconomicWorld world, WorldType newType)
     {
         var cls = world.EffectiveClass;
@@ -484,8 +413,6 @@ public sealed class GameShell : Window
         ShowConfirm("Designate", $"{warning}\nAre you sure about this command?", choice => {
             if (choice == 0) {
                 FinishDesignate(world, newType);
-            } else {
-                Designate();
             }
         });
     }
@@ -497,65 +424,6 @@ public sealed class GameShell : Window
         ShowInfo("Designate",
             $"{DisplayName(world)} has been designated as {DesignationArticleName(newType)}.\n" +
             $"All industries are being re-distributed.  New efficiency: {world.Efficiency}%");
-    }
-
-    private sealed record WorldTypeChoice(WorldType Type, string Label)
-    {
-        public override string ToString() => Label;
-    }
-
-    // A small ListView picker over an arbitrary label list -- ShowObjectPicker's own shape, minus
-    // its ISectorObject-specific fleet-action hint row. The bottom hint panel is this port's own
-    // addition (WorldDesignation.DesignationHint's own doc comment): no real Pascal equivalent tells
-    // the player what a designation actually changes -- optimally choosing meant cross-referencing
-    // manual tables by hand.
-    private void ShowWorldTypePicker(string title, IEconomicWorld world, List<WorldTypeChoice> choices, Action<WorldType> onChosen)
-    {
-        // Sized generously (not to the shortest string that happens to fit today): DesignationHint's
-        // longest sentence (~200 chars, the RawMaterialSplit branch) needs 3 wrapped rows at this
-        // width, so 4 leaves headroom rather than clipping the moment its wording changes slightly.
-        const int hintLines = 4;
-        const int hintGap = 1; // blank row separating the type list from the info panel below it
-        var picker = new Window {
-            Title = title,
-            X = Pos.Center(), Y = Pos.Center(),
-            Width = 88, Height = Math.Min(choices.Count + hintLines + hintGap + 3, 28),
-            BorderStyle = LineStyle.Single,
-            CanFocus = true,
-        };
-        picker.SetScheme(new Scheme(PickerNormalAttribute));
-        picker.Border.View?.SetScheme(new Scheme(PickerBorderAttribute));
-
-        picker.Add(new Label { X = 0, Y = 0, Text = $"{"World Type",-30}{"Main Industry",-22}{"Suit.",4}" });
-
-        var listView = new ListView<WorldTypeChoice> { X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill(hintLines + hintGap) };
-        listView.SetScheme(new Scheme { Normal = PickerNormalAttribute, Focus = PickerSelectedAttribute });
-        listView.SetSource(new ObservableCollection<WorldTypeChoice>(choices));
-        listView.Index = 0;
-        picker.Add(listView);
-
-        var hintLabel = new Label { X = 0, Y = Pos.AnchorEnd(hintLines), Width = Dim.Fill(), Height = hintLines, Text = WorldDesignation.DesignationHint(world, listView.Value!.Type) };
-        picker.Add(hintLabel);
-        listView.ValueChanged += (_, _) => hintLabel.Text = listView.Value is { } chosen ? WorldDesignation.DesignationHint(world, chosen.Type) : string.Empty;
-
-        var dismiss = AddModal(picker);
-
-        picker.KeyDown += (_, key) => {
-            switch (key.NoAlt.NoCtrl.NoShift.KeyCode) {
-                case KeyCode.Enter:
-                    var chosen = listView.Value;
-                    dismiss();
-                    if (chosen is not null) {
-                        onChosen(chosen.Type);
-                    }
-                    key.Handled = true;
-                    break;
-                case KeyCode.Esc:
-                    dismiss();
-                    key.Handled = true;
-                    break;
-            }
-        };
     }
 
     /// <summary>
@@ -634,6 +502,13 @@ public sealed class GameShell : Window
     // CloseUpCom).
     private void ShowCloseUp(ISectorObject obj)
     {
+        // One of the player's own worlds gets the full tabbed WorldInfoWindow (Close Up is just its
+        // first tab) instead of the standalone CloseUpWindow -- see WorldInfoWindow's own doc comment.
+        if (obj is IEconomicWorld ownWorld && ReferenceEquals(ownWorld.Owner, human)) {
+            ShowWorldInfo(ownWorld, "CloseUp");
+            return;
+        }
+
         var window = new CloseUpWindow(obj, human, game);
         var dismiss = AddModal(window);
         window.KeyDown += (_, key) => {
@@ -653,26 +528,10 @@ public sealed class GameShell : Window
                 return;
             }
 
-            if (obj is IEconomicWorld world && ReferenceEquals(world.Owner, human) &&
-                ResolveWorldContextAction(letter) is { } worldAction) {
-                dismiss();
-                worldAction(world);
-                key.Handled = true;
-                return;
-            }
-
             dismiss();
             key.Handled = true;
         };
     }
-
-    /// <summary>N/I/P -- Designate/ISSP/Production, the three Worlds-menu commands reachable directly off a selected owned world (Close Up and the Sector Selected Popup), matching ResolveFleetContextAction's own shape for fleets.</summary>
-    private Action<IEconomicWorld>? ResolveWorldContextAction(char key) => key switch {
-        'N' => Designate,
-        'I' => Issp,
-        'P' => Production,
-        _ => null,
-    };
 
     /// <summary>
     /// C/T/J/A -- Change Destination/Transfer/Abort-Join/Attack, the four Fleet/Ministry-of-War
@@ -709,7 +568,7 @@ public sealed class GameShell : Window
             return "D:deploy  C:dest  T:transfer  J:abort/join  A:attack";
         }
 
-        return isOwnedWorld ? "D:deploy  N:designate  I:issp  P:production" : "";
+        return isOwnedWorld ? "D:deploy" : "";
     }
 
     // DISPLAY.PAS's own GetIDMenuChoice/DisplayMenu (DISPLAY.PAS:51-74, MENU.PAS:116-156) -- the
@@ -813,13 +672,6 @@ public sealed class GameShell : Window
                 if (isOwnedFleet && ResolveFleetContextAction(letter) is { } action) {
                     dismiss();
                     action((Fleet)obj);
-                    key.Handled = true;
-                    return;
-                }
-
-                if (isOwnedWorld && ResolveWorldContextAction(letter) is { } worldAction) {
-                    dismiss();
-                    worldAction((IEconomicWorld)obj);
                     key.Handled = true;
                 }
             };

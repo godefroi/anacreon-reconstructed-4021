@@ -8,9 +8,9 @@ using TgAttribute = Terminal.Gui.Drawing.Attribute;
 namespace Reconstructed4021.Tui;
 
 /// <summary>
-/// Worlds menu > Production (CLSCOMM.PAS: ProductionCom). Read-only report -- dismissed by any key,
-/// same convention as <see cref="CloseUpWindow"/> (see that class's own doc comment for why this
-/// port uses a modal overlay here instead of Pascal's own non-modal shared display window).
+/// Worlds menu > Production (CLSCOMM.PAS: ProductionCom). Read-only report; one tab page swapped
+/// into <see cref="WorldInfoWindow"/>'s content area (a plain <see cref="View"/>, not a
+/// <see cref="Window"/> -- the outer window already draws the border).
 ///
 /// Layout condenses DisplayIndusInfo's own 6-column shape (Bio/Che/Min/SY-/Sup/Tri -- the 4 shipyard
 /// industries collapse to whichever one this world's type actually principally uses, matching real
@@ -19,10 +19,9 @@ namespace Reconstructed4021.Tui;
 /// see <see cref="WorldProductionPreview"/>'s own doc comment for why that's computed by running the
 /// real pipeline against a clone rather than a second reimplementation of the formula).
 /// </summary>
-internal sealed class ProductionWindow : Window
+internal sealed class ProductionWindow : View
 {
     private static readonly TgAttribute DispWindAttribute = new(StandardColor.LightGray, StandardColor.Blue); // SYSDispWind = 23
-    private static readonly TgAttribute BorderAttribute = new(StandardColor.LightGray, StandardColor.Black); // SYSWBorder = 7
 
     // DisplayIndusInfo's own column order (CLSCOMM.PAS:257): Bio, Che, Min, SY-, Sup, Tri.
     private static readonly (string Label, IndustryType Type)[] Columns = [
@@ -34,17 +33,12 @@ internal sealed class ProductionWindow : Window
         ("Tri", IndustryType.TrillumMining),
     ];
 
-    public ProductionWindow(IEconomicWorld world, string worldName, Random random)
+    public ProductionWindow(IEconomicWorld world, Random random)
     {
-        Title = $"Production: {worldName}";
-        Width = 80;
-        Height = 21;
-        X = Pos.Center();
-        Y = Pos.Center();
-        BorderStyle = LineStyle.Single;
+        Width = Dim.Fill();
+        Height = Dim.Fill();
         CanFocus = true;
         SetScheme(new Scheme(DispWindAttribute));
-        Border.View?.SetScheme(new Scheme(BorderAttribute));
 
         var columns = Columns;
         columns[3] = ("SY-", ActiveShipyardIndustry(world.Type));
