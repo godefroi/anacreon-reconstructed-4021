@@ -347,6 +347,15 @@ public sealed class GameShell : Window
             if (key.NoAlt.NoCtrl.NoShift.KeyCode == KeyCode.Esc) {
                 dismiss();
                 key.Handled = true;
+                return;
+            }
+
+            // Same D:Deploy CloseUpWindow itself offers for any object -- this window replaced
+            // CloseUpWindow for owned worlds, so it needs to keep offering it too.
+            if (char.ToUpperInvariant((char)key.AsRune.Value) == 'D') {
+                dismiss();
+                DeployFleet(world);
+                key.Handled = true;
             }
         };
     }
