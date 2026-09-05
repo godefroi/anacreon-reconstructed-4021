@@ -412,7 +412,7 @@ public sealed class GameShell : Window
 
         var window = new WorldInfoWindow(world, DisplayName(world), game, human, random, initialTab,
             newType => ConfirmDesignate(world, newType));
-        var dismiss = AddModal(window);
+        var dismiss = AddCloseUpOverlay(window);
         window.KeyDown += (_, key) => {
             if (key.NoAlt.NoCtrl.NoShift.KeyCode == KeyCode.Esc) {
                 dismiss();
@@ -430,14 +430,14 @@ public sealed class GameShell : Window
         };
     }
 
+    // None of these five onSelect callbacks dismiss their own panel before calling ShowCloseUp --
+    // AddCloseUpOverlay stacks Close Up on top of the still-open panel instead (see its own doc
+    // comment), so Esc from Close Up hands focus straight back to this exact instance, scroll
+    // position and highlighted row untouched.
     private void Status()
     {
-        Action dismiss = null!; // assigned right below -- StatusWindow's own Enter handler needs it to close this window before opening Close Up.
-        var window = new StatusWindow(game, human, world => {
-            dismiss();
-            ShowCloseUp(world);
-        });
-        dismiss = AddModal(window);
+        var window = new StatusWindow(game, human, ShowCloseUp);
+        var dismiss = AddPanel(window);
         window.KeyDown += (_, key) => {
             if (key.NoAlt.NoCtrl.NoShift.KeyCode is KeyCode.Esc or KeyCode.F3) {
                 dismiss();
@@ -448,12 +448,8 @@ public sealed class GameShell : Window
 
     private void ShowFleetWindow()
     {
-        Action dismiss = null!; // assigned right below -- FleetWindow's own Enter handler needs it to close this window before opening Close Up.
-        var window = new FleetWindow(game, human, obj => {
-            dismiss();
-            ShowCloseUp(obj);
-        });
-        dismiss = AddModal(window);
+        var window = new FleetWindow(game, human, ShowCloseUp);
+        var dismiss = AddPanel(window);
         window.KeyDown += (_, key) => {
             if (key.NoAlt.NoCtrl.NoShift.KeyCode is KeyCode.Esc or KeyCode.F5) {
                 dismiss();
@@ -464,12 +460,8 @@ public sealed class GameShell : Window
 
     private void ShowNewsWindow()
     {
-        Action dismiss = null!; // assigned right below -- NewsWindow's own Enter handler needs it to close this window before opening Close Up.
-        var window = new NewsWindow(human, subject => {
-            dismiss();
-            ShowCloseUp(subject);
-        });
-        dismiss = AddModal(window);
+        var window = new NewsWindow(human, ShowCloseUp);
+        var dismiss = AddPanel(window);
         window.KeyDown += (_, key) => {
             if (key.NoAlt.NoCtrl.NoShift.KeyCode is KeyCode.Esc or KeyCode.F7) {
                 dismiss();
@@ -480,12 +472,8 @@ public sealed class GameShell : Window
 
     private void ShowEmpireWindow()
     {
-        Action dismiss = null!; // assigned right below -- EmpireWindow's own Enter handler needs it to close this window before opening Close Up.
-        var window = new EmpireWindow(game, human, capital => {
-            dismiss();
-            ShowCloseUp(capital);
-        });
-        dismiss = AddModal(window);
+        var window = new EmpireWindow(game, human, ShowCloseUp);
+        var dismiss = AddPanel(window);
         window.KeyDown += (_, key) => {
             if (key.NoAlt.NoCtrl.NoShift.KeyCode is KeyCode.Esc or KeyCode.F8) {
                 dismiss();
@@ -496,14 +484,22 @@ public sealed class GameShell : Window
 
     private void ShowNamesWindow()
     {
-        Action dismiss = null!; // assigned right below -- NamesWindow's own Enter handler needs it to close this window before opening Close Up.
-        var window = new NamesWindow(game, human, obj => {
-            dismiss();
-            ShowCloseUp(obj);
-        });
-        dismiss = AddModal(window);
+        var window = new NamesWindow(game, human, ShowCloseUp);
+        var dismiss = AddPanel(window);
         window.KeyDown += (_, key) => {
             if (key.NoAlt.NoCtrl.NoShift.KeyCode is KeyCode.Esc or KeyCode.F9) {
+                dismiss();
+                key.Handled = true;
+            }
+        };
+    }
+
+    private void ShowHelpWindow()
+    {
+        var window = new HelpWindow();
+        var dismiss = AddPanel(window);
+        window.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode is KeyCode.Esc or KeyCode.F1) {
                 dismiss();
                 key.Handled = true;
             }
@@ -687,7 +683,7 @@ public sealed class GameShell : Window
         }
 
         var window = new CloseUpWindow(obj, human, game);
-        var dismiss = AddModal(window);
+        var dismiss = AddCloseUpOverlay(window);
         window.KeyDown += (_, key) => {
             var letter = char.ToUpperInvariant((char)key.AsRune.Value);
             if (letter == 'D') {
@@ -930,7 +926,13 @@ public sealed class GameShell : Window
     /// never gets a chance to fire. An outside click there is just swallowed instead -- real Pascal's
     /// own version of these is keyboard-only anyway, no click-out ever existed to reproduce.
     /// </param>
-    private Action AddModal(View popup, bool dismissOnOutsideClick = true)
+    /// <param name="refocusOnDismiss">
+    /// Where to send focus once this popup closes, instead of the default <see cref="galaxyView"/> --
+    /// used when this popup was stacked on top of a still-open background panel (see
+    /// <see cref="AddCloseUpOverlay"/>) rather than opened straight off the map, so closing it hands
+    /// keyboard control straight back to that panel instead of the map underneath everything.
+    /// </param>
+    private Action AddModal(View popup, bool dismissOnOutsideClick = true, View? refocusOnDismiss = null)
     {
         var backdrop = new View { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(), CanFocus = false };
         // ViewportSettingsFlags.Transparent is Terminal.Gui's own documented mechanism for this
@@ -966,7 +968,7 @@ public sealed class GameShell : Window
             openModalCount--;
             menuBar.Enabled = openModalCount == 0;
             galaxyView.Enabled = openModalCount == 0;
-            galaxyView.SetFocus();
+            (refocusOnDismiss ?? galaxyView).SetFocus();
         }
 
         backdrop.MouseEvent += (_, mouse) => {
@@ -985,6 +987,49 @@ public sealed class GameShell : Window
 
         return Dismiss;
     }
+
+    // Whichever "background panel" (Close Up/World Info, Status, Fleet, News, Empire, Names, Help) is
+    // currently open, if any -- at most one of these is ever visible at once (per the user's own
+    // explicit request: opening one used to stack it on top of whatever was already open, e.g. F8
+    // over an open Close Up, rather than replacing it). Distinct from AddModal's own general stacking,
+    // which every transient dialog/picker (MessageBox, ResourceDistributionEditor, the various pickers
+    // chained off a panel) still uses unchanged -- those are meant to layer on top of a panel, not
+    // replace it. openPanelWindow is also read by AddCloseUpOverlay below, to decide whether Close Up
+    // should stack on top of an already-open panel instead of replacing it.
+    private View? openPanelWindow;
+    private Action? openPanelDismiss;
+
+    private Action AddPanel(View popup, bool dismissOnOutsideClick = true)
+    {
+        openPanelDismiss?.Invoke();
+
+        var dismiss = AddModal(popup, dismissOnOutsideClick);
+        openPanelWindow = popup;
+        Action wrapped = () => {
+            dismiss();
+            openPanelWindow = null;
+            openPanelDismiss = null;
+        };
+        openPanelDismiss = wrapped;
+        return wrapped;
+    }
+
+    /// <summary>
+    /// Close Up's own entry point (both <see cref="CloseUpWindow"/> and <see cref="WorldInfoWindow"/>):
+    /// per the user's own explicit request, picking a row in Status/Fleet/News/Empire/Names should
+    /// return to that exact same window -- same scroll position, same highlighted row -- rather than
+    /// dropping back to the bare map. Since none of those callers dismiss their own panel before
+    /// calling this (their onSelect callbacks just call <see cref="ShowCloseUp"/> directly now), the
+    /// panel is still sitting right there in <see cref="openPanelWindow"/>; stacking Close Up on top of
+    /// it via a plain <see cref="AddModal"/> call (not <see cref="AddPanel"/>, which would wrongly
+    /// dismiss it first) and refocusing it on dismiss is the entire mechanism -- Remove() never
+    /// Disposes a view (confirmed by decompiling Terminal.Gui's own View.Remove), so the panel's own
+    /// fields (StatusWindow's selection/scroll position, etc.) were never touched to begin with. Opened
+    /// directly off the map (no panel open), this becomes the panel itself instead, via AddPanel,
+    /// unchanged from before.
+    /// </summary>
+    private Action AddCloseUpOverlay(View window) =>
+        openPanelWindow is { } panel ? AddModal(window, refocusOnDismiss: panel) : AddPanel(window);
 
     /// <summary>
     /// Styled "press any key" notice (<see cref="DosDialogWindow"/>), added via <see cref="AddModal"/>
@@ -2005,7 +2050,7 @@ public sealed class GameShell : Window
     ];
 
     private StatusBar BuildStatusBar() => new([
-        new Shortcut(Key.F1, "Help", () => Stub("Help"), ""),
+        new Shortcut(Key.F1, "Help", ShowHelpWindow, ""),
         new Shortcut(Key.F3, "Status", Status, ""),
         new Shortcut(Key.F5, "Fleet", ShowFleetWindow, ""),
         new Shortcut(Key.F7, "News", ShowNewsWindow, ""),

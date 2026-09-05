@@ -25,6 +25,14 @@ than replacing it. Concretely:
 - F1/F3/F5/F7/F8/F9 open their windows as floating overlays above the map (closable back to it),
   rather than swapping the map out for their content.
 - F10 (or Esc from an overlay) means "return focus to the map," not "switch to the map panel."
+- At most one background panel (Close Up/World Info, Status, Fleet, News, Empire, Names, Help) is
+  ever open at a time -- opening one dismisses whatever other one was already open
+  (`GameShell.AddPanel`), rather than stacking on top of it. Picking a row in Status/Fleet/News/Empire/Names
+  is the one deliberate exception: it opens Close Up *stacked on top* of that same panel
+  (`GameShell.AddCloseUpOverlay`) instead of dismissing it first, so Close Up's own Esc hands focus
+  straight back to the exact same panel instance -- same scroll position, same highlighted row --
+  rather than dropping back to the bare map and losing it. Port-only addition, no Pascal precedent for
+  either half of this (real Pascal's own background windows have no row-to-Close-Up navigation at all).
 
 This mainly affects the "Function-key background panels" and "Suggested build order" entries
 below — noted inline where relevant. No other surface's own content or behavior changes because of
@@ -153,7 +161,7 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
-| Help Window | F1 | `HLPWIND.PAS` | `ListView` topic index + `TextView` page body |
+| Help Window | F1 | `HLPWIND.PAS` | **Done** (`HelpWindow.cs`, `Core.Entities.HelpPages`) — real Pascal reads this from a compiled binary help file (ANACREON.HLP) that isn't part of this repo; its 14 pages were decoded once and are transcribed into an embedded `Assets/help.kdl` resource (KDL, not JSON/XML — chosen for real multi-line raw-string blocks with no escaping), parsed via KdlSharp. One correction made to the source file's own content: its "Status Windows" page listed a stale `<F2>`/`<F4>`/`<F6>` split — SWINDOWS.PAS's own live help-line string (confirmed authoritative, drawn every turn) has only F1/F3/F5/F7/F8/F9/F10, matching this port's actual windows, so the page was corrected to match. A second, subtler fix found only by driving it live: `IndexPageNo`'s own literal values are 0-based `Seek` offsets, one less than this class's 1-based page numbering — transcribing them directly sent "Defenses" to the wrong page; corrected (`Core.Entities.HelpPages`'s own doc comment has the full derivation), with a regression test locking in every index entry's real target topic. PageUp/PageDown page-turn (real Pascal's own `PageUp`/`PageDown` procedures are named for which way `PageNo` counts, not the physical key — the dispatch table's real behavior is the intuitive one), End opens the topic index. Port-only addition: `/` opens a substring search over all 14 pages |
 
 ## Meta / one-off
 
