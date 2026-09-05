@@ -361,6 +361,25 @@ public sealed class GameShell : Window
         ShowWorldTypePicker("Designate", world, choices, newType => ConfirmDesignate(world, newType));
     }
 
+    /// <summary>
+    /// Worlds menu > ISSP (DESIGN.PAS: ChangeISSPCom, :263-390). Only reachable for a
+    /// <see cref="Planet"/> the player owns -- a starbase's own dial is hardcoded at 0 with no real
+    /// per-starbase field in real Pascal either (<see cref="IEconomicWorld"/>'s own doc comment), so
+    /// there's nothing for this screen to edit there.
+    /// </summary>
+    private void Issp()
+    {
+        var world = FindWorldAt(galaxyView.CursorLocation);
+        if (world is not Planet planet || !ReferenceEquals(planet.Owner, human)) {
+            ShowInfo("ISSP", "Move the cursor onto one of your own worlds first.");
+            return;
+        }
+
+        var editor = new IsspEditor(planet.SelfSufficiency, DisplayName(planet));
+        var dismiss = AddModal(editor, dismissOnOutsideClick: false);
+        editor.Done += (_, _) => dismiss();
+    }
+
     // GetDesignation's own menu line (DESIGN.PAS:733-744): type name, left-padded, then main
     // industry -- three hardcoded overrides (University/RawMaterialMine/Capital) instead of
     // PrincipalIndustry's own entry for those. The trailing suitability percentage
@@ -1875,7 +1894,7 @@ public sealed class GameShell : Window
             new("_Close Up", Key.Empty, ExamineCursor),
             new("_Designate", Key.Empty, Designate),
             new("P_roduction", Key.Empty, () => Stub("Production")),
-            new("_ISSP", Key.Empty, () => Stub("ISSP")),
+            new("_ISSP", Key.Empty, Issp),
             new("_Add Name", Key.Empty, () => Stub("Add Name")),
             new("Delete _Name", Key.Empty, () => Stub("Delete Name")),
             new("_Liberate", Key.Empty, () => Stub("Liberate")),
