@@ -108,10 +108,14 @@ try {
 
         if (titleWindow.Choice == AnacreonTitleWindow.MenuChoice.LoadGame) {
             var saveDir = Path.Combine(FindRepoRoot(AppContext.BaseDirectory), "saves");
+            var autoSaveDir = Path.Combine(saveDir, "auto"); // GameShell.AutoSave's own subdirectory -- listed alongside manual saves, not a separate screen.
             Directory.CreateDirectory(saveDir);
+            Directory.CreateDirectory(autoSaveDir);
             var saves = Directory.GetFiles(saveDir, "*.json")
+                .Concat(Directory.GetFiles(autoSaveDir, "*.json"))
                 .OrderByDescending(File.GetLastWriteTime)
-                .Select(path => new SaveGamePickerWindow.SaveChoice(path, $"{Path.GetFileNameWithoutExtension(path),-30} {File.GetLastWriteTime(path):yyyy-MM-dd HH:mm}"))
+                .Select(path => new SaveGamePickerWindow.SaveChoice(path,
+                    $"{(Path.GetDirectoryName(path) == autoSaveDir ? "[auto]" : "[save]"),-7}{Path.GetFileNameWithoutExtension(path),-30} {File.GetLastWriteTime(path):yyyy-MM-dd HH:mm}"))
                 .ToList();
 
             var saveGamePicker = new SaveGamePickerWindow(saves);
