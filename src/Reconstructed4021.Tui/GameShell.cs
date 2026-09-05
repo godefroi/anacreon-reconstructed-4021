@@ -406,8 +406,12 @@ public sealed class GameShell : Window
 
     private void Status()
     {
-        var window = new StatusWindow(game, human);
-        var dismiss = AddModal(window);
+        Action dismiss = null!; // assigned right below -- StatusWindow's own Enter handler needs it to close this window before opening Close Up.
+        var window = new StatusWindow(game, human, world => {
+            dismiss();
+            ShowCloseUp(world);
+        });
+        dismiss = AddModal(window);
         window.KeyDown += (_, key) => {
             if (key.NoAlt.NoCtrl.NoShift.KeyCode is KeyCode.Esc or KeyCode.F3) {
                 dismiss();
