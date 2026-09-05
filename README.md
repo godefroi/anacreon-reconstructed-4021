@@ -3,11 +3,15 @@
 A from-scratch C# port of the DOS 4X game *Anacreon* (targeting the 1.31 release), reconstructed
 directly from its original Turbo Pascal source (`reference/DOSAnacreonSource131/`).
 
-The defining constraint of this project: every game-logic decision is checked against the real
-Pascal, not just against what seems plausible. `reference/verify/` builds and runs the actual
-original source under FreePascal and compares its output to the C# port's, so formulas, RNG
-sequencing, and edge-case behavior trace back to what the original game actually did rather than a
-plausible-sounding guess.
+The goal is a fun, playable game that's true to the original 1.31 release, not a byte-for-byte
+simulation exercise for its own sake. Once the faithful baseline is solid, the plan is to layer in
+optional, opt-in features on top of it, and the game itself should feel modern to actually sit down
+and play, not just correct on paper.
+
+Getting the original right still matters a lot, and it's the more interesting part of this project
+from a port-design angle: `reference/verify/` builds and runs the actual original source under
+FreePascal and compares its output against the C# port's, so game-logic decisions trace back to what
+the original game actually did instead of a plausible-sounding guess.
 
 ## Status
 
