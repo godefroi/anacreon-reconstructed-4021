@@ -494,6 +494,22 @@ public sealed class GameShell : Window
         };
     }
 
+    private void ShowNamesWindow()
+    {
+        Action dismiss = null!; // assigned right below -- NamesWindow's own Enter handler needs it to close this window before opening Close Up.
+        var window = new NamesWindow(game, human, obj => {
+            dismiss();
+            ShowCloseUp(obj);
+        });
+        dismiss = AddModal(window);
+        window.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode is KeyCode.Esc or KeyCode.F9) {
+                dismiss();
+                key.Handled = true;
+            }
+        };
+    }
+
     private void Designate() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "Designate");
     private void Issp() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "ISSP");
     private void Production() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "Production");
@@ -1981,6 +1997,6 @@ public sealed class GameShell : Window
         new Shortcut(Key.F5, "Fleet", ShowFleetWindow, ""),
         new Shortcut(Key.F7, "News", ShowNewsWindow, ""),
         new Shortcut(Key.F8, "Empire", ShowEmpireWindow, ""),
-        new Shortcut(Key.F9, "Names", () => Stub("Names"), ""),
+        new Shortcut(Key.F9, "Names", ShowNamesWindow, ""),
     ]);
 }
