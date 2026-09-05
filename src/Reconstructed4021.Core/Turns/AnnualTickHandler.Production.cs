@@ -58,10 +58,11 @@ public sealed partial class AnnualTickHandler
 
     /// <summary>
     /// % of industry that is effective, by world class and industry: ClassIndAdj (DATACNST.PAS:321-343).
-    /// Internal, not private: <see cref="Npe.NpeToolkit.GetNewDesignation"/> reads the same table
-    /// rather than re-transcribing 21 rows of balance data.
+    /// Public, not private: <see cref="Npe.NpeToolkit.GetNewDesignation"/> and
+    /// <see cref="Entities.WorldDesignation"/>'s own Designate-window suitability hint both read the
+    /// same table rather than re-transcribing 21 rows of balance data.
     /// </summary>
-    internal static readonly FrozenDictionary<(WorldClass, IndustryType), int> ClassIndustryAdjustment =
+    public static readonly FrozenDictionary<(WorldClass, IndustryType), int> ClassIndustryAdjustment =
         BuildClassIndustryAdjustment();
 
     private static FrozenDictionary<(WorldClass, IndustryType), int> BuildClassIndustryAdjustment()
@@ -145,31 +146,6 @@ public sealed partial class AnnualTickHandler
 
         return table.ToFrozenDictionary();
     }
-
-    /// <summary>Principal (population-scaling) industry per world type: PrincipalIndustry (DATACNST.PAS:493-514).</summary>
-    private static readonly FrozenDictionary<WorldType, IndustryType> _principalIndustry = new Dictionary<WorldType, IndustryType> {
-        [WorldType.Agricultural] = IndustryType.Supply,
-        [WorldType.Ambrosia] = IndustryType.Bioindustry,
-        [WorldType.Base] = IndustryType.ShipyardGeneral,
-        [WorldType.BaseStarbase] = IndustryType.ShipyardGeneral,
-        [WorldType.Capital] = IndustryType.ShipyardGeneral,
-        [WorldType.Chemical] = IndustryType.Chemical,
-        [WorldType.Independent] = IndustryType.ShipyardGeneral,
-        [WorldType.JumpshipBase] = IndustryType.ShipyardJump,
-        [WorldType.JumpshipBaseStarbase] = IndustryType.ShipyardJump,
-        [WorldType.Mine] = IndustryType.Mining,
-        [WorldType.NinjaWorld] = IndustryType.Bioindustry,
-        [WorldType.Outpost] = IndustryType.ShipyardGeneral,
-        [WorldType.RawMaterialMine] = IndustryType.Mining,
-        [WorldType.RawMaterialMineStarbase] = IndustryType.Mining,
-        [WorldType.StarshipBase] = IndustryType.ShipyardStarship,
-        [WorldType.StarshipBaseStarbase] = IndustryType.ShipyardStarship,
-        [WorldType.TransportBase] = IndustryType.ShipyardTransport,
-        [WorldType.TransportBaseStarbase] = IndustryType.ShipyardTransport,
-        [WorldType.University] = IndustryType.Mining,
-        [WorldType.Terraform] = IndustryType.Mining,
-        [WorldType.TrillumMine] = IndustryType.TrillumMining,
-    }.ToFrozenDictionary();
 
     /// <summary>
     /// World types with no principal industry (TypeData's PI columns are all zero): the remainder
@@ -291,8 +267,6 @@ public sealed partial class AnnualTickHandler
         [ConstructionType.Disrupter] = RawMaterialRow((CargoType.Chemicals, 1110), (CargoType.Metals, 1180), (CargoType.Trillum, 1120)),
     }.ToFrozenDictionary();
 
-    /// <summary>ISSP: how far over/under self-sufficient an industry's dial is set (DATACNST.PAS:524-525).</summary>
-    private static readonly double[] _issp = [0.01, 0.10, 0.25, 0.50, 0.75, 1.00, 1.50, 2.00, 3.00, 4.00, 5.00];
 
     /// <summary>World types SupplyLink/SurplusLink treat as raw-material sources (UPDATE.PAS:541-542,587-588's inline set) — distinct from <see cref="_rawMaterialOnlyTypes"/>, which serves GetIndustrialDistribution and includes types (University, Terraform, and every *Starbase-suffixed type) this set doesn't.</summary>
     private static readonly FrozenSet<WorldType> _supplyLinkEligibleTypes = new HashSet<WorldType> {
@@ -543,7 +517,7 @@ public sealed partial class AnnualTickHandler
             beta[industry] = value == 0 ? 1 : value;
         }
 
-        var supplyIssp = _issp[world.SelfSufficiencyIndex(IndustryType.Supply)];
+        var supplyIssp = SelfSufficiencySettings.Multipliers[world.SelfSufficiencyIndex(IndustryType.Supply)];
         var supplyThgAdj = _thgAdjRawMaterial[(IndustryType.Supply, CargoType.Supplies)];
         var supplyDist = (Math.Sqrt(SafetyAdj * supplyIssp * (SuppliesPerBillion / 100.0) * world.Population /
                                     ((supplyThgAdj / 100.0) * alpha)) - K4) / beta[IndustryType.Supply];
@@ -557,10 +531,10 @@ public sealed partial class AnnualTickHandler
             dist[IndustryType.Mining] = remaining * (_typeData[(world.Type, IndustryType.Mining)] / 100.0);
             dist[IndustryType.TrillumMining] = remaining * (_typeData[(world.Type, IndustryType.TrillumMining)] / 100.0);
         } else {
-            var mainIndustry = _principalIndustry[world.Type];
-            var cheIssp = _issp[world.SelfSufficiencyIndex(IndustryType.Chemical)];
-            var minIssp = _issp[world.SelfSufficiencyIndex(IndustryType.Mining)];
-            var triIssp = _issp[world.SelfSufficiencyIndex(IndustryType.TrillumMining)];
+            var mainIndustry = WorldDesignation.PrincipalIndustry[world.Type];
+            var cheIssp = SelfSufficiencySettings.Multipliers[world.SelfSufficiencyIndex(IndustryType.Chemical)];
+            var minIssp = SelfSufficiencySettings.Multipliers[world.SelfSufficiencyIndex(IndustryType.Mining)];
+            var triIssp = SelfSufficiencySettings.Multipliers[world.SelfSufficiencyIndex(IndustryType.TrillumMining)];
 
             // A is always 0 at K4=0 but written out, like every other K4 term here, so the constant
             // stays visible if the balance data ever changes it (INTRFACE.PAS:311).

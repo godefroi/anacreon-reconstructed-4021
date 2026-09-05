@@ -159,8 +159,8 @@ public static class CombatOutcome
         newCap.Efficiency = Rnd(random, 40, 60);
     }
 
-    /// <summary>SetEmpireTechnology (PRIMINTR.PAS) — a full replace of the empire's unlocked-tech set to TechDev[setTo], not a union.</summary>
-    private static void SetEmpireTechnology(Empire emp, TechLevel newLevel, TechLevel setTo)
+    /// <summary>SetEmpireTechnology (PRIMINTR.PAS) — a full replace of the empire's unlocked-tech set to TechDev[setTo], not a union. Internal, not private: <see cref="Entities.WorldDesignation.Redesignate"/>'s own capital-swap branch needs the same formula.</summary>
+    internal static void SetEmpireTechnology(Empire emp, TechLevel newLevel, TechLevel setTo)
     {
         emp.TechnologyLevel = newLevel;
         emp.Technology.ReplaceWith(TechCatalog.FullSetAt(setTo));

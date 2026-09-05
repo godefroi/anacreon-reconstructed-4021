@@ -24,4 +24,18 @@ public static class IndustryConstants
         [TechLevel.PreGate] = 95,
         [TechLevel.Gate] = 100,
     }.ToFrozenDictionary();
+
+    /// <summary>IndusNames (DATACNST.PAS:151-160) -- display name for one industry, read by Designate's own menu (PrincipalIndustry text) and Production.</summary>
+    public static string Name(IndustryType type) => type switch {
+        IndustryType.Bioindustry => "bio-tech labs",
+        IndustryType.Chemical => "chemical plants",
+        IndustryType.Mining => "metal mines",
+        IndustryType.ShipyardGeneral => "ship yards",
+        IndustryType.ShipyardJump => "jumpship yards",
+        IndustryType.ShipyardStarship => "starship yards",
+        IndustryType.ShipyardTransport => "transport yards",
+        IndustryType.Supply => "food factories",
+        IndustryType.TrillumMining => "trillum mines",
+        _ => throw new ArgumentOutOfRangeException(nameof(type)),
+    };
 }

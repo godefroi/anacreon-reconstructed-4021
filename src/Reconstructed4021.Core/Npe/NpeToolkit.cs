@@ -509,24 +509,13 @@ public static class NpeToolkit
 
             var newType = GetNewDesignation(planet, regionCapitals, game, random);
             if (newType != planet.Type) {
-                RedesignateWorldType(planet, newType, random);
+                // WorldDesignation.Redesignate (INTRFACE.PAS:187-221): NewType is never Capital here
+                // (Chance[CapTyp] never leaves 0 in GetNewDesignation, and this method's own caller
+                // already excludes the capital world from consideration), so its capital-swap branch
+                // never fires from this call path -- confirmed, not assumed.
+                WorldDesignation.Redesignate(planet, newType, random);
             }
         }
-    }
-
-    /// <summary>
-    /// DesignateWorld (INTRFACE.PAS:187-221), scoped to what ReDesignateEmpire can actually reach:
-    /// NewType is never Capital here (Chance[CapTyp] never leaves 0 in GetNewDesignation, and
-    /// ReDesignateEmpire's own caller already excludes the capital world from consideration), so the
-    /// capital-swap/tech-reset branch (INTRFACE.PAS:195-214) is real Pascal but confirmed unreachable
-    /// from this call path — not ported under this name. A general-purpose DesignateWorld (a human
-    /// "change world designation" command) would need that branch back. The efficiency reduction
-    /// below is NOT conditional on the capital branch, though — it fires for every call.
-    /// </summary>
-    private static void RedesignateWorldType(IEconomicWorld world, WorldType newType, Random random)
-    {
-        world.Efficiency -= PascalRound(world.Efficiency / (1.5 + random.NextDouble()));
-        world.Type = newType;
     }
 
     /// <summary>
@@ -1338,7 +1327,10 @@ public static class NpeToolkit
 
         var newType = GetNewDesignation(world, regionCapitals, game, random);
         if (newType != world.Type) {
-            RedesignateWorldType(world, newType, random);
+            // WorldDesignation.Redesignate: GetNewDesignation's own Chance[CapTyp] starts at
+            // NpeConstants.TypeDefault[Capital]=0 and nothing later multiplies it back up, so NewType
+            // is never Capital here either -- confirmed, not assumed.
+            WorldDesignation.Redesignate(world, newType, random);
         }
     }
 
