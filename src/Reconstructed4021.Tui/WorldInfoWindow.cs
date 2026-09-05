@@ -10,7 +10,7 @@ using System.Linq;
 namespace Reconstructed4021.Tui;
 
 /// <summary>
-/// One of the player's own worlds, shown as a tabbed window: Close Up, Designate, ISSP, Production
+/// One of the player's own worlds, shown as a tabbed window: Close Up, Production, ISSP, Designate
 /// -- four separate real Pascal commands (CLSCOMM.PAS: CloseUpCom/ProductionCom, DESIGN.PAS:
 /// DesignateCommand/ChangeISSPCom) that had no way to share one screen in 1988's Turbo Vision, but
 /// have no real reason not to now.
@@ -56,11 +56,11 @@ internal sealed class WorldInfoWindow : Window
         // dial at 0 -- see IsspEditor's own doc comment) -- omitted there rather than shown inert.
         var isspTab = world is Planet planet ? new IsspEditor(planet.SelfSufficiency) : null;
 
-        tabs = [("Close Up", closeUpTab), ("Designate", designateTab)];
+        tabs = [("Close Up", closeUpTab), ("Production", productionTab)];
         if (isspTab is not null) {
             tabs.Add(("ISSP", isspTab));
         }
-        tabs.Add(("Production", productionTab));
+        tabs.Add(("Designate", designateTab));
 
         var initialView = initialTab switch {
             "Designate" => designateTab,
