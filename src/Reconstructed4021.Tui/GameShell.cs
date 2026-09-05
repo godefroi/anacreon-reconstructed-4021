@@ -326,6 +326,192 @@ public sealed class GameShell : Window
         (IEconomicWorld?)game.Galaxy.Planets.FirstOrDefault(p => p.Location == location)
         ?? game.Galaxy.Starbases.FirstOrDefault(s => s.Location == location);
 
+    // GetDesignation's own menu filter (DESIGN.PAS:725-746): these 7 types are never offered here at
+    // all, regardless of tech -- the 5 starbase-variant types are set only when a starbase is first
+    // built, Outpost only by construction, Terraform only by the separate Terraform command.
+    private static readonly HashSet<WorldType> NeverDesignable = [
+        WorldType.Outpost, WorldType.BaseStarbase, WorldType.JumpshipBaseStarbase,
+        WorldType.StarshipBaseStarbase, WorldType.TransportBaseStarbase, WorldType.RawMaterialMineStarbase,
+        WorldType.Terraform,
+    ];
+
+    /// <summary>
+    /// Worlds menu > Designate (DESIGN.PAS: DesignateCommand, :656-861). Picks the world at the
+    /// cursor (must be the player's own), builds the same eligible-type list GetDesignation's own
+    /// loop does (tech gate, the 7 never-designable types, Ambrosia's own class gate), and opens a
+    /// picker; declining a risky choice's confirm re-opens this same picker rather than cancelling
+    /// the whole command, matching DesignateCommand's own outer REPEAT.
+    /// </summary>
+    private void Designate()
+    {
+        var world = FindWorldAt(galaxyView.CursorLocation);
+        if (world is null || !ReferenceEquals(world.Owner, human)) {
+            ShowInfo("Designate", "Move the cursor onto one of your own worlds first.");
+            return;
+        }
+
+        var cls = world.EffectiveClass;
+        var choices = Enum.GetValues<WorldType>()
+            .Where(t => !NeverDesignable.Contains(t))
+            .Where(t => WorldDesignation.MinTechForType[t] <= world.TechLevel)
+            .Where(t => t != WorldType.Ambrosia || cls is WorldClass.Ambrosia or WorldClass.Paradise)
+            .Select(t => new WorldTypeChoice(t, DesignationMenuLine(t, cls)))
+            .ToList();
+
+        ShowWorldTypePicker("Designate", world, choices, newType => ConfirmDesignate(world, newType));
+    }
+
+    // GetDesignation's own menu line (DESIGN.PAS:733-744): type name, left-padded, then main
+    // industry -- three hardcoded overrides (University/RawMaterialMine/Capital) instead of
+    // PrincipalIndustry's own entry for those. The trailing suitability percentage
+    // (ClassIndustryAdjustment for that industry, 100% = average) is this port's own addition, in its
+    // own column so every candidate's number is visible at a glance rather than one at a time in a
+    // hint line -- see WorldDesignation.DesignationHint's own doc comment for the rest of the info.
+    private static string DesignationMenuLine(WorldType type, WorldClass cls)
+    {
+        var name = WorldDesignation.TypeName(type);
+        var capitalized = char.ToUpperInvariant(name[0]) + name[1..];
+        var industry = type switch {
+            WorldType.University => "(research)",
+            WorldType.RawMaterialMine or WorldType.RawMaterialMineStarbase => "raw material mining",
+            WorldType.Capital => "administration",
+            _ => IndustryConstants.Name(WorldDesignation.PrincipalIndustry[type]),
+        };
+        var suitability = AnnualTickHandler.ClassIndustryAdjustment[(cls, WorldDesignation.PrincipalIndustry[type])];
+        return $"{capitalized,-30}{industry,-22}{suitability,4}%";
+    }
+
+    // DesignateCommand's own local TypeN (DESIGN.PAS:672-694) -- "a/an X" phrasing for its own
+    // confirm dialogs and final report; distinct from WorldDesignation.TypeName's bare noun (read
+    // by Production's Type: field).
+    private static string DesignationArticleName(WorldType type) => type switch {
+        WorldType.Agricultural => "an agricultural world",
+        WorldType.Ambrosia => "an ambrosia world",
+        WorldType.Base => "a base planet",
+        WorldType.BaseStarbase => "a specialized base planet",
+        WorldType.Capital => "the capital of the empire",
+        WorldType.Chemical => "a chemical factory world",
+        WorldType.Independent => "an independent world",
+        WorldType.JumpshipBase => "a jumpship complex",
+        WorldType.JumpshipBaseStarbase => "a specialized jumpship complex",
+        WorldType.Mine => "a metal-mining world",
+        WorldType.NinjaWorld => "a ninja world",
+        WorldType.Outpost => "an outpost",
+        WorldType.RawMaterialMine => "a mining world",
+        WorldType.RawMaterialMineStarbase => "a specialized mining world",
+        WorldType.StarshipBase => "a starship complex",
+        WorldType.StarshipBaseStarbase => "a specialized starship complex",
+        WorldType.TransportBase => "a warpship complex",
+        WorldType.TransportBaseStarbase => "a specialized warpship complex",
+        WorldType.University => "a research university world",
+        WorldType.Terraform => "a terraforming world",
+        WorldType.TrillumMine => "a trillum-mining world",
+        _ => throw new ArgumentOutOfRangeException(nameof(type)),
+    };
+
+    // DesignateCommand's own risk-confirm chain (DESIGN.PAS:785-832): at most one of these fires,
+    // in this exact order (an ELSE IF chain in real Pascal) -- declining re-opens the type picker
+    // rather than cancelling the command, matching the outer REPEAT's own retry.
+    private void ConfirmDesignate(IEconomicWorld world, WorldType newType)
+    {
+        var cls = world.EffectiveClass;
+        var warning = newType switch {
+            WorldType.Capital =>
+                $"{MyLord()}, changing the capital will result in short-term loss of efficiency\nand increased unrest among the people of the empire.",
+            _ when world is Starbase { Kind: StarbaseKind.IndustrialComplex } && newType is not
+                (WorldType.Base or WorldType.JumpshipBase or WorldType.StarshipBase or WorldType.TransportBase or WorldType.Capital or WorldType.NinjaWorld) =>
+                $"But {MyLord()}, an industrial complex would be wasted on such a trivial designation.",
+            WorldType.University when world.TechLevel < human.Capital!.TechLevel =>
+                $"But {MyLord()}, {DisplayName(world)} is not yet as advanced as the capital.\nAs a university world it wouldn't be of much use.",
+            WorldType.Mine or WorldType.RawMaterialMine or WorldType.TrillumMine when cls is WorldClass.GasGiant or WorldClass.Ice or WorldClass.Ocean or WorldClass.Poisonous =>
+                $"{MyLord()}, the environment of {DisplayName(world)} is not really suited to\nlarge scale mining operations.",
+            WorldType.Agricultural when cls is WorldClass.Arid or WorldClass.Artificial or WorldClass.Barren or WorldClass.Desert or WorldClass.Ice or WorldClass.Poisonous or WorldClass.Underground or WorldClass.Volcanic =>
+                $"I hope you will reconsider, {MyLord()}, {DisplayName(world)} would not be\nan ideal agricultural world.",
+            _ => null,
+        };
+
+        if (warning is null) {
+            FinishDesignate(world, newType);
+            return;
+        }
+
+        ShowConfirm("Designate", $"{warning}\nAre you sure about this command?", choice => {
+            if (choice == 0) {
+                FinishDesignate(world, newType);
+            } else {
+                Designate();
+            }
+        });
+    }
+
+    private void FinishDesignate(IEconomicWorld world, WorldType newType)
+    {
+        WorldDesignation.Redesignate(world, newType, random);
+        galaxyView.Refresh();
+        ShowInfo("Designate",
+            $"{DisplayName(world)} has been designated as {DesignationArticleName(newType)}.\n" +
+            $"All industries are being re-distributed.  New efficiency: {world.Efficiency}%");
+    }
+
+    private sealed record WorldTypeChoice(WorldType Type, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    // A small ListView picker over an arbitrary label list -- ShowObjectPicker's own shape, minus
+    // its ISectorObject-specific fleet-action hint row. The bottom hint panel is this port's own
+    // addition (WorldDesignation.DesignationHint's own doc comment): no real Pascal equivalent tells
+    // the player what a designation actually changes -- optimally choosing meant cross-referencing
+    // manual tables by hand.
+    private void ShowWorldTypePicker(string title, IEconomicWorld world, List<WorldTypeChoice> choices, Action<WorldType> onChosen)
+    {
+        // Sized generously (not to the shortest string that happens to fit today): DesignationHint's
+        // longest sentence (~200 chars, the RawMaterialSplit branch) needs 3 wrapped rows at this
+        // width, so 4 leaves headroom rather than clipping the moment its wording changes slightly.
+        const int hintLines = 4;
+        const int hintGap = 1; // blank row separating the type list from the info panel below it
+        var picker = new Window {
+            Title = title,
+            X = Pos.Center(), Y = Pos.Center(),
+            Width = 88, Height = Math.Min(choices.Count + hintLines + hintGap + 3, 28),
+            BorderStyle = LineStyle.Single,
+            CanFocus = true,
+        };
+        picker.SetScheme(new Scheme(PickerNormalAttribute));
+        picker.Border.View?.SetScheme(new Scheme(PickerBorderAttribute));
+
+        picker.Add(new Label { X = 0, Y = 0, Text = $"{"World Type",-30}{"Main Industry",-22}{"Suit.",4}" });
+
+        var listView = new ListView<WorldTypeChoice> { X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill(hintLines + hintGap) };
+        listView.SetScheme(new Scheme { Normal = PickerNormalAttribute, Focus = PickerSelectedAttribute });
+        listView.SetSource(new ObservableCollection<WorldTypeChoice>(choices));
+        listView.Index = 0;
+        picker.Add(listView);
+
+        var hintLabel = new Label { X = 0, Y = Pos.AnchorEnd(hintLines), Width = Dim.Fill(), Height = hintLines, Text = WorldDesignation.DesignationHint(world, listView.Value!.Type) };
+        picker.Add(hintLabel);
+        listView.ValueChanged += (_, _) => hintLabel.Text = listView.Value is { } chosen ? WorldDesignation.DesignationHint(world, chosen.Type) : string.Empty;
+
+        var dismiss = AddModal(picker);
+
+        picker.KeyDown += (_, key) => {
+            switch (key.NoAlt.NoCtrl.NoShift.KeyCode) {
+                case KeyCode.Enter:
+                    var chosen = listView.Value;
+                    dismiss();
+                    if (chosen is not null) {
+                        onChosen(chosen.Type);
+                    }
+                    key.Handled = true;
+                    break;
+                case KeyCode.Esc:
+                    dismiss();
+                    key.Handled = true;
+                    break;
+            }
+        };
+    }
+
     /// <summary>
     /// Resolves "the player's own fleet under the cursor" for every Fleet-menu command below plus
     /// Attack. Real Pascal disambiguates multiple fleets in one sector by having the player type the
@@ -1687,7 +1873,7 @@ public sealed class GameShell : Window
         }),
         new MenuBarItem("_Worlds", new MenuItem[] {
             new("_Close Up", Key.Empty, ExamineCursor),
-            new("_Designate", Key.Empty, () => Stub("Designate")),
+            new("_Designate", Key.Empty, Designate),
             new("P_roduction", Key.Empty, () => Stub("Production")),
             new("_ISSP", Key.Empty, () => Stub("ISSP")),
             new("_Add Name", Key.Empty, () => Stub("Add Name")),

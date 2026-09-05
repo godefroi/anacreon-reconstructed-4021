@@ -31,12 +31,17 @@ codebase is in a test file.
 
 ## Human interactive turn handler / TUI
 
-- **Most of the menu bar is still stubs.** `Fleet > Orders`/`Cancel Orders` (`Change Destination`/
-  `SRM Sweep`/`Probe` are done), all of `Build`/`Empire`/`Worlds`, every status-bar F-key panel, and
-  all of `Ministry of War` (`Attack`/`Auto Attack`/`Launch LAMs`/`Defenses` are done) are a
-  `MessageBox` stub. `Orders` is `FLTCOMM.PAS: FleetOrdersCommand` — a full mini scripting language
-  (`ORDERS.PAS`'s own compile/decompile pair over a captive text editor), not a quick add; `Cancel
-  Orders` is trivial but pointless before `Orders` exists.
+- **Menu bar items still a `MessageBox` "Not yet implemented." stub.** `docs/TUI_SURFACES_MAPPING.md`
+  has the planned widget shape and exact Pascal procedure for each; anything not listed here is done.
+  - [ ] `⌂ > About Anacreon`
+  - [ ] `Game > Status Hardcopy`
+  - [ ] `Empire > Send Message` / `Read Messages` / `Trade Technology`
+  - [ ] `Worlds > Production` / `ISSP` / `Add Name` / `Delete Name` / `Liberate` / `Self-Destruct`
+  - [ ] `Fleet > Orders` / `Cancel Orders` — `Orders` (`FLTCOMM.PAS: FleetOrdersCommand`) is a full
+        mini scripting language (`ORDERS.PAS`'s own compile/decompile pair over a captive text
+        editor), not a quick add; `Cancel Orders` is trivial but pointless before `Orders` exists.
+  - [ ] `Build > Site Status` / `New` / `Abort`
+  - [ ] Status bar `F1 Help` / `F3 Status` / `F5 Fleet` / `F7 News` / `F8 Empire` / `F9 Names`
 - **No post-conquest world-list report.** `ATTACK.PAS: ConquerEmpire`'s own `Booty` (the set of
   world indices that joined the conqueror mid-`ConquerEmpire`) is declared and threaded through
   real Pascal's call chain but never read anywhere in it — dropped entirely by this port, confirmed
