@@ -510,6 +510,18 @@ public sealed class GameShell : Window
         };
     }
 
+    private void ShowTechTree()
+    {
+        var window = new TechTreeWindow(human);
+        var dismiss = AddModal(window);
+        window.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode == KeyCode.Esc) {
+                dismiss();
+                key.Handled = true;
+            }
+        };
+    }
+
     private void Designate() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "Designate");
     private void Issp() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "ISSP");
     private void Production() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "Production");
@@ -1956,6 +1968,7 @@ public sealed class GameShell : Window
             new("_Send Message", Key.Empty, () => Stub("Send Message")),
             new("_Read Messages", Key.Empty, () => Stub("Read Messages")),
             new("_Trade Technology", Key.Empty, () => Stub("Trade Technology")),
+            new("Te_ch Tree", Key.Empty, ShowTechTree),
         }),
         new MenuBarItem("_Worlds", new MenuItem[] {
             new("_Close Up", Key.Empty, ExamineCursor),
