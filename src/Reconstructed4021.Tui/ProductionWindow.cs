@@ -159,15 +159,7 @@ internal sealed class ProductionWindow : View
     private static int AnnualTickHandlerClassAdj(IEconomicWorld world, IndustryType type) =>
         Core.Turns.AnnualTickHandler.ClassIndustryAdjustment[(world.EffectiveClass, type)];
 
-    private static string ShipAbbrev(ShipType type) => type switch {
-        ShipType.Fighter => "fgt", ShipType.HunterKiller => "hkr", ShipType.Jumpship => "jmp",
-        ShipType.Jumptransport => "jtn", ShipType.Penetrator => "pen", ShipType.Starship => "str",
-        ShipType.Transport => "trn", _ => type.ToString(),
-    };
+    private static string ShipAbbrev(ShipType type) => ResourceAbbreviation.Of(type);
 
-    private static string CargoAbbrev(CargoType type) => type switch {
-        CargoType.Chemicals => "che", CargoType.Metals => "met", CargoType.Supplies => "sup",
-        CargoType.Trillum => "tri", CargoType.Legion => "men", CargoType.NinjaLegion => "nnj",
-        CargoType.Ambrosia => "amb", _ => type.ToString(),
-    };
+    private static string CargoAbbrev(CargoType type) => ResourceAbbreviation.Of(type);
 }
