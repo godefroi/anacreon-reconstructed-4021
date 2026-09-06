@@ -39,7 +39,7 @@ internal sealed class WorldInfoWindow : Window
     private readonly List<(string Name, View View)> tabs;
     private int currentIndex;
 
-    public WorldInfoWindow(IEconomicWorld world, string worldName, Game game, Empire viewer, Random random, string initialTab, Action<WorldType> onDesignateSelected)
+    public WorldInfoWindow(IEconomicWorld world, string worldName, Game game, Empire viewer, string initialTab, Action<WorldType> onDesignateSelected)
     {
         Width = 88;
         Height = 24;
@@ -50,7 +50,7 @@ internal sealed class WorldInfoWindow : Window
 
         var closeUpTab = new WorldCloseUpTabView(world, game, viewer);
         var designateTab = new DesignateTabView(world, onDesignateSelected);
-        var productionTab = new ProductionWindow(world, random);
+        var productionTab = new ProductionWindow(world);
 
         // ISSP has nothing to edit on a starbase (real Pascal's own GetISSP/SetISSP hardcode its
         // dial at 0 -- see IsspEditor's own doc comment) -- omitted there rather than shown inert.
@@ -95,6 +95,9 @@ internal sealed class WorldInfoWindow : Window
     {
         Remove(tabs[currentIndex].View);
         currentIndex = (currentIndex + direction + tabs.Count) % tabs.Count;
+        if (tabs[currentIndex].View is ProductionWindow production) {
+            production.Refresh(); // stale otherwise -- ISSP dial changes on the sibling tab never re-run the preview
+        }
         Add(tabs[currentIndex].View);
         tabs[currentIndex].View.SetFocus();
         UpdateTitle();

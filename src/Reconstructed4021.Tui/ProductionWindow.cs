@@ -17,7 +17,15 @@ namespace Reconstructed4021.Tui;
 /// ShipYardInd's own point: a world only ever grows one of the four) across 6 rows of context
 /// (ISSP/ClsAdj/Target%/Opt/Current, all from real Pascal, plus this port's own "Next Tick" --
 /// see <see cref="WorldProductionPreview"/>'s own doc comment for why that's computed by running the
-/// real pipeline against a clone rather than a second reimplementation of the formula).
+/// real pipeline against a clone rather than a second reimplementation of the formula). The terse
+/// row labels (ISSP/ClsAdj/Target%/Opt) are spelled out in-line as an extra column past the industry
+/// cells; the ship/cargo type codes get a separate legend in the space to the right of those tables,
+/// reusing the real in-game glosses (F1 Help) rather than inventing new ones.
+///
+/// Must be recomputed on every visit, not just at construction -- <see cref="Refresh"/>, called by
+/// <see cref="WorldInfoWindow"/> on tab switch -- since the sibling ISSP tab can change the dials
+/// this preview depends on at any time. Uses its own fixed-seed Random rather than the game's shared
+/// one so repeated visits never perturb the real turn-resolution RNG.
 /// </summary>
 internal sealed class ProductionWindow : View
 {
@@ -33,17 +41,38 @@ internal sealed class ProductionWindow : View
         ("Tri", IndustryType.TrillumMining),
     ];
 
-    public ProductionWindow(IEconomicWorld world, Random random)
+    private readonly IEconomicWorld world;
+
+    public ProductionWindow(IEconomicWorld world)
     {
+        this.world = world;
         Width = Dim.Fill();
         Height = Dim.Fill();
         CanFocus = true;
         SetScheme(new Scheme(DispWindAttribute));
 
+        Rebuild();
+    }
+
+    /// <summary>
+    /// Recomputes the preview against the world's current state -- must be called whenever this tab
+    /// is revisited, since the constructor's own snapshot otherwise goes stale the moment the sibling
+    /// ISSP tab changes a dial (the bug this method exists to fix). Uses its own fixed-seed Random
+    /// rather than the game's shared one, so re-opening this tab never perturbs the real turn-
+    /// resolution RNG and always renders the same projection for the same world state.
+    /// </summary>
+    public void Refresh()
+    {
+        RemoveAll();
+        Rebuild();
+    }
+
+    private void Rebuild()
+    {
         var columns = Columns;
         columns[3] = ("SY-", ActiveShipyardIndustry(world.Type));
 
-        var preview = WorldProductionPreview.Compute(world, random);
+        var preview = WorldProductionPreview.Compute(world, new Random(0));
 
         AddAt(1, 0, " Cls:"); AddAt(7, 0, world.EffectiveClass.ToString());
         AddAt(23, 0, "Tech:"); AddAt(29, 0, world.TechLevel.ToString());
@@ -52,14 +81,15 @@ internal sealed class ProductionWindow : View
 
         const int industryLabelWidth = 10;
         string Row(string label, IEnumerable<string> cells) => label.PadRight(industryLabelWidth) + string.Concat(cells.Select(cell => cell.PadLeft(5)));
+        string RowWithGloss(string label, IEnumerable<string> cells, string gloss) => Row(label, cells) + "   " + gloss;
 
         AddAt(0, 2, Row("", columns.Select(c => c.Label)));
-        AddAt(0, 3, Row("ISSP:", columns.Select(c => IsspCell(world, c.Type))));
-        AddAt(0, 4, Row("ClsAdj:", columns.Select(c => $"{AnnualTickHandlerClassAdj(world, c.Type)}%")));
-        AddAt(0, 5, Row("Target%:", columns.Select(c => $"{preview.Distribution[c.Type]:0}%")));
-        AddAt(0, 6, Row("Opt:", columns.Select(c => $"{preview.OptimalIndustry[c.Type]}")));
-        AddAt(0, 7, Row("Current:", columns.Select(c => $"{world.Industry[c.Type]}")));
-        AddAt(0, 8, Row("Next Tick:", columns.Select(c => $"{preview.ProjectedIndustry[c.Type]}")));
+        AddAt(0, 3, RowWithGloss("ISSP:", columns.Select(c => IsspCell(world, c.Type)), "target self-sufficiency %"));
+        AddAt(0, 4, RowWithGloss("ClsAdj:", columns.Select(c => $"{AnnualTickHandlerClassAdj(world, c.Type)}%"), "world-class industry modifier"));
+        AddAt(0, 5, RowWithGloss("Target%:", columns.Select(c => $"{preview.Distribution[c.Type]:0}%"), "this tick's output share"));
+        AddAt(0, 6, RowWithGloss("Opt:", columns.Select(c => $"{preview.OptimalIndustry[c.Type]}"), "optimal at full output"));
+        AddAt(0, 7, RowWithGloss("Current:", columns.Select(c => $"{world.Industry[c.Type]}"), "industry level right now"));
+        AddAt(0, 8, RowWithGloss("Next Tick:", columns.Select(c => $"{preview.ProjectedIndustry[c.Type]}"), "level after next turn runs"));
 
         var ships = Enum.GetValues<ShipType>();
         AddAt(0, 10, Row("", ships.Select(ShipAbbrev)));
@@ -72,6 +102,38 @@ internal sealed class ProductionWindow : View
         AddAt(0, 16, Row("Next Tick:", cargoTypes.Select(c => $"{preview.ProjectedCargo[c]}")));
 
         AddAt(0, 17, $"Trillum reserves: {world.TrillumReserve}  ->  {preview.ProjectedTrillumReserve}");
+
+        AddAt(0, 18, preview.ShortThisTick.Count == 0
+            ? "Short this tick: none"
+            : $"Short this tick: {string.Join(", ", preview.ShortThisTick.Select(CargoAbbrev))}");
+
+        AddLegend();
+    }
+
+    // Unused screen real estate to the right of the ship/cargo tables (which only reach x=44) --
+    // ship and cargo type codes are the least likely of the abbreviations here to be misunderstood,
+    // so they're what's shown in this narrower legend; ISSP/ClsAdj/Target%/Opt get spelled out
+    // in-line as their own table column instead (RowWithGloss above), where there's no ambiguity
+    // about which row a description belongs to. Wording matches the real in-game glosses (F1 Help,
+    // "Ships and Defenses"/"Materials" pages) rather than inventing new ones.
+    private void AddLegend()
+    {
+        const int x = 50;
+        const int y = 10;
+        string[] lines = [
+            "fgt fighters      hkr hunter-killers",
+            "jmp jumpships     jtn jumptransports",
+            "pen penetrators   str starships",
+            "trn transports",
+            "",
+            "che chemicals     met metals",
+            "sup supplies      tri trillum",
+            "men troops        nnj ninja legion",
+            "amb ambrosia",
+        ];
+        for (var i = 0; i < lines.Length; i++) {
+            AddAt(x, y + i, lines[i]);
+        }
     }
 
     private void AddAt(int x, int y, string text) => Add(new Label { X = x, Y = y, Text = text });

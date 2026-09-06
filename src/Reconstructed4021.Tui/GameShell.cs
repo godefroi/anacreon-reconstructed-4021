@@ -410,7 +410,7 @@ public sealed class GameShell : Window
             return;
         }
 
-        var window = new WorldInfoWindow(world, DisplayName(world), game, human, random, initialTab,
+        var window = new WorldInfoWindow(world, DisplayName(world), game, human, initialTab,
             newType => ConfirmDesignate(world, newType));
         var dismiss = AddCloseUpOverlay(window);
         window.KeyDown += (_, key) => {
