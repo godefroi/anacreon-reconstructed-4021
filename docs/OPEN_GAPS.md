@@ -51,18 +51,6 @@ codebase is in a test file.
   there would mean also cloning that starbase's real neighbors, since real SupplyLink/SurplusLink
   mutate them directly, and a preview screen mutating other real worlds as a side effect of being
   opened isn't acceptable. See that class's own doc comment.
-- **`NewsItem`'s resource-name encoding uses a raw ordinal instead of a typed field.**
-  `ReportResourceShortfall`/`ConstructionLacksRawMaterial`/`DestructionDetail`/`TransferDetail` all
-  encode "which `DefenseType`/`ShipType`/`CargoType`" as Pascal's combined `ResourceTypes` ordinal
-  (defenses 1-4, ships 5-11, cargo 12-18) via a `+N` literal at each call site — the same shape of
-  problem `NewsItem`'s own `Subject`/`Position`/`OtherEmpire`/`TechGrant` fields already solved with
-  real typed fields instead of a packed ordinal. A missing `+12` here was a real live bug (a Metals
-  shortfall rendered as "ion cannons"), fixed with the correct offset for now, but the right fix is
-  `DefenseType?`/`ShipType?`/`CargoType?` fields on `NewsItem` (matching `FleetOrder.TransferShip`/
-  `TransferCargo`'s own pattern), which also means `SavGameWriter`/`SavGameLoader` need to
-  reconstruct/decode the raw `Word` from those fields at the file boundary, the same way
-  `OtherEmpire`/`TechGrant` already do. Deferred: touches both save formats and the `NewsWindow`
-  renderer, worth doing as its own change.
 - **No hotseat protection.** `PROLOG.PAS: SetUpPlayer`'s own password prompt (`GetPassword`) isn't
   built. `Program.cs`'s turn loop is already `Status`/`ITurnHandler.IsHuman`-driven per empire (not
   hardcoded to one `Empire` reference), so a second human empire would already get its own
