@@ -367,22 +367,35 @@ internal sealed class GalaxyView : View
     }
 
     /// <summary>
-    /// A plain click moves the cursor to that sector and activates it, same as pressing Enter there
-    /// -- no Pascal equivalent (MAPWIND.PAS is keyboard-only, DOS-era), a TUI-only convenience like
-    /// this view's own drag-panning below. Left-button drag (no full click, held and moved) instead
-    /// pans the viewport by the pixel delta since the last event; released or moved-without-the-button
-    /// ends the drag.
+    /// A single click just moves the cursor to that sector (same as an arrow key landing there); a
+    /// double click also activates it, same as pressing Enter there -- matching the ordinary desktop
+    /// convention of select-then-open, since a single click that immediately opened Close Up gave the
+    /// cursor no way to just move to a sector by mouse without also examining it. No Pascal equivalent
+    /// either way (MAPWIND.PAS is keyboard-only, DOS-era) -- a TUI-only convenience like this view's
+    /// own drag-panning below. Left-button drag (no full click, held and moved) instead pans the
+    /// viewport by the pixel delta since the last event; released or moved-without-the-button ends the
+    /// drag.
     /// </summary>
     private void OnMouseEvent(object? sender, Mouse mouse)
     {
+        if (mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked) && mouse.Position is { } doubleClickPosition) {
+            if (TryGetSectorAt(doubleClickPosition, out var sector)) {
+                MoveCursorTo(sector);
+                SectorActivated?.Invoke(this, _cursor);
+            }
+
+            mouse.Handled = true;
+            return;
+        }
+
         if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked) && mouse.Position is { } clickPosition) {
             // A click landing inside this View's own Frame but outside the galaxy's actual drawn
             // grid (e.g. a small galaxy with room to spare in a bigger terminal) used to silently
             // clamp to the nearest edge cell -- which, if that happened to already be the cursor's
-            // own position, activated whatever was already selected instead of doing nothing.
+            // own position, would previously have activated whatever was already selected instead of
+            // doing nothing; now it's simply a no-op cursor move either way.
             if (TryGetSectorAt(clickPosition, out var sector)) {
                 MoveCursorTo(sector);
-                SectorActivated?.Invoke(this, _cursor);
             }
 
             mouse.Handled = true;
@@ -422,9 +435,10 @@ internal sealed class GalaxyView : View
     public event EventHandler<string>? CursorCoordinateChanged;
 
     /// <summary>
-    /// Raised when a sector is clicked (see <see cref="OnMouseEvent"/>) -- click behaves like Enter,
-    /// per the user's own explicit request. <see cref="GameShell"/> subscribes to this and its own
-    /// Enter-key handler calls the exact same method, so the two input paths can never drift apart.
+    /// Raised when a sector is double-clicked (see <see cref="OnMouseEvent"/>) -- double-click behaves
+    /// like Enter, a single click just moves the cursor there. <see cref="GameShell"/> subscribes to
+    /// this and its own Enter-key handler calls the exact same method, so the two input paths can
+    /// never drift apart.
     /// </summary>
     public event EventHandler<Coordinate>? SectorActivated;
 

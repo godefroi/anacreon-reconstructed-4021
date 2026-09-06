@@ -149,10 +149,10 @@ public sealed class GameShell : Window
             key.Handled = true;
         };
 
-        // A click behaves like Enter on the same sector, per the user's own explicit request --
-        // routed through the exact same ActivateCursor the keyboard path uses, so the two can never
-        // drift apart (pending-pick confirm during Deploy/Attack destination selection, Close Up
-        // otherwise).
+        // A double-click behaves like Enter on the same sector (a single click just moves the cursor
+        // there, per GalaxyView's own OnMouseEvent) -- routed through the exact same ActivateCursor
+        // the keyboard path uses, so the two can never drift apart (pending-pick confirm during
+        // Deploy/Attack destination selection, Close Up otherwise).
         galaxyView.SectorActivated += (_, _) => ActivateCursor();
     }
 
