@@ -69,7 +69,7 @@ internal sealed class NewsWindow : Window
     // DestructionDetail/TransferDetail's own p2 encoding (LAM=1..ion=4,fgt=5..trn=11,men=12..tri=18,
     // per this port's own call-site comments -- ShipType/DefenseType ordinal plus a fixed offset).
     private static readonly string[] ResourceNames = [
-        "", "LAMs", "defense satellites", "GDMs", "ion canons", "fighter squadrons",
+        "", "LAMs", "defense satellites", "GDMs", "ion cannons", "fighter squadrons",
         "hunter-killers", "jumpships", "jumptransports", "penetrators", "starships", "transports",
         "legions", "ninja legions", "kilotons of ambrosia", "megatons of chemicals",
         "megatons of metals", "megatons of supplies", "kilotons of trillum",
