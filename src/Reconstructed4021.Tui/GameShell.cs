@@ -1425,6 +1425,39 @@ public sealed class GameShell : Window
             });
 
     /// <summary>
+    /// Fleet menu > Orders (FLTCOMM.PAS: FleetOrdersCommand): opens <see cref="FleetOrdersWindow"/> on
+    /// the selected fleet -- see that class's own doc comment for the compile/commit flow.
+    /// </summary>
+    private void FleetOrders() => PickOwnFleetAtCursor("Orders", FleetOrders);
+
+    private void FleetOrders(Fleet fleet)
+    {
+        var window = new FleetOrdersWindow(fleet, game);
+        var dismiss = AddModal(window, dismissOnOutsideClick: false);
+
+        window.Closed += (_, message) => {
+            dismiss();
+            if (message is not null) {
+                ShowInfo("Orders", message);
+            }
+        };
+    }
+
+    /// <summary>
+    /// Fleet menu > Cancel Orders (FLTCOMM.PAS: FleetCancelOrdersCommand, :917-931) -- no window at
+    /// all, matching real Pascal's own body exactly: clear the queue, zero the resume cursor, report.
+    /// </summary>
+    private void CancelFleetOrders() => PickOwnFleetAtCursor("Cancel Orders", CancelFleetOrders);
+
+    private void CancelFleetOrders(Fleet fleet)
+    {
+        fleet.Orders.Clear();
+        fleet.NextOrder = 0;
+        var fleetName = CloseUpWindow.DescribeLocation(fleet, human);
+        ShowInfo("Cancel Orders", $"All orders to {fleetName} cancelled, {MyLord()}.");
+    }
+
+    /// <summary>
     /// Fleet menu > SRM Sweep (FLTCOMM.PAS: MineSweeperCommand, :788-812): reads the mine at the
     /// selected fleet's own location (<c>GetCoord(FltID,XY)</c>), same as real Pascal -- there's no
     /// separate destination pick, the fleet has to already be sitting on the minefield.
@@ -2032,8 +2065,8 @@ public sealed class GameShell : Window
             new("_Abort/Join", Key.Empty, AbortJoinFleet),
             new("_Refuel", Key.Empty, RefuelFleet),
             new("_SRM Sweep", Key.Empty, SrmSweep),
-            new("_Orders", Key.Empty, () => Stub("Fleet Orders")),
-            new("Canc_el Orders", Key.Empty, () => Stub("Cancel Orders")),
+            new("_Orders", Key.Empty, FleetOrders),
+            new("Canc_el Orders", Key.Empty, CancelFleetOrders),
             new("_Probe", Key.Empty, LaunchProbe),
         }),
         new MenuBarItem("_Build", new MenuItem[] {
