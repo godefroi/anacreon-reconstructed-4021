@@ -1347,6 +1347,53 @@ Direct2D) surfaced; see the README's Known Issues section.
   J (opens the real Abort/Join ground picker), plus Close Up answering A (opens the real "Standard
   battle configuration?" dialog) — same code path both surfaces share.
 
+- **8t, Fleet Orders (`ORDERS.PAS`'s own mini scripting language, `FLTCOMM.PAS: FleetOrdersCommand`/
+  `FleetCancelOrdersCommand`).** `Fleet.Orders` had existed since the save-format work purely for
+  round-trip fidelity — nothing ever compiled a player's text into it or executed it during a turn.
+  Three pieces: `Fleet.NextOrder` (the execution cursor) plus `Core.Turns.FleetMovementHandler.
+  ExecuteFleetOrders`/`ExecuteDestCOM`/`ExecuteTransCOM`, ported directly from `FLEET.PAS:562-617`;
+  `Core.Entities.FleetOrderCompiler` (`ParseLine`/`CompileOrders`/`DeCompileOrders`, destination
+  resolution via the same per-empire `Names` dictionary already populated elsewhere, or a bounded
+  `"x,y"`); `Tui.FleetOrdersWindow`, hosting a `Terminal.Gui.Editor.Editor` child since this version's
+  own `TextView` is deprecated with no in-house replacement.
+
+  A real pre-existing save/load gap surfaced and got fixed alongside this: `SavGameLoader`/
+  `SavGameWriter` treated the on-disk `NextOrder` byte as dead legacy state (only `OrderData`, the
+  adjacent field, really is — a serialized heap pointer). Confirmed against `FLEET_ORDERS.SAV`
+  (`nextOrder=2`, genuinely mid-queue, not a fresh compile) that it round-trips as real, live state in
+  real Pascal; harmless only because nothing executed the queue yet.
+
+  One genuinely surprising, verified-against-source behavior worth flagging for anyone reading the
+  execution loop later: reaching the *last* command in a fleet's order list disposes the whole queue
+  in that same call, even when that last command (a `WaitCOM`, say) also independently satisfies the
+  loop's own stop condition — `ExecuteFleetOrders`' "what's next" bookkeeping runs unconditionally
+  every iteration, *before* the `UNTIL` check, matching `FLEET.PAS:582-611` exactly. Practical upshot:
+  a script only actually repeats if it ends with `REPEAT`; anything else is a one-shot no matter what
+  the last command is.
+
+  Verified end-to-end via the headless driver: compile success, a compile error's Yes/No
+  keep-editing/discard-and-close confirm, and the resulting fleet mutation, all live against
+  `assets/saves/Garrisoned Outpost.json`. Getting there took two real, load-bearing discoveries about
+  this Terminal.Gui version, both found by decompiling rather than guessing: (1) a bare Esc reaches
+  neither a Window's own `KeyDown` nor a plain C# `KeyDown` subscriber added on the Editor child from
+  outside — it's consumed through Terminal.Gui's own Command-dispatch path, so overriding it needs a
+  thin `Editor` subclass (`AddCommand`/`KeyBindings` are `protected`) rather than an external handler;
+  (2) the driver's own Pipeline-mode input queue needs real wall-clock time after a key before a
+  `DUMP` reflects its effect — several apparent "the keystroke did nothing" failures during this work
+  were actually just a `DUMP` reading the screen one iteration too early, not a real bug, resolved by
+  adding a `SLEEP` before the check.
+
+  Two unrelated bugs found and fixed along the way (their own commits): `GalaxyView`'s drag-pan mouse
+  grab could get stuck forever if a click happened to follow so much as a pixel of drift after the
+  press — any ordinary click with a little drag, not a rare edge case — because the grab-release
+  fallback sat behind early returns for `Clicked`/`DoubleClicked`; and `ReportResourceShortfall`/
+  `ConstructionLacksRawMaterial` were passing this port's own bare `CargoType` ordinal into a table
+  indexed by Pascal's combined `ResourceTypes` numbering, so a Metals shortfall rendered as "ion
+  cannons" instead of "megatons of metals" (missing the same `+N` offset already applied correctly for
+  ships elsewhere). That fix is explicitly interim — see `OPEN_GAPS.md`; the real fix replaces the
+  ordinal arithmetic with nullable typed fields on `NewsItem`, matching `FleetOrder`'s own
+  `TransferShip`/`TransferCargo` split, deferred as a follow-up since it touches both save formats.
+
 ## 9. Async/hotseat turn mode
 
 Deferred multiplayer option — sequential mode (already built) is the only mode a solo player sees.
