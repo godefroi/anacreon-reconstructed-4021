@@ -146,6 +146,7 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
         if (fleet.Location == destination) {
             fleet.Destination = null;
             fleet.Status = FleetStatus.Ready;
+            ExecuteFleetOrders(fleet, game);
             return;
         }
 
@@ -170,6 +171,7 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
                 fleet.Location = destination;
                 fleet.Destination = null;
                 fleet.Status = FleetStatus.Ready;
+                ExecuteFleetOrders(fleet, game);
             }
 
             return;
@@ -182,8 +184,134 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
         fleet.Location = nextLocation;
         fleet.Status = fleet.Location == destination ? FleetStatus.Ready : FleetStatus.InTransit;
 
-        if (fleet.Location == destination)
+        if (fleet.Location == destination) {
             fleet.Destination = null;
+            ExecuteFleetOrders(fleet, game);
+        }
+    }
+
+    /// <summary>
+    /// ExecuteFleetOrders (FLEET.PAS:562-617) -- called right after the three spots above that can
+    /// leave a fleet <see cref="FleetStatus.Ready"/> this turn, matching Pascal's own single tail call
+    /// in <c>UpdateFleet</c> exactly ("should be called after a fleet has reached its destination but
+    /// before a player takes his/her turn"). Runs commands starting at <see cref="Fleet.NextOrder"/>
+    /// (1-based, matching Pascal) until one of three things happens: a <see cref="CommandType.Destination"/>
+    /// or <see cref="CommandType.Wait"/> command is reached (both represent "this takes a real turn to
+    /// resolve," so execution stops there for now), the list runs out (<see cref="Fleet.NextOrder"/>
+    /// resets to 0 and <see cref="Fleet.Orders"/> is cleared -- Pascal's own <c>DisposeOrders</c>/
+    /// <c>SetFleetCode</c> pairing), or the fleet is destroyed mid-execution (a <see cref="CommandType.Transfer"/>
+    /// emptying the fleet via <see cref="FleetLifecycle.ChangeCompositionOfFleet"/>'s own abort-if-empty
+    /// branch) -- in which case <see cref="Fleet.NextOrder"/> is left untouched, matching Pascal's own
+    /// <c>IF NOT FleetDestroyed THEN SetFleetNextStatement</c> guard. <see cref="CommandType.Repeat"/>
+    /// jumps back to command 1 exactly once per call (<c>IgnoreRepeat</c>) so two adjacent Repeats
+    /// can't spin forever.
+    /// </summary>
+    public static void ExecuteFleetOrders(Fleet fleet, Game game)
+    {
+        if (fleet.NextOrder == 0)
+            return;
+
+        var com = fleet.NextOrder;
+        var lastCommand = fleet.Orders.Count;
+        var ignoreRepeat = false;
+        CommandType type;
+
+        do {
+            var command = fleet.Orders[com - 1];
+            type = command.Type;
+
+            switch (type) {
+                case CommandType.Destination:
+                    ExecuteDestCOM(fleet, command);
+                    break;
+                case CommandType.Transfer:
+                    ExecuteTransCOM(fleet, command, game);
+                    break;
+            }
+
+            if (!game.Galaxy.Fleets.Contains(fleet)) {
+                return; // fleet destroyed by ExecuteTransCOM's own ChangeCompositionOfFleet -- NextOrder stays whatever it was, matching Pascal
+            }
+
+            if (type == CommandType.Repeat && !ignoreRepeat) {
+                com = 1;
+                ignoreRepeat = true;
+            } else if (com < lastCommand) {
+                com++;
+            } else {
+                com = 0;
+                fleet.Orders.Clear();
+            }
+        } while (type is not (CommandType.Destination or CommandType.Wait) && com != 0);
+
+        fleet.NextOrder = com;
+    }
+
+    /// <summary>ExecuteDestCOM (FLEET.PAS:492-497) -- a target object's own current location wins over the raw compiled coordinate (matching Pascal's own <c>IF SameXY(Loc.XY,Limbo) THEN GetCoord(Loc.ID,Loc.XY)</c>), so a DEST order aimed at a starbase still tracks it if that starbase has since moved.</summary>
+    private static void ExecuteDestCOM(Fleet fleet, FleetOrder command)
+    {
+        var destination = command.DestinationObject?.Location ?? command.DestinationPosition!.Value;
+        FleetLifecycle.SetFleetDestination(fleet, destination);
+    }
+
+    /// <summary>
+    /// ExecuteTransCOM (FLEET.PAS:515-560) -- transfers between the fleet and whatever's at its own
+    /// current location, silently clamped to whatever's actually available/fits rather than failing
+    /// outright (there's no player present to retry on error, unlike <see cref="ResourceDistribution.TryTransfer"/>'s
+    /// interactive validate-then-move). A ground that isn't the player's own (or isn't a
+    /// <see cref="IEconomicWorld"/> at all -- <see cref="Galaxy.Galaxy.GetObjectAt"/> never returns a
+    /// <see cref="Fleet"/>, matching real Pascal's own ground/fleet split) is a silent no-op, matching
+    /// Pascal's own <c>GetStatus(GroundID)=GetStatus(FltID)</c> guard.
+    /// </summary>
+    private static void ExecuteTransCOM(Fleet fleet, FleetOrder command, Game game)
+    {
+        if (game.Galaxy.GetObjectAt(fleet.Location) is not IEconomicWorld ground || ground.Owner != fleet.Owner) {
+            return;
+        }
+
+        var newFleetShips = CombatEngine.CloneShips(fleet.Ships);
+        var newFleetCargo = CombatEngine.CloneCargo(fleet.Cargo);
+        var newGroundShips = CombatEngine.CloneShips(ground.Ships);
+        var newGroundCargo = CombatEngine.CloneCargo(ground.Cargo);
+
+        if (command.TransferShip is { } shipType) {
+            var trans = ClampTransfer(command.TransferAmount, newFleetShips[shipType], newGroundShips[shipType], cargoSpacePerUnit: null, newFleetShips, newFleetCargo);
+            newFleetShips[shipType] += trans;
+            newGroundShips[shipType] -= trans;
+        } else if (command.TransferCargo is { } cargoType) {
+            var trans = ClampTransfer(command.TransferAmount, newFleetCargo[cargoType], newGroundCargo[cargoType], FleetLogistics.CargoSpacePerUnit[cargoType], newFleetShips, newFleetCargo);
+            newFleetCargo[cargoType] += trans;
+            newGroundCargo[cargoType] -= trans;
+        } else {
+            return; // a compiled Transfer order always sets exactly one of the two -- defensive only
+        }
+
+        FleetLogistics.BalanceFleet(newFleetShips, newFleetCargo);
+        FleetLifecycle.ChangeCompositionOfFleet(fleet, ground, newFleetShips, newFleetCargo, newGroundShips, newGroundCargo, game);
+    }
+
+    /// <summary>
+    /// The pickup (<paramref name="trans"/>&gt;0)/drop-off clamp cascade from <c>ExecuteTransCOM</c>
+    /// itself (<c>LesserInt</c> chains, FLEET.PAS:537-552): a pickup is bounded by what's on the ground,
+    /// by the fleet's own <see cref="PascalMath.MaxResources"/> headroom, and -- cargo only, ships take
+    /// up their own hull rather than cargo space -- by <see cref="FleetLogistics.FleetCargoSpace"/>; a
+    /// drop-off is bounded by what the fleet has and the ground's own headroom.
+    /// </summary>
+    private static int ClampTransfer(int trans, int fleetAmount, int groundAmount, int? cargoSpacePerUnit, ShipCounts fleetShips, CargoHold fleetCargo)
+    {
+        if (trans > 0) {
+            trans = Math.Min(trans, groundAmount);
+            trans = Math.Min(trans, PascalMath.MaxResources - fleetAmount);
+            if (cargoSpacePerUnit is { } perUnit) {
+                trans = Math.Min(FleetLogistics.FleetCargoSpace(fleetShips, fleetCargo) * perUnit, trans);
+            }
+        } else {
+            trans = -trans;
+            trans = Math.Min(trans, fleetAmount);
+            trans = Math.Min(trans, PascalMath.MaxResources - groundAmount);
+            trans = -trans;
+        }
+        return trans;
     }
 
     /// <summary>

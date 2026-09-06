@@ -408,8 +408,14 @@ public sealed class SavGameLoader
     /// (`LOADSAVE.PAS:250-256`): if any single axis of `XY`/`Dest` is exactly 0, both coordinates
     /// reset to `(1,1)` — confirmed to fire on a per-component basis, not "both coordinates are
     /// (0,0)". `CommandRecord` order queues are read into <see cref="Fleet.Orders"/> (see
-    /// <see cref="ReadCommandRecord"/>) rather than discarded. `NextOrder`/`OrderData` are Pascal's
-    /// own legacy/superseded fields, already dead before this file was even written.
+    /// <see cref="ReadCommandRecord"/>) rather than discarded, and so is `NextOrder` -- a plain
+    /// resume-index `Word`, not a pointer, that real Pascal's own `SaveFleets`/`LoadFleets`
+    /// (`LOADSAVE.PAS:202,246`) blit as part of the whole live `FleetRecord`, so it round-trips
+    /// correctly there. `OrderData` (the 6 bytes right after it) really is dead on load -- it's a
+    /// serialized heap pointer from the save process, meaningless once reloaded into a new one --
+    /// but `NextOrder` is real, live gameplay state <see cref="Turns.FleetMovementHandler.ExecuteFleetOrders"/>
+    /// reads and writes every turn; skipping it would silently lose a fleet's resume point for any
+    /// order queue saved mid-execution (e.g. sitting at a `WaitCOM` between two `DestCOM`s).
     /// </summary>
     private void LoadFleets(SavReader reader, Galaxy.Galaxy galaxy)
     {
@@ -430,8 +436,8 @@ public sealed class SavGameLoader
             var fuel = reader.ReadInteger();
             var knownBy = reader.ReadBitSet(1);
 
-            reader.Skip(1); // NextOrder -- legacy, superseded by the CommandRecord queue below
-            reader.Skip(6); // OrderData -- same legacy status
+            fleet.NextOrder = reader.ReadByte();
+            reader.Skip(6); // OrderData -- a serialized heap pointer, genuinely dead on load
             reader.Skip(1); // NPEDataIndex -- Kingdom AI keys fleet state by Fleet reference, not this index
             reader.Skip(8); // Reserved
             reader.ReadIdNumber(); // NextID -- unused linked-list field

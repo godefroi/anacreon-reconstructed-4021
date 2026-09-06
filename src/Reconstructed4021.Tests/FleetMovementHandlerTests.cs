@@ -365,4 +365,214 @@ public class FleetMovementHandlerTests
         await Assert.That(fleet.Location).IsEqualTo(new Coordinate(6, 6));
         await Assert.That(fleet.Status).IsEqualTo(FleetStatus.InTransit);
     }
+
+    [Test]
+    public async Task ExecuteFleetOrders_DestCOM_SetsDestinationAndStopsTheLoop()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Fighters = 1;
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(5, 5)));
+        fleet.Orders.Add(new FleetOrder(CommandType.Wait));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(fleet.Destination).IsEqualTo(new Coordinate(5, 5));
+        await Assert.That(fleet.Status).IsEqualTo(FleetStatus.InTransit);
+        // Stopped at the DestCOM itself -- the WaitCOM right after it never runs this call.
+        await Assert.That(fleet.NextOrder).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_DestCOM_TargetingAnObject_TracksItsCurrentLocation()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var target = new Starbase { Owner = empire, Location = new Coordinate(7, 7), Kind = StarbaseKind.Outpost };
+        game.Galaxy.Starbases.Add(target);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Fighters = 1;
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationObject: target));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(fleet.Destination).IsEqualTo(new Coordinate(7, 7));
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_WaitCOM_StopsTheLoopWithoutTouchingDestination()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Fighters = 1;
+        fleet.Orders.Add(new FleetOrder(CommandType.Wait));
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(5, 5)));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(fleet.Destination).IsNull();
+        await Assert.That(fleet.NextOrder).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_ReachingTheLastCommand_ClearsOrdersAndZeroesNextOrder()
+    {
+        // Real Pascal (FLEET.PAS:582-611) advances/disposes Com unconditionally every iteration,
+        // *before* the UNTIL check -- so reaching the very last command in the list clears the whole
+        // queue and zeroes NextOrder in this same call, even though that same command (Wait here) also
+        // independently satisfies the stop condition. Genuinely surprising but faithful: a script's
+        // last real action (with no trailing Repeat) is a one-shot, not something that survives to be
+        // "resumed" on a later arrival. Starts at NextOrder=2 -- as if a prior call already stopped at
+        // order 1's own Wait -- to isolate this from DestCOM-specific or first-order-specific behavior.
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Fighters = 1;
+        fleet.Orders.Add(new FleetOrder(CommandType.Wait));
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(5, 5)));
+        fleet.NextOrder = 2;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(fleet.Destination).IsEqualTo(new Coordinate(5, 5));
+        await Assert.That(fleet.Orders).IsEmpty();
+        await Assert.That(fleet.NextOrder).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_RepeatCOM_LoopsExactlyOnceWhenTwoRepeatsAreAdjacent()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Fighters = 1;
+        // REPEAT, REPEAT, WAIT, DEST -- the first Repeat jumps back to order 1 (itself); IgnoreRepeat
+        // then stops the second Repeat from doing the same, so execution falls through to Wait instead
+        // of looping forever. A trailing DEST keeps Wait from being the *last* command, so this stays
+        // isolated from the separate "last command clears the queue" behavior (see the test above).
+        fleet.Orders.Add(new FleetOrder(CommandType.Repeat));
+        fleet.Orders.Add(new FleetOrder(CommandType.Repeat));
+        fleet.Orders.Add(new FleetOrder(CommandType.Wait));
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(9, 9)));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(fleet.NextOrder).IsEqualTo(4);
+        await Assert.That(fleet.Orders).Count().IsEqualTo(4);
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_TransCOM_PicksUpCargoFromGroundClampedToWhatsAvailable()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var ground = new Planet {
+            Location = new Coordinate(0, 0), Owner = empire, Class = WorldClass.EarthLike, Type = WorldType.Base,
+        };
+        ground.Cargo.Metals = 100;
+        game.Galaxy.Planets.Add(ground);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Transports = 100; // plenty of cargo space
+        // A trailing DEST after Wait keeps Wait from being the *last* command -- see the "reaching the
+        // last command" test above for why that distinction matters here.
+        fleet.Orders.Add(new FleetOrder(CommandType.Transfer, TransferCargo: CargoType.Metals, TransferAmount: 9999));
+        fleet.Orders.Add(new FleetOrder(CommandType.Wait));
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(9, 9)));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        // Clamped to what the ground actually had (100), not the requested 9999.
+        await Assert.That(fleet.Cargo.Metals).IsEqualTo(100);
+        await Assert.That(ground.Cargo.Metals).IsEqualTo(0);
+        // Transfer doesn't stop the loop -- execution continues straight into the WaitCOM after it.
+        await Assert.That(fleet.NextOrder).IsEqualTo(3);
+        await Assert.That(fleet.Orders).Count().IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_TransCOM_DropOffOntoGround()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var ground = new Planet {
+            Location = new Coordinate(0, 0), Owner = empire, Class = WorldClass.EarthLike, Type = WorldType.Base,
+        };
+        game.Galaxy.Planets.Add(ground);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Transports = 100;
+        fleet.Cargo.Metals = 50;
+        fleet.Orders.Add(new FleetOrder(CommandType.Transfer, TransferCargo: CargoType.Metals, TransferAmount: -30));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(fleet.Cargo.Metals).IsEqualTo(20);
+        await Assert.That(ground.Cargo.Metals).IsEqualTo(30);
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_TransCOM_GroundNotOwnedByFleet_IsANoOp()
+    {
+        var empire = new Empire { Name = "Human" };
+        var other = new Empire { Name = "Other" };
+        var game = new Game(new Galaxy(size: 20));
+        var ground = new Planet {
+            Location = new Coordinate(0, 0), Owner = other, Class = WorldClass.EarthLike, Type = WorldType.Base,
+        };
+        ground.Cargo.Metals = 100;
+        game.Galaxy.Planets.Add(ground);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Transports = 100;
+        fleet.Orders.Add(new FleetOrder(CommandType.Transfer, TransferCargo: CargoType.Metals, TransferAmount: 50));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(fleet.Cargo.Metals).IsEqualTo(0);
+        await Assert.That(ground.Cargo.Metals).IsEqualTo(100);
+    }
+
+    [Test]
+    public async Task AdvanceFleet_ReachingItsDestination_RunsFleetOrdersTheSameTurn()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var fleet = new Fleet {
+            Owner = empire, Location = new Coordinate(9, 0), Destination = new Coordinate(10, 0),
+            Fuel = 100, Status = FleetStatus.Ready,
+        };
+        fleet.Ships.Fighters = 1;
+        // Arrives at (10,0) this turn (rate 1) -- DestCOM should immediately redirect it onward to
+        // (20,0) in the same call, matching real Pascal's "ExecuteFleetOrders runs right after arrival,
+        // before the player's own turn" ordering.
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(20, 0)));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        var handler = new FleetMovementHandler(new FixedRandom(0));
+        handler.AdvanceFleets(game, new Empire { Name = "AI" }, empire);
+
+        await Assert.That(fleet.Location).IsEqualTo(new Coordinate(10, 0));
+        await Assert.That(fleet.Destination).IsEqualTo(new Coordinate(20, 0));
+        await Assert.That(fleet.Status).IsEqualTo(FleetStatus.InTransit);
+    }
 }

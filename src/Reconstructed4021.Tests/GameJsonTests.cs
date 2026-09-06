@@ -264,6 +264,7 @@ public class GameJsonTests
         galaxy.Fleets.Add(movingFleet);
         galaxy.Fleets.Add(targetFleet);
         movingFleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationObject: targetFleet));
+        movingFleet.NextOrder = 1;
 
         galaxy.Fleets.Remove(targetFleet); // destroyed after the order was compiled against it
 
@@ -273,6 +274,7 @@ public class GameJsonTests
         var roundTrippedFleet = roundTripped.Galaxy.Fleets.Single(f => f.Location == new Coordinate(1, 1));
         await Assert.That(roundTrippedFleet.Orders).Count().IsEqualTo(1);
         await Assert.That(roundTrippedFleet.Orders[0].DestinationObject).IsNull();
+        await Assert.That(roundTrippedFleet.NextOrder).IsEqualTo(1);
     }
 
     [Test]

@@ -33,13 +33,20 @@ public sealed class Fleet : IMovable, ISectorObject, IShipCargoHolder
     public FleetStatus Status { get; set; } = FleetStatus.Ready;
 
     /// <summary>
-    /// A fleet's compiled order queue (`CommandRecord`/`DestCOM` et al, `ORDERS.PAS`) -- data only,
-    /// not acted on by any turn-processing code in this port yet: nothing here consumes an order and
-    /// advances the queue the way real Pascal's own `NextOrder`/`UpdateFleet` do. Modeled purely so
-    /// `.SAV` import/export round-trips a real order queue instead of discarding it on read and
-    /// always writing empty on write (`docs/OPEN_GAPS.md`'s tracked Save/load gap).
+    /// A fleet's compiled order queue (`CommandRecord`/`DestCOM` et al, `ORDERS.PAS`), consumed by
+    /// <see cref="Turns.FleetMovementHandler.ExecuteFleetOrders"/> each time the fleet becomes
+    /// <see cref="FleetStatus.Ready"/> -- see <see cref="NextOrder"/> for the execution cursor.
     /// </summary>
     public List<FleetOrder> Orders { get; init; } = [];
+
+    /// <summary>
+    /// `NextOrder` (`ORDERS.PAS`'s own `Word`) -- 1-based index of the next command in
+    /// <see cref="Orders"/> to execute, or 0 if there's no active queue (in which case
+    /// <see cref="Orders"/> is empty too -- the two always move in lockstep, matching real Pascal's
+    /// own `DisposeOrders`/`SetFleetCode` pairing in <c>FleetCancelOrdersCommand</c> and at the end of
+    /// <c>ExecuteFleetOrders</c>).
+    /// </summary>
+    public int NextOrder { get; set; }
 
     /// <summary>
     /// A fleet's classification is derived from its ship composition, never stored — Pascal itself

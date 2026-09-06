@@ -135,12 +135,18 @@ public class SavGameLoaderTests
         // docs/SAV_FILE_FORMAT.md's own worked example -- resolving to the planets at (19,20) and
         // (20,19) respectively (savtool ordinals 188/130 -> this port's 0-based Planets[187]/[129]).
         // 13 fleets total; the queue must not throw off the byte cursor for the rest of the file.
+        //
+        // nextOrder is 2 in this same fixture (savtool ground truth), not 1 or 0 -- real, live
+        // mid-queue state: the fleet is already travelling toward the first DestCOM's target (its own
+        // "dest" field is (19,20), matching Orders[0]) and will resume at Orders[1] (the WaitCOM) once
+        // it arrives. Confirms this is genuinely live gameplay state, not dead/legacy bytes.
         var game = new SavGameLoader().LoadGame(LoadSave("FLEET_ORDERS.SAV"));
 
         await Assert.That(game.Galaxy.Fleets.Count).IsEqualTo(13);
 
         var fleet = game.Galaxy.Fleets.Single(f => f.Location == new Coordinate(18, 21) && f.Fuel == 1992.0);
         await Assert.That(fleet.Orders).Count().IsEqualTo(4);
+        await Assert.That(fleet.NextOrder).IsEqualTo(2);
 
         await Assert.That(fleet.Orders[0].Type).IsEqualTo(CommandType.Destination);
         await Assert.That(fleet.Orders[0].DestinationPosition).IsNull();
@@ -176,6 +182,7 @@ public class SavGameLoaderTests
 
         var fleet = new Fleet { Location = new Coordinate(1, 1), Owner = empire };
         fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationObject: stargate));
+        fleet.NextOrder = 1;
         galaxy.Fleets.Add(fleet);
 
         var game = new Game(galaxy);
@@ -189,6 +196,7 @@ public class SavGameLoaderTests
         await Assert.That(loadedFleet.Orders).Count().IsEqualTo(1);
         await Assert.That(loadedFleet.Orders[0].DestinationObject).IsNotNull();
         await Assert.That(loadedFleet.Orders[0].DestinationObject!.Location).IsEqualTo(new Coordinate(3, 3));
+        await Assert.That(loadedFleet.NextOrder).IsEqualTo(1);
     }
 
     [Test]

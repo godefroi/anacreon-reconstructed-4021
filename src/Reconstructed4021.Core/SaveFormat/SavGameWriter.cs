@@ -267,8 +267,8 @@ public static class SavGameWriter
 
             writer.WriteBitSet(visibility.Fleets.KnownBy.TryGetValue(fleet, out var known) ? known : [], 1);
 
-            writer.WriteByte(0); // NextOrder
-            writer.WriteZeros(6); // OrderData
+            writer.WriteByte((byte)fleet.NextOrder);
+            writer.WriteZeros(6); // OrderData -- a serialized heap pointer in real Pascal, never reconstructable
             writer.WriteByte(0); // NPEDataIndex
             writer.WriteZeros(8); // Reserved
             writer.WriteIdNumber(new SavIdNumber(SavObjectType.Void, 0)); // NextID

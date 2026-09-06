@@ -204,7 +204,8 @@
         "fuel": 100,
         "destination": null,
         "status": "Ready",
-        "orders": []
+        "orders": [],
+        "nextOrder": 0
       },
       {
         "location": {
@@ -239,7 +240,8 @@
         "fuel": 500,
         "destination": null,
         "status": "Ready",
-        "orders": []
+        "orders": [],
+        "nextOrder": 0
       }
     ],
     "stargates": [],
