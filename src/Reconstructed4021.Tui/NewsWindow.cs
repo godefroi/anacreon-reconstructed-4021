@@ -65,16 +65,6 @@ internal sealed class NewsWindow : Window
         NewsType.TroopsWantOut, NewsType.RebellionQuietedByMilitary, NewsType.WorldDiscoveredByOutpost,
     ];
 
-    // DATACNST.PAS's ThingNames (:100-119) -- 1-based ResourceTypes ordinal (index 0 unused),
-    // DestructionDetail/TransferDetail's own p2 encoding (LAM=1..ion=4,fgt=5..trn=11,men=12..tri=18,
-    // per this port's own call-site comments -- ShipType/DefenseType ordinal plus a fixed offset).
-    private static readonly string[] ResourceNames = [
-        "", "LAMs", "defense satellites", "GDMs", "ion cannons", "fighter squadrons",
-        "hunter-killers", "jumpships", "jumptransports", "penetrators", "starships", "transports",
-        "legions", "ninja legions", "kilotons of ambrosia", "megatons of chemicals",
-        "megatons of metals", "megatons of supplies", "kilotons of trillum",
-    ];
-
     // DATACNST.PAS's IndusNames (:121-130) -- 0-based, ordinal-aligned with IndustryType directly
     // (IndustryDestroyed's own p2 is a plain IndustryType cast, no ResourceNames-style offset).
     private static readonly string[] IndustryNames = [
@@ -188,8 +178,8 @@ internal sealed class NewsWindow : Window
 
         var line = item.Headline switch {
             NewsType.LacksRawMaterial or NewsType.ConstructionLacksRawMaterial =>
-                $"{loc} lacks {ResourceNames[item.Parm1]}.",
-            NewsType.DefensesLackResources => $"{loc} needs {ResourceNames[item.Parm1]} to build defenses.",
+                $"{loc} lacks {item.Resource!.DisplayName}.",
+            NewsType.DefensesLackResources => $"{loc} needs {item.Resource!.DisplayName} to build defenses.",
             NewsType.IndustryLacksMetals => $"{loc} cannot build up its industry due to a lack of metals.",
             NewsType.PeopleStarving => $"{death} people have died of starvation on {loc}.",
             NewsType.TechLevelIncreased => $"{loc} has advanced to {TechLevelNames[item.Parm1]} level technology.",
@@ -226,9 +216,9 @@ internal sealed class NewsWindow : Window
             NewsType.FleetDamagedByLams => $"{loc} was damaged by {emp} LAMs.",
             NewsType.FleetDestroyedByLams => $"{loc} has been destroyed by a {emp} LAM attack.",
             NewsType.EmpireAttackedWithLams => $"{loc} has been hit by {emp} LAMs.",
-            NewsType.DestructionDetail => $"   {item.Parm1} {ResourceNames[item.Parm2]} destroyed.",
+            NewsType.DestructionDetail => $"   {item.Parm1} {item.Resource!.DisplayName} destroyed.",
             NewsType.ShipsOrCargoTransferredToYou => $"{loc} has received the following resources from {emp}:",
-            NewsType.TransferDetail => $"   {item.Parm1} {ResourceNames[item.Parm2]}",
+            NewsType.TransferDetail => $"   {item.Parm1} {item.Resource!.DisplayName}",
             NewsType.ProbeDestroyedByYou => $"Enemy probe from {emp} destroyed at {loc}.",
             NewsType.ProbeDestroyed => $"Lost contact with probe at {loc}.",
             NewsType.ConstructionDestroyedByUnknown => $"Construction at {loc} has been destroyed by unknown force.",
