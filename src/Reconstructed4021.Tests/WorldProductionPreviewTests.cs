@@ -62,7 +62,8 @@ public class WorldProductionPreviewTests
         // clone-and-run is faithful, these must match exactly, field for field.
         var comparisonOwner = NewEmpire("Owner");
         var comparisonPlanet = NewPlanet(comparisonOwner);
-        new AnnualTickHandler(new FixedRandom(0)).RunProductionPipeline(comparisonPlanet, []);
+        var comparisonShortfalls = new HashSet<CargoType>();
+        new AnnualTickHandler(new FixedRandom(0)).RunProductionPipeline(comparisonPlanet, comparisonShortfalls);
 
         await Assert.That(result.ProjectedIndustry.ShipyardGeneral).IsEqualTo(comparisonPlanet.Industry.ShipyardGeneral);
         await Assert.That(result.ProjectedIndustry.Supply).IsEqualTo(comparisonPlanet.Industry.Supply);
@@ -74,5 +75,19 @@ public class WorldProductionPreviewTests
 
         // And the pipeline actually did something, so this isn't a degenerate all-zero comparison.
         await Assert.That(result.ProjectedIndustry.ShipyardGeneral).IsNotEqualTo(0);
+
+        await Assert.That(result.ShortThisTick).IsEquivalentTo(comparisonShortfalls);
+    }
+
+    [Test]
+    public async Task Compute_ReportsShortfalls_WhenCargoRunsOut()
+    {
+        var owner = NewEmpire("Owner");
+        var planet = NewPlanet(owner);
+        planet.Cargo.Metals = 0; // industry growth needs Metals -- UpdateIndustry reports it short.
+
+        var result = WorldProductionPreview.Compute(planet, new FixedRandom(0));
+
+        await Assert.That(result.ShortThisTick).Contains(CargoType.Metals);
     }
 }

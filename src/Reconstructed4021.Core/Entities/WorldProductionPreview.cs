@@ -38,7 +38,8 @@ public static class WorldProductionPreview
         IndustryLevels ProjectedIndustry,
         ShipCounts ProjectedShips,
         CargoHold ProjectedCargo,
-        int ProjectedTrillumReserve);
+        int ProjectedTrillumReserve,
+        IReadOnlySet<CargoType> ShortThisTick);
 
     public static Result Compute(IEconomicWorld world, Random random)
     {
@@ -56,9 +57,10 @@ public static class WorldProductionPreview
         scratchOwner.Technology.ReplaceWith(world.Owner.Technology);
 
         var clone = CloneWorld(world, scratchOwner);
-        new AnnualTickHandler(random).RunProductionPipeline(clone, []);
+        var shortfalls = new HashSet<CargoType>();
+        new AnnualTickHandler(random).RunProductionPipeline(clone, shortfalls);
 
-        return new Result(distribution, optimalIndustry, clone.Industry, clone.Ships, clone.Cargo, clone.TrillumReserve);
+        return new Result(distribution, optimalIndustry, clone.Industry, clone.Ships, clone.Cargo, clone.TrillumReserve, shortfalls);
     }
 
     private static IEconomicWorld CloneWorld(IEconomicWorld world, Empire scratchOwner) => world switch {
