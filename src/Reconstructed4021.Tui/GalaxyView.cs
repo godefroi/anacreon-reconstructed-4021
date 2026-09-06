@@ -378,6 +378,17 @@ internal sealed class GalaxyView : View
     /// </summary>
     private void OnMouseEvent(object? sender, Mouse mouse)
     {
+        // A drag-in-progress must release its grab the moment the button is no longer down, even if
+        // this same event also carries Clicked/DoubleClicked (a press with a pixel or two of movement
+        // before release is still classified as a click, not just "released") -- the branches below
+        // return early on those flags, so without this upfront check a click that happens to follow a
+        // grabbed press would leave _dragOrigin and the mouse grab stuck forever: every future mouse
+        // event routes to this view regardless of where it lands, including clicks on the menu bar.
+        if (_dragOrigin is not null && !mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed)) {
+            _dragOrigin = null;
+            App?.Mouse.UngrabMouse();
+        }
+
         if (mouse.Flags.HasFlag(MouseFlags.LeftButtonDoubleClicked) && mouse.Position is { } doubleClickPosition) {
             if (TryGetSectorAt(doubleClickPosition, out var sector)) {
                 MoveCursorTo(sector);
@@ -402,12 +413,9 @@ internal sealed class GalaxyView : View
             return;
         }
 
+        // The upfront check above already released any stale grab for a not-Pressed event; this is
+        // just the ordinary "nothing to do" case (e.g. plain mouse movement with no button down).
         if (!mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed) || mouse.Position is not { } position) {
-            if (_dragOrigin is not null) {
-                _dragOrigin = null;
-                App?.Mouse.UngrabMouse();
-            }
-
             return;
         }
 
