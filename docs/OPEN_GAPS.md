@@ -41,13 +41,19 @@ codebase is in a test file.
         mini scripting language (`ORDERS.PAS`'s own compile/decompile pair over a captive text
         editor), not a quick add; `Cancel Orders` is trivial but pointless before `Orders` exists.
   - [ ] `Build > Site Status` / `New` / `Abort`
-  - [ ] Status bar `F1 Help` / `F3 Status` / `F5 Fleet` / `F7 News` / `F8 Empire` / `F9 Names`
 - **No post-conquest world-list report.** `ATTACK.PAS: ConquerEmpire`'s own `Booty` (the set of
   world indices that joined the conqueror mid-`ConquerEmpire`) is declared and threaded through
   real Pascal's call chain but never read anywhere in it — dropped entirely by this port, confirmed
   by reading (`CombatOutcome.cs`'s own doc comment). `ATTCOMM.PAS: EmpireConquestReport` (the screen
   that would list those worlds after a capital-conquering attack) is the one real consumer of that
   data; building it means un-dropping `Booty` tracking first, not just adding a screen.
+- **Production window preview underestimates an Industrial Complex starbase's own output.**
+  `WorldProductionPreview.Compute` (the Production tab's "Next Tick" projection) runs the real
+  production pipeline against a throwaway clone, but never runs SupplyLink/SurplusLink (an
+  Industrial Complex starbase's own cargo exchange with adjacent same-empire planets) — enabling it
+  there would mean also cloning that starbase's real neighbors, since real SupplyLink/SurplusLink
+  mutate them directly, and a preview screen mutating other real worlds as a side effect of being
+  opened isn't acceptable. See that class's own doc comment.
 - **No hotseat protection.** `PROLOG.PAS: SetUpPlayer`'s own password prompt (`GetPassword`) isn't
   built. `Program.cs`'s turn loop is already `Status`/`ITurnHandler.IsHuman`-driven per empire (not
   hardcoded to one `Empire` reference), so a second human empire would already get its own
