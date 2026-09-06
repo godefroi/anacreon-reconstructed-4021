@@ -471,9 +471,7 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
 
         foreach (var t in _mineableShipTypes) {
             if (destroyed[t] > 0) {
-                // Pascal's raw ResourceTypes ordinal for fgt..trn is ShipType's own C# ordinal + 5
-                // (see CombatStandalone.LAMAttack's identical comment).
-                owner.AddNews(NewsType.DestructionDetail, fleet, p1: destroyed[t], p2: (int)t + 5);
+                owner.AddNews(NewsType.DestructionDetail, fleet, p1: destroyed[t], resource: new ResourceKind.Ship(t));
             }
         }
 

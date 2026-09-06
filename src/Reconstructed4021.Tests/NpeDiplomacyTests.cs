@@ -48,10 +48,10 @@ public class NpeDiplomacyTests
         var attackedFleet = new Fleet { Location = capital.Location, Owner = owner };
 
         owner.AddNews(NewsType.EnemyEmpireDestroyed, attackedFleet, otherEmpire: attackerA);
-        owner.AddNews(NewsType.DestructionDetail, attackedFleet, p1: 1, p2: (int)AttackType.Fighter + 1);
+        owner.AddNews(NewsType.DestructionDetail, attackedFleet, p1: 1, resource: AttackType.Fighter.ToResourceKind());
 
         owner.AddNews(NewsType.EnemyEmpireDestroyed, attackedFleet, otherEmpire: attackerB);
-        owner.AddNews(NewsType.DestructionDetail, attackedFleet, p1: 900, p2: (int)AttackType.Starship + 1);
+        owner.AddNews(NewsType.DestructionDetail, attackedFleet, p1: 900, resource: AttackType.Starship.ToResourceKind());
 
         var persona = new NpeCharacter { Provoke = 75 };
         var state = new Dictionary<Empire, StateDeptRecord>();
@@ -83,7 +83,7 @@ public class NpeDiplomacyTests
 
         var attackedFleet = new Fleet { Location = capital.Location, Owner = owner };
         owner.AddNews(NewsType.EnemyEmpireDestroyed, attackedFleet, otherEmpire: attacker);
-        owner.AddNews(NewsType.DestructionDetail, attackedFleet, p1: 1, p2: (int)AttackType.Fighter + 1);
+        owner.AddNews(NewsType.DestructionDetail, attackedFleet, p1: 1, resource: AttackType.Fighter.ToResourceKind());
 
         var persona = new NpeCharacter { Provoke = 75 };
         var state = new Dictionary<Empire, StateDeptRecord>();

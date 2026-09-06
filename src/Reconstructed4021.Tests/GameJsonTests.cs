@@ -277,6 +277,122 @@ public class GameJsonTests
         await Assert.That(roundTrippedFleet.NextOrder).IsEqualTo(1);
     }
 
+    /// <summary>
+    /// A save written before <see cref="NewsItem.Resource"/> existed has none of the three
+    /// <c>resourceDefense</c>/<c>resourceShip</c>/<c>resourceCargo</c> keys -- <see cref="GameJson"/>'s
+    /// own <c>ReadNewsItem</c> must still decode <c>Resource</c> from the legacy combined-ordinal
+    /// <c>Parm2</c> (<see cref="ResourceKind.LegacyParmSlot"/>), the same fallback
+    /// <see cref="SavGameLoader"/> always needed for real <c>.SAV</c> bytes. Simulated by stripping
+    /// those three keys back out of an otherwise-normal serialized save, rather than hand-writing a
+    /// stale fixture that would bit-rot the moment another field is added.
+    /// </summary>
+    [Test]
+    public async Task Deserialize_NewsItemWithoutResourceKeys_FallsBackToLegacyParmDecode()
+    {
+        var galaxy = new Galaxy(10);
+        var game = new Game(galaxy);
+
+        var empire = new Empire { Name = "Test Empire" };
+        game.Empires.Add(empire);
+        game.CurrentEmpire = empire;
+        game.TurnHandlers[empire] = new HumanTurnHandler();
+
+        var fleet = new Fleet { Location = new Coordinate(1, 1), Owner = empire };
+        galaxy.Fleets.Add(fleet);
+        empire.AddNews(NewsType.DestructionDetail, fleet, p1: 3);
+
+        // Old code wrote the combined ResourceTypes ordinal straight into Parm2 and had no
+        // resourceDefense/Ship/Cargo keys at all -- rewrite this otherwise-normal serialized save into
+        // that exact pre-Resource shape rather than hand-writing a stale fixture that would bit-rot the
+        // moment another field is added.
+        var node = System.Text.Json.Nodes.JsonNode.Parse(GameJson.Serialize(game))!;
+        var newsNode = node["empires"]![0]!["news"]![0]!.AsObject();
+        newsNode["parm2"] = (int)ShipType.Starship + 5;
+        newsNode.Remove("resourceDefense");
+        newsNode.Remove("resourceShip");
+        newsNode.Remove("resourceCargo");
+
+        var roundTripped = GameJson.Deserialize(node.ToJsonString(), new Random(0));
+        var roundTrippedNews = roundTripped.Empires.Single().News.Single();
+
+        await Assert.That(roundTrippedNews.Parm1).IsEqualTo(3);
+        await Assert.That(roundTrippedNews.Resource).IsEqualTo(new ResourceKind.Ship(ShipType.Starship));
+    }
+
+    /// <summary>
+    /// The exact real bug report: a save written before this port fixed a missing-<c>+12</c> bug
+    /// (<c>ReportResourceShortfall</c>/<c>ConstructionLacksRawMaterial</c> once wrote the bare 0-based
+    /// <see cref="CargoType"/> ordinal, not the combined one) still shows "ion cannons" instead of the
+    /// real resource today unless <c>Resource</c>'s legacy decode knows about that era too --
+    /// <see cref="ResourceKind.FromLegacyCargoOnlyOrdinal"/>, not the generic
+    /// <see cref="ResourceKind.FromOrdinal"/>, which would otherwise land ordinal 4 in the Defense
+    /// range (<see cref="DefenseType.IonCannon"/>) instead of recognizing it as bug-era
+    /// <see cref="CargoType.Metals"/>.
+    /// </summary>
+    [Test]
+    public async Task Deserialize_PreBugfixShortfallNews_DecodesRealResourceNotIonCannons()
+    {
+        var galaxy = new Galaxy(10);
+        var game = new Game(galaxy);
+
+        var empire = new Empire { Name = "Test Empire" };
+        game.Empires.Add(empire);
+        game.CurrentEmpire = empire;
+        game.TurnHandlers[empire] = new HumanTurnHandler();
+
+        var planet = new Planet { Location = new Coordinate(1, 1), Owner = empire };
+        galaxy.Planets.Add(planet);
+        empire.AddNews(NewsType.DefensesLackResources, planet);
+
+        var node = System.Text.Json.Nodes.JsonNode.Parse(GameJson.Serialize(game))!;
+        var newsNode = node["empires"]![0]!["news"]![0]!.AsObject();
+        newsNode["parm1"] = (int)CargoType.Metals; // the real pre-bugfix bytes: bare ordinal, no +12
+        newsNode.Remove("resourceDefense");
+        newsNode.Remove("resourceShip");
+        newsNode.Remove("resourceCargo");
+
+        var roundTripped = GameJson.Deserialize(node.ToJsonString(), new Random(0));
+        var roundTrippedNews = roundTripped.Empires.Single().News.Single();
+
+        await Assert.That(roundTrippedNews.Resource).IsEqualTo(new ResourceKind.Cargo(CargoType.Metals));
+    }
+
+    /// <summary>
+    /// <see cref="TechCatalog.TechGrantIdentity"/>'s own JSON shape switched from writing the bare
+    /// <c>Ordinal</c> int to the type's own name (<see cref="ShipType"/>/<see cref="DefenseType"/>/
+    /// <see cref="CargoType"/>/<see cref="ConstructionType"/> depending on <c>Category</c>) -- a save
+    /// still carrying the old <c>ordinal</c> key must keep decoding correctly, since a
+    /// <c>TechGrantIdentity</c> is always disambiguated by its own <c>Category</c> first (no bug-era
+    /// concern the way <see cref="ResourceKind"/>'s combined ordinal has).
+    /// </summary>
+    [Test]
+    public async Task Deserialize_TechGrantWithLegacyOrdinalKey_StillDecodesCorrectly()
+    {
+        var galaxy = new Galaxy(10);
+        var game = new Game(galaxy);
+
+        var empire = new Empire { Name = "Test Empire" };
+        game.Empires.Add(empire);
+        game.CurrentEmpire = empire;
+        game.TurnHandlers[empire] = new HumanTurnHandler();
+
+        var planet = new Planet { Location = new Coordinate(1, 1), Owner = empire };
+        galaxy.Planets.Add(planet);
+        empire.AddNews(NewsType.EmpireGainedTechnology, planet, techGrant: new TechCatalog.TechGrantIdentity(TechCategory.Ship, (int)ShipType.Jumpship));
+
+        var node = System.Text.Json.Nodes.JsonNode.Parse(GameJson.Serialize(game))!;
+        var techGrantNode = node["empires"]![0]!["news"]![0]!["techGrant"]!.AsObject();
+        await Assert.That(techGrantNode["type"]!.GetValue<string>()).IsEqualTo(nameof(ShipType.Jumpship));
+
+        techGrantNode.Remove("type");
+        techGrantNode["ordinal"] = (int)ShipType.Jumpship;
+
+        var roundTripped = GameJson.Deserialize(node.ToJsonString(), new Random(0));
+        var roundTrippedNews = roundTripped.Empires.Single().News.Single();
+
+        await Assert.That(roundTrippedNews.TechGrant).IsEqualTo(new TechCatalog.TechGrantIdentity(TechCategory.Ship, (int)ShipType.Jumpship));
+    }
+
     [Test]
     public async Task RoundTrips_Intro2()
     {

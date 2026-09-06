@@ -176,7 +176,7 @@ public class FleetMovementHandlerTests
         await Assert.That(fleet.Ships.Jumpships).IsEqualTo(5);
         await Assert.That(game.Galaxy.IsMineScoutedBy(victim, new Coordinate(1, 0))).IsTrue();
         await Assert.That(victim.News).Contains(n => n.Headline == NewsType.FleetDamagedByMines && n.OtherEmpire == mineOwner);
-        await Assert.That(victim.News).Contains(n => n.Headline == NewsType.DestructionDetail && n.Parm1 == 5);
+        await Assert.That(victim.News).Contains(n => n.Headline == NewsType.DestructionDetail && n.Parm1 == 5 && n.Resource == new ResourceKind.Ship(ShipType.Jumpship));
         await Assert.That(mineOwner.News).Contains(n => n.Headline == NewsType.EnemyFleetDamagedInMinefield && n.OtherEmpire == victim && n.Position == new Coordinate(1, 0));
     }
 
@@ -198,7 +198,7 @@ public class FleetMovementHandlerTests
 
         await Assert.That(game.Galaxy.Fleets).DoesNotContain(fleet);
         await Assert.That(victim.News).Contains(n => n.Headline == NewsType.FleetDestroyedByMines && n.OtherEmpire == mineOwner);
-        await Assert.That(victim.News).Contains(n => n.Headline == NewsType.DestructionDetail && n.Parm1 == 1);
+        await Assert.That(victim.News).Contains(n => n.Headline == NewsType.DestructionDetail && n.Parm1 == 1 && n.Resource == new ResourceKind.Ship(ShipType.Jumpship));
     }
 
     [Test]

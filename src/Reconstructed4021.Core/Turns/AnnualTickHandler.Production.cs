@@ -335,16 +335,11 @@ public sealed partial class AnnualTickHandler
     /// per-tick UpdateWorld call, not reset between call sites) — <see cref="HashSet{T}.Add"/> already
     /// returns whether the item was new, so the guard and the insert are one call.
     ///
-    /// Parm1 is Pascal's combined <c>ResourceTypes</c> ordinal (<c>men..tri</c> = 12..18), the same
-    /// table <see cref="Tui.NewsWindow"/>'s <c>ResourceNames</c> array indexes -- <c>+12</c>, not this
-    /// port's own bare <see cref="CargoType"/> ordinal (0..6), matching the <c>ShipType</c>+5
-    /// convention <c>DestructionDetail</c>/<c>TransferDetail</c> already use for the same table. Fixed
-    /// live: a Metals shortfall (ordinal 4) was rendering as <c>ResourceNames[4]</c>, "ion cannons".
     /// </summary>
     private static void ReportResourceShortfall(IEconomicWorld world, CargoType resource, NewsType headline, HashSet<CargoType> reportedShortfalls)
     {
         if (reportedShortfalls.Add(resource)) {
-            world.Owner.AddNews(headline, world, p1: (int)resource + 12);
+            world.Owner.AddNews(headline, world, resource: new ResourceKind.Cargo(resource));
             ChangeRevIndex(world, 1);
         }
     }

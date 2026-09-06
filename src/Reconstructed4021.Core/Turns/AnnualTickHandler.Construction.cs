@@ -92,9 +92,7 @@ public sealed partial class AnnualTickHandler
             }
 
             if (rawNeeded > 0) {
-                // Parm1 is Pascal's combined ResourceTypes ordinal (men..tri = 12..18), matching
-                // ReportResourceShortfall's own +12 -- see that method's doc comment.
-                site.Owner.AddNews(NewsType.ConstructionLacksRawMaterial, site, p1: (int)cargoType + 12);
+                site.Owner.AddNews(NewsType.ConstructionLacksRawMaterial, site, resource: new ResourceKind.Cargo(cargoType));
                 return false;
             }
         }

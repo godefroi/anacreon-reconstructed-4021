@@ -857,6 +857,7 @@ public sealed class SavGameLoader
         [NewsType.EmpireGainedTechnology] = 1,
     };
 
+
     /// <summary>
     /// `LoadNewsData` (`NEWS.PAS:266-297`). `Loc1` decodes the same way as every other `Location`
     /// union in this format (`NameRecord.Coord`, `CommandRecord`'s `DestCOM` variant): an object
@@ -903,7 +904,11 @@ public sealed class SavGameLoader
                     ? ResolveTechGrant(SelectParm(techParm, parm1, parm2, parm3))
                     : null;
 
-                _empireSlots[slot].AddNews(headline, subject, position, otherEmpire, techGrant, parm1, parm2, parm3);
+                ResourceKind? resource = ResourceKind.LegacyParmSlot.TryGetValue(headline, out var resourceParm)
+                    ? ResourceKind.FromOrdinal(SelectParm(resourceParm, parm1, parm2, parm3))
+                    : null;
+
+                _empireSlots[slot].AddNews(headline, subject, position, otherEmpire, techGrant, parm1, parm2, parm3, resource: resource);
             }
         }
     }

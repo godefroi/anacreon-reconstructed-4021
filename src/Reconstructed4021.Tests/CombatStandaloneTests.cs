@@ -117,7 +117,7 @@ public class CombatStandaloneTests
         await Assert.That(galaxy.Fleets).Contains(elsewhereFleet);
         await Assert.That(owner.News).IsEmpty();
         await Assert.That(foreigner.News).Contains(n => n.Headline == NewsType.FleetsDestroyedInExplosion);
-        await Assert.That(foreigner.News).Contains(n => n.Headline == NewsType.DestructionDetail && n.Parm1 == 3);
+        await Assert.That(foreigner.News).Contains(n => n.Headline == NewsType.DestructionDetail && n.Parm1 == 3 && n.Resource == new ResourceKind.Ship(ShipType.Fighter));
         await Assert.That(observer.News).Contains(n => n.Headline == NewsType.StarbaseSelfDestructed && n.OtherEmpire == owner);
     }
 

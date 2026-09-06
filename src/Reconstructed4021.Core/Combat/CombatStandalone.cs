@@ -72,9 +72,7 @@ public static class CombatStandalone
 
             foreach (var t in Enum.GetValues<ShipType>()) {
                 if (shipsDestroyed[t] > 0) {
-                    // Pascal's raw ResourceTypes ordinal for fgt..trn is ShipType's own C# ordinal + 5
-                    // (LAM=1,def=2,GDM=3,ion=4,fgt=5..trn=11 — see CombatOutcome.AbortFleet's own comment).
-                    targetOwner.AddNews(NewsType.DestructionDetail, fleet, p1: shipsDestroyed[t], p2: (int)t + 5);
+                    targetOwner.AddNews(NewsType.DestructionDetail, fleet, p1: shipsDestroyed[t], resource: new ResourceKind.Ship(t));
                 }
             }
         } else if (target is IEconomicWorld world) {
@@ -91,8 +89,7 @@ public static class CombatStandalone
                 defensesDestroyed[t] = Math.Min((int)(lamsPerType / 100.0 * CombatConstants.CombatTable[(AttackType.Lam, t.ToAttackType())]), defenses[t]);
                 defenses[t] -= defensesDestroyed[t];
                 if (defensesDestroyed[t] > 0) {
-                    // Pascal's raw ResourceTypes ordinal for LAM..ion is DefenseType's own C# ordinal + 1.
-                    targetOwner.AddNews(NewsType.DestructionDetail, subject, p1: defensesDestroyed[t], p2: (int)t + 1);
+                    targetOwner.AddNews(NewsType.DestructionDetail, subject, p1: defensesDestroyed[t], resource: new ResourceKind.Defense(t));
                 }
             }
         } else {
@@ -172,7 +169,7 @@ public static class CombatStandalone
                 fleetOwner.AddNews(NewsType.FleetsDestroyedInExplosion, fleet);
                 foreach (var t in Enum.GetValues<ShipType>()) {
                     if (fleet.Ships[t] > 0) {
-                        fleetOwner.AddNews(NewsType.DestructionDetail, fleet, p1: fleet.Ships[t], p2: (int)t + 5);
+                        fleetOwner.AddNews(NewsType.DestructionDetail, fleet, p1: fleet.Ships[t], resource: new ResourceKind.Ship(t));
                     }
                 }
             }

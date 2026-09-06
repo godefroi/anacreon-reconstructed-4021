@@ -132,12 +132,13 @@ public sealed class Empire
         int p1 = 0,
         int p2 = 0,
         int p3 = 0,
-        Empire? defender = null)
+        Empire? defender = null,
+        ResourceKind? resource = null)
     {
         if (IsIndependent || Status == EmpireStatus.Eliminated) {
             return;
         }
 
-        News.Add(new NewsItem(headline, subject, position, otherEmpire, techGrant, p1, p2, p3, defender));
+        News.Add(new NewsItem(headline, subject, position, otherEmpire, techGrant, p1, p2, p3, defender, resource));
     }
 }

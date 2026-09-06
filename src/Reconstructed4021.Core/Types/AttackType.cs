@@ -78,4 +78,28 @@ public static class AttackTypeExtensions
         AttackType.Transport => ShipType.Transport,
         _ => null,
     };
+
+    /// <summary>
+    /// <see cref="ResourceKind"/> bridge for combat news (<c>ReportLosses</c>'s own combined-ordinal
+    /// <c>DestructionDetail</c> reports, ATTACK.PAS:1196-1204) -- every <see cref="AttackType"/> maps to
+    /// exactly one <see cref="ResourceKind"/> case, the troop pair aside (Legion/NinjaLegion have no
+    /// <see cref="AsDefenseType"/>/<see cref="AsShipType"/> hit, so they're handled directly).
+    /// </summary>
+    public static ResourceKind ToResourceKind(this AttackType type) => type switch {
+        AttackType.Legion => new ResourceKind.Cargo(CargoType.Legion),
+        AttackType.NinjaLegion => new ResourceKind.Cargo(CargoType.NinjaLegion),
+        _ when type.AsDefenseType() is { } defense => new ResourceKind.Defense(defense),
+        _ when type.AsShipType() is { } ship => new ResourceKind.Ship(ship),
+        _ => throw new ArgumentOutOfRangeException(nameof(type)),
+    };
+
+    /// <summary>Inverse of <see cref="ToResourceKind"/> -- only Legion/NinjaLegion cargo has an AttackType at all (see that method's own doc comment).</summary>
+    public static AttackType ToAttackType(this ResourceKind kind) => kind switch {
+        ResourceKind.Defense d => d.Type.ToAttackType(),
+        ResourceKind.Ship s => s.Type.ToAttackType(),
+        ResourceKind.Cargo { Type: CargoType.Legion } => AttackType.Legion,
+        ResourceKind.Cargo { Type: CargoType.NinjaLegion } => AttackType.NinjaLegion,
+        ResourceKind.Cargo c => throw new ArgumentOutOfRangeException(nameof(kind), c.Type, "ToAttackType: only Legion/NinjaLegion cargo can be an AttackType."),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 }

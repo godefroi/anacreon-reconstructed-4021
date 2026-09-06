@@ -1420,7 +1420,7 @@ public static class NpeToolkit
     {
         long total = 1;
         for (var i = headlineIndex + 1; i < news.Count && news[i].Headline == NewsType.DestructionDetail; i++) {
-            var attackType = (AttackType)(news[i].Parm2 - 1);
+            var attackType = news[i].Resource!.ToAttackType();
             total += news[i].Parm1 * CombatConstants.MPower[attackType];
         }
 

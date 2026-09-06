@@ -22,6 +22,11 @@ namespace Reconstructed4021.Core.Entities;
 /// enough (ATTACK.PAS's ResolveAttack). <c>OtherEmpire</c> holds the attacker for
 /// these; <c>Defender</c> is the second, added rather than reused because every other headline's
 /// single <c>OtherEmpire</c> already means "the empire this news item is about," a different role.
+/// <c>Resource</c> exists for the same reason as <c>OtherEmpire</c>/<c>TechGrant</c>: several
+/// headlines (<c>ReportResourceShortfall</c>/<c>ConstructionLacksRawMaterial</c>/<c>DestructionDetail</c>/
+/// <c>TransferDetail</c>) pack "which <see cref="DefenseType"/>/<see cref="ShipType"/>/
+/// <see cref="CargoType"/>" into Pascal's combined <c>ResourceTypes</c> ordinal via one of
+/// <c>Parm1-3</c>; <see cref="ResourceKind"/> is the real 3-case type for that instead.
 /// </summary>
 public sealed record NewsItem(
     NewsType Headline,
@@ -32,4 +37,5 @@ public sealed record NewsItem(
     int Parm1 = 0,
     int Parm2 = 0,
     int Parm3 = 0,
-    Empire? Defender = null);
+    Empire? Defender = null,
+    ResourceKind? Resource = null);

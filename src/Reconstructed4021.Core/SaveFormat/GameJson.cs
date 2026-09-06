@@ -330,12 +330,15 @@ public static class GameJson
                 ["position"] = item.Position is { } position ? new JsonObject { ["x"] = position.X, ["y"] = position.Y } : null,
                 ["otherEmpire"] = EmpireIdOrNull(index, item.OtherEmpire),
                 ["techGrant"] = item.TechGrant is { } techGrant
-                    ? new JsonObject { ["category"] = techGrant.Category.ToString(), ["ordinal"] = techGrant.Ordinal }
+                    ? new JsonObject { ["category"] = techGrant.Category.ToString(), ["type"] = TechGrantTypeName(techGrant) }
                     : null,
                 ["parm1"] = item.Parm1,
                 ["parm2"] = item.Parm2,
                 ["parm3"] = item.Parm3,
                 ["defender"] = EmpireIdOrNull(index, item.Defender),
+                ["resourceDefense"] = (item.Resource as ResourceKind.Defense)?.Type.ToString(),
+                ["resourceShip"] = (item.Resource as ResourceKind.Ship)?.Type.ToString(),
+                ["resourceCargo"] = (item.Resource as ResourceKind.Cargo)?.Type.ToString(),
             });
         }
 
@@ -350,12 +353,61 @@ public static class GameJson
             ? new Coordinate((int)positionNode["x"]!, (int)positionNode["y"]!)
             : (Coordinate?)null;
         var otherEmpire = node["otherEmpire"] is { } otherEmpireNode ? lookup.Empire((int)otherEmpireNode) : null;
-        var techGrant = node["techGrant"] is JsonObject techGrantNode
-            ? new TechCatalog.TechGrantIdentity(Enum.Parse<TechCategory>((string)techGrantNode["category"]!), (int)techGrantNode["ordinal"]!)
-            : (TechCatalog.TechGrantIdentity?)null;
+        var techGrant = node["techGrant"] is JsonObject techGrantNode ? ReadTechGrant(techGrantNode) : (TechCatalog.TechGrantIdentity?)null;
         var defender = node["defender"] is { } defenderNode ? lookup.Empire((int)defenderNode) : null;
+        var (parm1, parm2, parm3) = ((int)node["parm1"]!, (int)node["parm2"]!, (int)node["parm3"]!);
 
-        return new NewsItem(headline, subject, position, otherEmpire, techGrant, (int)node["parm1"]!, (int)node["parm2"]!, (int)node["parm3"]!, defender);
+        // resourceDefense/Ship/Cargo postdate NewsItem.Resource -- a save written before that field
+        // existed has none of the three, so fall back to decoding the same combined ResourceTypes
+        // ordinal SavGameLoader always had to (ResourceKind.LegacyParmSlot), out of whichever raw Parm
+        // this headline packed it into back when Resource didn't exist yet. The 3 CargoOnlyHeadlines
+        // need FromLegacyCargoOnlyOrdinal instead of the generic FromOrdinal: a save written by this
+        // port's own code before it fixed a real missing-+12 bug stored the bare 0-based CargoType
+        // ordinal there, not the combined one -- see that method's own doc comment.
+        ResourceKind? resource =
+            node["resourceDefense"] is { } defenseNode ? new ResourceKind.Defense(Enum.Parse<DefenseType>((string)defenseNode!)) :
+            node["resourceShip"] is { } shipNode ? new ResourceKind.Ship(Enum.Parse<ShipType>((string)shipNode!)) :
+            node["resourceCargo"] is { } cargoNode ? new ResourceKind.Cargo(Enum.Parse<CargoType>((string)cargoNode!)) :
+            ResourceKind.CargoOnlyHeadlines.Contains(headline) ? ResourceKind.FromLegacyCargoOnlyOrdinal(parm1) :
+            ResourceKind.LegacyParmSlot.TryGetValue(headline, out var slot)
+                ? ResourceKind.FromOrdinal(slot switch { 1 => parm1, 2 => parm2, _ => parm3 })
+                : null;
+
+        return new NewsItem(headline, subject, position, otherEmpire, techGrant, parm1, parm2, parm3, defender, resource);
+    }
+
+    /// <summary>The enum name for whichever of DefenseType/ShipType/CargoType/ConstructionType <paramref name="identity"/>'s own Category says its Ordinal is -- see <see cref="ReadTechGrant"/> for the inverse.</summary>
+    private static string TechGrantTypeName(TechCatalog.TechGrantIdentity identity) => identity.Category switch {
+        TechCategory.Defense => ((DefenseType)identity.Ordinal).ToString(),
+        TechCategory.Ship => ((ShipType)identity.Ordinal).ToString(),
+        TechCategory.Cargo => ((CargoType)identity.Ordinal).ToString(),
+        TechCategory.Construction => ((ConstructionType)identity.Ordinal).ToString(),
+        _ => throw new ArgumentOutOfRangeException(nameof(identity)),
+    };
+
+    /// <summary>
+    /// Inverse of <see cref="TechGrantTypeName"/>. A save written before this port switched from
+    /// writing the bare <c>Ordinal</c> int to the type's own name has no <c>type</c> key -- that old
+    /// int is unambiguous on its own (unlike <see cref="ResourceKind"/>'s combined ordinal, a
+    /// <see cref="TechCatalog.TechGrantIdentity"/> is always disambiguated by its own <c>Category</c>
+    /// first), so it decodes directly with no bug-era concern.
+    /// </summary>
+    private static TechCatalog.TechGrantIdentity ReadTechGrant(JsonObject node)
+    {
+        var category = Enum.Parse<TechCategory>((string)node["category"]!);
+        if (node["type"] is not { } typeNode) {
+            return new TechCatalog.TechGrantIdentity(category, (int)node["ordinal"]!);
+        }
+
+        var typeName = (string)typeNode!;
+        var ordinal = category switch {
+            TechCategory.Defense => (int)Enum.Parse<DefenseType>(typeName),
+            TechCategory.Ship => (int)Enum.Parse<ShipType>(typeName),
+            TechCategory.Cargo => (int)Enum.Parse<CargoType>(typeName),
+            TechCategory.Construction => (int)Enum.Parse<ConstructionType>(typeName),
+            _ => throw new ArgumentOutOfRangeException(nameof(node)),
+        };
+        return new TechCatalog.TechGrantIdentity(category, ordinal);
     }
 
     /// <summary>

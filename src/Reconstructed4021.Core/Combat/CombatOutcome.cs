@@ -281,12 +281,12 @@ public static class CombatOutcome
         }
     }
 
-    /// <summary>ResolveAttack's nested ReportLosses (ATTACK.PAS:1196-1204). p2 is Pascal's raw AttackTypes ordinal, which includes the leading NoRes sentinel this port's AttackType drops — see AttackType's own doc comment.</summary>
+    /// <summary>ResolveAttack's nested ReportLosses (ATTACK.PAS:1196-1204).</summary>
     private static void ReportLosses(Empire emp, ISectorObject subject, AttackTally killed)
     {
         foreach (var t in Enum.GetValues<AttackType>()) {
             if (killed[t] > 0) {
-                emp.AddNews(NewsType.DestructionDetail, subject, p1: killed[t], p2: (int)t + 1);
+                emp.AddNews(NewsType.DestructionDetail, subject, p1: killed[t], resource: t.ToResourceKind());
             }
         }
     }
@@ -333,17 +333,12 @@ public static class CombatOutcome
             groundOwner.AddNews(NewsType.ShipsOrCargoTransferredToYou, (ISectorObject)ground, otherEmpire: attacker);
             foreach (var t in Enum.GetValues<ShipType>()) {
                 if (source.Ships[t] != 0) {
-                    // Pascal's raw ResourceTypes ordinal for fgt..trn is ShipType's own C# ordinal + 5
-                    // (LAM=1,def=2,GDM=3,ion=4,fgt=5..trn=11 — verified against ATTACK.PAS's own
-                    // CombatPower table comment).
-                    groundOwner.AddNews(NewsType.TransferDetail, (ISectorObject)ground, p1: source.Ships[t], p2: (int)t + 5);
+                    groundOwner.AddNews(NewsType.TransferDetail, (ISectorObject)ground, p1: source.Ships[t], resource: new ResourceKind.Ship(t));
                 }
             }
             foreach (var t in Enum.GetValues<CargoType>()) {
                 if (source.Cargo[t] != 0) {
-                    // Pascal's raw ResourceTypes ordinal for men..tri is CargoType's own C# ordinal + 12
-                    // (continuing fgt..trn's run: pen=9,str=10,trn=11,men=12..tri=18).
-                    groundOwner.AddNews(NewsType.TransferDetail, (ISectorObject)ground, p1: source.Cargo[t], p2: (int)t + 12);
+                    groundOwner.AddNews(NewsType.TransferDetail, (ISectorObject)ground, p1: source.Cargo[t], resource: new ResourceKind.Cargo(t));
                 }
             }
         }
