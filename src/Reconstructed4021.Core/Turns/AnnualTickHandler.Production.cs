@@ -327,19 +327,24 @@ public sealed partial class AnnualTickHandler
 
     /// <summary>
     /// ReportPlanetLack (UPDATE.PAS:39-56): the first time a given resource type is reported lacking
-    /// in a tick, fires <paramref name="headline"/> (Parm1 = the resource's ordinal) and bumps
-    /// RevolutionIndex by 1. Takes the headline as a parameter since Pascal's own two call sites pass
-    /// different ones for the same underlying "not enough raw material" shape — <c>Lack</c> from
-    /// Production's raw-material check (UPDATE.PAS:905), <c>IndLack</c> from UpdateIndustry's metals
-    /// check (UPDATE.PAS:971). reportedShortfalls mirrors Pascal's OtherReports (a ResourceSet threaded
-    /// through the whole per-tick UpdateWorld call, not reset between call sites) —
-    /// <see cref="HashSet{T}.Add"/> already returns whether the item was new, so the guard and the
-    /// insert are one call.
+    /// in a tick, fires <paramref name="headline"/> and bumps RevolutionIndex by 1. Takes the headline
+    /// as a parameter since Pascal's own two call sites pass different ones for the same underlying
+    /// "not enough raw material" shape — <c>Lack</c> from Production's raw-material check
+    /// (UPDATE.PAS:905), <c>IndLack</c> from UpdateIndustry's metals check (UPDATE.PAS:971).
+    /// reportedShortfalls mirrors Pascal's OtherReports (a ResourceSet threaded through the whole
+    /// per-tick UpdateWorld call, not reset between call sites) — <see cref="HashSet{T}.Add"/> already
+    /// returns whether the item was new, so the guard and the insert are one call.
+    ///
+    /// Parm1 is Pascal's combined <c>ResourceTypes</c> ordinal (<c>men..tri</c> = 12..18), the same
+    /// table <see cref="Tui.NewsWindow"/>'s <c>ResourceNames</c> array indexes -- <c>+12</c>, not this
+    /// port's own bare <see cref="CargoType"/> ordinal (0..6), matching the <c>ShipType</c>+5
+    /// convention <c>DestructionDetail</c>/<c>TransferDetail</c> already use for the same table. Fixed
+    /// live: a Metals shortfall (ordinal 4) was rendering as <c>ResourceNames[4]</c>, "ion cannons".
     /// </summary>
     private static void ReportResourceShortfall(IEconomicWorld world, CargoType resource, NewsType headline, HashSet<CargoType> reportedShortfalls)
     {
         if (reportedShortfalls.Add(resource)) {
-            world.Owner.AddNews(headline, world, p1: (int)resource);
+            world.Owner.AddNews(headline, world, p1: (int)resource + 12);
             ChangeRevIndex(world, 1);
         }
     }
