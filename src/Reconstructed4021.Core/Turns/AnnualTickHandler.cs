@@ -20,7 +20,14 @@ namespace Reconstructed4021.Core.Turns;
 /// creating Starbases/Stargates/minefields on completion.</item>
 /// </list>
 /// </summary>
-public sealed partial class AnnualTickHandler(Random random) : IAnnualTickHandler
+/// <param name="techDebugLog">
+/// Optional per-empire-per-year sink for <see cref="NewTechLevel"/>'s own roll (year, TechLevel, per-lab
+/// breakdown, chance, roll, outcome) -- added after a real playthrough (60+ years, one tech gained) that
+/// this port's own formula/orchestration checked out correct against source but couldn't be fully
+/// explained from sparse autosaves alone (17-year gaps between some). Null (the default, every other
+/// caller/test) means no overhead beyond the null check.
+/// </param>
+public sealed partial class AnnualTickHandler(Random random, Action<string>? techDebugLog = null) : IAnnualTickHandler
 {
     public void RunAnnualTick(Game game)
     {

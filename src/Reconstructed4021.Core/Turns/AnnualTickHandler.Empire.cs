@@ -26,9 +26,16 @@ public sealed partial class AnnualTickHandler
         }
 
         var missingAtCurrentLevel = TechCatalog.MissingTechAt(emp.Technology, tech);
-        var (chance, lab) = GetChanceForNewTech(emp, tech, game);
+        var (chance, lab, labBreakdown) = GetChanceForNewTech(emp, tech, game);
+        var roll = Rnd(1, 100);
+        var success = roll <= chance;
 
-        if (Rnd(1, 100) > chance) {
+        if (techDebugLog is not null) {
+            var outcome = !success ? "miss" : missingAtCurrentLevel.Count > 0 ? "gained tech" : "leveled up";
+            techDebugLog($"{game.Id} {game.Year} {emp.Name}: tech={tech} chance={chance}% roll={roll} {outcome} labs=[{labBreakdown}]");
+        }
+
+        if (!success) {
             return;
         }
 
@@ -69,7 +76,7 @@ public sealed partial class AnnualTickHandler
     /// whose TechLevel gets bumped in the "new tech level" branch, since the chance itself is already
     /// summed across every lab regardless of which one wins the walk).
     /// </summary>
-    private (int Chance, IEconomicWorld? Lab) GetChanceForNewTech(Empire emp, TechLevel empTech, Game game)
+    private (int Chance, IEconomicWorld? Lab, string LabBreakdown) GetChanceForNewTech(Empire emp, TechLevel empTech, Game game)
     {
         var labs = new List<(IEconomicWorld World, int Chance)>();
 
@@ -93,18 +100,20 @@ public sealed partial class AnnualTickHandler
                 labs.Add((starbase, chance.Value));
         }
 
+        var breakdown = techDebugLog is null ? "" : string.Join(",", labs.Select(l => $"{l.World.Type}@{l.World.TechLevel}:{l.Chance}"));
+
         var totalChance = labs.Sum(l => l.Chance);
         var roll = Rnd(1, totalChance);
         foreach (var (world, chance) in labs) {
             if (roll <= chance)
-                return (totalChance, world);
+                return (totalChance, world, breakdown);
             roll -= chance;
         }
 
         // Loop should never exit here (source comment, UPDATE.PAS:351), but nothing bad happens if it
         // does — only reachable when there are zero labs, in which case totalChance is 0 and the
         // caller's Rnd(1,100)<=chance gate can never pass regardless of what Lab is.
-        return (totalChance, emp.Capital);
+        return (totalChance, emp.Capital, breakdown);
     }
 
     /// <summary>

@@ -94,7 +94,9 @@ public class GarrisonedOutpostFixtureTests
         attackFleet.Names[human] = "Warfleet";
         galaxy.Fleets.Add(attackFleet);
 
-        var game = new Game(galaxy) { Year = 4021, CurrentEmpire = human };
+        // Fixed, not Game's own random default -- this fixture's committed JSON needs a stable Id to
+        // stay byte-for-byte reproducible across regenerations.
+        var game = new Game(galaxy) { Id = new Guid("00000000-0000-0000-0000-000000000001"), Year = 4021, CurrentEmpire = human };
         game.Empires.Add(human);
         game.Empires.Add(kingdom);
         game.TurnHandlers[human] = new HumanTurnHandler();

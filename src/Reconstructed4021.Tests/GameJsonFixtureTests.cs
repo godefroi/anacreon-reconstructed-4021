@@ -91,7 +91,9 @@ public class GameJsonFixtureTests
         kingdomOutpost.Ships.Fighters = 50; // 50 total -- NPE grand total 300, so the human capital's 3000 is exactly 10x.
         kingdomOutpost.Defenses.DefenseSatellites = 5; // No Lams here either.
 
-        var game = new Game(galaxy) { Year = 4021, CurrentEmpire = human };
+        // Fixed, not Game's own random default -- this fixture's committed JSON needs a stable Id to
+        // stay byte-for-byte reproducible across regenerations.
+        var game = new Game(galaxy) { Id = new Guid("00000000-0000-0000-0000-000000000002"), Year = 4021, CurrentEmpire = human };
         game.Empires.Add(human);
         game.Empires.Add(kingdom);
         game.TurnHandlers[human] = new HumanTurnHandler();

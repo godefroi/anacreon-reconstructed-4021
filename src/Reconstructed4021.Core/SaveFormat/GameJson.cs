@@ -151,6 +151,11 @@ public static class GameJson
 
         var game = new Game(galaxy);
         game.Empires.AddRange(empires.Take(realEmpireCount));
+        // A save written before Game.Id existed has no "id" key -- the property initializer's own
+        // fresh Guid.NewGuid() already covers that case, so there's nothing to overwrite it with here.
+        if (root["id"] is { } idNode) {
+            game.Id = Guid.Parse((string)idNode!);
+        }
         game.Year = (int)root["year"]!;
         game.ScenarioFilename = (string?)root["scenarioFilename"];
         game.CurrentEmpire = root["currentEmpireId"] is { } currentEmpireIdNode ? lookup.Empire((int)currentEmpireIdNode) : null;

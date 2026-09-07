@@ -15,6 +15,20 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     public Galaxy.Galaxy Galaxy { get; } = galaxy;
 
     /// <summary>
+    /// Port-only addition, no Pascal equivalent: a stable identity for this playthrough, shared by
+    /// every save (manual or auto) taken from it -- lets a player's own saves/autosaves, and anything
+    /// else keyed to a specific game session (e.g. <see cref="Turns.AnnualTickHandler"/>'s optional
+    /// tech-research debug log), be correlated back to "the same game," across however many times it's
+    /// saved, loaded, or the process itself is relaunched. Assigned fresh here so every construction
+    /// path (a brand-new game, a real `.SAV` import) gets one for free with no extra call site; a JSON
+    /// save written before this field existed has no `id` key at all, so
+    /// <see cref="SaveFormat.GameJson.Deserialize"/> falls back to a fresh one there too -- that save's
+    /// own sibling saves from before this feature just won't retroactively share an identity, which is
+    /// the best any of them can do once written.
+    /// </summary>
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    /// <summary>
     /// Not reflection-serializable as-is: <see cref="Empire"/> itself needs pre-allocated
     /// placeholder identity (its own <c>Capital</c>/<c>DefeatedBy</c>/visibility-set fields can
     /// forward-reference entities, and every entity's <c>Owner</c> back-references an
