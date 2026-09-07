@@ -1,0 +1,24 @@
+# Smoke-test script for Reconstructed4021.TuiDriver, run against
+# assets/saves/Garrisoned Outpost.json:
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Garrisoned Outpost.json" --script assets/tui-driver-scripts/garrisoned-outpost-attack-then-a.txt
+#
+# Moves the map cursor onto the human attack fleet, opens Ministry of War > Attack (bare mnemonic
+# chain), and instead of Y/N on the "Standard battle configuration?" dialog, presses A -- the new
+# shortcut straight into BeginAutoAttack, now shown on that dialog's own legend too -- then answers
+# its own "ready to attack... confirm order?" dialog and dismisses the result report.
+Right Right Right Right Down
+m
+a
+SLEEP 300
+DUMP
+a
+SLEEP 300
+DUMP
+y
+SLEEP 300
+DUMP
+Enter
+SLEEP 300
+DUMP

@@ -1754,9 +1754,35 @@ public sealed class GameShell : Window
     // (default) skips Fleet Group Configuration and uses DefaultDistribution, matching what this
     // command always did before this screen existed; N opens the real GetGroups-equivalent screen.
     // Esc abandons the attack entirely (IF Ans<>EscKey), matching AttackCommand's own guard.
-    private void BeginAttack(Fleet attacker, object target) =>
-        ShowConfirm("Attack", "Standard battle configuration?", choice => {
-            if (choice is null) {
+    //
+    // Port-only addition, no Pascal equivalent, per the user's own explicit request: A jumps straight
+    // to BeginAutoAttack instead -- same single "ready to attack... confirm?" dialog Ministry of War's
+    // own Auto Attack menu item already shows, not a second layer on top of this one. Not using the
+    // shared ShowConfirm/DosDialogWindow(isConfirm:true) convenience here since A must NOT become a
+    // third button on every other Yes/No/Esc confirm in the app -- constructed directly instead, with
+    // a second KeyDown subscriber layered on top for just this one dialog (the dialog's own internal
+    // handler leaves A unhandled -- neither Y/N/Enter/Esc -- so it still reaches this one). hint: shows
+    // the extra key on this one dialog's own legend without changing DosDialogWindow's shared default.
+    private void BeginAttack(Fleet attacker, object target)
+    {
+        var dialog = new DosDialogWindow("Attack", "Standard battle configuration?", isConfirm: true,
+            hint: "(Y)es / (N)o / (A)uto   Esc: cancel");
+        var dismiss = AddModal(dialog, dismissOnOutsideClick: false);
+
+        dialog.KeyDown += (_, key) => {
+            if (char.ToUpperInvariant((char)key.AsRune.Value) != 'A') {
+                return;
+            }
+
+            dismiss();
+            key.Handled = true;
+            BeginAutoAttack(attacker, target);
+        };
+
+        dialog.Answered += (_, _) => {
+            dismiss();
+
+            if (dialog.ButtonIndex is not { } choice) {
                 return;
             }
 
@@ -1766,12 +1792,13 @@ public sealed class GameShell : Window
             }
 
             var configWindow = new FleetGroupConfigurationWindow(attacker.Ships, attacker.Cargo);
-            var dismiss = AddModal(configWindow, dismissOnOutsideClick: false);
+            var dismissConfig = AddModal(configWindow, dismissOnOutsideClick: false);
             configWindow.Committed += (_, _) => {
-                dismiss();
+                dismissConfig();
                 StartEngagement(attacker, target, [.. configWindow.Groups]);
             };
-        });
+        };
+    }
 
     private void StartEngagement(Fleet attacker, object target, List<GroupRecord> groups)
     {
@@ -1825,7 +1852,10 @@ public sealed class GameShell : Window
         CombatOutcome.RestoreCombatant(target, state.Killed);
 
         if (state.Result != AttackResultType.DefenderConquered) {
-            FinishAttackOutcome(attackerFleet, target, state, hkSurprise, capture: true, report: null);
+            var report = state.Result == AttackResultType.AttackerRetreats
+                ? Retreated()
+                : BattleLostMessage((ISectorObject)target);
+            FinishAttackOutcome(attackerFleet, target, state, hkSurprise, capture: true, report);
             return;
         }
 
@@ -1872,13 +1902,95 @@ public sealed class GameShell : Window
         FinishAttackOutcome(attackerFleet, target, state, hkSurprise, capture, report);
     }
 
-    private void FinishAttackOutcome(Fleet attackerFleet, object target, InteractiveCombatState state, bool hkSurprise, bool capture, string? report)
+    private void FinishAttackOutcome(Fleet attackerFleet, object target, InteractiveCombatState state, bool hkSurprise, bool capture, string report)
     {
         CombatOutcome.ResolveAttack(state.Result, attackerFleet, target, hkSurprise, capture, state.Casualties, state.Killed, game, random);
 
-        var result = new DosMessageWindow(game, human, report ?? $"Result: {state.Result}");
+        var result = new DosMessageWindow(game, human, report);
         var dismissResult = AddModal(result, dismissOnOutsideClick: false);
         result.Answered += (_, _) => dismissResult();
+    }
+
+    // Retreated (ATTCOMM.PAS:1324-1336) -- CleanUp's own AttackerRetreats branch. Real Pascal's doc
+    // comment says "Revolution is added, though not as much as if the ships had been destroyed" --
+    // that's ResolveAttack's own job (ChangeTotalRevIndex), already called right before this text is
+    // shown; nothing else to port here, the message itself is a single fixed line.
+    private string Retreated() => $"The attacking force has retreated, {MyLord()}.";
+
+    // BattleLost (ATTCOMM.PAS:1224-1322) -- CleanUp's own AttackerDestroyed branch: a flavor message
+    // picked at random from 4 variants, with different odds against an Independent target (1/12, 2/12,
+    // 10/12 for Message1/2/4 -- Message3 never fires, it needs another *empire* to name) versus a real
+    // empire (1/4 each). Same "no re-roll on redraw" simplification this file's other flavor pickers
+    // already use (ConquestMessage, NewsWindow's LackArticle) -- there's no golden-file/replay
+    // requirement for on-screen flavor text the way there is for Core simulation RNG.
+    private string BattleLostMessage(ISectorObject subject)
+    {
+        var messageNumber = subject.Owner.IsIndependent
+            ? PascalMath.Rnd(random, 1, 12) switch { 1 => 1, 2 => 2, _ => 4 }
+            : PascalMath.Rnd(random, 1, 4);
+
+        return messageNumber switch {
+            1 => BattleLostMessage1(),
+            2 => BattleLostMessage2(),
+            3 => BattleLostMessage3(),
+            _ => BattleLostMessage4(),
+        };
+    }
+
+    // Message1 (ATTCOMM.PAS:1233-1266): fixed text, plus -- if the attacker's own most-restless world
+    // exceeds RevIndex 20 -- a named callout naming it. World<>'' (Pascal's own guard for "no owned
+    // planets at all") is just "does the player own any planets" here, since DisplayName always returns
+    // something real, unlike ObjectName on an invalid ID.
+    private string BattleLostMessage1()
+    {
+        var ownWorlds = game.Galaxy.Planets.Where(p => p.Owner == human).ToList();
+        var mostRestless = ownWorlds.Count > 0 ? ownWorlds.MaxBy(p => p.RevolutionIndex) : null;
+        var callout = mostRestless is not null && mostRestless.RevolutionIndex > 20
+            ? $"\nDo not forget that {DisplayName(mostRestless)} is quickly growing doubtful of the Empire's\nability to defend itself.  "
+            : "";
+
+        return $"I'm sorry, {MyLord()}, the entire attack force has been destroyed.\n" +
+            "I hope I do not have to remind you about the repercussion that this\n" +
+            "loss will have.  Cetain factions within the Empire are already counting\n" +
+            $"on fear to incite rebellion.{callout}";
+    }
+
+    // Message2 (ATTCOMM.PAS:1268-1275): fixed text, no randomness beyond the outer pick.
+    private string BattleLostMessage2() =>
+        $"{MyLord()}, I'm sorry to report that the entire attack force was lost\n" +
+        "in the battle.  At the risk of offending Your Highness, I would like to\n" +
+        "point out that an option to retreat was open at all times.  Although\n" +
+        "sacrifice is something that all your troops know, it is often best to\n" +
+        "allow them the luxury of living to fight another day.";
+
+    // Message3 (ATTCOMM.PAS:1277-1290): names a random other active empire -- real Pascal rejection-
+    // samples over the fixed Empire1..Empire8 range until it lands on one that both isn't Player and is
+    // EmpireActive; ported as a direct pick over the empires that already satisfy that, one Rnd call
+    // (see BattleLostMessage's own doc comment on why draw-count parity doesn't matter here). Only
+    // reachable when subject.Owner isn't Independent, so subject.Owner itself is always at least one
+    // eligible candidate -- the empty-list branch is defensive, not a modeled game state.
+    private string BattleLostMessage3()
+    {
+        var others = game.Empires.Where(e => !ReferenceEquals(e, human) && e.Status == EmpireStatus.Active).ToList();
+        var other = others.Count > 0 ? others[PascalMath.Rnd(random, 1, others.Count) - 1] : human;
+
+        return $"{MyLord()}, the entire attack force was destroyed in battle.\n" +
+            "Although I certainly do not question the orders and decision of Your\n" +
+            "Highness, I should like to mention that this defeat will not go\n" +
+            $"unnoticed in the Galaxy.  Already {other.Name} is starting to\n" +
+            "believe that this Empire would not be an overly costly target.";
+    }
+
+    // Message4 (ATTCOMM.PAS:1292-1300): fixed intro, plus a Rnd(1,3) flavor tail.
+    private string BattleLostMessage4()
+    {
+        var tail = PascalMath.Rnd(random, 1, 3) switch {
+            1 => "You must be careful, Your Highness, or greater battles will be lost.",
+            2 => "Do not think that this defeat will go unnoticed in the Galaxy.",
+            _ => "You must be careful, other star systems grow suspicious of your defenses.",
+        };
+
+        return $"{MyLord()}, the attack force has been totally destroyed by the enemy.\n{tail}";
     }
 
     // OldShipsFound (ATTCOMM.PAS:1485-1526): an Independent planet may hold ships too obsolete for its

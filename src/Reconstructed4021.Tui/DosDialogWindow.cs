@@ -37,10 +37,18 @@ public sealed class DosDialogWindow : Window
     /// <summary>Meaningful only when constructed with <c>isConfirm</c>: 0 = Yes/Enter, 1 = No, null = Esc -- matches <c>MessageBox.Query</c>'s own return shape exactly.</summary>
     public int? ButtonIndex { get; private set; }
 
-    public DosDialogWindow(string title, string body, bool isConfirm = false)
+    /// <param name="hint">
+    /// Overrides the default Yes/No/Esc legend -- for a caller that's layered an extra key onto a
+    /// confirm dialog beyond its own Y/N/Esc (see <c>GameShell.BeginAttack</c>'s own A: Auto Attack
+    /// shortcut) and wants it shown, not hidden. Doesn't change what keys the dialog itself reacts to
+    /// (still only Y/N/Enter/Esc here) -- purely cosmetic, the extra key is still handled by whatever
+    /// the caller layers on top via its own <see cref="View.KeyDown"/> subscriber.
+    /// </param>
+    public DosDialogWindow(string title, string body, bool isConfirm = false, string? hint = null)
     {
         var lines = body.Split('\n');
-        var longest = Math.Max(title.Length, lines.Max(l => l.Length));
+        var hintText = hint ?? (isConfirm ? "(Y)es / (N)o   Esc: cancel" : "Press any key to continue...");
+        var longest = new[] { title.Length, lines.Max(l => l.Length), hintText.Length }.Max();
 
         Title = title;
         Width = Math.Clamp(longest + 8, 40, 76);
@@ -56,7 +64,7 @@ public sealed class DosDialogWindow : Window
         Add(new Label {
             X = 1,
             Y = Pos.AnchorEnd(1),
-            Text = isConfirm ? "(Y)es / (N)o   Esc: cancel" : "Press any key to continue...",
+            Text = hintText,
         });
 
         var answered = false;

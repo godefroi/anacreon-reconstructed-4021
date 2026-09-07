@@ -1,0 +1,25 @@
+# Smoke-test script for Reconstructed4021.TuiDriver, run against
+# assets/saves/Garrisoned Outpost.json:
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Garrisoned Outpost.json" --script assets/tui-driver-scripts/garrisoned-outpost-retreat.txt
+#
+# Moves the map cursor onto the human attack fleet, opens Ministry of War > Attack, accepts standard
+# battle configuration (reaching the Tactical Battle Display with the default groups already placed),
+# then immediately retreats -- exercises GameShell.BattleLostMessage/Retreated's real post-battle text
+# instead of the old "Result: AttackerRetreats" placeholder.
+Right Right Right Right Down
+m
+a
+SLEEP 300
+y
+SLEEP 300
+DUMP
+r
+SLEEP 300
+y
+SLEEP 300
+DUMP
+Enter
+SLEEP 300
+DUMP
