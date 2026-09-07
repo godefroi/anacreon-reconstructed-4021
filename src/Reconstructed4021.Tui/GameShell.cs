@@ -91,8 +91,9 @@ public sealed class GameShell : Window
 
         // Bottom-right coordinate readout (MAPWIND.PAS's DrawMapCursor/CoordLine): its own Label rather
         // than a StatusBar Shortcut, since it needs to live-update from GalaxyView and isn't a command.
+        // X reserves a 1-column right margin (Pos.AnchorEnd() alone sits flush against the edge).
         var coordinateLabel = new Label {
-            X = Pos.AnchorEnd(),
+            X = Pos.AnchorEnd() - 1,
             Y = Pos.AnchorEnd(),
             CanFocus = false,
             Text = galaxyView.CursorCoordinateText,
@@ -694,9 +695,14 @@ public sealed class GameShell : Window
 
         var window = new CloseUpWindow(obj, human, game);
         var dismiss = AddCloseUpOverlay(window);
+        // Matches FleetActionHint's own D gating exactly (obj itself owned -- an unowned world or an
+        // enemy's fleet, whose Deploy would just fail PickDeploySource's own ownership check every
+        // time, no longer advertises D at all; see CloseUpWindow's own updated hint-line comment).
+        var canDeploy = (obj is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, human))
+            || (obj is IEconomicWorld world && ReferenceEquals(world.Owner, human));
         window.KeyDown += (_, key) => {
             var letter = char.ToUpperInvariant((char)key.AsRune.Value);
-            if (letter == 'D') {
+            if (letter == 'D' && canDeploy) {
                 dismiss();
                 DeployFleet(obj);
                 key.Handled = true;
@@ -717,20 +723,21 @@ public sealed class GameShell : Window
     }
 
     /// <summary>
-    /// C/T/J/A -- Change Destination/Transfer/Abort-Join/Attack, the four Fleet/Ministry-of-War
+    /// C/T/J/A/R -- Change Destination/Transfer/Abort-Join/Attack/Refuel, the five Fleet/Ministry-of-War
     /// commands reachable directly off a selected fleet (Close Up and the Sector Selected Popup),
     /// shared so the two surfaces can't drift on which letter maps to which command. Deploy (D) isn't
     /// here -- it's handled separately by both call sites since it applies to any selected object, not
     /// just the player's own fleets. Not gated on "is this action actually useful right now" (e.g.
-    /// Attack with no enemy present) -- same idiom PickOwnFleetAtCursor/Attack/PickGround already use
-    /// everywhere else in this file: offer the command, let its own existing MessageBox explain why it
-    /// didn't apply.
+    /// Attack with no enemy present, or Refuel with no trillum anywhere nearby) -- same idiom
+    /// PickOwnFleetAtCursor/Attack/PickGround already use everywhere else in this file: offer the
+    /// command, let its own existing MessageBox explain why it didn't apply.
     /// </summary>
     private Action<Fleet>? ResolveFleetContextAction(char key) => key switch {
         'C' => ChangeDestination,
         'T' => TransferFleet,
         'J' => AbortJoinFleet,
         'A' => Attack,
+        'R' => RefuelFleet,
         _ => null,
     };
 
@@ -739,7 +746,7 @@ public sealed class GameShell : Window
     /// explicit request -- an earlier pass always showed every letter regardless of the highlighted
     /// item, which read as confusing/misleading for objects none of them actually apply to). D shows
     /// for your own world or your own fleet (the two cases <see cref="DeployFleet(ISectorObject)"/>
-    /// itself directly supports); C/T/J/A only for your own fleet. Empty for anything else --
+    /// itself directly supports); C/T/J/A/R only for your own fleet. Empty for anything else --
     /// <see cref="ListView{T}.ValueChanged"/> keeps this in sync as the highlighted item changes.
     /// </summary>
     private string FleetActionHint(ISectorObject? obj)
@@ -748,7 +755,7 @@ public sealed class GameShell : Window
         var isOwnedFleet = obj is Fleet fleet && ReferenceEquals(fleet.Owner, human);
 
         if (isOwnedFleet) {
-            return "D:deploy  C:dest  T:transfer  J:abort/join  A:attack";
+            return "D:deploy  C:dest  T:transfer  J:abort/join  A:attack  R:refuel";
         }
 
         return isOwnedWorld ? "D:deploy" : "";
@@ -1369,10 +1376,12 @@ public sealed class GameShell : Window
     /// procedure's own SameID(FltID,Ground) message branch), then a numeric prompt for tons of
     /// trillum to spend.
     /// </summary>
-    private void RefuelFleet() => PickOwnFleetAtCursor("Refuel Fleet", fleet =>
+    private void RefuelFleet() => PickOwnFleetAtCursor("Refuel Fleet", RefuelFleet);
+
+    private void RefuelFleet(Fleet fleet) =>
         PickGround(fleet, playerOnly: true, includeFleet: true, "Refuel Fleet",
             "There is no world or fleet of yours here to refuel from.",
-            ground => PromptForTrillum(fleet, (IShipCargoHolder)ground)));
+            ground => PromptForTrillum(fleet, (IShipCargoHolder)ground));
 
     private void PromptForTrillum(Fleet fleet, IShipCargoHolder ground)
     {

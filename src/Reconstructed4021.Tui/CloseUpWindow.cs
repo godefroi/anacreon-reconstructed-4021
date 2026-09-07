@@ -97,19 +97,26 @@ internal sealed class CloseUpWindow : Window
 
         // No Pascal equivalent -- TUI-only shortcut legend for GameShell.ShowCloseUp's own D/C/T/J/A
         // handling (per the user's own explicit request). D deploys from whatever world is at obj's
-        // own Location and is offered regardless of obj's type -- see
-        // GameShell.DeployFleet(Coordinate)'s own doc comment; C/T/J/A only ever act on one of your
-        // own fleets. This window never opens on one of the player's own worlds at all any more --
-        // GameShell.ShowCloseUp routes that case to WorldInfoWindow instead -- so there's no
-        // world-owned branch here to show.
+        // own Location -- see GameShell.DeployFleet(Coordinate)'s own doc comment; C/T/J/A only ever
+        // act on one of your own fleets. This window never opens on one of the player's own worlds at
+        // all any more -- GameShell.ShowCloseUp routes that case to WorldInfoWindow instead -- so
+        // obj is only ever an enemy/independent world or any fleet here. Gated the same way
+        // GameShell.FleetActionHint's own D check is (obj itself owned, since Deploy's own source is
+        // always obj's location, never the fleet at it) -- an unowned world or an enemy's fleet
+        // offering "Deploy from here" only to have PickDeploySource reject it every time was the actual
+        // bug a user reported ("I am offered the choice to 'deploy from here' ... for a world I don't
+        // own").
         var fleetOwned = fleet is not null && ReferenceEquals(fleet.Owner, viewer);
+        var worldOwned = obj is IEconomicWorld ownedWorld && ReferenceEquals(ownedWorld.Owner, viewer);
         if (fleetOwned) {
-            // Split across two rows -- the full line runs to 88 columns, past this window's own
-            // 78-column content width (Width=80 minus the border), and Label doesn't wrap on its own.
-            AddAt(1, 17, "D:Deploy  C:Change Destination  T:Transfer  J:Abort/Join  A:Attack");
+            // Split across two rows -- the full line runs past this window's own 78-column content
+            // width (Width=80 minus the border), and Label doesn't wrap on its own.
+            AddAt(1, 17, "D:Deploy  C:Change Destination  T:Transfer  J:Abort/Join  A:Attack  R:Refuel");
             AddAt(1, 18, "(other key: close)");
-        } else {
+        } else if (worldOwned) {
             AddAt(1, 17, "D:Deploy from here  (other key: close)");
+        } else {
+            AddAt(1, 17, "(any key: close)");
         }
     }
 
