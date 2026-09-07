@@ -1,0 +1,25 @@
+# Regression script for Reconstructed4021.TuiDriver, run against
+# assets/saves/Garrisoned Outpost.json:
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Garrisoned Outpost.json" --script assets/tui-driver-scripts/garrisoned-outpost-fleetwindow-changedest.txt
+#
+# Real bug repro: F5 (Fleet Window) -> Enter (jump to Close Up on the first fleet) -> C (Change
+# Destination) used to leave the map cursor completely unmovable (galaxyView.Enabled stayed false,
+# since the Fleet Window's own modal was still open underneath). Confirms the cursor now actually
+# moves and the destination pick completes.
+F5
+SLEEP 200
+DUMP
+Enter
+SLEEP 200
+DUMP
+c
+SLEEP 200
+DUMP
+Right Right Down
+SLEEP 200
+DUMP
+Enter
+SLEEP 200
+DUMP

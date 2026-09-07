@@ -174,6 +174,16 @@ public sealed class GameShell : Window
     /// </summary>
     private void BeginPick(string prompt, Action<Coordinate> onConfirm)
     {
+        // A still-open panel (Fleet/Status/News/etc -- AddPanel's own openPanelDismiss) sits on top of
+        // AddModal's own galaxyView.Enabled=false, which only clears once every open modal is gone.
+        // Close Up's own C/T/J/A shortcuts dismiss *themselves* before calling into here, but if they
+        // were stacked on top of an open panel (AddCloseUpOverlay's own doc comment), that panel's own
+        // AddModal call is still open underneath and still holds galaxyView disabled -- found live: F5
+        // (Fleet Window), Enter to Close Up, C for Change Destination left the map cursor completely
+        // unmovable. Dismissing the panel here, not just whatever popup got us here, is what actually
+        // frees the map back up.
+        openPanelDismiss?.Invoke();
+
         pickerPromptLabel.Text = prompt;
         pickerPromptLabel.Visible = true;
         pendingPick = onConfirm;
