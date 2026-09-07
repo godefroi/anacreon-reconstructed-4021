@@ -123,9 +123,9 @@ driven by `ANACREON.PAS`'s main loop calling `PROLOG.PAS: SetUpPlayer` for each 
 
 | Surface | Where used | Pascal source | Terminal.Gui primitives |
 |---|---|---|---|
-| New Construction Site | Build menu → New | `CONSTR.PAS: ConstructCommand` | `ListView`/`Dialog` type picker (tech-filtered) + map cursor for coordinate + `MessageBox` cost confirm |
-| Abort Construction | Build menu → Abort | `CONSTR.PAS: AbortConstructionCommand` | `MessageBox` confirm |
-| Construction Site Status | Build menu → Site Status | `CONSTR.PAS: ConstrStatusCommand` | `TableView` (read-only) |
+| New Construction Site | Build menu → New | `CONSTR.PAS: ConstructCommand` | **Done** (`GameShell.NewConstruction`) — `ListView<ConstructionType>` tech-filtered popup + `BeginPick` map cursor for the coordinate + `DosDialogWindow` cost/time confirm |
+| Abort Construction | Build menu → Abort | `CONSTR.PAS: AbortConstructionCommand` | **Done** (`GameShell.AbortConstruction`) — `PickOwnConstructionSiteAtCursor` + `ShowConfirm` |
+| Construction Site Status | Build menu → Site Status | `CONSTR.PAS: ConstrStatusCommand` | **Done** (`ConstructionSiteStatusWindow`) — single-pane `ListView`-shaped report (`NewsWindow`'s own scrolling convention, not a `TableView`) |
 
 ## Menus & navigation
 

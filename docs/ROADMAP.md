@@ -1394,6 +1394,42 @@ Direct2D) surfaced; see the README's Known Issues section.
   ordinal arithmetic with nullable typed fields on `NewsItem`, matching `FleetOrder`'s own
   `TransferShip`/`TransferCargo` split, deferred as a follow-up since it touches both save formats.
 
+- **8u, the Build menu (`CONSTR.PAS: ConstructCommand`/`AbortConstructionCommand`/
+  `ConstrStatusCommand`).** `ConstructionSite`/the tick's own `UpdateConstruction` (countdown +
+  completion) were already fully ported, but nothing ever created one outside of `SavGameLoader`
+  reading it from a file. `Core.Entities.ConstructionCatalog` (new `YearsToBuild`/`ConsName` tables
+  plus `AnnualTickHandler.Production.cs`'s own private raw-material table, relocated here so the
+  tick and the Build menu's cost preview read the same source) and `ConstructionLifecycle.
+  StartConstruction` (no upfront resource cost — matching real `Construction`, which never touches
+  `Cargo`) are the two new Core pieces. No explicit visibility mark needed at creation — confirmed
+  `Game.Visible`/`ScoutedOrOwned` already fall back to plain ownership, the same reason a freshly
+  created Starbase/Stargate doesn't mark it either.
+
+  `GameShell.NewConstruction` (tech-filtered `ListView<ConstructionType>` popup → `BeginPick` →
+  `ConstructionLifecycle.StartConstruction` → the real cost/time summary, including a small ported
+  `Noun` a/an helper, `STRG.PAS:86-92`), `AbortConstruction` (`PickOwnConstructionSiteAtCursor`, a
+  plain lookup rather than a picker — a sector holds at most one ground object), and
+  `ConstructionSiteStatusWindow` (`NewsWindow`'s own single-pane scrolling shape, not a `TableView`)
+  replace the three menu stubs.
+
+  A real bug found and fixed while building this: the "sector already occupied" reprompt used to call
+  itself synchronously, inside the very callback that opened its own error dialog — left the map
+  cursor silently stuck (`AddModal`'s own `galaxyView.Enabled` didn't clear until that dialog was
+  dismissed by some later, unrelated keypress). Deferred one tick instead, the same pattern
+  `ShowOldShipsFound` already uses for the identical reason. Verified end-to-end via the headless
+  driver against a small dedicated fixture (`BuildMenuFixtureTests`, an empire with
+  `Outpost`/`CommandBase` pre-unlocked so the smoke test doesn't need a multi-turn tech grind first):
+  the occupied-reprompt, a successful build, Site Status showing it, and Abort removing it again.
+
+  Two unrelated bugs found and fixed along the way (their own commits): `BeginPick`'s own
+  `galaxyView.SetFocus()` silently did nothing whenever a still-open panel (Fleet/Status/News/etc,
+  stacked underneath a Close Up that had just dismissed *itself*) left `AddModal`'s own modal count
+  above zero — found live going from F5's Fleet Window into Close Up into Change Destination, which
+  left the map cursor completely unmovable with no visible sign anything was wrong; `BeginPick` now
+  dismisses any open panel itself first. And `PickGround` (Transfer/Abort-Join's own target picker)
+  now sorts the player's own fleets/world before an enemy's, rather than interleaving them in
+  whatever order `Galaxy.Fleets` happened to hold them.
+
 ## 9. Async/hotseat turn mode
 
 Deferred multiplayer option — sequential mode (already built) is the only mode a solo player sees.
