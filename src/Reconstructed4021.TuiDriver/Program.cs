@@ -55,6 +55,13 @@ using Reconstructed4021.Tui;
 //    AutoProcess: false and a short real sleep between actions so the live loop's own iterations
 //    have time to actually drain and redraw before the next line runs or a DUMP reads the screen.
 //
+// --output <path>: writes DUMP/final-state output there instead of stdout (resolved relative to the
+// repo root, same as --load/--script). Omit it and a path under logs/ (gitignored, same convention as
+// Reconstructed4021.Tui's own crash/tech-debug logs) is generated and printed to stdout before the
+// script runs -- either way, the caller never has to shell-redirect this process's own stdout (which,
+// for a Claude Code caller specifically, means one less permission prompt per run) to get at a
+// multi-DUMP script's output.
+//
 // Script format, one instruction per line:
 //   # comment                    -- ignored, as is a blank line
 //   DUMP                         -- prints the current screen as plain text
@@ -86,6 +93,14 @@ if (!File.Exists(resolvedScriptPath)) {
     Console.Error.WriteLine($"Script file not found: {resolvedScriptPath}");
     return 1;
 }
+
+var outputPathArg = OptionalArg("--output");
+var outputPath = outputPathArg is not null
+    ? (Path.IsPathRooted(outputPathArg) ? outputPathArg : Path.Combine(repoRoot, outputPathArg))
+    : Path.Combine(repoRoot, "logs", $"tuidriver-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+Console.WriteLine($"Output: {outputPath}");
+using var output = new StreamWriter(outputPath) { AutoFlush = true };
 
 Window window;
 Func<string>? describeResult = null;
@@ -163,7 +178,7 @@ void RunScript()
         }
 
         if (line == "DUMP") {
-            Console.WriteLine(RenderScreen());
+            output.WriteLine(RenderScreen());
             continue;
         }
 
@@ -182,8 +197,8 @@ void RunScript()
         }
     }
 
-    Console.WriteLine("=== final state ===");
-    Console.WriteLine(RenderScreen());
+    output.WriteLine("=== final state ===");
+    output.WriteLine(RenderScreen());
 }
 
 string RenderScreen()
@@ -240,4 +255,10 @@ int? OptionalIntArg(string name)
 {
     var index = Array.IndexOf(args, name);
     return index >= 0 && index + 1 < args.Length ? int.Parse(args[index + 1]) : null;
+}
+
+string? OptionalArg(string name)
+{
+    var index = Array.IndexOf(args, name);
+    return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
 }
