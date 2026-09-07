@@ -251,22 +251,6 @@ public sealed partial class AnnualTickHandler
     private static FrozenDictionary<CargoType, int> RawMaterialRow(params (CargoType material, int amount)[] entries) =>
         entries.ToFrozenDictionary(e => e.material, e => e.amount);
 
-    /// <summary>
-    /// ConsCargoNeeded[ConstrTypes,CargoTypes] (DATACNST.PAS:539-548) — raw material needed per year
-    /// to build each construction type. Used by <see cref="UpdateConstruction"/>, not production —
-    /// kept here alongside the other RawM/ConsCargoNeeded-shaped tables.
-    /// </summary>
-    private static readonly FrozenDictionary<ConstructionType, FrozenDictionary<CargoType, int>> _constructionCargoNeeded = new Dictionary<ConstructionType, FrozenDictionary<CargoType, int>> {
-        [ConstructionType.Minefield] = RawMaterialRow((CargoType.Chemicals, 110), (CargoType.Metals, 500), (CargoType.Trillum, 80)),
-        [ConstructionType.CommandBase] = RawMaterialRow((CargoType.Chemicals, 460), (CargoType.Metals, 2300), (CargoType.Trillum, 180)),
-        [ConstructionType.Fortress] = RawMaterialRow((CargoType.Chemicals, 840), (CargoType.Metals, 2870), (CargoType.Trillum, 250)),
-        [ConstructionType.IndustrialComplex] = RawMaterialRow((CargoType.Chemicals, 590), (CargoType.Metals, 2600), (CargoType.Trillum, 150)),
-        [ConstructionType.Outpost] = RawMaterialRow((CargoType.Chemicals, 350), (CargoType.Metals, 1120), (CargoType.Trillum, 150)),
-        [ConstructionType.Gate] = RawMaterialRow((CargoType.Chemicals, 2530), (CargoType.Metals, 3920), (CargoType.Trillum, 1450)),
-        [ConstructionType.WarpLink] = RawMaterialRow((CargoType.Chemicals, 1560), (CargoType.Metals, 2550), (CargoType.Trillum, 290)),
-        [ConstructionType.Disrupter] = RawMaterialRow((CargoType.Chemicals, 1110), (CargoType.Metals, 1180), (CargoType.Trillum, 1120)),
-    }.ToFrozenDictionary();
-
 
     /// <summary>World types SupplyLink/SurplusLink treat as raw-material sources (UPDATE.PAS:541-542,587-588's inline set) — distinct from <see cref="_rawMaterialOnlyTypes"/>, which serves GetIndustrialDistribution and includes types (University, Terraform, and every *Starbase-suffixed type) this set doesn't.</summary>
     private static readonly FrozenSet<WorldType> _supplyLinkEligibleTypes = new HashSet<WorldType> {

@@ -79,7 +79,7 @@ public sealed partial class AnnualTickHandler
     /// </summary>
     private static bool UseUpRawMaterial(ConstructionSite site, List<Fleet> fleets)
     {
-        var needed = _constructionCargoNeeded[site.Building];
+        var needed = ConstructionCatalog.RawMaterialPerYear[site.Building];
         var scratch = fleets.ToDictionary(f => f, f => _constructionRawMaterialTypes.ToDictionary(t => t, t => f.Cargo[t]));
 
         foreach (var cargoType in _constructionRawMaterialTypes) {
