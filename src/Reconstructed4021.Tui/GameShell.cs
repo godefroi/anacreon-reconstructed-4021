@@ -1499,6 +1499,153 @@ public sealed class GameShell : Window
     }
 
     /// <summary>
+    /// Fleet menu > Resupply -- no Pascal precedent, a hardcoded fleet-order template (see
+    /// <see cref="FleetOrderTemplates"/>'s own doc comment): pick a fleet, a source world, a cargo
+    /// type and amount, and a destination world, then commit the generated orders directly (matching
+    /// how Refuel/Change Destination commit immediately, no editor preview step). Both worlds must be
+    /// the player's own -- <see cref="FleetOrderTemplates.Resupply"/>'s DEST/TRAN/REFU sequence only
+    /// ever touches ground the fleet actually owns (<see cref="Core.Turns.FleetMovementHandler"/>'s own
+    /// ground guard), so an unowned source/destination would just silently no-op every step.
+    /// </summary>
+    private void ResupplyMission() => PickOwnFleetAtCursor("Resupply", fleet => PickResupplySource(fleet));
+
+    private void PickResupplySource(Fleet fleet) =>
+        BeginPick("Resupply -- move cursor to source world, Enter: select, Esc: cancel",
+            coordinate => PickOwnWorldOrRetry(coordinate, "Resupply", () => PickResupplySource(fleet),
+                source => PickResupplyCargo(fleet, source)));
+
+    private void PickResupplyCargo(Fleet fleet, Planet source) =>
+        ShowCargoTypePicker(cargo => PickResupplyAmount(fleet, source, cargo));
+
+    private void PickResupplyAmount(Fleet fleet, Planet source, CargoType cargo)
+    {
+        var dialog = new Window {
+            Title = "Resupply",
+            X = Pos.Center(), Y = Pos.Center(),
+            Width = 50, Height = 6,
+            BorderStyle = LineStyle.Single,
+            CanFocus = true,
+        };
+        dialog.SetScheme(new Scheme(DialogNormalAttribute));
+        dialog.Border.View?.SetScheme(new Scheme(DialogBorderAttribute));
+
+        var amountField = new TextField { X = 1, Y = 1, Width = Dim.Fill(1) };
+        var errorLabel = new Label { X = 1, Y = 2 };
+        dialog.Add(new Label { X = 1, Y = 0, Text = $"Amount of {new ResourceKind.Cargo(cargo).DisplayName} to shuttle:" });
+        dialog.Add(amountField);
+        dialog.Add(errorLabel);
+        dialog.Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "Enter: confirm   Esc: cancel" });
+
+        var dismiss = AddModal(dialog, dismissOnOutsideClick: false);
+        amountField.SetFocus();
+
+        amountField.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Enter) {
+                return;
+            }
+
+            key.Handled = true;
+            if (!int.TryParse(amountField.Text, out var amount) || amount <= 0) {
+                errorLabel.Text = "Enter a positive number.";
+                return;
+            }
+
+            dismiss();
+            PickResupplyDestination(fleet, source, cargo, amount);
+        };
+        dialog.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Esc) {
+                return;
+            }
+
+            dismiss();
+            key.Handled = true;
+        };
+    }
+
+    private void PickResupplyDestination(Fleet fleet, Planet source, CargoType cargo, int amount) =>
+        BeginPick("Resupply -- move cursor to destination world, Enter: select, Esc: cancel",
+            coordinate => PickOwnWorldOrRetry(coordinate, "Resupply", () => PickResupplyDestination(fleet, source, cargo, amount),
+                destination => CommitResupply(fleet, source, destination, cargo, amount)));
+
+    private void CommitResupply(Fleet fleet, Planet source, Planet destination, CargoType cargo, int amount)
+    {
+        fleet.Orders.Clear();
+        fleet.Orders.AddRange(FleetOrderTemplates.Resupply(source, destination, cargo, amount));
+        fleet.NextOrder = 1;
+        galaxyView.Refresh();
+
+        var resource = new ResourceKind.Cargo(cargo).DisplayName;
+        var sourceName = CloseUpWindow.DescribeLocation(source, human);
+        var destinationName = CloseUpWindow.DescribeLocation(destination, human);
+        ShowInfo("Resupply",
+            $"{CloseUpWindow.DescribeLocation(fleet, human)} will shuttle {amount} {resource} " +
+            $"from {sourceName} to {destinationName} and return, {MyLord()}.");
+    }
+
+    /// <summary>Shared retry-on-invalid-pick idiom (<see cref="PickConstructionCoordinate"/>'s own "that sector is already occupied" dialog): re-prompts via <paramref name="retry"/> instead of silently failing when the picked coordinate isn't one of the player's own worlds.</summary>
+    private void PickOwnWorldOrRetry(Coordinate coordinate, string title, Action retry, Action<Planet> onOwnWorld)
+    {
+        if (FindWorldAt(coordinate) is Planet { } world && ReferenceEquals(world.Owner, human)) {
+            onOwnWorld(world);
+            return;
+        }
+
+        var dialog = new DosDialogWindow(title, $"{MyLord()}, that isn't one of your own worlds.");
+        var dismissDialog = AddModal(dialog, dismissOnOutsideClick: false);
+        dialog.Answered += (_, _) => {
+            dismissDialog();
+            App!.AddTimeout(TimeSpan.Zero, () => {
+                retry();
+                return false;
+            });
+        };
+    }
+
+    private void ShowCargoTypePicker(Action<CargoType> onChosen)
+    {
+        var types = Enum.GetValues<CargoType>();
+        var picker = new Window {
+            Title = "Resupply",
+            X = Pos.Center(), Y = Pos.Center(),
+            Width = 40, Height = Math.Min(types.Length, 12) + 2,
+            BorderStyle = LineStyle.Single,
+            CanFocus = true,
+        };
+        picker.SetScheme(new Scheme(PickerNormalAttribute));
+        picker.Border.View?.SetScheme(new Scheme(PickerBorderAttribute));
+
+        var listView = new ListView<CargoTypeListItem> { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill() };
+        listView.SetScheme(new Scheme { Normal = PickerNormalAttribute, Focus = PickerSelectedAttribute });
+        listView.SetSource(new ObservableCollection<CargoTypeListItem>(types.Select(t => new CargoTypeListItem(t))));
+        listView.Index = 0;
+        picker.Add(listView);
+
+        var dismiss = AddModal(picker);
+        picker.KeyDown += (_, key) => {
+            switch (key.NoAlt.NoCtrl.NoShift.KeyCode) {
+                case KeyCode.Enter:
+                    var chosen = listView.Value;
+                    dismiss();
+                    if (chosen is not null) {
+                        onChosen(chosen.Type);
+                    }
+                    key.Handled = true;
+                    break;
+                case KeyCode.Esc:
+                    dismiss();
+                    key.Handled = true;
+                    break;
+            }
+        };
+    }
+
+    private sealed record CargoTypeListItem(CargoType Type)
+    {
+        public override string ToString() => new ResourceKind.Cargo(Type).DisplayName;
+    }
+
+    /// <summary>
     /// Fleet menu > SRM Sweep (FLTCOMM.PAS: MineSweeperCommand, :788-812): reads the mine at the
     /// selected fleet's own location (<c>GetCoord(FltID,XY)</c>), same as real Pascal -- there's no
     /// separate destination pick, the fleet has to already be sitting on the minefield.
@@ -2363,6 +2510,7 @@ public sealed class GameShell : Window
             new("_SRM Sweep", Key.Empty, SrmSweep),
             new("_Orders", Key.Empty, FleetOrders),
             new("Canc_el Orders", Key.Empty, CancelFleetOrders),
+            new("Res_upply", Key.Empty, ResupplyMission),
             new("_Probe", Key.Empty, LaunchProbe),
         }),
         new MenuBarItem("_Build", new MenuItem[] {

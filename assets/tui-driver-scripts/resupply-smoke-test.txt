@@ -1,0 +1,53 @@
+# Smoke-test script for Reconstructed4021.TuiDriver, run against a scratch fixture
+# (assets/saves/Resupply Smoke Test.json, NOT committed -- Border Skirmish.json with planet (4,4)
+# reassigned to Human and a Human fleet (20 transports, 10 fuel) placed at the capital (0,0)):
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Resupply Smoke Test.json" --script assets/tui-driver-scripts/resupply-smoke-test.txt
+#
+# Fleet > Resupply: cursor starts at the capital (0,0), where the one fleet already sits, so
+# PickOwnFleetAtCursor auto-picks it. Enter picks (0,0) as the source world. Down x3 + Enter in the
+# cargo-type picker picks Chemicals (Legion/NinjaLegion/Ambrosia/Chemicals). "100" + Enter for the
+# amount. Right x4 + Down x4 moves the cursor to (4,4), Enter picks it as the destination. Then
+# Fleet > Orders shows the compiled DEST/TRAN/REFU sequence for confirmation.
+f
+u
+SLEEP 200
+DUMP
+Enter
+SLEEP 200
+DUMP
+Down
+Down
+Down
+Enter
+SLEEP 200
+DUMP
+1
+0
+0
+Enter
+SLEEP 200
+DUMP
+Right
+Right
+Right
+Right
+Down
+Down
+Down
+Down
+SLEEP 200
+Enter
+SLEEP 200
+DUMP
+Enter
+SLEEP 200
+DUMP
+f
+o
+SLEEP 200
+DUMP
+Esc
+SLEEP 200
+DUMP
