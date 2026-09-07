@@ -16,9 +16,18 @@ using Game = Reconstructed4021.Core.Game;
 // (deterministic test scripts), not what the real game should do.
 var random = new Random();
 
+// Diagnostic: one line per empire per year for NewTechLevel's own roll (chance/roll/outcome/lab
+// breakdown) -- logs/ is gitignored, same as WriteCrashLog's own file below, so this never needs
+// cleaning up or committing. Unconditional (not env-var-gated): the file is tiny (a few KB per full
+// game) and this is exactly the evidence a slow-tech-advancement report needs to actually diagnose,
+// rather than reconstructing history from sparse autosaves after the fact.
+var techDebugLogPath = Path.Combine(FindRepoRoot(AppContext.BaseDirectory), "logs", $"tech-debug-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+Directory.CreateDirectory(Path.GetDirectoryName(techDebugLogPath)!);
+void TechDebugLog(string line) => File.AppendAllText(techDebugLogPath, line + Environment.NewLine);
+
 // One TurnEngine for the whole process -- stateless itself, just wraps three handlers that all
 // share this same random, matching every other scenario-load/setup component below.
-var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random));
+var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random, TechDebugLog));
 
 // NEWGAME.PAS's own ScenarioIntroduction just prompts for a hardcoded filename -- no directory scan or
 // title list. ScenarioLoader.ReadHeader reads only the same header tokens Load() itself would, so this
