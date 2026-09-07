@@ -893,7 +893,12 @@ public sealed class GameShell : Window
     /// </summary>
     private void PickGround(Fleet source, bool playerOnly, bool includeFleet, string title, string emptyMessage, Action<ISectorObject> onPicked)
     {
-        var candidates = new List<ISectorObject>();
+        // Own fleets, own world, enemy fleets, enemy world -- per the user's own explicit request: the
+        // player's own objects should always sort first (fleets before the single ground object either
+        // side can have), not interleaved with an enemy's in whatever order Galaxy.Fleets happens to
+        // hold them.
+        var ownFleets = new List<ISectorObject>();
+        var enemyFleets = new List<ISectorObject>();
         foreach (var f in game.Galaxy.Fleets) {
             if (f.Location != source.Location) {
                 continue;
@@ -901,14 +906,31 @@ public sealed class GameShell : Window
             if (!includeFleet && ReferenceEquals(f, source)) {
                 continue;
             }
-            if (playerOnly && !ReferenceEquals(f.Owner, human)) {
+            var isOwn = ReferenceEquals(f.Owner, human);
+            if (playerOnly && !isOwn) {
                 continue;
             }
-            candidates.Add(f);
+            (isOwn ? ownFleets : enemyFleets).Add(f);
         }
 
-        if (FindWorldAt(source.Location) is { } world && (!playerOnly || ReferenceEquals(world.Owner, human))) {
-            candidates.Add(world);
+        ISectorObject? ownWorld = null;
+        ISectorObject? enemyWorld = null;
+        if (FindWorldAt(source.Location) is { } world) {
+            if (ReferenceEquals(world.Owner, human)) {
+                ownWorld = world;
+            } else if (!playerOnly) {
+                enemyWorld = world;
+            }
+        }
+
+        var candidates = new List<ISectorObject>();
+        candidates.AddRange(ownFleets);
+        if (ownWorld is not null) {
+            candidates.Add(ownWorld);
+        }
+        candidates.AddRange(enemyFleets);
+        if (enemyWorld is not null) {
+            candidates.Add(enemyWorld);
         }
 
         if (candidates.Count == 0) {
