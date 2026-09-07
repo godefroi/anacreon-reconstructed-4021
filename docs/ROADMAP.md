@@ -1430,6 +1430,26 @@ Direct2D) surfaced; see the README's Known Issues section.
   now sorts the player's own fleets/world before an enemy's, rather than interleaving them in
   whatever order `Galaxy.Fleets` happened to hold them.
 
+- **8v, Resupply (`GameShell.ResupplyMission`, `Core.Entities.FleetOrderTemplates`).** No Pascal
+  precedent — a "templated fleet orders" feature: pick a fleet, a source world, a cargo type/amount,
+  and a destination world, and get a one-shot pickup/deliver/return/refuel order sequence installed
+  directly, no hand-typing required. The existing DEST/TRAN/REPE/WAIT order language
+  (`Core.Entities.FleetOrderCompiler`) already covers the whole "travel, transfer, travel back" shape;
+  the one real gap was Refuel, previously only a player-interactive command
+  (`GameShell.RefuelFleet`/`FLTCOMM.PAS: RefuelFleetCommand`), not an order-queue token. A new `REFU`
+  `CommandType` closes that gap by calling `FleetLifecycle.RefuelFleet` from the order queue — the
+  same primitive the NPE AI's own `RefuelBMS` mission already uses, just not previously reachable by a
+  player's own orders. `FleetOrderTemplates.Resupply` is the one template so far; more can follow the
+  same shape later.
+
+  Three small, unrelated Tui fixes landed alongside this: Close Up was offering "Deploy from here" for
+  any world/enemy fleet regardless of ownership (always failing `PickDeploySource`'s own check) — now
+  gated the same way the Sector Selected Popup's `FleetActionHint` already was; the bottom-right
+  coordinate readout was missing its right margin (`Pos.AnchorEnd()` alone sits flush against the
+  edge, `Pos.AnchorEnd() - 1` reserves one column); and Refuel joins Change Destination/Transfer/
+  Abort-Join/Attack as a direct quick-option on a selected fleet (Close Up and the Sector Selected
+  Popup), not just Fleet menu → Refuel.
+
 ## 9. Async/hotseat turn mode
 
 Deferred multiplayer option — sequential mode (already built) is the only mode a solo player sees.
