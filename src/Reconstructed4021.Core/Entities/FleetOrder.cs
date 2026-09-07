@@ -15,8 +15,10 @@ namespace Reconstructed4021.Core.Entities;
 /// one of the two type fields is set, since <c>Res: ResourceTypes</c> ranges over <c>fgt..tri</c>
 /// (<c>ORDERS.PAS</c>'s own <c>GetResourceType</c>: ship types 5-11, cargo types 12-18, sharing this
 /// port's existing <see cref="ShipType"/>/<see cref="CargoType"/> ordinal offsets). Every other
-/// <see cref="CommandType"/> (<c>Repeat</c>/<c>Abort</c>/<c>Sweep</c>/<c>Stop</c>/<c>Wait</c>)
-/// carries no payload at all -- real Pascal's own variant record is simply unused/garbage for those.
+/// <see cref="CommandType"/> (<c>Repeat</c>/<c>Abort</c>/<c>Sweep</c>/<c>Stop</c>/<c>Wait</c>/
+/// <c>Refuel</c>) carries no payload at all -- real Pascal's own variant record is simply
+/// unused/garbage for the real ones; <c>Refuel</c> (this port's own addition, see
+/// <see cref="FleetOrderCompiler"/>'s own doc comment) simply needs none.
 /// No real reference save exercises <c>TransCOM</c> (`docs/SAV_FILE_FORMAT.md`'s own verification
 /// notes), so this decode is reasoned through from <c>ORDERS.PAS</c> directly, not empirically
 /// confirmed the way <c>DestCOM</c> is (`FLEET_ORDERS.SAV`).

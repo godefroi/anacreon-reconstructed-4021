@@ -227,6 +227,9 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
                 case CommandType.Transfer:
                     ExecuteTransCOM(fleet, command, game);
                     break;
+                case CommandType.Refuel:
+                    ExecuteRefuCOM(fleet, game);
+                    break;
             }
 
             if (!game.Galaxy.Fleets.Contains(fleet)) {
@@ -288,6 +291,24 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
 
         FleetLogistics.BalanceFleet(newFleetShips, newFleetCargo);
         FleetLifecycle.ChangeCompositionOfFleet(fleet, ground, newFleetShips, newFleetCargo, newGroundShips, newGroundCargo, game);
+    }
+
+    /// <summary>
+    /// No ORDERS.PAS token -- this port's own addition (see <see cref="FleetOrderCompiler"/>'s doc
+    /// comment on <c>REFU</c>). Same ground guard as <see cref="ExecuteTransCOM"/> (only a same-owner
+    /// <see cref="IEconomicWorld"/>, i.e. a <see cref="Planet"/>, at the fleet's own location), then
+    /// tops the fleet's tank off with as much of the ground's trillum as it needs -- exactly the
+    /// Tui's own interactive Refuel command, just automated for an order queue via the same
+    /// <see cref="FleetLifecycle.RefuelFleet"/>/<see cref="FleetLifecycle.MaxTrillumToRefuel"/> pair
+    /// the NPE AI's own <c>RefuelBMS</c> mission already calls.
+    /// </summary>
+    private static void ExecuteRefuCOM(Fleet fleet, Game game)
+    {
+        if (game.Galaxy.GetObjectAt(fleet.Location) is not IEconomicWorld ground || ground.Owner != fleet.Owner) {
+            return;
+        }
+
+        FleetLifecycle.RefuelFleet(fleet, ground, FleetLifecycle.MaxTrillumToRefuel(fleet, ground));
     }
 
     /// <summary>

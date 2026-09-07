@@ -147,6 +147,16 @@ public class FleetOrderCompilerTests
     }
 
     [Test]
+    public async Task Compile_Refuel_NeedsNoOperand()
+    {
+        var (game, owner) = NewGame();
+
+        var result = FleetOrderCompiler.Compile(game, owner, ["REFUEL"]);
+
+        await Assert.That(result.Orders[0].Type).IsEqualTo(CommandType.Refuel);
+    }
+
+    [Test]
     public async Task Compile_BlankLine_SilentlySkipped()
     {
         var (game, owner) = NewGame();
@@ -192,6 +202,7 @@ public class FleetOrderCompilerTests
             new FleetOrder(CommandType.Transfer, TransferCargo: CargoType.Trillum, TransferAmount: -15),
             new FleetOrder(CommandType.Wait),
             new FleetOrder(CommandType.Repeat),
+            new FleetOrder(CommandType.Refuel),
         ];
 
         var lines = FleetOrderCompiler.Decompile(owner, original);
@@ -207,6 +218,7 @@ public class FleetOrderCompilerTests
         await Assert.That(recompiled.Orders[3].TransferAmount).IsEqualTo(-15);
         await Assert.That(recompiled.Orders[4].Type).IsEqualTo(CommandType.Wait);
         await Assert.That(recompiled.Orders[5].Type).IsEqualTo(CommandType.Repeat);
+        await Assert.That(recompiled.Orders[6].Type).IsEqualTo(CommandType.Refuel);
     }
 
     [Test]

@@ -552,6 +552,56 @@ public class FleetMovementHandlerTests
     }
 
     [Test]
+    public async Task ExecuteFleetOrders_RefuCOM_ConvertsGroundTrillumToFuel()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var ground = new Planet {
+            Location = new Coordinate(0, 0), Owner = empire, Class = WorldClass.EarthLike, Type = WorldType.Base,
+        };
+        ground.Cargo.Trillum = 100;
+        game.Galaxy.Planets.Add(ground);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Fuel = 0, Status = FleetStatus.Ready };
+        fleet.Ships.Transports = 10;
+        fleet.Orders.Add(new FleetOrder(CommandType.Refuel));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        var expectedTrillum = FleetLifecycle.MaxTrillumToRefuel(fleet, ground);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(ground.Cargo.Trillum).IsEqualTo(100 - expectedTrillum);
+        // MaxTrillumToRefuel rounds its tons-needed estimate up (FleetLifecycle's own +1), so a
+        // ground with plenty of trillum tops the tank exactly to capacity, not to trillum*FuelPerTon.
+        await Assert.That(fleet.Fuel).IsEqualTo(FleetLogistics.FuelCapacity(fleet.Ships));
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_RefuCOM_GroundNotOwnedByFleet_IsANoOp()
+    {
+        var empire = new Empire { Name = "Human" };
+        var other = new Empire { Name = "Other" };
+        var game = new Game(new Galaxy(size: 20));
+        var ground = new Planet {
+            Location = new Coordinate(0, 0), Owner = other, Class = WorldClass.EarthLike, Type = WorldType.Base,
+        };
+        ground.Cargo.Trillum = 100;
+        game.Galaxy.Planets.Add(ground);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Fuel = 0, Status = FleetStatus.Ready };
+        fleet.Orders.Add(new FleetOrder(CommandType.Refuel));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(ground.Cargo.Trillum).IsEqualTo(100);
+        await Assert.That(fleet.Fuel).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task AdvanceFleet_ReachingItsDestination_RunsFleetOrdersTheSameTurn()
     {
         var empire = new Empire { Name = "Human" };

@@ -94,6 +94,11 @@ public static class FleetOrderCompiler
                 return (new FleetOrder(CommandType.Repeat), null);
             case "WAIT":
                 return (new FleetOrder(CommandType.Wait), null);
+            case "REFU":
+                // No ORDERS.PAS token -- this port's own addition, exposing RefuelFleetCommand's
+                // trillum-to-fuel conversion (already reused by the NPE AI's own RefuelBMS mission,
+                // FleetLifecycle.RefuelFleet) as something a player's order queue can trigger too.
+                return (new FleetOrder(CommandType.Refuel), null);
             default:
                 return (null, "Unknown command in line");
         }
@@ -193,6 +198,7 @@ public static class FleetOrderCompiler
                 CommandType.Transfer => $"TRANsfer {order.TransferAmount} {TransferResourceText(order)}",
                 CommandType.Repeat => "REPEat",
                 CommandType.Wait => "WAIT",
+                CommandType.Refuel => "REFUel",
                 _ => throw new ArgumentOutOfRangeException(nameof(orders), order.Type, "Unexpected compiled command type."),
             });
         }
