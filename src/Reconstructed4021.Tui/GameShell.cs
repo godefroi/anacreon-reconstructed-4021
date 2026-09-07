@@ -1540,6 +1540,149 @@ public sealed class GameShell : Window
     }
 
     /// <summary>
+    /// Build menu > New (CONSTR.PAS: ConstructCommand/InputConstrType). Tech-filtered picker (real
+    /// Pascal's own "you don't have the technology to build anything!" when
+    /// <see cref="UnlockedTechnology.Constructions"/> is empty) -&gt; map-cursor coordinate (real
+    /// Pascal's own "that sector is already occupied" re-prompt, GetConstrXY) -&gt;
+    /// <see cref="ConstructionLifecycle.StartConstruction"/> -&gt; the same cost/time summary
+    /// ConstructCommand itself shows.
+    /// </summary>
+    private void NewConstruction()
+    {
+        var available = Enum.GetValues<ConstructionType>().Where(t => human.Technology.Constructions.Contains(t)).ToList();
+        if (available.Count == 0) {
+            ShowInfo("Construction", $"{MyLord()}, you don't have the technology to build anything!");
+            return;
+        }
+
+        ShowConstructionTypePicker(available, PickConstructionCoordinate);
+    }
+
+    private void PickConstructionCoordinate(ConstructionType type) =>
+        BeginPick("Construction -- move cursor to begin construction, Enter: select, Esc: cancel", coordinate => {
+            if (game.Galaxy.GetObjectAt(coordinate) is not null) {
+                // Deferred one tick (see ShowOldShipsFound's own comment) -- re-entering BeginPick
+                // synchronously, inside the very key dispatch that opened this dialog, left galaxyView
+                // still disabled underneath it (AddModal's own openModalCount hadn't unwound yet),
+                // found live: the cursor pick silently couldn't move until this dialog was dismissed by
+                // a completely unrelated later keypress.
+                var dialog = new DosDialogWindow("Construction", $"{MyLord()}, that sector is already occupied.");
+                var dismissDialog = AddModal(dialog, dismissOnOutsideClick: false);
+                dialog.Answered += (_, _) => {
+                    dismissDialog();
+                    App!.AddTimeout(TimeSpan.Zero, () => {
+                        PickConstructionCoordinate(type);
+                        return false;
+                    });
+                };
+                return;
+            }
+
+            var site = ConstructionLifecycle.StartConstruction(game, human, type, coordinate);
+            galaxyView.Refresh();
+
+            var years = ConstructionCatalog.YearsToBuild[type];
+            var cost = ConstructionCatalog.RawMaterialPerYear[type]
+                .Where(kv => kv.Value > 0)
+                .Select(kv => $"{kv.Value} {new ResourceKind.Cargo(kv.Key).DisplayName} per year.");
+
+            ShowInfo("Construction",
+                $"Starting construction of {Noun(ConstructionCatalog.DisplayName(type))} at {DisplayName(site)}.\n\n" +
+                $"Construction will take approximately {years} years to finish and will\n" +
+                "require the following quantities of raw material:\n" +
+                string.Join('\n', cost));
+        });
+
+    // Noun (STRG.PAS:86-92) -- 'a'/'an' by leading letter, Y counted as a vowel like Pascal's own does.
+    private static string Noun(string word) => "AEIOUY".Contains(char.ToUpperInvariant(word[0])) ? $"an {word}" : $"a {word}";
+
+    private void ShowConstructionTypePicker(IReadOnlyList<ConstructionType> types, Action<ConstructionType> onChosen)
+    {
+        var picker = new Window {
+            Title = "Construction",
+            X = Pos.Center(), Y = Pos.Center(),
+            Width = 40, Height = Math.Min(types.Count, 12) + 2,
+            BorderStyle = LineStyle.Single,
+            CanFocus = true,
+        };
+        picker.SetScheme(new Scheme(PickerNormalAttribute));
+        picker.Border.View?.SetScheme(new Scheme(PickerBorderAttribute));
+
+        var listView = new ListView<ConstructionTypeListItem> { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill() };
+        listView.SetScheme(new Scheme { Normal = PickerNormalAttribute, Focus = PickerSelectedAttribute });
+        listView.SetSource(new ObservableCollection<ConstructionTypeListItem>(types.Select(t => new ConstructionTypeListItem(t))));
+        listView.Index = 0;
+        picker.Add(listView);
+
+        var dismiss = AddModal(picker);
+        picker.KeyDown += (_, key) => {
+            switch (key.NoAlt.NoCtrl.NoShift.KeyCode) {
+                case KeyCode.Enter:
+                    var chosen = listView.Value;
+                    dismiss();
+                    if (chosen is not null) {
+                        onChosen(chosen.Type);
+                    }
+                    key.Handled = true;
+                    break;
+                case KeyCode.Esc:
+                    dismiss();
+                    key.Handled = true;
+                    break;
+            }
+        };
+    }
+
+    private sealed record ConstructionTypeListItem(ConstructionType Type)
+    {
+        public override string ToString() => ConstructionCatalog.DisplayName(Type);
+    }
+
+    /// <summary>Build menu > Abort (CONSTR.PAS: AbortConstructionCommand).</summary>
+    private void AbortConstruction() => PickOwnConstructionSiteAtCursor("Abort Construction", AbortConstruction);
+
+    private void AbortConstruction(ConstructionSite site)
+    {
+        var name = DisplayName(site);
+        ShowConfirm("Abort Construction", $"Are you sure you want to abort {name} (y/N)?", choice => {
+            if (choice != 0) {
+                return;
+            }
+
+            game.Galaxy.ConstructionSites.Remove(site);
+            galaxyView.Refresh();
+            var capitalized = char.ToUpperInvariant(name[0]) + name[1..];
+            ShowInfo("Abort Construction", $"{capitalized} aborted, {MyLord()}.");
+        });
+    }
+
+    // A sector holds at most one ground object (Galaxy.GetObjectAt's own single-slot model), unlike
+    // PickOwnFleetAtCursor -- no picker branch needed for "more than one."
+    private void PickOwnConstructionSiteAtCursor(string title, Action<ConstructionSite> onChosen)
+    {
+        var site = game.Galaxy.ConstructionSites.FirstOrDefault(c => c.Location == galaxyView.CursorLocation && ReferenceEquals(c.Owner, human));
+        if (site is null) {
+            ShowInfo(title, "Move the cursor onto one of your own construction sites first.");
+            return;
+        }
+
+        onChosen(site);
+    }
+
+    /// <summary>Build menu > Site Status (CONSTR.PAS: ConstrStatusCommand).</summary>
+    private void ShowConstructionSiteStatus()
+    {
+        var window = new ConstructionSiteStatusWindow(game, human, ShowCloseUp);
+        var dismiss = AddPanel(window);
+        window.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode is KeyCode.Esc) {
+                dismiss();
+                key.Handled = true;
+            }
+        };
+    }
+
+    /// <summary>
     /// Ministry of War menu > Attack (ATTCOMM.PAS: GetTarget/AttackCommand/CleanUp/EnemyConquered).
     /// Target selection order is transcribed directly from GetTarget's own nested CreateMenu
     /// (ATTCOMM.PAS:663-715): every enemy Fleet in the sector <see cref="Game.Scouted"/> by the
@@ -2214,9 +2357,9 @@ public sealed class GameShell : Window
             new("_Probe", Key.Empty, LaunchProbe),
         }),
         new MenuBarItem("_Build", new MenuItem[] {
-            new("_Site Status", Key.Empty, () => Stub("Construction Site Status")),
-            new("_New", Key.Empty, () => Stub("New Construction Site")),
-            new("_Abort", Key.Empty, () => Stub("Abort Construction")),
+            new("_Site Status", Key.Empty, ShowConstructionSiteStatus),
+            new("_New", Key.Empty, NewConstruction),
+            new("_Abort", Key.Empty, AbortConstruction),
         }),
         new MenuBarItem("_Ministry of War", new MenuItem[] {
             new("_Attack", Key.Empty, Attack),

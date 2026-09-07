@@ -1,0 +1,51 @@
+# Smoke-test script for Reconstructed4021.TuiDriver, run against a scratch fixture
+# (assets/saves/Build Menu Smoke Test.json, NOT committed -- built via evaluate_csharp with an
+# empire that actually has ConstructionType.Outpost/CommandBase unlocked):
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Build Menu Smoke Test.json" --script assets/tui-driver-scripts/build-menu-smoke-test.txt
+#
+# Build > New: type picker (2 items), Enter picks the first (command base), Enter confirms the
+# coordinate (0,0 is the capital -- occupied, exercising the "already occupied" reprompt, which now
+# auto-retries one tick after its own dialog is dismissed), one dismiss key, Down+Enter to retry one
+# cell over, confirming the cost/time summary. Then Site Status shows it, Abort removes it.
+b
+n
+SLEEP 200
+DUMP
+Enter
+SLEEP 200
+DUMP
+Enter
+SLEEP 200
+DUMP
+Enter
+SLEEP 300
+Down
+SLEEP 200
+Enter
+SLEEP 200
+DUMP
+Enter
+SLEEP 200
+DUMP
+b
+s
+SLEEP 200
+DUMP
+Esc
+SLEEP 200
+b
+a
+SLEEP 200
+DUMP
+y
+SLEEP 200
+DUMP
+Enter
+SLEEP 200
+DUMP
+b
+s
+SLEEP 200
+DUMP
