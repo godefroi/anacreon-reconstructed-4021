@@ -51,15 +51,14 @@ Windows Terminal's text renderer from its default (DirectX 11/AtlasEngine) to Di
 `src/Reconstructed4021.Tui/Program.cs`'s own notes on a related
 ConPTY tearing issue ([#5323](https://github.com/tui-cs/Terminal.Gui/issues/5323)).
 
-**TUI freezes for several seconds after Windows Terminal is minimized/backgrounded, or after the PC
-wakes from sleep:** a separate issue from the lag above -- reproduces under both the default
-renderer and Direct2D, so it isn't a text-renderer problem. Doesn't reproduce under `conhost.exe`,
-and doesn't reproduce on screens that redraw continuously while idle (e.g. the main menu's orbit
-animation) -- only ones that only redraw in response to input (e.g. the galaxy map). Decompiling
-Terminal.Gui's own iteration-pacing and console-input-polling code found no elapsed-wall-clock-time
-catch-up logic there, so this points at Windows Terminal/ConPTY itself deferring or throttling a
-backgrounded session's servicing, not this app or Terminal.Gui. No known workaround besides
-avoiding Windows Terminal.
+**TUI froze for several seconds after Windows Terminal was minimized/backgrounded, or after the PC
+woke from sleep (fixed):** reproduced under both the default renderer and Direct2D, and didn't
+reproduce under `conhost.exe` or on screens that redraw continuously while idle (e.g. the main
+menu's orbit animation) -- only ones that only redraw in response to input (e.g. the galaxy map),
+pointing at Windows Terminal/ConPTY deferring or throttling a backgrounded session's servicing
+rather than a bug in this app or Terminal.Gui (see issue #1). Giving the galaxy map the same kind
+of continuous-idle redraw the main menu already had -- a low-frequency
+`Application.AddTimeout` heartbeat in `GameShell` -- resolved it in testing.
 
 ## Repository layout
 
