@@ -1519,34 +1519,67 @@ public sealed class GameShell : Window
 
     private void PickResupplyAmount(Fleet fleet, Planet source, CargoType cargo)
     {
+        var resource = new ResourceKind.Cargo(cargo).DisplayName;
+        var atSource = source.Cargo[cargo];
+        var fleetSpace = Math.Max(0, FleetLogistics.FleetCargoSpaceFor(cargo, fleet.Ships, fleet.Cargo));
+        var maxAmount = Math.Min(atSource, Math.Min(fleetSpace, PascalMath.MaxResources - fleet.Cargo[cargo]));
+
+        if (maxAmount <= 0) {
+            ShowInfo("Resupply", $"There is no {resource} available to shuttle -- {atSource} at {DisplayName(source)}, fleet has room for {fleetSpace}.");
+            return;
+        }
+
+        // Width sized to the longest of the two info lines rather than a flat constant -- "megatons
+        // of chemicals" alone is longer than the whole label PromptForTrillum's own dialog gets away
+        // with at its fixed Width=50 (a bug found live: the label silently ran off the dialog's own
+        // right edge at a shorter fixed width, same class of issue DosDialogWindow's own word-wrap
+        // fix addresses for confirmation text -- this dialog has too few, too short lines to be worth
+        // wrapping, so it just sizes to fit instead).
+        var line1 = $"Amount of {resource} to shuttle:";
+        var line2 = $"{atSource} at {DisplayName(source)}; fleet has room for {fleetSpace}.";
+        var width = Math.Max(line1.Length, line2.Length) + 6;
+
         var dialog = new Window {
             Title = "Resupply",
             X = Pos.Center(), Y = Pos.Center(),
-            Width = 50, Height = 6,
+            Width = width, Height = 7,
             BorderStyle = LineStyle.Single,
             CanFocus = true,
         };
         dialog.SetScheme(new Scheme(DialogNormalAttribute));
         dialog.Border.View?.SetScheme(new Scheme(DialogBorderAttribute));
 
-        var amountField = new TextField { X = 1, Y = 1, Width = Dim.Fill(1) };
-        var errorLabel = new Label { X = 1, Y = 2 };
-        dialog.Add(new Label { X = 1, Y = 0, Text = $"Amount of {new ResourceKind.Cargo(cargo).DisplayName} to shuttle:" });
+        var amountField = new TextField { X = 1, Y = 2, Width = Dim.Fill(1) };
+        var errorLabel = new Label { X = 1, Y = 3 };
+        dialog.Add(new Label { X = 1, Y = 0, Text = line1 });
+        dialog.Add(new Label { X = 1, Y = 1, Text = line2 });
         dialog.Add(amountField);
         dialog.Add(errorLabel);
-        dialog.Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "Enter: confirm   Esc: cancel" });
+        dialog.Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = $"Enter: confirm (0 = max {maxAmount})   Esc: cancel" });
 
         var dismiss = AddModal(dialog, dismissOnOutsideClick: false);
         amountField.SetFocus();
 
+        // Same "0/blank defaults to max, out-of-range re-prompts" convention as PromptForTrillum's own
+        // GetTrillumToUse (FLTCOMM.PAS:692-724).
         amountField.KeyDown += (_, key) => {
             if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Enter) {
                 return;
             }
 
             key.Handled = true;
-            if (!int.TryParse(amountField.Text, out var amount) || amount <= 0) {
+            var text = amountField.Text?.Trim() ?? "";
+            if (!int.TryParse(text, out var amount) && text.Length > 0) {
+                errorLabel.Text = "Enter a whole number.";
+                return;
+            }
+            if (amount == 0) {
+                amount = maxAmount;
+            } else if (amount < 0) {
                 errorLabel.Text = "Enter a positive number.";
+                return;
+            } else if (amount > maxAmount) {
+                errorLabel.Text = $"The maximum amount allowable is {maxAmount}.";
                 return;
             }
 
@@ -1576,11 +1609,9 @@ public sealed class GameShell : Window
         galaxyView.Refresh();
 
         var resource = new ResourceKind.Cargo(cargo).DisplayName;
-        var sourceName = CloseUpWindow.DescribeLocation(source, human);
-        var destinationName = CloseUpWindow.DescribeLocation(destination, human);
         ShowInfo("Resupply",
-            $"{CloseUpWindow.DescribeLocation(fleet, human)} will shuttle {amount} {resource} " +
-            $"from {sourceName} to {destinationName} and return, {MyLord()}.");
+            $"{DisplayName(fleet)} will shuttle {amount} {resource} from {DisplayName(source)} " +
+            $"to {DisplayName(destination)} and return, {MyLord()}.");
     }
 
     /// <summary>Shared retry-on-invalid-pick idiom (<see cref="PickConstructionCoordinate"/>'s own "that sector is already occupied" dialog): re-prompts via <paramref name="retry"/> instead of silently failing when the picked coordinate isn't one of the player's own worlds.</summary>

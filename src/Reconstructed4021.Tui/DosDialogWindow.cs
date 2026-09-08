@@ -2,6 +2,7 @@ using Terminal.Gui.App;
 using Terminal.Gui.Drawing;
 using Terminal.Gui.Drivers;
 using Terminal.Gui.Input;
+using Terminal.Gui.Text;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
@@ -46,13 +47,22 @@ public sealed class DosDialogWindow : Window
     /// </param>
     public DosDialogWindow(string title, string body, bool isConfirm = false, string? hint = null)
     {
-        var lines = body.Split('\n');
+        // Width clamps at 76 below; this is that ceiling minus room for the border and the Label's
+        // own X=1/Width=Dim.Fill(1) margins. A caller's own line breaks (blank lines, paragraphs) are
+        // preserved -- only each individual line that's actually too long gets word-wrapped, rather
+        // than reflowing the whole body as one blob (which would collapse deliberate blank-line
+        // separators several existing callers already rely on, e.g. ConstructCommand's cost preview).
+        const int maxContentWidth = 70;
+        var lines = body.Split('\n')
+            .SelectMany(line => line.Length > maxContentWidth ? TextFormatter.WordWrapText(line, maxContentWidth) : [line])
+            .ToList();
+        var wrappedBody = string.Join('\n', lines);
         var hintText = hint ?? (isConfirm ? "(Y)es / (N)o   Esc: cancel" : "Press any key to continue...");
         var longest = new[] { title.Length, lines.Max(l => l.Length), hintText.Length }.Max();
 
         Title = title;
         Width = Math.Clamp(longest + 8, 40, 76);
-        Height = lines.Length + 6;
+        Height = lines.Count + 6;
         X = Pos.Center();
         Y = Pos.Center();
         BorderStyle = LineStyle.Single; // ThinBRD
@@ -60,7 +70,7 @@ public sealed class DosDialogWindow : Window
         SetScheme(new Scheme(ContentAttribute));
         Border.View?.SetScheme(new Scheme(BorderAttribute));
 
-        Add(new Label { X = 1, Y = 1, Width = Dim.Fill(1), Height = lines.Length, Text = body });
+        Add(new Label { X = 1, Y = 1, Width = Dim.Fill(1), Height = lines.Count, Text = wrappedBody });
         Add(new Label {
             X = 1,
             Y = Pos.AnchorEnd(1),

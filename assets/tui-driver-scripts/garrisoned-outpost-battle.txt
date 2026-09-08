@@ -23,13 +23,21 @@ Left
 Enter
 DUMP
 t
+SLEEP 150
 f
+SLEEP 150
 f
+SLEEP 150
 Enter
+SLEEP 150
 m
+SLEEP 150
 a
+SLEEP 150
 a
+SLEEP 150
 Enter
+SLEEP 150
 y
 DUMP
 e

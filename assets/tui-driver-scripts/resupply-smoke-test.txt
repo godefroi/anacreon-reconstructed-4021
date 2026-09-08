@@ -7,9 +7,10 @@
 #
 # Fleet > Resupply: cursor starts at the capital (0,0), where the one fleet already sits, so
 # PickOwnFleetAtCursor auto-picks it. Enter picks (0,0) as the source world. Down x3 + Enter in the
-# cargo-type picker picks Chemicals (Legion/NinjaLegion/Ambrosia/Chemicals). "100" + Enter for the
-# amount. Right x4 + Down x4 moves the cursor to (4,4), Enter picks it as the destination. Then
-# Fleet > Orders shows the compiled DEST/TRAN/REFU sequence for confirmation.
+# cargo-type picker picks Chemicals (Legion/NinjaLegion/Ambrosia/Chemicals). "50" + Enter for the
+# amount (the fleet's own 20 transports cap it at 60 tons of chemicals -- comfortably under the 500
+# sitting at the source). Right x4 + Down x4 moves the cursor to (4,4), Enter picks it as the
+# destination. Then Fleet > Orders shows the compiled DEST/TRAN/REFU sequence for confirmation.
 f
 u
 SLEEP 200
@@ -23,8 +24,7 @@ Down
 Enter
 SLEEP 200
 DUMP
-1
-0
+5
 0
 Enter
 SLEEP 200
