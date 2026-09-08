@@ -36,6 +36,10 @@ Top reasons:
 
 **Desktop UI (Avalonia) "retro terminal look" fallback**: not pursued as a real option. Nothing found in Terminal.Gui's feature set (windows, menus, mouse, color, custom cell drawing) is missing that would force a move to a full desktop UI stack, and a desktop app trades away the actual terminal-mode aesthetic and portability the original DOS UI trades on. Not worth the detour.
 
+**ktsu-dev/TUI** (NuGet `ktsu.TUI.Core`, checked 2026-09): a Spectre.Console-based component library, not a windowing toolkit — no overlapping windows, no menu bar, no dialog/modal concept, same structural gap as Spectre itself. 3 GitHub stars, one visible maintainer, no dated stable release found. Ruled out: doesn't clear the windowing bar and has negligible adoption to lean on.
+
+**Ratatui.cs** (`holo-q/Ratatui.cs`, checked 2026-09): .NET bindings over the Rust Ratatui engine via FFI — retained-mode stateful widgets (List, Table, Gauge, Tabs, Scrollbar), full mouse events, headless snapshot testing for CI. Genuinely more capable than Spectre for widget-level work, but still no windowing/menu-bar abstraction — Ratatui itself is an immediate-mode-per-frame widget-rendering crate, not a window manager, and the C# binding doesn't add one. 16 stars, single maintainer, 0.3.x/alpha. Ruled out for the same structural reason as Spectre: would need a windowing layer built on top, at which point you're not saving the work Terminal.Gui already did. Worth a revisit only if the project ever needs Ratatui-specific widgets (e.g. `BarChart`/`Sparkline`) badly enough to justify an FFI dependency and hand-rolled window management.
+
 Other libraries surfacing in search (`SharpConsoleUI`, various small console-GUI frameworks like `TomaszRewak/C-sharp-console-gui-framework`, `DoubleNegation/ConsoleUI`) were not carried forward: none combine floating windows + menu bar + dialogs + mouse + active maintenance in one package the way Terminal.Gui does; they're single-purpose or dormant hobby projects.
 
 ## 3. What Terminal.Gui buys us vs. hand-rolling (mapped to the Pascal units)
