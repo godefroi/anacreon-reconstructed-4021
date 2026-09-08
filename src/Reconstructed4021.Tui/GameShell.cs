@@ -37,6 +37,11 @@ public sealed class GameShell : Window
     private static readonly TgAttribute DropdownAttribute = new(StandardColor.LightGray, StandardColor.Black); // SYSMenu = 7
     private static readonly TgAttribute HelpLineAttribute = new(DosColors.Red, StandardColor.Black); // SYSHelpLine = 4
 
+    // Issue #1 diagnostic: the reactivation freeze reproduces only on screens that redraw solely in
+    // response to input (this map), never ones that redraw continuously while idle (the main menu's
+    // orbit animation) -- testing whether a periodic heartbeat alone is enough to dodge it.
+    private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromMilliseconds(200);
+
     private readonly Game game;
     private readonly TurnEngine turnEngine;
     private readonly Empire human;
@@ -45,6 +50,7 @@ public sealed class GameShell : Window
     private readonly Label pickerPromptLabel;
     private readonly MenuBar menuBar;
     private int openModalCount;
+    private object? heartbeatTimeout;
 
     // Set while a command (Deploy, Attack) is waiting for the player to move the map cursor onto a
     // target sector and confirm -- the map-cursor-reuse pattern TUI_SURFACES_MAPPING.md calls for
@@ -155,6 +161,27 @@ public sealed class GameShell : Window
         // the keyboard path uses, so the two can never drift apart (pending-pick confirm during
         // Deploy/Attack destination selection, Close Up otherwise).
         galaxyView.SectorActivated += (_, _) => ActivateCursor();
+
+        // App isn't assigned yet during construction (only once Application.Run begins this window's
+        // session), so the first tick has to wait for Initialized, same as AnacreonTitleWindow's orbit
+        // animation. Stops itself once this Run ends (IsRunningChanged fires false) rather than at each
+        // of EndTurn/ConfirmQuit/ConfirmExitToOs's own RequestStop calls -- the same Application instance
+        // runs a fresh GameShell per turn (see Program.cs), so a leaked timeout would keep firing
+        // against a disposed instance into whatever window runs next.
+        Initialized += (_, _) => {
+            heartbeatTimeout = App!.AddTimeout(HeartbeatInterval, () => {
+                galaxyView.SetNeedsDraw();
+                return true;
+            });
+        };
+        IsRunningChanged += (_, running) => {
+            if (running.Value || heartbeatTimeout is not { } token) {
+                return;
+            }
+
+            App?.RemoveTimeout(token);
+            heartbeatTimeout = null;
+        };
     }
 
     /// <summary>Enter (keyboard) or a plain click (mouse, via <see cref="GalaxyView.SectorActivated"/>) on the current cursor sector: confirms a pending coordinate pick if one's active, otherwise examines whatever's there.</summary>
