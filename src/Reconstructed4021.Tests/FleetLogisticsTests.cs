@@ -1,4 +1,5 @@
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Types;
 
 namespace Reconstructed4021.Tests;
 
@@ -41,5 +42,16 @@ public class FleetLogisticsTests
         await Assert.That(cargo.Metals).IsEqualTo(int.Parse(expected["balanced_met"]));
         await Assert.That(cargo.Supplies).IsEqualTo(int.Parse(expected["balanced_sup"]));
         await Assert.That(cargo.Trillum).IsEqualTo(int.Parse(expected["balanced_tri"]));
+    }
+
+    [Test]
+    public async Task FleetCargoSpaceFor_ScalesFreeSpaceByTheCargoTypesOwnPerUnitCost()
+    {
+        var ships = new ShipCounts { Transports = 10 };
+        var cargo = new CargoHold();
+
+        // 10 tons of free transport space; Metals costs 3 space per ton (CargoSpacePerUnit), so up to
+        // 30 tons of metals fit -- the same product ExecuteTransCOM's own pickup clamp computes inline.
+        await Assert.That(FleetLogistics.FleetCargoSpaceFor(CargoType.Metals, ships, cargo)).IsEqualTo(30);
     }
 }

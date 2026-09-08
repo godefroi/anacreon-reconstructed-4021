@@ -116,6 +116,16 @@ public static class FleetLogistics
     }
 
     /// <summary>
+    /// Max tons of <paramref name="type"/> this fleet has free space for right now -- the same
+    /// <see cref="FleetCargoSpace"/> * <see cref="CargoSpacePerUnit"/> product
+    /// <see cref="Turns.FleetMovementHandler"/>'s own pickup clamp already computes inline, exposed
+    /// here (<see cref="CargoSpacePerUnit"/> itself stays internal) for a caller that needs to show
+    /// the real number to a player before they commit to a transfer, not just clamp one after the fact.
+    /// </summary>
+    public static int FleetCargoSpaceFor(CargoType type, ShipCounts ships, CargoHold cargo) =>
+        FleetCargoSpace(ships, cargo) * CargoSpacePerUnit[type];
+
+    /// <summary>
     /// BalanceFleet (MISC.PAS:431-465) — trims cargo in priority order (chemicals, supplies, metals,
     /// legions, ninja legions, trillum, ambrosia) until the fleet's cargo fits its ship capacity again,
     /// partially restoring the last type trimmed to exactly zero out the remaining deficit. Assumes (as
