@@ -9,6 +9,11 @@
 # into the Kingdom garrison's shell, engages, answers AskToCapture, and dismisses the conquest report.
 # Exercises the exact sequence this session drove once by hand over psmux (see docs/ROADMAP.md's 8q
 # entry) -- now headless and deterministic.
+#
+# Target/Move both use a scrollable, freely-navigable group list now (docs/ROADMAP.md's own entry on
+# this) instead of GroupMove/GroupTarget's real forced-sequential-with-auto-exit behavior -- Enter
+# explicitly finalizes each flow (below) rather than it closing itself the instant the last group's
+# been answered.
 Right Right Right Right Down
 DUMP
 m
@@ -20,9 +25,11 @@ DUMP
 t
 f
 f
+Enter
 m
 a
 a
+Enter
 y
 DUMP
 e

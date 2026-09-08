@@ -1450,6 +1450,39 @@ Direct2D) surfaced; see the README's Known Issues section.
   Abort-Join/Attack as a direct quick-option on a selected fleet (Close Up and the Sector Selected
   Popup), not just Fleet menu → Refuel.
 
+- **8w, Tactical Battle: scrollable/navigable Move and Target
+  (`TacticalBattleDisplayWindow.HandleMove`/`HandleTarget`).** Reported bug: once a fleet had enough
+  groups, the later ones went invisible "off the end" of GroupWindow's own command box — real Pascal's
+  `GroupMove`/`GroupTarget` accumulate one line per group into a fixed-size window with no scrolling,
+  and this port's own approximation (show only the last 10 accumulated lines) happened to line up
+  exactly with the real 9-group cap (`Combat.FleetGroupConfiguration.MaxGroups`, `ATTACK.PAS:24`) plus
+  one hint line — a zero-margin fit any text wrap or off-by-one pushes over. Per the user's own
+  request for "a better UI... more usable for players, not one based on the pascal version": both
+  flows now use a real `ListView<GroupActionListItem>` (a new small mutable row type, `Decision`
+  always starting at a concrete value -- Move: "Stay"; Target: the group's current `Trg` -- so an
+  untouched row is exactly as valid an answer as one explicitly confirmed) instead of accumulating
+  text into a `Label`. Scrolling comes free from the framework with no fixed-row ceiling, and the
+  player can now freely navigate with arrows and revisit/change an earlier group's answer, rather than
+  only ever being asked once, strictly in order, with no way back — `S`/`A`/`R` (Move) and the
+  existing `TargetChoices` letters (Target) still act on whichever row is highlighted, `Enter`
+  finalizes, `Esc` cancels (Move also un-queues everything via `CancelAllQueuedMoves`; Target's own
+  changes are already live, matching real Pascal's own no-queue/no-confirm targeting).
+
+  Two real bugs found and fixed while building this, both about focus, not application logic:
+  `groupListView.SetFocus()` silently did nothing because its container (`commandBox`) still had
+  `CanFocus = false` from when everything inside it was a passive `Label` — every key, including the
+  list's own per-row letters, fell straight through to the top-level command dispatch instead of
+  reaching the list at all; and even after fixing that, `Enter` specifically kept returning straight
+  to the command menu, skipping the Maneuver confirm — the base `View` class's own default key binding
+  (`Key.Enter` → `Command.Accept`) was consuming it via a separate SuperView-bubbling mechanism before
+  the plain C# `KeyDown` event `activePrompt` relies on ever saw it, fixed by handling `Enter`/`Esc`
+  directly inside the list's own `KeyDown` handler rather than relying on it bubbling to the window.
+  Verified end-to-end with the headless `TuiDriver` against the existing
+  `garrisoned-outpost-battle.txt`/`-retreat.txt`/`-auto-attack.txt`/`-attack-then-a.txt` fixtures (the
+  first needed two extra explicit `Enter`s added to its own script, now that Move/Target no longer
+  auto-close the instant the last group's answered) — full battles still resolve correctly through
+  capture/destruction/retreat with no regressions.
+
 ## 9. Async/hotseat turn mode
 
 Deferred multiplayer option — sequential mode (already built) is the only mode a solo player sees.

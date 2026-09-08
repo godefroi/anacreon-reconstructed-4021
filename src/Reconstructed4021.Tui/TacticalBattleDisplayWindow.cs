@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text;
 using Terminal.Gui.Drawing;
 using Terminal.Gui.Drivers;
@@ -67,6 +68,8 @@ internal sealed class TacticalBattleDisplayWindow : Window
     private static readonly TgAttribute GroupWindAttribute = new(StandardColor.LightGray, StandardColor.Blue);
     private static readonly TgAttribute EnemyWindAttribute = new(DosColors.Red, StandardColor.Black);
     private static readonly TgAttribute BorderAttribute = new(StandardColor.LightGray, StandardColor.Black);
+    // SYSDispSelect = 112 -- same real Pascal "selected row" constant GameShell's own pickers already use.
+    private static readonly TgAttribute GroupSelectedAttribute = new(StandardColor.Black, StandardColor.LightGray);
     private static readonly ShellPosition[] _allShellPositions = Enum.GetValues<ShellPosition>();
     private static readonly AttackType[] _allAttackTypes = Enum.GetValues<AttackType>();
 
@@ -87,6 +90,8 @@ internal sealed class TacticalBattleDisplayWindow : Window
     private readonly Label messageLabel;
     private readonly BattleMapView mapView;
     private readonly Label commandBoxContent;
+    private readonly Label groupListHintLabel;
+    private readonly ListView<GroupActionListItem> groupListView;
     private readonly Label enemyLabel;
     private readonly Label autoTargetLabel;
     private object? pendingMessageTimeout;
@@ -94,6 +99,12 @@ internal sealed class TacticalBattleDisplayWindow : Window
     // Non-null while a sub-interaction (Move/Retreat/Target/GroupStatus, all drawn into GroupWindow
     // itself) owns the next keypress instead of the top-level E/M/T/R/G/D/A dispatch.
     private Action<Key>? activePrompt;
+
+    // Non-null only during Move/Target: groupListView's own KeyDown (wired once, below) just calls
+    // through to whichever of these two flows currently owns it -- same reassign-on-entry idiom as
+    // activePrompt itself, avoiding a fresh subscription (and the leak/reentrancy that would invite)
+    // every time HandleMove/HandleTarget runs across a multi-round battle.
+    private Action<Key>? groupListKeyHandler;
 
     /// <summary>Fired exactly once, when <see cref="InteractiveCombatState.IsOver"/> first becomes true. The caller applies the outcome (RestoreCombatant/ResolveAttack) and dismisses this window.</summary>
     public event EventHandler? BattleEnded;
@@ -133,14 +144,46 @@ internal sealed class TacticalBattleDisplayWindow : Window
         // as source (ThinBRD), positioned bottom-left same as source (col 1, row 14). One single
         // multi-line Label fills its whole interior (10 rows -- Height 12 minus 2 border) rather than
         // one Label per line, since its content is replaced wholesale by every sub-interaction.
+        // CanFocus = true (an earlier pass here left this false, fine while everything inside was a
+        // passive Label -- but Terminal.Gui never lets a descendant hold real focus while an ancestor
+        // itself can't, so groupListView.SetFocus() below silently failed to do anything: every key,
+        // including its own per-row letters, fell straight through to the top-level dispatch instead).
         var commandBox = new Window {
             X = 0, Y = 14, Width = 35, Height = 12,
-            BorderStyle = LineStyle.Single, CanFocus = false,
+            BorderStyle = LineStyle.Single, CanFocus = true,
         };
         commandBox.SetScheme(new Scheme(GroupWindAttribute));
         commandBox.Border.View?.SetScheme(new Scheme(BorderAttribute));
         commandBoxContent = new Label { X = 1, Y = 0, Width = Dim.Fill(1), Height = Dim.Fill() };
         commandBox.Add(commandBoxContent);
+
+        // Port-only addition: Move/Target's own per-group prompts (HandleMove/HandleTarget) use these
+        // two instead of accumulating text into commandBoxContent above -- a real ListView scrolls for
+        // any number of groups with no fixed-row ceiling, and lets the player freely revisit/change an
+        // earlier group's answer instead of only ever being asked once, strictly in order. Both hidden
+        // outside those two flows; SetCommandBoxContent (used by every other flow) hides them again.
+        // The hint stays its own Label (row 0) rather than sharing space with the group rows below it
+        // (row 1 down) -- unlike every other flow's hint, which is just the growing Label's own first
+        // line, Move/Target's hint needs to stay visible and pinned in place while the list beneath it
+        // scrolls.
+        groupListHintLabel = new Label { X = 1, Y = 0, Width = Dim.Fill(1), Visible = false };
+        commandBox.Add(groupListHintLabel);
+        groupListView = new ListView<GroupActionListItem> { X = 1, Y = 1, Width = Dim.Fill(1), Height = Dim.Fill(), Visible = false };
+        groupListView.SetScheme(new Scheme { Normal = GroupWindAttribute, Focus = GroupSelectedAttribute });
+        // Keeps the map's highlighted-group marker tracking whichever row is highlighted, including
+        // free arrow-key navigation -- a real improvement over the old forced one-shot-per-step reveal.
+        groupListView.ValueChanged += (_, _) => {
+            if (groupListView.Value is { } item) {
+                mapView.HighlightedGroupIndex = state.Groups.IndexOf(item.Group);
+                mapView.SetNeedsDraw();
+            }
+        };
+        // Wired once here, dispatches to whichever flow (HandleMove/HandleTarget) currently owns
+        // groupListKeyHandler -- same precedent as ShowObjectPicker's own fleet-action letters on
+        // listView.KeyDown (GameShell.cs), which fires before ListView's own internal Up/Down/
+        // type-ahead-search bindings, so arrow keys still reach the base ListView's own navigation.
+        groupListView.KeyDown += (_, key) => groupListKeyHandler?.Invoke(key);
+        commandBox.Add(groupListView);
         Add(commandBox);
 
         // EnemyWindow (ATTCOMM.PAS:1177) -- bottom-right, beside GroupWindow.
@@ -200,6 +243,10 @@ internal sealed class TacticalBattleDisplayWindow : Window
     // the last 10 lines of whatever's accumulated so far.
     private void SetCommandBoxContent(IReadOnlyList<string> lines)
     {
+        groupListHintLabel.Visible = false;
+        groupListView.Visible = false;
+        commandBoxContent.Visible = true;
+
         const int interiorHeight = 10;
         var visible = lines.Count > interiorHeight ? lines.Skip(lines.Count - interiorHeight) : lines;
         commandBoxContent.Text = string.Join('\n', visible);
@@ -357,80 +404,132 @@ internal sealed class TacticalBattleDisplayWindow : Window
         }
     }
 
-    // GroupMove (ATTCOMM.PAS:352-461): ActivateWindow(GroupWindow); ClrScr; once, then each group's
-    // own status+prompt lines accumulate below the last, without clearing between groups. A group not
-    // currently eligible for either Advance or Retreat is silently skipped -- no lines for it at all.
-    // Esc at any point cancels every move queued this pass and returns straight to the menu; this
-    // port's own simplification of GroupMove's real "Esc mid-loop, then still maybe ask Maneuver?"
-    // edge case (ambiguous even against source) to "Esc always cancels immediately" -- net-equivalent
-    // in practice, since real Pascal's own CancelAdvance fires on every path that isn't an explicit Y
-    // to Maneuver anyway.
+    /// <summary>
+    /// No Pascal equivalent -- the mutable row behind <see cref="groupListView"/> for both
+    /// <see cref="HandleMove"/> and <see cref="HandleTarget"/> (a class, not a `record` like every
+    /// other `ListView` item type in this file: <see cref="Decision"/> genuinely changes in place as
+    /// the player answers, rather than the item being replaced). <see cref="Decision"/> always starts
+    /// at a concrete value (Move: "Stay"; Target: the group's current <c>Trg</c>) rather than
+    /// null/blank, so a row the player never touches is exactly as valid an answer as one they
+    /// explicitly confirmed.
+    /// </summary>
+    private sealed class GroupActionListItem(GroupRecord group, string baseLine)
+    {
+        public GroupRecord Group { get; } = group;
+        public string Decision { get; set; } = "";
+        public override string ToString() => $"{baseLine} -> {Decision}";
+    }
+
+    /// <summary>
+    /// Shared setup for <see cref="HandleMove"/>/<see cref="HandleTarget"/>: swaps
+    /// <see cref="commandBoxContent"/> out for <see cref="groupListView"/> (a real scrollable,
+    /// freely-navigable list -- see this class's own doc comment for why that replaces GroupMove/
+    /// GroupTarget's literal accumulate-into-a-Label behavior) and focuses it. Each flow still wires
+    /// its own <see cref="groupListKeyHandler"/>/<see cref="activePrompt"/> before calling this, since
+    /// Move and Target genuinely differ on legal keys, per-row actions, and what finishing means.
+    /// </summary>
+    private void ShowGroupActionList(IReadOnlyList<GroupActionListItem> items, string hint)
+    {
+        commandBoxContent.Visible = false;
+        groupListHintLabel.Visible = true;
+        groupListHintLabel.Text = hint;
+        groupListView.Visible = true;
+        groupListView.SetSource(new ObservableCollection<GroupActionListItem>(items));
+        groupListView.Index = 0;
+        groupListView.KeystrokeNavigator = null; // otherwise swallows S/A/R and every TargetChoices letter before groupListKeyHandler ever sees them
+        groupListView.SetFocus();
+        mapView.HighlightedGroupIndex = state.Groups.IndexOf(items[0].Group);
+        mapView.SetNeedsDraw();
+    }
+
+    // GroupMove (ATTCOMM.PAS:352-461). Real Pascal accumulates each group's own status+prompt line
+    // into GroupWindow, strictly sequential with no way back -- replaced here with a scrollable,
+    // freely-navigable ListView (see GroupActionListItem's own doc comment for why): every eligible
+    // group's row is visible/reachable regardless of count, and the player can revisit and change an
+    // earlier answer before finishing. A group not currently eligible for either Advance or Retreat is
+    // skipped entirely, matching source. Esc cancels every move queued this pass and returns straight
+    // to the menu -- this port's own simplification of GroupMove's real "Esc mid-loop, then still
+    // maybe ask Maneuver?" edge case (ambiguous even against source) to "Esc always cancels
+    // immediately," net-equivalent in practice since real Pascal's own CancelAdvance fires on every
+    // path that isn't an explicit Y to Maneuver anyway.
     private void HandleMove()
     {
         if (state.IsOver) {
             return;
         }
-        // No Pascal equivalent -- MoveNextGroup used to repeat its own "S/A/R/Esc" hint after every
-        // group's own line, which is what actually overflowed GroupWindow's 10-row interior for any
-        // fleet with more than a few groups (each group cost 2 lines, not 1). One hint line up front
-        // instead -- per the user's own explicit request -- with each group's own line updated in
-        // place once answered, rather than a second line appended per group.
-        MoveNextGroup(state.Groups, 0, ["S:stay  A:advance  R:retreat  Esc:cancel all"], anyQueued: false);
-    }
 
-    private void MoveNextGroup(IReadOnlyList<GroupRecord> groups, int index, List<string> lines, bool anyQueued)
-    {
-        if (index >= groups.Count) {
-            mapView.HighlightedGroupIndex = null;
-            mapView.SetNeedsDraw();
-            FinishMove(lines, anyQueued);
+        var items = new List<GroupActionListItem>();
+        for (var i = 0; i < state.Groups.Count; i++) {
+            var g = state.Groups[i];
+            if (g.Sta == GroupStatus.Destroyed || (!state.CanAdvance(g) && !state.CanRetreat(g))) {
+                continue;
+            }
+            items.Add(new GroupActionListItem(g, GroupLine(g, i + 1)) { Decision = "Stay" });
+        }
+
+        if (items.Count == 0) {
+            ShowCommandMenu();
             return;
         }
 
-        var g = groups[index];
-        var canAdvance = state.CanAdvance(g);
-        var canRetreat = state.CanRetreat(g);
-        if (g.Sta == GroupStatus.Destroyed || (!canAdvance && !canRetreat)) {
-            MoveNextGroup(groups, index + 1, lines, anyQueued);
-            return;
-        }
-
-        lines.Add(GroupLine(g, index + 1));
-        SetCommandBoxContent(lines);
-        mapView.HighlightedGroupIndex = index; // per the user's own explicit request -- the group this prompt is asking about, not just named in text
-        mapView.SetNeedsDraw();
-
-        activePrompt = key => {
-            if (key.NoAlt.NoCtrl.NoShift.KeyCode == KeyCode.Esc) {
+        var anyQueued = false;
+        groupListKeyHandler = key => {
+            var code = key.NoAlt.NoCtrl.NoShift.KeyCode;
+            // Enter/Esc handled right here, not via activePrompt: groupListView holds focus while
+            // this flow is open, and the base View class's own default key binding
+            // (View.Keyboard.cs: KeyBindings.Add(Key.Enter, Command.Accept)) would otherwise consume
+            // Enter internally -- via Command.Accept's own SuperView-bubbling, not the plain C#
+            // KeyDown event activePrompt relies on -- before it ever reached the outer window. Found
+            // live: Enter silently returned straight to the command menu, skipping FinishMove/the
+            // Maneuver prompt entirely.
+            if (code == KeyCode.Esc) {
                 key.Handled = true;
                 state.CancelAllQueuedMoves();
                 ShowCommandMenu();
                 return;
             }
+            if (code == KeyCode.Enter) {
+                key.Handled = true;
+                FinishMove(anyQueued);
+                return;
+            }
 
+            if (groupListView.Value is not { } item) {
+                return;
+            }
+
+            var g = item.Group;
             var ch = char.ToUpperInvariant((char)key.AsRune.Value);
-            if (ch != 'S' && !(ch == 'A' && canAdvance) && !(ch == 'R' && canRetreat)) {
+            if (ch != 'S' && !(ch == 'A' && state.CanAdvance(g)) && !(ch == 'R' && state.CanRetreat(g))) {
                 return;
             }
             key.Handled = true;
 
-            var queued = anyQueued;
-            var chosen = "Stay";
+            item.Decision = "Stay";
             if (ch == 'A') {
                 state.QueueAdvance(g);
-                queued = true;
-                chosen = "Advance";
+                anyQueued = true;
+                item.Decision = "Advance";
             } else if (ch == 'R') {
                 state.QueueRetreat(g);
-                queued = true;
-                chosen = "Retreat";
+                anyQueued = true;
+                item.Decision = "Retreat";
             }
-            lines[^1] = $"{GroupLine(g, index + 1)} -> {chosen}";
-            MoveNextGroup(groups, index + 1, lines, queued);
+            groupListView.SetNeedsDraw();
+            if (groupListView.Index < items.Count - 1) {
+                groupListView.Index++;
+            }
         };
+
+        // Blocks the top-level E/M/T/R/G/D/A dispatch for whatever groupListView itself doesn't
+        // handle (or hasn't yet consumed via its own internal command bindings, e.g. arrow-key
+        // navigation) while this flow is open -- ShowCommandMenu resets this back to null on exit.
+        activePrompt = _ => { };
+
+        ShowGroupActionList(items, "S:stay  A:advance  R:retreat  Enter:confirm all  Esc:cancel all");
     }
 
-    private void FinishMove(List<string> lines, bool anyQueued)
+    private void FinishMove(bool anyQueued)
     {
         if (!anyQueued) {
             ShowCommandMenu();
@@ -455,43 +554,40 @@ internal sealed class TacticalBattleDisplayWindow : Window
         };
     }
 
-    // GroupTarget (ATTCOMM.PAS:509-546): ActivateWindow(GroupWindow); ClrScr; once, then each live
-    // group's status line plus a "New target" prompt accumulate the same way GroupMove's do. A single
-    // ATSymb keypress selects the target (TargetChoices, matching source's own restricted GetCharacter
-    // set exactly -- not a ListView, an earlier pass here built a picker that doesn't match how real
-    // Pascal actually does this at all). Enter keeps the group's current target; Esc aborts the rest
-    // of the sequence (groups already handled keep their new Trg). No round consumed.
-    // Same one-time-hint consolidation as MoveNextGroup, see its own doc comment.
-    private void HandleTarget() => TargetNextGroup(state.Groups, 0, ["Enter:keep current  -:clear  Esc:cancel"]);
-
-    private void TargetNextGroup(IReadOnlyList<GroupRecord> groups, int index, List<string> lines)
+    // GroupTarget (ATTCOMM.PAS:509-546). Same ListView-based replacement as HandleMove, see its own
+    // doc comment. A single ATSymb keypress selects the target (TargetChoices, matching source's own
+    // restricted GetCharacter set exactly), applied immediately per row -- real Pascal has no
+    // queue/confirm step for targeting, so both Enter and Esc here just mean "done looking at this
+    // list," identical to each other (unlike Move, where Esc also cancels queued moves): whatever's
+    // already been set on any row stays set either way. No round consumed.
+    private void HandleTarget()
     {
-        if (index >= groups.Count) {
+        var items = new List<GroupActionListItem>();
+        for (var i = 0; i < state.Groups.Count; i++) {
+            var g = state.Groups[i];
+            if (g.Sta == GroupStatus.Destroyed) {
+                continue;
+            }
+            items.Add(new GroupActionListItem(g, GroupLine(g, i + 1)) { Decision = g.Trg is { } t ? TypeName(t) : "-" });
+        }
+
+        if (items.Count == 0) {
             ShowCommandMenu();
             return;
         }
 
-        var g = groups[index];
-        if (g.Sta == GroupStatus.Destroyed) {
-            TargetNextGroup(groups, index + 1, lines);
-            return;
-        }
-
-        lines.Add(GroupLine(g, index + 1));
-        SetCommandBoxContent(lines);
-        mapView.HighlightedGroupIndex = index;
-        mapView.SetNeedsDraw();
-
-        activePrompt = key => {
+        groupListKeyHandler = key => {
             var code = key.NoAlt.NoCtrl.NoShift.KeyCode;
-            if (code == KeyCode.Enter) {
-                key.Handled = true;
-                TargetNextGroup(groups, index + 1, lines);
-                return;
-            }
-            if (code == KeyCode.Esc) {
+            // Enter/Esc handled right here, not via activePrompt -- see HandleMove's own doc comment
+            // on groupListView's base-View Enter binding (Command.Accept) otherwise swallowing it
+            // before activePrompt (on the outer window) ever sees it.
+            if (code == KeyCode.Enter || code == KeyCode.Esc) {
                 key.Handled = true;
                 ShowCommandMenu();
+                return;
+            }
+
+            if (groupListView.Value is not { } item) {
                 return;
             }
 
@@ -501,10 +597,17 @@ internal sealed class TacticalBattleDisplayWindow : Window
                 return; // not a legal key -- ignored, matches GetCharacter's own restricted set
             }
             key.Handled = true;
-            state.SetTarget(g, match.Type);
-            lines[^1] = $"{GroupLine(g, index + 1)} -> {(match.Type is { } t ? TypeName(t) : "(cleared)")}";
-            TargetNextGroup(groups, index + 1, lines);
+
+            state.SetTarget(item.Group, match.Type);
+            item.Decision = match.Type is { } matchedType ? TypeName(matchedType) : "-";
+            groupListView.SetNeedsDraw();
+            if (groupListView.Index < items.Count - 1) {
+                groupListView.Index++;
+            }
         };
+
+        activePrompt = _ => { }; // see HandleMove's own doc comment on why this stays a no-op blocker
+        ShowGroupActionList(items, "Pick a new target per group, -:clear  Enter/Esc:done");
     }
 
     // GroupStatus (ATTCOMM.PAS:548-574): ActivateWindow(GroupWindow); ClrScr; the full listing, then
