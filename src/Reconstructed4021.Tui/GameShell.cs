@@ -448,12 +448,14 @@ public sealed class GameShell : Window
             return;
         }
 
+        Action? dismiss = null;
         var window = new WorldInfoWindow(world, DisplayName(world), game, human, initialTab,
-            newType => ConfirmDesignate(world, newType));
-        var dismiss = AddCloseUpOverlay(window);
+            newType => ConfirmDesignate(world, newType),
+            () => { dismiss?.Invoke(); PickRedirectDestination(world); });
+        dismiss = AddCloseUpOverlay(window);
         window.KeyDown += (_, key) => {
             if (key.NoAlt.NoCtrl.NoShift.KeyCode == KeyCode.Esc) {
-                dismiss();
+                dismiss?.Invoke();
                 key.Handled = true;
                 return;
             }
@@ -461,11 +463,29 @@ public sealed class GameShell : Window
             // Same D:Deploy CloseUpWindow itself offers for any object -- this window replaced
             // CloseUpWindow for owned worlds, so it needs to keep offering it too.
             if (char.ToUpperInvariant((char)key.AsRune.Value) == 'D') {
-                dismiss();
+                dismiss?.Invoke();
                 DeployFleet(world);
                 key.Handled = true;
             }
         };
+    }
+
+    /// <summary>
+    /// The Redirect tab's own Enter key (<see cref="RedirectTabView.PickDestinationRequested"/>):
+    /// reuses <see cref="BeginPick"/> exactly as Deploy Fleet's own destination pick
+    /// (<see cref="ValidateDeploySource"/>) does, then reopens <see cref="ShowWorldInfo"/> back on the
+    /// Redirect tab so the player sees the result immediately.
+    /// </summary>
+    private void PickRedirectDestination(IEconomicWorld world)
+    {
+        if (world is not Planet planet) {
+            return;
+        }
+
+        BeginPick("Redirect -- move cursor to destination, Enter: select, Esc: cancel", destination => {
+            planet.Redirection.Destination = destination;
+            ShowWorldInfo(world, "Redirect");
+        });
     }
 
     // None of these five onSelect callbacks dismiss their own panel before calling ShowCloseUp --
@@ -705,7 +725,9 @@ public sealed class GameShell : Window
     // already-open Close Up. Any other key keeps the original "any key dismisses" behavior
     // (CloseUpWindow's own doc comment on why that's already a deviation from real Pascal's non-modal
     // CloseUpCom).
-    private void ShowCloseUp(ISectorObject obj)
+    private void ShowCloseUp(ISectorObject obj) => ShowCloseUp(obj, "Close Up");
+
+    private void ShowCloseUp(ISectorObject obj, string initialTab)
     {
         // Picking a row in the Status/Fleet/News windows can name an object anywhere on the map, far
         // from wherever the cursor already was -- move it there so the map (and its coordinate
@@ -715,19 +737,42 @@ public sealed class GameShell : Window
 
         // One of the player's own worlds gets the full tabbed WorldInfoWindow (Close Up is just its
         // first tab) instead of the standalone CloseUpWindow -- see WorldInfoWindow's own doc comment.
+        // A world never has an Orders tab, so initialTab is irrelevant on this branch.
         if (obj is IEconomicWorld ownWorld && ReferenceEquals(ownWorld.Owner, human)) {
             ShowWorldInfo(ownWorld, "CloseUp");
             return;
         }
 
-        var window = new CloseUpWindow(obj, human, game);
+        var window = new CloseUpWindow(obj, human, game, initialTab);
         var dismiss = AddCloseUpOverlay(window);
+        window.OrdersCommitted += (_, message) => {
+            dismiss();
+            if (message is not null) {
+                ShowInfo("Orders", message);
+            }
+        };
+
         // Matches FleetActionHint's own D gating exactly (obj itself owned -- an unowned world or an
         // enemy's fleet, whose Deploy would just fail PickDeploySource's own ownership check every
         // time, no longer advertises D at all; see CloseUpWindow's own updated hint-line comment).
         var canDeploy = (obj is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, human))
             || (obj is IEconomicWorld world && ReferenceEquals(world.Owner, human));
         window.KeyDown += (_, key) => {
+            // CloseUpWindow's own Ctrl+PageUp/PageDown tab switch (registered in its constructor, so
+            // it always runs before this externally-attached handler) owns every Ctrl-chord -- never
+            // treat one as a D/C/T/J/A/R letter or fall through to the generic dismiss below.
+            if (key.IsCtrl) {
+                return;
+            }
+
+            // The Orders tab's embedded editor owns every key while it's showing (typed text, Esc,
+            // Ctrl+N -- see CloseUpWindow.ShowingOrders's own doc comment) -- letting the generic
+            // "any key closes" catch-all below run here would silently discard an in-progress edit on
+            // any keystroke the editor itself doesn't handle.
+            if (window.ShowingOrders) {
+                return;
+            }
+
             var letter = char.ToUpperInvariant((char)key.AsRune.Value);
             if (letter == 'D' && canDeploy) {
                 dismiss();
@@ -1493,23 +1538,14 @@ public sealed class GameShell : Window
             });
 
     /// <summary>
-    /// Fleet menu > Orders (FLTCOMM.PAS: FleetOrdersCommand): opens <see cref="FleetOrdersWindow"/> on
-    /// the selected fleet -- see that class's own doc comment for the compile/commit flow.
+    /// Fleet menu > Orders (FLTCOMM.PAS: FleetOrdersCommand): opens Close-Up on the selected fleet,
+    /// already on its Orders tab -- see <see cref="CloseUpWindow.BuildOrdersContent"/>'s own doc
+    /// comment for the compile/commit flow. Superseded the old standalone FleetOrdersWindow; one
+    /// editing surface, not two to keep in sync.
     /// </summary>
     private void FleetOrders() => PickOwnFleetAtCursor("Orders", FleetOrders);
 
-    private void FleetOrders(Fleet fleet)
-    {
-        var window = new FleetOrdersWindow(fleet, game);
-        var dismiss = AddModal(window, dismissOnOutsideClick: false);
-
-        window.Closed += (_, message) => {
-            dismiss();
-            if (message is not null) {
-                ShowInfo("Orders", message);
-            }
-        };
-    }
+    private void FleetOrders(Fleet fleet) => ShowCloseUp(fleet, "Orders");
 
     /// <summary>
     /// Fleet menu > Cancel Orders (FLTCOMM.PAS: FleetCancelOrdersCommand, :917-931) -- no window at

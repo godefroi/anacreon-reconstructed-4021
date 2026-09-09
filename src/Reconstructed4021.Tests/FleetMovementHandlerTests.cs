@@ -625,4 +625,163 @@ public class FleetMovementHandlerTests
         await Assert.That(fleet.Destination).IsEqualTo(new Coordinate(20, 0));
         await Assert.That(fleet.Status).IsEqualTo(FleetStatus.InTransit);
     }
+
+    [Test]
+    public async Task ExecuteFleetOrders_JoinCOM_OwnedPlanet_PlainClampsAndLosesOverflow()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var planet = new Planet { Location = new Coordinate(0, 0), Owner = empire, Class = WorldClass.EarthLike, Type = WorldType.Base };
+        planet.Ships.Fighters = 9995;
+        game.Galaxy.Planets.Add(planet);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Fighters = 10;
+        fleet.Orders.Add(new FleetOrder(CommandType.Join, PreserveOverflow: false));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(planet.Ships.Fighters).IsEqualTo(PascalMath.MaxResources); // 5 lost to the clamp
+        await Assert.That(game.Galaxy.Fleets).DoesNotContain(fleet);
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_JoinCOM_OwnedStarbase_PlainClampsAndLosesOverflow()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var starbase = new Starbase { Location = new Coordinate(0, 0), Owner = empire, Kind = StarbaseKind.Outpost };
+        starbase.Ships.Fighters = 9995;
+        game.Galaxy.Starbases.Add(starbase);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Fighters = 10;
+        fleet.Orders.Add(new FleetOrder(CommandType.Join, PreserveOverflow: false));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(starbase.Ships.Fighters).IsEqualTo(PascalMath.MaxResources);
+        await Assert.That(game.Galaxy.Fleets).DoesNotContain(fleet);
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_JoinCOM_FuelConvertsToTrillumOnTheWorld()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var planet = new Planet { Location = new Coordinate(0, 0), Owner = empire, Class = WorldClass.EarthLike, Type = WorldType.Base };
+        game.Galaxy.Planets.Add(planet);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready, Fuel = FleetLogistics.FuelPerTon * 2 };
+        fleet.Orders.Add(new FleetOrder(CommandType.Join, PreserveOverflow: false));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(planet.Cargo.Trillum).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_JoinCOM_OwnedPlanet_PreserveOverflow_SpillsIntoANewHoldingFleet()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var planet = new Planet { Location = new Coordinate(0, 0), Owner = empire, Class = WorldClass.EarthLike, Type = WorldType.Base };
+        planet.Ships.Fighters = 9995;
+        game.Galaxy.Planets.Add(planet);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Fighters = 10;
+        fleet.Orders.Add(new FleetOrder(CommandType.Join, PreserveOverflow: true));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(planet.Ships.Fighters).IsEqualTo(PascalMath.MaxResources); // filled to the cap, not over
+        await Assert.That(game.Galaxy.Fleets).DoesNotContain(fleet); // fully drained, so still destroyed
+
+        var holding = game.Galaxy.Fleets.Single(f => f.Names.GetValueOrDefault(empire) == "Holding-1");
+        await Assert.That(holding.Ships.Fighters).IsEqualTo(6); // the 6 that didn't fit -- nothing lost
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_JoinCOM_NoOwnedWorldAtDestination_CreatesHoldingOne()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Fighters = 7;
+        fleet.Cargo.Legions = 3;
+        fleet.Orders.Add(new FleetOrder(CommandType.Join));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(game.Galaxy.Fleets).DoesNotContain(fleet);
+        var holding = game.Galaxy.Fleets.Single(f => f.Names.GetValueOrDefault(empire) == "Holding-1");
+        await Assert.That(holding.Ships.Fighters).IsEqualTo(7);
+        await Assert.That(holding.Cargo.Legions).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task ExecuteFleetOrders_JoinCOM_ExistingHoldingFleetsOutOfOrder_FillsLowestNumberFirstThenCreatesNext()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+
+        var holding3 = new Fleet { Owner = empire, Location = new Coordinate(0, 0) };
+        holding3.Names[empire] = "Holding-3";
+        holding3.Ships.Fighters = 9997; // 2 of headroom left
+        var holding5 = new Fleet { Owner = empire, Location = new Coordinate(0, 0) };
+        holding5.Names[empire] = "Holding-5";
+        holding5.Ships.Fighters = 9998; // 1 of headroom left
+        game.Galaxy.Fleets.Add(holding3);
+        game.Galaxy.Fleets.Add(holding5);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Fighters = 20; // 2 into Holding-3, 1 into Holding-5, 17 into a new Holding-6
+        fleet.Orders.Add(new FleetOrder(CommandType.Join));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        FleetMovementHandler.ExecuteFleetOrders(fleet, game);
+
+        await Assert.That(holding3.Ships.Fighters).IsEqualTo(PascalMath.MaxResources);
+        await Assert.That(holding5.Ships.Fighters).IsEqualTo(PascalMath.MaxResources);
+        await Assert.That(game.Galaxy.Fleets).DoesNotContain(fleet);
+        var holding6 = game.Galaxy.Fleets.Single(f => f.Names.GetValueOrDefault(empire) == "Holding-6");
+        await Assert.That(holding6.Ships.Fighters).IsEqualTo(17);
+    }
+
+    [Test]
+    public async Task AdvanceFleet_ArrivingWithAJoinOrder_ExecutesJoinOnArrival()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var planet = new Planet { Location = new Coordinate(10, 0), Owner = empire, Class = WorldClass.EarthLike, Type = WorldType.Base };
+        game.Galaxy.Planets.Add(planet);
+
+        var fleet = new Fleet {
+            Owner = empire, Location = new Coordinate(9, 0), Destination = new Coordinate(10, 0),
+            Fuel = 100, Status = FleetStatus.Ready,
+        };
+        fleet.Ships.Fighters = 4;
+        fleet.Orders.Add(new FleetOrder(CommandType.Join));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        var handler = new FleetMovementHandler(new FixedRandom(0));
+        handler.AdvanceFleets(game, new Empire { Name = "AI" }, empire);
+
+        await Assert.That(planet.Ships.Fighters).IsEqualTo(4);
+        await Assert.That(game.Galaxy.Fleets).DoesNotContain(fleet);
+    }
 }

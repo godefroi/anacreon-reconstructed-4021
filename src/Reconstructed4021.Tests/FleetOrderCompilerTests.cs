@@ -157,6 +157,28 @@ public class FleetOrderCompilerTests
     }
 
     [Test]
+    public async Task Compile_Join_NoOperand_PreserveOverflowFalse()
+    {
+        var (game, owner) = NewGame();
+
+        var result = FleetOrderCompiler.Compile(game, owner, ["JOIN"]);
+
+        await Assert.That(result.Orders[0].Type).IsEqualTo(CommandType.Join);
+        await Assert.That(result.Orders[0].PreserveOverflow).IsFalse();
+    }
+
+    [Test]
+    public async Task Compile_Join_Over_PreserveOverflowTrue()
+    {
+        var (game, owner) = NewGame();
+
+        var result = FleetOrderCompiler.Compile(game, owner, ["JOIN OVER"]);
+
+        await Assert.That(result.Orders[0].Type).IsEqualTo(CommandType.Join);
+        await Assert.That(result.Orders[0].PreserveOverflow).IsTrue();
+    }
+
+    [Test]
     public async Task Compile_BlankLine_SilentlySkipped()
     {
         var (game, owner) = NewGame();
@@ -165,6 +187,49 @@ public class FleetOrderCompilerTests
 
         await Assert.That(result.ErrorMessage).IsNull();
         await Assert.That(result.Orders).Count().IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Compile_NoMarkedLine_DefaultsMarkedOrderIndexToOne()
+    {
+        var (game, owner) = NewGame();
+
+        var result = FleetOrderCompiler.Compile(game, owner, ["WAIT", "REPEAT"]);
+
+        await Assert.That(result.MarkedOrderIndex).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Compile_MarkedLine_OnARealCommand_ResolvesToThatCommandsOwnIndex()
+    {
+        var (game, owner) = NewGame();
+
+        // Marking line 3 ("REFUEL", the 3rd real command) should resolve to order index 3.
+        var result = FleetOrderCompiler.Compile(game, owner, ["WAIT", "REPEAT", "REFUEL"], markedLine: 3);
+
+        await Assert.That(result.MarkedOrderIndex).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task Compile_MarkedLine_OnABlankLineBetweenCommands_ResolvesToTheNextRealOrder()
+    {
+        var (game, owner) = NewGame();
+
+        // Line 2 is blank, sitting between WAIT (order 1) and REPEAT (order 2) -- marking it should
+        // resolve to order 2, "whichever real order comes next."
+        var result = FleetOrderCompiler.Compile(game, owner, ["WAIT", "", "REPEAT"], markedLine: 2);
+
+        await Assert.That(result.MarkedOrderIndex).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Compile_MarkedLine_PastTheEndOfTheText_DefaultsMarkedOrderIndexToOne()
+    {
+        var (game, owner) = NewGame();
+
+        var result = FleetOrderCompiler.Compile(game, owner, ["WAIT", "REPEAT"], markedLine: 99);
+
+        await Assert.That(result.MarkedOrderIndex).IsEqualTo(1);
     }
 
     [Test]
@@ -203,6 +268,7 @@ public class FleetOrderCompilerTests
             new FleetOrder(CommandType.Wait),
             new FleetOrder(CommandType.Repeat),
             new FleetOrder(CommandType.Refuel),
+            new FleetOrder(CommandType.Join, PreserveOverflow: true),
         ];
 
         var lines = FleetOrderCompiler.Decompile(owner, original);
@@ -219,6 +285,8 @@ public class FleetOrderCompilerTests
         await Assert.That(recompiled.Orders[4].Type).IsEqualTo(CommandType.Wait);
         await Assert.That(recompiled.Orders[5].Type).IsEqualTo(CommandType.Repeat);
         await Assert.That(recompiled.Orders[6].Type).IsEqualTo(CommandType.Refuel);
+        await Assert.That(recompiled.Orders[7].Type).IsEqualTo(CommandType.Join);
+        await Assert.That(recompiled.Orders[7].PreserveOverflow).IsTrue();
     }
 
     [Test]

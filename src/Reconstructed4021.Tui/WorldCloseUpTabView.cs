@@ -3,6 +3,7 @@ using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Galaxy;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
 
 namespace Reconstructed4021.Tui;
@@ -48,6 +49,11 @@ internal sealed class WorldCloseUpTabView : View
             $"{s.Fighters,5}{s.HunterKillers,5}{s.Jumpships,5}{s.Jumptransports,5}{s.Penetrators,5}{s.Starships,5}{s.Transports,5}" +
             $"  {c.Legions,5}{c.NinjaLegions,5}" +
             $"  {d.Lams,5}{d.DefenseSatellites,5}{d.Gdms,5}{d.IonCannons,5}");
+
+        if (world is Planet { Redirection.Destination: { } redirectDestination }) {
+            var origin = viewer.Capital?.Location ?? new Coordinate(0, 0);
+            AddAt(1, 6, $"Redirecting new production -> ({RelativeCoordinate.Format(redirectDestination, origin)})");
+        }
 
         if (Game.FindWorldBackgroundText(game, world, viewer, conquer: false) is { } background) {
             for (var i = 0; i < background.Count; i++) {

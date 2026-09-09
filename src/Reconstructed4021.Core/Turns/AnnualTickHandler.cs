@@ -91,7 +91,20 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
         // ReportResourceShortfall) fires at most once per tick, not once per call site that hits it.
         var reportedShortfalls = new HashSet<CargoType>();
 
+        var shipsBeforeProduction = new ShipCounts();
+        foreach (var type in Enum.GetValues<ShipType>()) {
+            shipsBeforeProduction[type] = planet.Ships[type];
+        }
+        var legionsBeforeProduction = planet.Cargo.Legions;
+        var ninjaLegionsBeforeProduction = planet.Cargo.NinjaLegions;
+
         RunProductionPipeline(planet, reportedShortfalls);
+
+        // Production redirection (GitHub issue #8, no Pascal equivalent -- see RedirectionSettings'
+        // own doc comment): dispatch what was just produced before any later same-tick step (military,
+        // revolution) can touch it.
+        ProductionRedirection.Apply(planet, game, shipsBeforeProduction, legionsBeforeProduction, ninjaLegionsBeforeProduction);
+
         UpdateEfficiency(planet);
         UpdateTechLevel(planet);
         UpdatePopulation(planet);

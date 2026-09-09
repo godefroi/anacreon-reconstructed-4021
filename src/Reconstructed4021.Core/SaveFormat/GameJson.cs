@@ -434,8 +434,9 @@ public static class GameJson
             var transferShip = obj["transferShip"] is { } shipNode ? Enum.Parse<ShipType>((string)shipNode!) : (ShipType?)null;
             var transferCargo = obj["transferCargo"] is { } cargoNode ? Enum.Parse<CargoType>((string)cargoNode!) : (CargoType?)null;
             var transferAmount = (int)obj["transferAmount"]!;
+            var preserveOverflow = obj["preserveOverflow"] is { } preserveOverflowNode && (bool)preserveOverflowNode;
 
-            orders.Add(new FleetOrder(type, destinationObject, destinationPosition, transferShip, transferCargo, transferAmount));
+            orders.Add(new FleetOrder(type, destinationObject, destinationPosition, transferShip, transferCargo, transferAmount, preserveOverflow));
         }
 
         return orders;
@@ -1008,6 +1009,7 @@ public static class GameJson
                     ["transferShip"] = order.TransferShip?.ToString(),
                     ["transferCargo"] = order.TransferCargo?.ToString(),
                     ["transferAmount"] = order.TransferAmount,
+                    ["preserveOverflow"] = order.PreserveOverflow,
                 });
             }
 
