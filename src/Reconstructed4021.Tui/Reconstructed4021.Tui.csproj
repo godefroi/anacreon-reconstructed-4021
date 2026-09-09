@@ -18,6 +18,14 @@
          Microsoft.Extensions.Configuration.Abstractions; the AvaloniaEdit code it's adapted from is
          forked into its own third_party source, not a runtime dependency. -->
     <PackageReference Include="Terminal.Gui.Editor" Version="2.5.7" />
+
+    <!-- .NET's own options-loading pipeline for appsettings.json (TuiSettings): already resolved
+         transitively at this version via Terminal.Gui.Editor's own Configuration.Abstractions
+         dependency, pinned explicitly here since Load() calls into Json/Binder/FileExtensions directly. -->
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.7" />
   </ItemGroup>
 
   <PropertyGroup>

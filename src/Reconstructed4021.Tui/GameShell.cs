@@ -57,7 +57,7 @@ public sealed class GameShell : Window
     // ("map cursor reuse for launch/destination") in place of a separate coordinate-entry dialog.
     private Action<Coordinate>? pendingPick;
 
-    public GameShell(Game game, TurnEngine turnEngine, Empire human, Random random)
+    public GameShell(Game game, TurnEngine turnEngine, Empire human, Random random, TuiSettings? tuiSettings = null)
     {
         this.game = game;
         this.turnEngine = turnEngine;
@@ -73,7 +73,7 @@ public sealed class GameShell : Window
         BorderStyle = LineStyle.None;
         Border.Thickness = new Thickness(0);
 
-        galaxyView = new GalaxyView(game.Galaxy, human) {
+        galaxyView = new GalaxyView(game.Galaxy, human, game.Empires, tuiSettings ?? new TuiSettings()) {
             X = 0,
             Y = 1, // below the menu bar
             Width = Dim.Fill(),

@@ -16,6 +16,8 @@ using Game = Reconstructed4021.Core.Game;
 // (deterministic test scripts), not what the real game should do.
 var random = new Random();
 
+var tuiSettings = TuiSettings.Load(FindRepoRoot(AppContext.BaseDirectory));
+
 // Diagnostic: one line per empire per year for NewTechLevel's own roll (chance/roll/outcome/lab
 // breakdown) -- logs/ is gitignored, same as WriteCrashLog's own file below, so this never needs
 // cleaning up or committing. Unconditional (not env-var-gated): the file is tiny (a few KB per full
@@ -260,7 +262,7 @@ GameShell.ExitChoice RunGame(Game game)
             app.Run(new TurnStartGreetingWindow(current, game.Year, Random.Shared.Next(1, 4)), null);
             app.Run(new EmpireStatusWindow(current, game), null);
 
-            var gameShell = new GameShell(game, turnEngine, current, random);
+            var gameShell = new GameShell(game, turnEngine, current, random, tuiSettings);
             app.Run(gameShell, null);
             if (gameShell.Choice is GameShell.ExitChoice.MainMenu or GameShell.ExitChoice.ExitToOs) {
                 return gameShell.Choice;
