@@ -17,10 +17,11 @@ namespace Reconstructed4021.Tui;
 /// Renders the galaxy grid directly onto a custom View, scrolled via Viewport. Layout, glyphs, and
 /// colors are taken from the real DOS map (reference/DOSAnacreonSource131/MAPWIND.PAS's CellRecord and
 /// DATACNST.PAS's TypeStr/BaseTypeData/GateTypeData), not invented: each sector is 3 screen columns
-/// (player-fleet indicator | world glyph | enemy-fleet indicator), and color is two-tier -- White for
-/// whatever <see cref="_player"/> owns, LightGray for everyone else's (including Independent, matching
-/// DrawPlanets' own <c>IF Emp=Player THEN PlayerColor ELSE EnemyColor</c> -- the original never gave
-/// individual empires distinct colors). A cursor (arrows move it, PageUp/PageDown jump it, the viewport
+/// (player-fleet indicator | world glyph | enemy-fleet indicator). Ownership color: White for whatever
+/// <see cref="_player"/> owns, DarkGray for Independent, one <see cref="DosColors.EmpirePalette"/> color
+/// per other empire (issue #3 -- DrawPlanets' own <c>IF Emp=Player THEN PlayerColor ELSE EnemyColor</c>
+/// meant the original never gave individual empires distinct colors; this is a new addition, not a
+/// port). A cursor (arrows move it, PageUp/PageDown jump it, the viewport
 /// auto-follows) highlights one sector the same way DrawMapCursor did -- corner brackets straddling the
 /// cursor's own column in the rows above/below, not a box drawn on the cursor's own row.
 ///
@@ -78,6 +79,11 @@ internal sealed class GalaxyView : View
     private readonly CoreGalaxy _galaxy;
     private readonly Empire _player;
 
+    // Issue #3: per-empire colors, keyed by object identity since Empire has no numeric id. Built once
+    // from Game.Empires (a permanent roster -- see Empire.Status's own doc comment) rather than
+    // recomputed per draw; empires never join or leave that roster mid-game, only change Status.
+    private readonly Dictionary<Empire, TgAttribute> _empireAttributes;
+
     // A render-local cache, not a duplicated/stale copy of Core state: without it, every redraw
     // called Galaxy.GetObjectAt (up to four linear scans across Planets/Starbases/Stargates/
     // ConstructionSites) once per visible cell -- on GAUNTLET.SCN (~290 objects) at a ~1800-cell
@@ -109,7 +115,7 @@ internal sealed class GalaxyView : View
     // so a run of same-colored cells spanning a row wrap still gets to skip the redundant call.
     private TgAttribute? _lastAttribute;
 
-    public GalaxyView(CoreGalaxy galaxy, Empire player)
+    public GalaxyView(CoreGalaxy galaxy, Empire player, IReadOnlyList<Empire> empires, TuiSettings tuiSettings)
     {
         _galaxy = galaxy;
         _player = player;
@@ -117,6 +123,11 @@ internal sealed class GalaxyView : View
         _cursor = _origin;
         SetContentSize(new Size(galaxy.Size * CellWidth, galaxy.Size));
         CanFocus = true;
+
+        // UseLegacyEmpireColors=true: an empty map, so OwnerAttribute's GetValueOrDefault always falls
+        // through to the flat OtherAttribute -- the exact pre-issue-#3 two-tier scheme, not a second
+        // code path to keep in sync with the one below.
+        _empireAttributes = tuiSettings.UseLegacyEmpireColors ? [] : BuildEmpireAttributes(empires, player);
 
         RebuildIndex();
 
@@ -142,6 +153,29 @@ internal sealed class GalaxyView : View
         _objectsByLocation.Clear();
         RebuildIndex();
         SetNeedsDraw();
+    }
+
+    /// <summary>
+    /// Assigns each non-player, non-independent empire one color from <see cref="DosColors.EmpirePalette"/>,
+    /// in <paramref name="empires"/> roster order -- stable across a session since that roster never
+    /// reorders, and never collides since the palette has one slot per non-player empire the engine's
+    /// own 8-empire cap (TYPES.PAS:56) allows.
+    /// </summary>
+    private static Dictionary<Empire, TgAttribute> BuildEmpireAttributes(IReadOnlyList<Empire> empires, Empire player)
+    {
+        var attributes = new Dictionary<Empire, TgAttribute>();
+        var paletteIndex = 0;
+
+        foreach (var empire in empires) {
+            if (ReferenceEquals(empire, player) || empire.IsIndependent) {
+                continue;
+            }
+
+            attributes[empire] = new TgAttribute(DosColors.EmpirePalette[paletteIndex], StandardColor.Black);
+            paletteIndex++;
+        }
+
+        return attributes;
     }
 
     private void RebuildIndex()
@@ -282,8 +316,21 @@ internal sealed class GalaxyView : View
         return (new Rune(' '), EmptyAttribute);
     }
 
-    private TgAttribute OwnerAttribute(Empire owner) =>
-        ReferenceEquals(owner, _player) ? PlayerAttribute : owner.IsIndependent ? UnownedAttribute : OtherAttribute;
+    private TgAttribute OwnerAttribute(Empire owner)
+    {
+        if (ReferenceEquals(owner, _player)) {
+            return PlayerAttribute;
+        }
+
+        if (owner.IsIndependent) {
+            return UnownedAttribute;
+        }
+
+        // GetValueOrDefault rather than an indexer: an owner not in the game's own Empires roster
+        // shouldn't be possible, but this is a color, not a correctness-critical lookup -- falling back
+        // to the old flat color beats crashing the whole view over it.
+        return _empireAttributes.GetValueOrDefault(owner, OtherAttribute);
+    }
 
     private bool FleetPresent(Coordinate coordinate, bool wantPlayerOwned)
     {
