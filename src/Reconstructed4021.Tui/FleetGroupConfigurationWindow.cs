@@ -18,14 +18,17 @@ namespace Reconstructed4021.Tui;
 /// <c>Draw()</c>) — the pure transfer math lives in <see cref="FleetGroupConfiguration"/> (Core), this
 /// class only drives the grid's own input loop.
 ///
-/// Two independent cursors, matching real Pascal exactly: <see cref="selectedGroup"/> (Up/Down, which
-/// of the 9 rows) and a separate, *staged* <see cref="currentType"/> (Left/Right, cycling fgt..trn) —
-/// GetGroups' own <c>CurTyp</c> is a loose preview value, not committed to a group's real <c>Typ</c>
-/// until ships actually transfer (<c>ChangeGroupNumber</c>/the space-bar load-all). Committing eagerly
-/// on every Left/Right keystroke instead would be a real behavioral difference, not just a cosmetic
-/// one: arrowing away from a group that already holds ships and back again, without ever loading
-/// anything, must leave that group untouched — confirmed by reading <c>LoadShips</c>' own
-/// <c>IF Typ&lt;&gt;CurTyp</c> gate, which only fires on an actual transfer.
+/// Two independent cursors: <see cref="selectedGroup"/> (Up/Down, which of the 9 rows) and a separate,
+/// *staged* <see cref="currentType"/> (Left/Right, cycling fgt..trn) — GetGroups' own <c>CurTyp</c> is a
+/// loose preview value, not committed to a group's real <c>Typ</c> until ships actually transfer
+/// (<c>ChangeGroupNumber</c>/the space-bar load-all). Committing eagerly on every Left/Right keystroke
+/// instead would be a real behavioral difference, not just a cosmetic one: arrowing away from a group
+/// that already holds ships and back again, without ever loading anything, must leave that group
+/// untouched — confirmed by reading <c>LoadShips</c>' own <c>IF Typ&lt;&gt;CurTyp</c> gate, which only
+/// fires on an actual transfer.
+///
+/// Up/Down deliberately diverges from real Pascal's own unconditional <c>CurTyp:=Gp[CG].Typ</c>
+/// (ATTCOMM.PAS:1011,1019) — see <see cref="AdoptSelectedGroupType"/>.
 ///
 /// Esc always commits and closes — real Pascal's <c>GetGroups</c> has no cancel path at all
 /// (<c>Exit:=False</c> hardcoded right after its own loop) — never a "discard changes" exit.
@@ -149,6 +152,19 @@ internal sealed class FleetGroupConfigurationWindow : Window
 
     private void SetError(string message) => errorLabel.Text = message;
 
+    // Real Pascal unconditionally does CurTyp:=Gp[CG].Typ on Up/Down (ATTCOMM.PAS:1011,1019) -- but every
+    // group's Typ starts at fgt (the same default the Pascal init loop uses, ATTCOMM.PAS:995), so an
+    // untouched group's Typ tells you nothing about what the player actually wants there. Deliberate
+    // divergence: only adopt the group's Typ once it holds something real (Num or Gat > 0) -- browsing
+    // past still-empty groups now leaves the staged currentType alone instead of stomping it back to fgt.
+    private void AdoptSelectedGroupType()
+    {
+        var g = groups[selectedGroup];
+        if (g.Num > 0 || g.Gat > 0) {
+            currentType = g.Typ;
+        }
+    }
+
     private void OnKeyDown(object? sender, Key key)
     {
         if (editBuffer is not null) {
@@ -160,7 +176,7 @@ internal sealed class FleetGroupConfigurationWindow : Window
             case KeyCode.CursorUp:
                 if (selectedGroup > 0) {
                     selectedGroup--;
-                    currentType = groups[selectedGroup].Typ; // CurTyp:=Gp[CG].Typ (ATTCOMM.PAS:1011)
+                    AdoptSelectedGroupType();
                     Refresh();
                 }
                 key.Handled = true;
@@ -168,7 +184,7 @@ internal sealed class FleetGroupConfigurationWindow : Window
             case KeyCode.CursorDown:
                 if (selectedGroup < groups.Length - 1) {
                     selectedGroup++;
-                    currentType = groups[selectedGroup].Typ;
+                    AdoptSelectedGroupType();
                     Refresh();
                 }
                 key.Handled = true;

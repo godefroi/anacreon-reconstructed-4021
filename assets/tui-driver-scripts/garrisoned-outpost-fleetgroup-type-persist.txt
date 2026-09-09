@@ -1,0 +1,34 @@
+# Regression script for Reconstructed4021.TuiDriver, run against
+# assets/saves/Garrisoned Outpost.json:
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Garrisoned Outpost.json" \
+#     --script assets/tui-driver-scripts/garrisoned-outpost-fleetgroup-type-persist.txt
+#
+# Issue #4: opens Ministry of War > Attack > manual Fleet configuration, stages hunter-killers as
+# the type-to-add (Right), then browses Down/Down/Up/Up across three still-empty groups before
+# pressing Space. The staged type must survive that browsing -- group 1 should end up holding
+# hunter-killers, not fighters (fgt is every group's untouched default, and the pre-fix code
+# unconditionally re-read Gp[CG].Typ on every Up/Down, clobbering the staged type the moment it
+# passed over an empty group). A further Down/Left/Down/Up/Up detour confirms group 1's own real
+# assignment survives once it holds something, too.
+Right Right Right Right Down
+m
+a
+SLEEP 300
+n
+SLEEP 300
+Right
+Down
+Down
+Up
+Up
+Space
+DUMP
+Down
+Left
+Down
+Up
+Up
+DUMP
+Esc
