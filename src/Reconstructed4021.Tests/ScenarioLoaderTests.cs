@@ -400,4 +400,26 @@ public class ScenarioLoaderTests
         // FixedRandom(0): InitX=1 (<=Size/4=3, left branch, XDisp=0); every row paints x in [1-1,1+1]=[0,2] (1-based) -> 0-based [-1,1] clipped to [0,1].
         await Assert.That(game.Galaxy.GetNebula(new Coordinate(0, 0))).IsEqualTo(NebulaType.Nebula);
     }
+
+    /// <summary>
+    /// Issue #12: PERIPHER.SCN's own BEGINTEXT banner uses byte 0x16 as a decorative dot alongside its
+    /// box-drawing art, which real DOS wrote straight to video memory as a font glyph, not a control
+    /// code. Left un-decoded, that byte survives as a literal C0 control character, which Terminal.Gui
+    /// measures as zero-width -- undercounting this exact line's real on-screen width and forcing an
+    /// early word-wrap partway through "George Moromisato" (confirmed directly against TextFormatter:
+    /// raw measures 70 columns and wraps into "...by George" / "Moromisato"; correctly decoded it
+    /// measures 73 and stays one line). See ScenarioLoader.ReadScenarioFile's own doc comment.
+    /// </summary>
+    [Test]
+    public async Task ReadScenarioFile_DecodesCp437ControlRangeBytesAsTheirDosDisplayGlyphs()
+    {
+        var path = Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "reference", "scenarios", "dos_131", "PERIPHER.SCN");
+
+        var text = ScenarioLoader.ReadScenarioFile(path);
+        var pages = ScenarioLoader.ReadIntroPages(text);
+        var bannerLine = pages[0].Split('\n').Single(l => l.Contains("Moromisato"));
+
+        await Assert.That(bannerLine).EndsWith("by George Moromisato");
+        await Assert.That(bannerLine.Any(char.IsControl)).IsFalse();
+    }
 }
