@@ -57,10 +57,13 @@ namespace Reconstructed4021.Tui;
 /// second (<c>Delay(1000)</c>) before the next screen update -- freezing the whole game loop is a
 /// DOS-era artifact, not a mechanic worth reproducing, so this class shows the message immediately and
 /// clears it on a one-shot <c>Application.AddTimeout</c> (the <see cref="TmaLogoWindow"/> idiom)
-/// instead, without blocking input. No Esc anywhere in the top-level menu either — real Pascal's own
-/// <c>Menu</c> has no cancel key at all, the only ways out are <see cref="InteractiveCombatState.IsOver"/>
-/// becoming true. Added to <see cref="GameShell"/> via <c>AddModal(..., dismissOnOutsideClick: false)</c>
-/// for exactly that reason.
+/// instead, without blocking input. Real Pascal's own <c>Menu</c> has no cancel key at all — the only
+/// way out is <see cref="InteractiveCombatState.IsOver"/> becoming true, which is why this window is
+/// added to <see cref="GameShell"/> via <c>AddModal(..., dismissOnOutsideClick: false)</c>. Port-only
+/// addition: Esc at the top-level menu (<see cref="OnKeyDown"/>) routes into the same y/n Retreat
+/// confirmation <c>&lt;R&gt;</c> already uses, rather than doing nothing — an unhandled Esc used to fall
+/// through to Terminal.Gui's default quit behavior and unwind the whole <c>app.Run(gameShell)</c> call
+/// instead of anything battle-related (issue #5).
 /// </summary>
 internal sealed class TacticalBattleDisplayWindow : Window
 {
@@ -310,6 +313,18 @@ internal sealed class TacticalBattleDisplayWindow : Window
                 HandleAutoTargetToggle();
                 key.Handled = true;
                 break;
+        }
+
+        if (key == Key.Esc) {
+            // Real Pascal's Menu has no cancel key (see this class's own doc comment) -- Esc falling
+            // through unhandled used to hit Terminal.Gui's default quit behavior, unwinding all the way
+            // out of app.Run(gameShell) and back to the turn-start greeting (issue #5) instead of doing
+            // anything battle-related. Routed into the same y/n Retreat confirmation <R> already uses,
+            // rather than a bare dismiss: this window only ever leaves via BattleEnded (GameShell.
+            // StartEngagement), which runs RestoreCombatant/ResolveAttack -- skipping that would leave
+            // the engaged fleets stuck mid-battle.
+            HandleRetreat();
+            key.Handled = true;
         }
     }
 
