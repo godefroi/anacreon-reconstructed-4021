@@ -970,7 +970,21 @@ public sealed class GameShell : Window
     /// guaranteed Known/Scouted. Real Pascal just opens an empty menu when nothing qualifies; a plain
     /// "nothing here" message reads better.
     /// </summary>
-    private void PickGround(Fleet source, bool playerOnly, bool includeFleet, string title, string emptyMessage, Action<ISectorObject> onPicked)
+    /// <param name="exclude">
+    /// Drops any candidate this predicate matches before the picker ever shows, the same way
+    /// <see cref="FleetActionHint"/> stops advertising D for a target Deploy would just reject every
+    /// time -- Refuel is the one caller (<paramref name="includeFleet"/> is also true there) that
+    /// passes this, to drop any candidate (including <paramref name="source"/> itself, refueling from
+    /// trillum already in its own hold per Pascal's <c>SameID</c> branch) with no trillum to actually
+    /// give. Issue #2 was a player defaulting onto exactly such a candidate -- their own empty cargo
+    /// hold, one row above the world that actually had the trillum -- and getting a bare "no trillum
+    /// available" with no hint that the wrong source had been picked.
+    /// </param>
+    /// <param name="excludedEmptyMessage">
+    /// Shown instead of <paramref name="emptyMessage"/> when <paramref name="exclude"/> drops every
+    /// candidate -- distinct wording for "nothing here" vs. "something's here, just nothing usable."
+    /// </param>
+    private void PickGround(Fleet source, bool playerOnly, bool includeFleet, string title, string emptyMessage, Action<ISectorObject> onPicked, Func<ISectorObject, bool>? exclude = null, string? excludedEmptyMessage = null)
     {
         // Own fleets, own world, enemy fleets, enemy world -- per the user's own explicit request: the
         // player's own objects should always sort first (fleets before the single ground object either
@@ -1015,6 +1029,14 @@ public sealed class GameShell : Window
         if (candidates.Count == 0) {
             ShowInfo(title, emptyMessage);
             return;
+        }
+
+        if (exclude is not null) {
+            candidates = candidates.Where(c => !exclude(c)).ToList();
+            if (candidates.Count == 0) {
+                ShowInfo(title, excludedEmptyMessage ?? emptyMessage);
+                return;
+            }
         }
 
         ShowObjectPicker(title, candidates, onPicked);
@@ -1453,15 +1475,15 @@ public sealed class GameShell : Window
     private void RefuelFleet(Fleet fleet) =>
         PickGround(fleet, playerOnly: true, includeFleet: true, "Refuel Fleet",
             "There is no world or fleet of yours here to refuel from.",
-            ground => PromptForTrillum(fleet, (IShipCargoHolder)ground));
+            ground => PromptForTrillum(fleet, (IShipCargoHolder)ground),
+            exclude: ground => FleetLifecycle.MaxTrillumToRefuel(fleet, (IShipCargoHolder)ground) <= 0,
+            excludedEmptyMessage: "There is no trillum available to refuel with.");
 
     private void PromptForTrillum(Fleet fleet, IShipCargoHolder ground)
     {
+        // Guaranteed positive -- RefuelFleet's own exclude predicate already dropped every candidate
+        // this could be <= 0 for, and nothing mutates fleet/ground between the picker and here.
         var maxTri = FleetLifecycle.MaxTrillumToRefuel(fleet, ground);
-        if (maxTri <= 0) {
-            ShowInfo("Refuel Fleet", "There is no trillum available to refuel with.");
-            return;
-        }
 
         var dialog = new Window {
             Title = "Refuel Fleet",
