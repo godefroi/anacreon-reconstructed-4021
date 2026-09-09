@@ -1562,7 +1562,7 @@ public sealed class GameShell : Window
         // right edge at a shorter fixed width, same class of issue DosDialogWindow's own word-wrap
         // fix addresses for confirmation text -- this dialog has too few, too short lines to be worth
         // wrapping, so it just sizes to fit instead).
-        var line1 = $"Amount of {resource} to shuttle:";
+        var line1 = $"{char.ToUpperInvariant(resource[0])}{resource[1..]} to shuttle:";
         var line2 = $"{atSource} at {DisplayName(source)}; fleet has room for {fleetSpace}.";
         var width = Math.Max(line1.Length, line2.Length) + 6;
 
