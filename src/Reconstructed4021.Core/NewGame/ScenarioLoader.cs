@@ -46,6 +46,20 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
     /// universally: a strict UTF-8 decode is tried first (a plain-ASCII file is valid UTF-8 by
     /// construction, so this never misclassifies the common case, and correctly reads any scenario that
     /// happens to already be genuine UTF-8), falling back to CP437 only when that decode fails.
+    ///
+    /// PERIPHER.SCN's own BEGINTEXT banner also uses byte 0x16 as a decorative dot mixed into its
+    /// box-drawing art -- a DOS program writing bytes straight to video memory has no such thing as an
+    /// "invisible control character", every byte 0-255 is just a font glyph index. .NET's CP437 table
+    /// decodes 0x00-0x1F/0x7F as real C0/DEL control characters instead (confirmed against Unicode.org's
+    /// own CP437.TXT -- that's the correct mapping for CP437 as a *text encoding*, just not for how the
+    /// DOS ROM video font actually rendered those byte values on screen), so byte 0x16 survives decoding
+    /// as a literal U+0016. Terminal.Gui's own text-width measurement then treats that as zero-width,
+    /// undercounting the banner line by 3 columns and forcing an early word-wrap partway through "George
+    /// Moromisato" (issue #12) -- confirmed by feeding both the real and remapped line through
+    /// TextFormatter directly: raw measures 70 columns and wraps into "...by George" / "Moromisato";
+    /// remapped measures the correct 73 and stays one line. <see cref="Cp437ControlRangeGlyphs"/> maps
+    /// the low byte range back to the DOS ROM font's own display glyphs, applied only to the CP437
+    /// fallback path since a file that decodes as strict UTF-8 can't contain these raw bytes.
     /// </summary>
     public static string ReadScenarioFile(string path)
     {
@@ -53,9 +67,30 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         try {
             return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
         } catch (DecoderFallbackException) {
-            return Encoding.GetEncoding(437).GetString(bytes);
+            var text = Encoding.GetEncoding(437).GetString(bytes);
+            return string.Create(text.Length, text, (span, source) => {
+                for (var i = 0; i < source.Length; i++) {
+                    span[i] = Cp437ControlRangeGlyphs.TryGetValue(source[i], out var glyph) ? glyph : source[i];
+                }
+            });
         }
     }
+
+    /// <summary>
+    /// The DOS ROM video font's display glyphs for the codepage's own control range (Wikipedia's "Code
+    /// page 437" article), used only to undo .NET's literal C0/DEL decode of bytes that a DOS program
+    /// wrote straight to video memory as decoration rather than as real control codes. \t/\r/\n are
+    /// deliberately excluded -- <see cref="ScenarioTokenizer"/>'s own line-based parsing depends on
+    /// those three staying real line/field structure, and no committed .SCN file uses them decoratively
+    /// (confirmed from every file's raw bytes).
+    /// </summary>
+    private static readonly Dictionary<char, char> Cp437ControlRangeGlyphs = new() {
+        ['\x01'] = '☺', ['\x02'] = '☻', ['\x03'] = '♥', ['\x04'] = '♦', ['\x05'] = '♣', ['\x06'] = '♠',
+        ['\x07'] = '•', ['\x08'] = '◘', ['\x0B'] = '♂', ['\x0C'] = '♀', ['\x0E'] = '♫', ['\x0F'] = '☼',
+        ['\x10'] = '►', ['\x11'] = '◄', ['\x12'] = '↕', ['\x13'] = '‼', ['\x14'] = '¶', ['\x15'] = '§',
+        ['\x16'] = '▬', ['\x17'] = '↨', ['\x18'] = '↑', ['\x19'] = '↓', ['\x1A'] = '→', ['\x1B'] = '←',
+        ['\x1C'] = '∟', ['\x1D'] = '↔', ['\x1E'] = '▲', ['\x1F'] = '▼', ['\x7F'] = '⌂',
+    };
 
     /// <summary>NEWGAME.PAS:60-85 (RndEmpireName) — GetRandomEmpireName's candidate pool.</summary>
     private static readonly string[] _rndEmpireNames = [
