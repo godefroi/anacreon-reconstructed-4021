@@ -1,0 +1,44 @@
+# Regression for issue #2 ("Refuel fails with 'no trillum available' over a planet with
+# trillum"): run against a scratch fixture derived from Border Skirmish.json (NOT committed --
+# same convention as resupply-smoke-test.txt), with:
+#   - the (0,0) capital's cargo.trillum set to 0
+#   - two Human fleets added at (0,0): "Trillum Carrier" (10 jumptransports, cargo.trillum 100,
+#     fuel 50) and "Thirsty Fleet" (5 jumpships, cargo.trillum 0, fuel 5 -- well under its own
+#     ~17.45 fuel capacity)
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Refuel Picker Trap.json" --script assets/tui-driver-scripts/refuel-picker-excludes-empty-candidates.txt
+#
+# Root cause: RefuelFleet's own PickGround call (GameShell.cs) lists the refueling fleet itself
+# as a candidate "ground" (IncludeFleet:=True, matching Pascal's SameID(FltID,Ground) branch --
+# refueling from trillum already in your own hold is real), and the picker used to default to
+# row 0 regardless of whether that candidate actually had anything to give. A player who
+# Abort/Joined a trillum-carrying fleet onto their own planet, then tried to Refuel a second
+# fleet at the same location and accepted the picker's default row, silently refueled from their
+# own (now sole, and empty) fleet instead of the planet one row down -- "no trillum available"
+# even though the planet had plenty.
+#
+# f,a picks Trillum Carrier (default row 0) for Abort/Join; Down,Enter targets the planet as the
+# destination, dumping its 100 trillum onto (0,0) and destroying Trillum Carrier. f,r then opens
+# Refuel for the sole remaining own fleet (Thirsty Fleet): the picker must now show ONLY the
+# planet as a candidate -- Thirsty Fleet's own empty cargo hold is excluded rather than merely
+# reordered -- so accepting the default row (Enter, no navigation) reaches the correct "Tons of
+# trillum" prompt instead of the bug's "no trillum available" message.
+f
+a
+SLEEP 200
+DUMP
+Enter
+SLEEP 200
+DUMP
+Down
+Enter
+SLEEP 200
+DUMP
+f
+r
+SLEEP 200
+DUMP
+Enter
+SLEEP 200
+DUMP
