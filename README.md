@@ -65,7 +65,9 @@ of continuous-idle redraw the main menu already had -- a low-frequency
 - **`src/`** — the C# port. `Reconstructed4021.Core` is the simulation itself;
   `Reconstructed4021.Tui` is the Terminal.Gui interface (in progress);
   `Reconstructed4021` is the (currently placeholder) entry point; `*.Tests` is everything
-  else, including the Pascal ground-truth harness.
+  else, including the Pascal ground-truth harness; `Reconstructed4021.TuiDriver` is a headless
+  driver for exercising the Tui end-to-end without a real terminal — see its own
+  [README](src/Reconstructed4021.TuiDriver/README.md).
 - **`reference/DOSAnacreonSource131/`** — the pristine, unmodified 1.31 Turbo Pascal source. Never
   edited directly — see `reference/verify/README.md` for how changes to it are made (as patches,
   not in place).
@@ -103,3 +105,5 @@ of continuous-idle redraw the main menu already had -- a low-frequency
   menu, dialog, and editor in the original game, mapped to its Pascal source and the Terminal.Gui
   primitive it's built (or to be built) from.
 - **[`docs/AnacreonManual.md`](docs/AnacreonManual.md)** — the original player-facing manual.
+- **[`src/Reconstructed4021.TuiDriver/README.md`](src/Reconstructed4021.TuiDriver/README.md)** — how
+  to drive the Tui headlessly (no pty) to debug, diagnose, and regression-test screens and fixes.
