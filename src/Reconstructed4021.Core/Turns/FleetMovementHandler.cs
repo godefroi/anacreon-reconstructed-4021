@@ -230,10 +230,13 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
                 case CommandType.Refuel:
                     ExecuteRefuCOM(fleet, game);
                     break;
+                case CommandType.Join:
+                    ExecuteJoinCOM(fleet, command, game);
+                    break;
             }
 
             if (!game.Galaxy.Fleets.Contains(fleet)) {
-                return; // fleet destroyed by ExecuteTransCOM's own ChangeCompositionOfFleet -- NextOrder stays whatever it was, matching Pascal
+                return; // fleet destroyed by ExecuteTransCOM's ChangeCompositionOfFleet or ExecuteJoinCOM -- NextOrder stays whatever it was, matching Pascal
             }
 
             if (type == CommandType.Repeat && !ignoreRepeat) {
@@ -310,6 +313,144 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
 
         FleetLifecycle.RefuelFleet(fleet, ground, FleetLifecycle.MaxTrillumToRefuel(fleet, ground));
     }
+
+    private const string HoldingNamePrefix = "Holding-";
+
+    /// <summary>
+    /// No ORDERS.PAS token -- port-only, same precedent as <see cref="ExecuteRefuCOM"/>. Production
+    /// redirection's own "join on arrival" option compiles this as the one order a freshly-dispatched
+    /// fleet is born with (<see cref="Entities.ProductionRedirection.Apply"/>), so it runs the moment
+    /// that fleet arrives -- but it's a real order like any other, so a player can queue it by hand too
+    /// (JOIN / JOIN OVER, <see cref="FleetOrderCompiler"/>). Not to be confused with the existing
+    /// player-driven "Abort/Join" command (<c>Tui.GameShell.AbortJoinFleet</c>) -- that's an on-demand
+    /// merge to whatever's at the fleet's current location, always via the unclamped
+    /// <see cref="FleetLifecycle.AbortFleet"/>; this is the automatic, arrival-triggered version with
+    /// its own clamp/no-clamp choice (<see cref="FleetOrder.PreserveOverflow"/>).
+    /// </summary>
+    private static void ExecuteJoinCOM(Fleet fleet, FleetOrder command, Game game)
+    {
+        if (game.Galaxy.GetObjectAt(fleet.Location) is IEconomicWorld world && world.Owner == fleet.Owner) {
+            JoinWorld(fleet, world, command.PreserveOverflow, game);
+            return;
+        }
+
+        JoinHoldingFleets(fleet, game);
+    }
+
+    /// <summary>
+    /// The owned-world half of <see cref="ExecuteJoinCOM"/>. <paramref name="preserveOverflow"/> false
+    /// clamps at <see cref="PascalMath.MaxResources"/> per type -- a plain "top it off" merge, losing
+    /// whatever doesn't fit; true never loses anything, spilling whatever doesn't fit into this
+    /// empire's own Holding-N fleets in the same sector instead (<see cref="JoinHoldingFleets"/>) --
+    /// deliberately not <see cref="FleetLifecycle.AbortFleet"/>, which neither clamps nor spills
+    /// overflow anywhere, just lets the world read over the cap forever.
+    /// </summary>
+    private static void JoinWorld(Fleet fleet, IEconomicWorld world, bool preserveOverflow, Game game)
+    {
+        // Fuel has no meaning on a world -- convert to trillum first, same conversion
+        // CombatOutcome.AbortFleet's own world branch already does.
+        fleet.Cargo.Trillum = ClampResource(fleet.Cargo.Trillum + ClampResource(fleet.Fuel / FleetLogistics.FuelPerTon));
+        fleet.Fuel = 0;
+
+        if (!preserveOverflow) {
+            foreach (var t in Enum.GetValues<ShipType>())
+                world.Ships[t] = ClampResource(world.Ships[t] + fleet.Ships[t]);
+            foreach (var t in Enum.GetValues<CargoType>())
+                world.Cargo[t] = ClampResource(world.Cargo[t] + fleet.Cargo[t]);
+
+            CombatOutcome.DestroyFleet(fleet, game);
+            return;
+        }
+
+        MergeUpToCapacity(fleet, world);
+        if (IsDrained(fleet)) {
+            CombatOutcome.DestroyFleet(fleet, game);
+            return;
+        }
+
+        JoinHoldingFleets(fleet, game); // whatever didn't fit spills into Holding-N, never destroyed
+    }
+
+    /// <summary>
+    /// Moves as much of <paramref name="source"/>'s ships/cargo onto <paramref name="target"/> as fits
+    /// under <see cref="PascalMath.MaxResources"/> per type, leaving any remainder on
+    /// <paramref name="source"/>. The same bound <see cref="ClampTransfer"/>'s own drop-off clamp
+    /// already applies for a manual Transfer order -- not a new cap, the established "no stack of a
+    /// resource type exceeds 9999 anywhere" convention. Generic over <see cref="IShipCargoHolder"/> so
+    /// it works for both "merge into a world" (<see cref="JoinWorld"/>) and "merge into a holding
+    /// fleet" (<see cref="MergeIntoHoldingFleet"/>) unchanged.
+    /// </summary>
+    private static void MergeUpToCapacity(IShipCargoHolder source, IShipCargoHolder target)
+    {
+        foreach (var t in Enum.GetValues<ShipType>()) {
+            var move = Math.Min(source.Ships[t], PascalMath.MaxResources - target.Ships[t]);
+            target.Ships[t] += move;
+            source.Ships[t] -= move;
+        }
+        foreach (var t in Enum.GetValues<CargoType>()) {
+            var move = Math.Min(source.Cargo[t], PascalMath.MaxResources - target.Cargo[t]);
+            target.Cargo[t] += move;
+            source.Cargo[t] -= move;
+        }
+    }
+
+    /// <summary>
+    /// The not-owned half of <see cref="ExecuteJoinCOM"/>, and <see cref="JoinWorld"/>'s own overflow
+    /// spillover target: consolidates <paramref name="fleet"/> into this empire's own "Holding-N"
+    /// fleets already in this sector, lowest N first, spilling into newly created ones as needed, until
+    /// <paramref name="fleet"/> is fully drained -- always terminates in practice after at most one
+    /// freshly-created (empty, so up to 9999-per-type headroom) Holding fleet, since a single tick's
+    /// redirected production can't realistically exceed that, but is correct for any magnitude.
+    /// </summary>
+    private static void JoinHoldingFleets(Fleet fleet, Game game)
+    {
+        var owner = fleet.Owner;
+        var location = fleet.Location;
+
+        var holdingFleets = game.Galaxy.Fleets
+            .Where(f => f != fleet && f.Owner == owner && f.Location == location && HoldingNumber(f, owner) is not null)
+            .OrderBy(f => HoldingNumber(f, owner)!.Value)
+            .ToList();
+
+        var nextNumber = holdingFleets.Count == 0 ? 1 : holdingFleets.Max(f => HoldingNumber(f, owner)!.Value) + 1;
+
+        foreach (var holding in holdingFleets) {
+            MergeIntoHoldingFleet(fleet, holding);
+            if (IsDrained(fleet)) {
+                CombatOutcome.DestroyFleet(fleet, game);
+                return;
+            }
+        }
+
+        while (true) {
+            var holding = new Fleet { Location = location, Owner = owner };
+            holding.Names[owner] = $"{HoldingNamePrefix}{nextNumber}";
+            nextNumber++;
+            game.Galaxy.Fleets.Add(holding);
+
+            MergeIntoHoldingFleet(fleet, holding);
+            if (IsDrained(fleet)) {
+                CombatOutcome.DestroyFleet(fleet, game);
+                return;
+            }
+        }
+    }
+
+    /// <summary>This owner's own name for <paramref name="f"/> parsed as "Holding-&lt;n&gt;", or null if it doesn't match -- per-viewer names (<see cref="ISectorObject.Names"/>), so only this owner's own naming counts.</summary>
+    private static int? HoldingNumber(Fleet f, Empire owner) =>
+        f.Names.TryGetValue(owner, out var name) && name.StartsWith(HoldingNamePrefix, StringComparison.Ordinal)
+            && int.TryParse(name.AsSpan(HoldingNamePrefix.Length), out var n) ? n : null;
+
+    /// <summary>Fuel is added to whichever holding fleet is reached first -- zeroing <paramref name="source"/>'s own Fuel immediately makes every later call's fuel line a harmless no-op instead of needing a separate "already placed" flag.</summary>
+    private static void MergeIntoHoldingFleet(Fleet source, Fleet target)
+    {
+        MergeUpToCapacity(source, target);
+        target.Fuel += source.Fuel;
+        source.Fuel = 0;
+    }
+
+    private static bool IsDrained(Fleet f) =>
+        FleetLifecycle.NoShips(f.Ships) && Enum.GetValues<CargoType>().All(t => f.Cargo[t] == 0);
 
     /// <summary>
     /// The pickup (<paramref name="trans"/>&gt;0)/drop-off clamp cascade from <c>ExecuteTransCOM</c>

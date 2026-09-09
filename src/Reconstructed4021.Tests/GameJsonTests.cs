@@ -358,6 +358,35 @@ public class GameJsonTests
     }
 
     /// <summary>
+    /// A save written before <see cref="Planet.Redirection"/> existed (GitHub issue #8) has no
+    /// <c>redirection</c> key at all -- confirms it still loads, defaulting to a fresh
+    /// <see cref="RedirectionSettings"/> (redirection off), same as the <see cref="SelfSufficiency"/>
+    /// precedent it follows.
+    /// </summary>
+    [Test]
+    public async Task Deserialize_PlanetWithoutRedirectionKey_DefaultsToRedirectionOff()
+    {
+        var galaxy = new Galaxy(10);
+        var game = new Game(galaxy);
+
+        var empire = new Empire { Name = "Test Empire" };
+        game.Empires.Add(empire);
+        game.CurrentEmpire = empire;
+        game.TurnHandlers[empire] = new HumanTurnHandler();
+
+        var planet = new Planet { Location = new Coordinate(1, 1), Owner = empire };
+        galaxy.Planets.Add(planet);
+
+        var node = System.Text.Json.Nodes.JsonNode.Parse(GameJson.Serialize(game))!;
+        node["galaxy"]!["planets"]![0]!.AsObject().Remove("redirection");
+
+        var roundTripped = GameJson.Deserialize(node.ToJsonString(), new Random(0));
+        var roundTrippedPlanet = roundTripped.Galaxy.Planets.Single();
+
+        await Assert.That(roundTrippedPlanet.Redirection.Destination).IsNull();
+    }
+
+    /// <summary>
     /// <see cref="TechCatalog.TechGrantIdentity"/>'s own JSON shape switched from writing the bare
     /// <c>Ordinal</c> int to the type's own name (<see cref="ShipType"/>/<see cref="DefenseType"/>/
     /// <see cref="CargoType"/>/<see cref="ConstructionType"/> depending on <c>Category</c>) -- a save

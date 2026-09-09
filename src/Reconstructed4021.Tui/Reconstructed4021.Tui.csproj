@@ -14,7 +14,7 @@
 
     <!-- Terminal.Gui's own TextView is deprecated in this version with no replacement of its own,
          so this package (same tui-cs org, targets Terminal.Gui >= 2.4.17) supplies the multi-line
-         text editor FleetOrdersWindow needs. Only runtime dependency besides Terminal.Gui itself is
+         text editor Close-Up's own Orders tab (CloseUpWindow) needs. Only runtime dependency besides Terminal.Gui itself is
          Microsoft.Extensions.Configuration.Abstractions; the AvaloniaEdit code it's adapted from is
          forked into its own third_party source, not a runtime dependency. -->
     <PackageReference Include="Terminal.Gui.Editor" Version="2.5.7" />

@@ -1,11 +1,9 @@
-using Terminal.Gui.Drivers;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.Types;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace Reconstructed4021.Tui;
 
@@ -13,21 +11,9 @@ namespace Reconstructed4021.Tui;
 /// One of the player's own worlds, shown as a tabbed window: Close Up, Production, ISSP, Designate
 /// -- four separate real Pascal commands (CLSCOMM.PAS: CloseUpCom/ProductionCom, DESIGN.PAS:
 /// DesignateCommand/ChangeISSPCom) that had no way to share one screen in 1988's Turbo Vision, but
-/// have no real reason not to now.
-///
-/// Not built on Terminal.Gui's own Tabs control: its tab-strip chrome adds five lines around the
-/// content (border, tab line, a line above and below the tabs), its own arrow-key navigation
-/// intercepts Left/Right before a tab's own content (ISSP's stepper) reliably gets real keyboard
-/// focus -- confirmed live, not assumed -- and its header rendering has no public customization
-/// surface (every drawing-related member on Tabs is private). Swapping a single content view in and
-/// out of a plain bordered Window sidesteps all three: ordinary Window chrome is two lines total,
-/// only one content view is ever a focusable child so SetFocus is unambiguous, and the tab names
-/// live in the Title text instead of a framework-drawn strip.
-///
-/// Tab names show in the Title -- Window.Title has no per-run styling (TextFormatter's only styling
-/// hook is the single-character HotKeySpecifier), so the active tab is marked with brackets rather
-/// than a color -- and switch on Ctrl+PageUp/Ctrl+PageDown, a chord none of the four tabs' own
-/// content ever reads.
+/// have no real reason not to now. The tab mechanism itself (<see cref="TabbedWindow"/>) is shared
+/// with <see cref="CloseUpWindow"/> -- see that class's own doc comment for why it's not built on
+/// Terminal.Gui's own Tabs control.
 ///
 /// Only reachable for a world the player owns (<see cref="GameShell.ShowCloseUp"/>'s own routing) --
 /// a fleet or another empire's world still goes through the standalone <see cref="CloseUpWindow"/>,
@@ -35,76 +21,42 @@ namespace Reconstructed4021.Tui;
 /// </summary>
 internal sealed class WorldInfoWindow : Window
 {
-    private readonly string worldName;
-    private readonly List<(string Name, View View)> tabs;
-    private int currentIndex;
+    private readonly TabbedWindow tabs;
 
-    public WorldInfoWindow(IEconomicWorld world, string worldName, Game game, Empire viewer, string initialTab, Action<WorldType> onDesignateSelected)
+    public WorldInfoWindow(IEconomicWorld world, string worldName, Game game, Empire viewer, string initialTab, Action<WorldType> onDesignateSelected, Action onPickRedirectDestination)
     {
         Width = 88;
         Height = 24;
         X = Pos.Center();
         Y = Pos.Center();
         CanFocus = true;
-        this.worldName = worldName;
+
+        tabs = new TabbedWindow(this, worldName);
 
         var closeUpTab = new WorldCloseUpTabView(world, game, viewer);
         var designateTab = new DesignateTabView(world, onDesignateSelected);
         var productionTab = new ProductionWindow(world);
 
+        tabs.AddTab("Close Up", closeUpTab);
+        tabs.AddTab("Production", productionTab, onActivated: productionTab.Refresh); // stale otherwise -- ISSP dial changes on the sibling tab never re-run the preview
+
         // ISSP has nothing to edit on a starbase (real Pascal's own GetISSP/SetISSP hardcode its
         // dial at 0 -- see IsspEditor's own doc comment) -- omitted there rather than shown inert.
-        var isspTab = world is Planet planet ? new IsspEditor(planet.SelfSufficiency) : null;
-
-        tabs = [("Close Up", closeUpTab), ("Production", productionTab)];
-        if (isspTab is not null) {
-            tabs.Add(("ISSP", isspTab));
+        if (world is Planet planet) {
+            tabs.AddTab("ISSP", new IsspEditor(planet.SelfSufficiency));
         }
-        tabs.Add(("Designate", designateTab));
 
-        var initialView = initialTab switch {
-            "Designate" => designateTab,
-            "ISSP" => (View?)isspTab ?? closeUpTab,
-            "Production" => productionTab,
-            _ => closeUpTab,
-        };
-        currentIndex = Math.Max(0, tabs.FindIndex(t => ReferenceEquals(t.View, initialView)));
-        Add(tabs[currentIndex].View);
-        UpdateTitle();
+        tabs.AddTab("Designate", designateTab);
 
-        KeyDown += (_, key) => {
-            if (!key.IsCtrl) {
-                return;
-            }
-            switch (key.NoAlt.NoCtrl.NoShift.KeyCode) {
-                case KeyCode.PageUp:
-                    StepTab(-1);
-                    key.Handled = true;
-                    break;
-                case KeyCode.PageDown:
-                    StepTab(1);
-                    key.Handled = true;
-                    break;
-            }
-        };
-
-        Initialized += (_, _) => tabs[currentIndex].View.SetFocus();
-    }
-
-    private void StepTab(int direction)
-    {
-        Remove(tabs[currentIndex].View);
-        currentIndex = (currentIndex + direction + tabs.Count) % tabs.Count;
-        if (tabs[currentIndex].View is ProductionWindow production) {
-            production.Refresh(); // stale otherwise -- ISSP dial changes on the sibling tab never re-run the preview
+        if (world is Planet redirectPlanet) {
+            var origin = viewer.Capital?.Location ?? new Coordinate(0, 0);
+            var redirectTab = new RedirectTabView(redirectPlanet.Redirection, origin);
+            redirectTab.PickDestinationRequested += (_, _) => onPickRedirectDestination();
+            tabs.AddTab("Redirect", redirectTab);
         }
-        Add(tabs[currentIndex].View);
-        tabs[currentIndex].View.SetFocus();
-        UpdateTitle();
-    }
 
-    private void UpdateTitle()
-    {
-        Title = $"{worldName}  " + string.Join("  ", tabs.Select((t, i) => i == currentIndex ? $"[{t.Name}]" : t.Name));
+        tabs.Show(initialTab == "CloseUp" ? "Close Up" : initialTab);
+
+        Initialized += (_, _) => tabs.FocusCurrentTab();
     }
 }

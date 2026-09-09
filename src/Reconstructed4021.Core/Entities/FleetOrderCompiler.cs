@@ -7,7 +7,8 @@ namespace Reconstructed4021.Core.Entities;
 /// `ORDERS.PAS`'s own compile/decompile pair (`ParseLine`/`CompileOrders`/`DeCompileOrders`,
 /// `:129-312`) plus the destination half of `GetLocation`/`GetDestination`
 /// (`PRIMINTR.PAS:1530-1573`) adapted to this port's data -- the real mini scripting language a player
-/// types into <see cref="Tui.FleetOrdersWindow"/>, kept here so it's testable without any window.
+/// types into Close-Up's own Orders tab (<c>Tui.CloseUpWindow</c>), kept here so it's testable without
+/// any window.
 ///
 /// v1.31 is the baseline (confirmed identical to v2 for `FLTCOMM.PAS`; v2's only `ORDERS.PAS` changes
 /// are a `SRMS` order token behind the v2 SRM-sweep feature and a still-commented-out `ABOR` stub --
@@ -20,18 +21,40 @@ namespace Reconstructed4021.Core.Entities;
 /// </summary>
 public static class FleetOrderCompiler
 {
-    public sealed record CompileResult(IReadOnlyList<FleetOrder> Orders, int ErrorLine = 0, string? ErrorMessage = null);
+    /// <param name="MarkedOrderIndex">
+    /// 1-based index into <see cref="Orders"/> of the player-set "next order" marker (Close-Up's own
+    /// Orders tab, no ORDERS.PAS equivalent) -- see <see cref="Compile"/>'s own <c>markedLine</c>
+    /// parameter for how it's resolved. Defaults to 1 ("start from the top"), the same default an
+    /// unmarked or lost marker resolves to -- deliberately not a new "has orders but nothing marked"
+    /// state, preserving <see cref="Fleet.NextOrder"/>'s existing invariant (0 iff <see cref="Orders"/>
+    /// is empty).
+    /// </param>
+    public sealed record CompileResult(IReadOnlyList<FleetOrder> Orders, int ErrorLine = 0, string? ErrorMessage = null, int MarkedOrderIndex = 1);
 
     /// <summary>
     /// CompileOrders (`ORDERS.PAS:234-266`). Blank lines produce no order (`IF Comm.Typ&lt;&gt;NoCOM
     /// THEN AddOrders`, silently skipped, not an error) -- everything else is one of the four real
     /// commands or a compile error naming the 1-based line it failed on.
+    ///
+    /// <paramref name="markedLine"/> (1-based, optional) is this port's own "next order" marker --
+    /// no ORDERS.PAS equivalent, lives in the editor's presentation rather than the order language
+    /// itself (Close-Up's own Orders tab tracks it as a per-line highlight, not literal text). Resolved
+    /// against how many real orders precede it: reaching <paramref name="markedLine"/> mid-loop
+    /// captures <c>orders.Count + 1</c> as <see cref="CompileResult.MarkedOrderIndex"/> -- correct
+    /// whether the marked line itself compiles to an order (points at that exact order) or is blank
+    /// (points at whichever real order comes next). Never reached (null, or past the end after edits)
+    /// leaves <see cref="CompileResult.MarkedOrderIndex"/> at its default of 1.
     /// </summary>
-    public static CompileResult Compile(Game game, Empire owner, IReadOnlyList<string> lines)
+    public static CompileResult Compile(Game game, Empire owner, IReadOnlyList<string> lines, int? markedLine = null)
     {
         var orders = new List<FleetOrder>();
+        var markedOrderIndex = 1;
 
         for (var i = 0; i < lines.Count; i++) {
+            if (i + 1 == markedLine) {
+                markedOrderIndex = orders.Count + 1;
+            }
+
             var (order, error) = ParseLine(game, owner, lines[i]);
             if (error is not null) {
                 return new CompileResult([], i + 1, error);
@@ -42,7 +65,7 @@ public static class FleetOrderCompiler
             }
         }
 
-        return new CompileResult(orders);
+        return new CompileResult(orders, MarkedOrderIndex: markedOrderIndex);
     }
 
     /// <summary>
@@ -99,6 +122,13 @@ public static class FleetOrderCompiler
                 // trillum-to-fuel conversion (already reused by the NPE AI's own RefuelBMS mission,
                 // FleetLifecycle.RefuelFleet) as something a player's order queue can trigger too.
                 return (new FleetOrder(CommandType.Refuel), null);
+            case "JOIN": {
+                // No ORDERS.PAS token -- this port's own addition (production redirection's "join on
+                // arrival" option, see FleetMovementHandler.ExecuteJoinCOM). A second word "OVER"
+                // selects the never-lose-anything variant; absent means the plain clamped merge.
+                var preserveOverflow = parts.Length > 1 && string.Equals(parts[1], "OVER", StringComparison.OrdinalIgnoreCase);
+                return (new FleetOrder(CommandType.Join, PreserveOverflow: preserveOverflow), null);
+            }
             default:
                 return (null, "Unknown command in line");
         }
@@ -199,6 +229,7 @@ public static class FleetOrderCompiler
                 CommandType.Repeat => "REPEat",
                 CommandType.Wait => "WAIT",
                 CommandType.Refuel => "REFUel",
+                CommandType.Join => order.PreserveOverflow ? "JOIN OVER" : "JOIN",
                 _ => throw new ArgumentOutOfRangeException(nameof(orders), order.Type, "Unexpected compiled command type."),
             });
         }

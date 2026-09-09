@@ -17,6 +17,15 @@
           "supply": 5,
           "trillum": 5
         },
+        "redirection": {
+          "destination": null,
+          "includeLegions": false,
+          "includeNinjaLegions": false,
+          "ships": {},
+          "nextDispatchNumber": 1,
+          "joinOnArrival": false,
+          "preserveOverflowOnJoin": false
+        },
         "techLevel": "Bio",
         "efficiency": 80,
         "revolutionIndex": 0,

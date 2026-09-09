@@ -6,7 +6,7 @@ namespace Reconstructed4021.Core.Entities;
 /// Hardcoded fleet-order generators for the player-facing "templated orders" feature -- not a
 /// Pascal port concept (compare <c>Core.Npe.NpeTypes</c>'s own unrelated AI <c>MissionTypes</c>),
 /// just a shortcut that builds an ordinary <see cref="FleetOrder"/> list out of the same
-/// DEST/TRAN/REFU commands a player could type into <see cref="Tui.FleetOrdersWindow"/> by hand.
+/// DEST/TRAN/REFU commands a player could type into Close-Up's own Orders tab (<c>Tui.CloseUpWindow</c>) by hand.
 /// </summary>
 public static class FleetOrderTemplates
 {

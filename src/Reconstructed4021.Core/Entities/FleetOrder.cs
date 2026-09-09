@@ -22,6 +22,10 @@ namespace Reconstructed4021.Core.Entities;
 /// No real reference save exercises <c>TransCOM</c> (`docs/SAV_FILE_FORMAT.md`'s own verification
 /// notes), so this decode is reasoned through from <c>ORDERS.PAS</c> directly, not empirically
 /// confirmed the way <c>DestCOM</c> is (`FLEET_ORDERS.SAV`).
+///
+/// <see cref="PreserveOverflow"/> is this port's own addition, populated only for
+/// <see cref="CommandType.Join"/> -- see that command's own doc comment
+/// (<see cref="Turns.FleetMovementHandler.ExecuteJoinCOM"/>).
 /// </summary>
 public sealed record FleetOrder(
     CommandType Type,
@@ -29,4 +33,5 @@ public sealed record FleetOrder(
     Coordinate? DestinationPosition = null,
     ShipType? TransferShip = null,
     CargoType? TransferCargo = null,
-    int TransferAmount = 0);
+    int TransferAmount = 0,
+    bool PreserveOverflow = false);
