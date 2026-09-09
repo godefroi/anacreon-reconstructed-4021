@@ -28,6 +28,19 @@ codebase is in a test file.
   synchronous mode (one `CurrentEmpire` at a time, `NextEmpire`'s fixed cyclic order). `Game.AsyncTurns`
   round-trips through `.SAV` but nothing reads it — out of scope for now, but real multiplayer/hotseat
   parity needs it eventually.
+- **Pirate/Berserker/Guardian/Trader NPE empires have no turn handler, and the turn loop crashes
+  once one comes up.** `ScenarioLoader.RunCreateNPEmpire` only registers a `Game.TurnHandlers` entry
+  for `NpeEmpireType.Kingdom1`/`Kingdom2` — the other four personalities (`Pirate`/`Berserker`/
+  `Guardian`/`Trader`) get added to `Game.Empires` with their `NpeType` recorded but no
+  `ITurnHandler`, matching `TurnEngineTests`' own "ai has no entry in TurnHandlers" comment. That's
+  fine as far as it goes, but nothing downstream actually tolerates it: `Program.cs`'s `RunGame` loop
+  (`game.TurnHandlers[current]`) and `TurnEngine.BeginTurn` (same unguarded lookup) both assume every
+  empire in `Game.Empires` has an entry, so the TUI throws `KeyNotFoundException` and crashes the
+  instant `CurrentEmpire` cycles onto one of these empires' slot — not a corner case: `ARRONAX.SCN`
+  (`CreateNPEmpire 6` = Pirate, `CreateNPEmpire 7` = Berserker) hits this on the very first turn wrap.
+  `TurnEngineTests.MissingHandler_ThrowsKeyNotFoundException` currently encodes the crash as the
+  *expected* behavior, so a real fix needs to change that test's contract too, not just guard one call
+  site — and still leaves these four personalities with no actual AI behavior, only "doesn't crash."
 
 ## Human interactive turn handler / TUI
 
