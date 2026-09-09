@@ -172,12 +172,7 @@ internal sealed class TacticalBattleDisplayWindow : Window
         groupListView.SetScheme(new Scheme { Normal = GroupWindAttribute, Focus = GroupSelectedAttribute });
         // Keeps the map's highlighted-group marker tracking whichever row is highlighted, including
         // free arrow-key navigation -- a real improvement over the old forced one-shot-per-step reveal.
-        groupListView.ValueChanged += (_, _) => {
-            if (groupListView.Value is { } item) {
-                mapView.HighlightedGroupIndex = state.Groups.IndexOf(item.Group);
-                mapView.SetNeedsDraw();
-            }
-        };
+        groupListView.ValueChanged += (_, _) => UpdateHighlightFromSelection();
         // Wired once here, dispatches to whichever flow (HandleMove/HandleTarget) currently owns
         // groupListKeyHandler -- same precedent as ShowObjectPicker's own fleet-action letters on
         // listView.KeyDown (GameShell.cs), which fires before ListView's own internal Up/Down/
@@ -405,15 +400,27 @@ internal sealed class TacticalBattleDisplayWindow : Window
     }
 
     /// <summary>
-    /// No Pascal equivalent -- the mutable row behind <see cref="groupListView"/> for both
-    /// <see cref="HandleMove"/> and <see cref="HandleTarget"/> (a class, not a `record` like every
-    /// other `ListView` item type in this file: <see cref="Decision"/> genuinely changes in place as
-    /// the player answers, rather than the item being replaced). <see cref="Decision"/> always starts
-    /// at a concrete value (Move: "Stay"; Target: the group's current <c>Trg</c>) rather than
-    /// null/blank, so a row the player never touches is exactly as valid an answer as one they
-    /// explicitly confirmed.
+    /// No Pascal equivalent -- the row types behind <see cref="groupListView"/>, shared by
+    /// <see cref="HandleMove"/>'s per-group list, <see cref="HandleTarget"/>, and (Move only)
+    /// <see cref="ShellHeaderItem"/>'s section headings. A plain marker base rather than a shared
+    /// "has a Group" property: a header row has none, and forcing one nullable onto every row just to
+    /// accommodate headers pushed null-checks onto <see cref="TargetGroupItem"/>/
+    /// <see cref="MoveGroupItem"/> call sites that can never actually see one -- <see cref="IGroupRow"/>
+    /// below is the real shared shape those two have.
     /// </summary>
-    private sealed class GroupActionListItem(GroupRecord group, string baseLine)
+    private abstract class GroupActionListItem;
+
+    /// <summary>A <see cref="GroupActionListItem"/> row that corresponds to a real, still-live group, as opposed to a section heading.</summary>
+    private interface IGroupRow
+    {
+        GroupRecord Group { get; }
+    }
+
+    // GroupTarget (ATTCOMM.PAS:509-546)'s own per-row shape: <see cref="Decision"/> genuinely changes
+    // in place as the player answers, rather than the item being replaced, and always starts at a
+    // concrete value (the group's current Trg) rather than null/blank, so a row the player never
+    // touches is exactly as valid an answer as one they explicitly confirmed.
+    private sealed class TargetGroupItem(GroupRecord group, string baseLine) : GroupActionListItem, IGroupRow
     {
         public GroupRecord Group { get; } = group;
         public string Decision { get; set; } = "";
@@ -421,12 +428,102 @@ internal sealed class TacticalBattleDisplayWindow : Window
     }
 
     /// <summary>
+    /// A shell-position section heading in <see cref="HandleMove"/>'s own group list -- not itself
+    /// selectable (<see cref="ShowGroupActionList"/>/the list's own Up/Down handling both skip past
+    /// these), just a once-per-shell label so individual rows don't need to repeat "O:high orbit" on
+    /// every line (see <see cref="MoveGroupItem"/>'s own doc comment for why that repetition was the
+    /// actual bug).
+    /// </summary>
+    private sealed class ShellHeaderItem(ShellPosition shell) : GroupActionListItem
+    {
+        public override string ToString() => $"-- {PosName(shell)} --";
+    }
+
+    // groupListView's own real usable width (measured live via TuiDriver, not the 33-column interior
+    // commandBox's border-to-border width suggests -- ListView reserves a 1-column left indent and
+    // Dim.Fill(1)'s own 1-column right margin, neither available to row text) is 31. The widest a Move
+    // row's own leading label ever gets: a player's own attacking groups only ever come from
+    // Fleet.Ships/Cargo (Fighter..Transport, Legion, NinjaLegion -- GDM/def. satellite/ion cannon/LAM
+    // are world-side static defenses, never a mobile fleet's own group), and "hunter-killers"/
+    // "jumptransports" (14 chars) are the longest of those; "99:9999 " (2 number + ":" + 4 count + " ")
+    // is 8 more, for 22 total ("** MOVE ALL **", MoveAllItem's own label, fits well under that same
+    // budget too) -- exactly 31 minus the toggle's own fixed 9 columns (3 cells x 3 chars, no separator
+    // needed: every unselected cell already opens with its own space), so the widest real row fits with
+    // nothing to spare.
+    private const int MoveRowLabelWidth = 22;
+
+    /// <summary>
+    /// <see cref="HandleMove"/>'s own per-group row: ship type/count plus a fixed-width Retreat/Stay/
+    /// Advance toggle (<c>"[R] S  A"</c> etc.) instead of the old free-text <c>"-> Advance"</c>
+    /// suffix. That old suffix, appended to a line that already carried the group's own O:{shell} and
+    /// (Trg) text, routinely overflowed <see cref="commandBoxContent"/>'s real 35-column fixed width
+    /// (a Pascal-era constant, GroupWindow's own real footprint) -- a real reported bug ("choosing
+    /// Advance for every group, then Confirm, does nothing") that turned out to be the confirm working
+    /// correctly with zero visible confirmation that it had, since the one piece of text that would've
+    /// shown it never fit on screen. This format can't overflow: the toggle's three cells are always
+    /// three characters each regardless of which one's selected (no extra separator between them --
+    /// each cell's own space padding around an unselected letter already reads as a gap), and O:
+    /// {shell} is hoisted out to a <see cref="ShellHeaderItem"/> shown once per shell instead of once
+    /// per group. A letter not currently legal for this group (<see cref="CanAdvance"/>/
+    /// <see cref="CanRetreat"/>, gating the same as <see cref="InteractiveCombat.CanAdvance"/>/
+    /// <see cref="InteractiveCombat.CanRetreat"/>) renders as "&#183;" instead of its letter, so
+    /// illegality is visible up front rather than a keypress silently doing nothing.
+    /// </summary>
+    private sealed class MoveGroupItem(GroupRecord group, string shipLine, bool canAdvance, bool canRetreat) : GroupActionListItem, IGroupRow
+    {
+        public GroupRecord Group { get; } = group;
+        public bool CanAdvance { get; } = canAdvance;
+        public bool CanRetreat { get; } = canRetreat;
+
+        public override string ToString()
+        {
+            var r = CanRetreat ? (Group.Sta == GroupStatus.Retreating ? "[R]" : " R ") : " · ";
+            var s = Group.Sta == GroupStatus.Ready ? "[S]" : " S ";
+            var a = CanAdvance ? (Group.Sta == GroupStatus.Advancing ? "[A]" : " A ") : " · ";
+            return $"{shipLine.PadRight(MoveRowLabelWidth)}{r}{s}{a}";
+        }
+    }
+
+    /// <summary>
+    /// <see cref="HandleMove"/>'s own bulk-action row, always <see cref="ShowMoveList"/>'s first item:
+    /// same fixed-width Retreat/Stay/Advance toggle as <see cref="MoveGroupItem"/>, labeled "** MOVE
+    /// ALL **" instead of a ship type, and legal (per cell) whenever any eligible group is. Choosing
+    /// Retreat/Advance here applies it to every group that can legally do it (skipping any that can't,
+    /// same as the rest can't-do-nothing-silently convention elsewhere in this class), immediately --
+    /// same "commit as you go" behavior <see cref="MoveGroupItem"/>'s own rows already have, not
+    /// deferred to Enter. Port-only addition, no Pascal equivalent: real GroupMove has no bulk action at
+    /// all. Navigating (Up/Down) across the boundary between this row and the per-group rows below it
+    /// resets every choice made on whichever side is being left, per the user's own explicit request --
+    /// this row and the per-group list are two alternate ways to answer the same prompt, not layers that
+    /// combine, so leaving one behind clears it rather than leaving a stale, possibly-contradictory
+    /// choice in place.
+    /// </summary>
+    private sealed class MoveAllItem(bool canAdvance, bool canRetreat) : GroupActionListItem
+    {
+        public bool CanAdvance { get; } = canAdvance;
+        public bool CanRetreat { get; } = canRetreat;
+        public GroupStatus Choice { get; set; } = GroupStatus.Ready;
+
+        public override string ToString()
+        {
+            var r = CanRetreat ? (Choice == GroupStatus.Retreating ? "[R]" : " R ") : " · ";
+            var s = Choice == GroupStatus.Ready ? "[S]" : " S ";
+            var a = CanAdvance ? (Choice == GroupStatus.Advancing ? "[A]" : " A ") : " · ";
+            return $"{"** MOVE ALL **".PadRight(MoveRowLabelWidth)}{r}{s}{a}";
+        }
+    }
+
+    /// <summary>
     /// Shared setup for <see cref="HandleMove"/>/<see cref="HandleTarget"/>: swaps
     /// <see cref="commandBoxContent"/> out for <see cref="groupListView"/> (a real scrollable,
-    /// freely-navigable list -- see this class's own doc comment for why that replaces GroupMove/
-    /// GroupTarget's literal accumulate-into-a-Label behavior) and focuses it. Each flow still wires
-    /// its own <see cref="groupListKeyHandler"/>/<see cref="activePrompt"/> before calling this, since
-    /// Move and Target genuinely differ on legal keys, per-row actions, and what finishing means.
+    /// freely-navigable list -- see <see cref="GroupActionListItem"/>'s own doc comment for why that
+    /// replaces GroupMove/GroupTarget's literal accumulate-into-a-Label behavior) and focuses it. Each
+    /// flow still wires its own <see cref="groupListKeyHandler"/>/<see cref="activePrompt"/> before
+    /// calling this, since Move and Target genuinely differ on legal keys, per-row actions, and what
+    /// finishing means. Selects the first selectable (non-header) row, in case <paramref name="items"/>
+    /// opens with a <see cref="ShellHeaderItem"/> -- not the case today (<see cref="MoveAllItem"/>
+    /// always leads <see cref="ShowMoveList"/>'s own list, and <see cref="HandleTarget"/> has no
+    /// headers at all) but cheap insurance against a future list that does.
     /// </summary>
     private void ShowGroupActionList(IReadOnlyList<GroupActionListItem> items, string hint)
     {
@@ -435,44 +532,139 @@ internal sealed class TacticalBattleDisplayWindow : Window
         groupListHintLabel.Text = hint;
         groupListView.Visible = true;
         groupListView.SetSource(new ObservableCollection<GroupActionListItem>(items));
-        groupListView.Index = 0;
+
+        var firstRow = 0;
+        while (firstRow < items.Count && items[firstRow] is ShellHeaderItem) {
+            firstRow++;
+        }
+        groupListView.Index = firstRow;
         groupListView.KeystrokeNavigator = null; // otherwise swallows S/A/R and every TargetChoices letter before groupListKeyHandler ever sees them
         groupListView.SetFocus();
-        mapView.HighlightedGroupIndex = state.Groups.IndexOf(items[0].Group);
+        UpdateHighlightFromSelection();
+    }
+
+    private void UpdateHighlightFromSelection()
+    {
+        mapView.HighlightedGroupIndex = groupListView.Value is IGroupRow row ? state.Groups.IndexOf(row.Group) : null;
         mapView.SetNeedsDraw();
     }
 
     // GroupMove (ATTCOMM.PAS:352-461). Real Pascal accumulates each group's own status+prompt line
-    // into GroupWindow, strictly sequential with no way back -- replaced here with a scrollable,
-    // freely-navigable ListView (see GroupActionListItem's own doc comment for why): every eligible
-    // group's row is visible/reachable regardless of count, and the player can revisit and change an
-    // earlier answer before finishing. A group not currently eligible for either Advance or Retreat is
-    // skipped entirely, matching source. Esc cancels every move queued this pass and returns straight
-    // to the menu -- this port's own simplification of GroupMove's real "Esc mid-loop, then still
-    // maybe ask Maneuver?" edge case (ambiguous even against source) to "Esc always cancels
-    // immediately," net-equivalent in practice since real Pascal's own CancelAdvance fires on every
-    // path that isn't an explicit Y to Maneuver anyway.
+    // into GroupWindow, strictly sequential with no way back -- replaced here with ShowMoveList's own
+    // scrollable list. A group not currently eligible for either Advance or Retreat is skipped
+    // entirely, matching source.
     private void HandleMove()
     {
         if (state.IsOver) {
             return;
         }
 
-        var items = new List<GroupActionListItem>();
+        var candidates = new List<GroupRecord>();
         for (var i = 0; i < state.Groups.Count; i++) {
             var g = state.Groups[i];
-            if (g.Sta == GroupStatus.Destroyed || (!state.CanAdvance(g) && !state.CanRetreat(g))) {
-                continue;
+            if (g.Sta != GroupStatus.Destroyed && (state.CanAdvance(g) || state.CanRetreat(g))) {
+                candidates.Add(g);
             }
-            items.Add(new GroupActionListItem(g, GroupLine(g, i + 1)) { Decision = "Stay" });
         }
 
-        if (items.Count == 0) {
+        if (candidates.Count == 0) {
             ShowCommandMenu();
             return;
         }
 
-        var anyQueued = false;
+        ShowMoveList(candidates);
+    }
+
+    // One row per eligible group, grouped under a ShellHeaderItem per shell (see MoveGroupItem's own
+    // doc comment for why the O:{shell} text moved there), led by a MoveAllItem bulk-action row (see
+    // its own doc comment for the crossing-resets-the-other-side behavior). Left/Right cycles the
+    // selected row's own Retreat/Stay/Advance choice through whichever of those are actually legal for
+    // it; S/A/R letters still work too, matching source's own single-keypress-per-group input. Up/Down
+    // moves between rows, stepping over header rows. Enter confirms whatever's been chosen so far; Esc
+    // cancels everything queued this pass and returns to the menu, same simplification of GroupMove's
+    // real Esc-mid-loop edge case this method always used (ambiguous even against source;
+    // net-equivalent in practice since real Pascal's own CancelAdvance fires on every path that isn't
+    // an explicit Y to Maneuver anyway).
+    private void ShowMoveList(List<GroupRecord> candidates)
+    {
+        var allItem = new MoveAllItem(candidates.Any(state.CanAdvance), candidates.Any(state.CanRetreat));
+        var items = new List<GroupActionListItem> { allItem };
+        foreach (var shell in _allShellPositions) {
+            var atShell = candidates.Where(g => g.Pos == shell).ToList();
+            if (atShell.Count == 0) {
+                continue;
+            }
+            items.Add(new ShellHeaderItem(shell));
+            foreach (var g in atShell) {
+                var number = state.Groups.IndexOf(g) + 1;
+                items.Add(new MoveGroupItem(g, $"{number,2}:{g.Num,4} {TypeName(g.Typ)}", state.CanAdvance(g), state.CanRetreat(g)));
+            }
+        }
+
+        void SetChoice(GroupRecord g, GroupStatus want)
+        {
+            if (want == GroupStatus.Advancing) {
+                state.QueueAdvance(g);
+            } else if (want == GroupStatus.Retreating) {
+                state.QueueRetreat(g);
+            } else {
+                g.Sta = GroupStatus.Ready;
+            }
+            groupListView.SetNeedsDraw();
+        }
+
+        // Applies want to every candidate that can legally do it (Ready is always legal), skipping the
+        // rest -- same "best effort, matching source's own already-established idiom rather than block
+        // the whole action" precedent as everywhere else illegality is silently allowed to leave a row
+        // unchanged. allItem.Choice always reflects the player's own request, even for a group that
+        // couldn't actually receive it.
+        void ApplyAllChoice(GroupStatus want)
+        {
+            allItem.Choice = want;
+            foreach (var g in candidates) {
+                var legal = want switch {
+                    GroupStatus.Advancing => state.CanAdvance(g),
+                    GroupStatus.Retreating => state.CanRetreat(g),
+                    _ => true,
+                };
+                if (legal) {
+                    SetChoice(g, want);
+                }
+            }
+        }
+
+        // See MoveAllItem's own doc comment: crossing the boundary between it and the per-group rows,
+        // in either direction, clears whatever was chosen on the side being left.
+        void ResetAllAndGroups()
+        {
+            allItem.Choice = GroupStatus.Ready;
+            foreach (var g in candidates) {
+                g.Sta = GroupStatus.Ready;
+            }
+            groupListView.SetNeedsDraw();
+        }
+
+        // Shared Retreat/Stay/Advance cycling rule for both MoveAllItem and MoveGroupItem rows (only
+        // their own CanAdvance/CanRetreat/current-status/apply differ) -- returns whether a legal
+        // neighbor existed in the requested direction.
+        bool Cycle(bool canAdvance, bool canRetreat, GroupStatus current, int direction, Action<GroupStatus> apply)
+        {
+            var states = new List<GroupStatus>();
+            if (canRetreat) {
+                states.Add(GroupStatus.Retreating);
+            }
+            states.Add(GroupStatus.Ready);
+            if (canAdvance) {
+                states.Add(GroupStatus.Advancing);
+            }
+            var idx = states.IndexOf(current) + direction;
+            if (idx < 0 || idx >= states.Count) {
+                return false;
+            }
+            apply(states[idx]);
+            return true;
+        }
+
         groupListKeyHandler = key => {
             var code = key.NoAlt.NoCtrl.NoShift.KeyCode;
             // Enter/Esc handled right here, not via activePrompt: groupListView holds focus while
@@ -490,34 +682,63 @@ internal sealed class TacticalBattleDisplayWindow : Window
             }
             if (code == KeyCode.Enter) {
                 key.Handled = true;
-                FinishMove(anyQueued);
+                FinishMove(candidates.Any(g => g.Sta != GroupStatus.Ready));
+                return;
+            }
+            if (code is KeyCode.CursorUp or KeyCode.CursorDown) {
+                key.Handled = true;
+                var step = code == KeyCode.CursorDown ? 1 : -1;
+                var current = groupListView.Index ?? 0;
+                var next = current + step;
+                while (next >= 0 && next < items.Count && items[next] is ShellHeaderItem) {
+                    next += step;
+                }
+                if (next < 0 || next >= items.Count) {
+                    return;
+                }
+                if (items[current] is MoveAllItem != items[next] is MoveAllItem) {
+                    ResetAllAndGroups();
+                }
+                groupListView.Index = next;
                 return;
             }
 
-            if (groupListView.Value is not { } item) {
+            if (code is KeyCode.CursorLeft or KeyCode.CursorRight) {
+                var direction = code == KeyCode.CursorRight ? 1 : -1;
+                key.Handled = groupListView.Value switch {
+                    MoveAllItem all => Cycle(all.CanAdvance, all.CanRetreat, all.Choice, direction, ApplyAllChoice),
+                    MoveGroupItem item => Cycle(item.CanAdvance, item.CanRetreat, item.Group.Sta, direction, want => SetChoice(item.Group, want)),
+                    _ => false,
+                };
                 return;
             }
 
-            var g = item.Group;
             var ch = char.ToUpperInvariant((char)key.AsRune.Value);
-            if (ch != 'S' && !(ch == 'A' && state.CanAdvance(g)) && !(ch == 'R' && state.CanRetreat(g))) {
-                return;
-            }
-            key.Handled = true;
-
-            item.Decision = "Stay";
-            if (ch == 'A') {
-                state.QueueAdvance(g);
-                anyQueued = true;
-                item.Decision = "Advance";
-            } else if (ch == 'R') {
-                state.QueueRetreat(g);
-                anyQueued = true;
-                item.Decision = "Retreat";
-            }
-            groupListView.SetNeedsDraw();
-            if (groupListView.Index < items.Count - 1) {
-                groupListView.Index++;
+            switch (groupListView.Value) {
+                case MoveAllItem all:
+                    if (ch == 'S') {
+                        key.Handled = true;
+                        ApplyAllChoice(GroupStatus.Ready);
+                    } else if (ch == 'A' && all.CanAdvance) {
+                        key.Handled = true;
+                        ApplyAllChoice(GroupStatus.Advancing);
+                    } else if (ch == 'R' && all.CanRetreat) {
+                        key.Handled = true;
+                        ApplyAllChoice(GroupStatus.Retreating);
+                    }
+                    break;
+                case MoveGroupItem item:
+                    if (ch == 'S') {
+                        key.Handled = true;
+                        SetChoice(item.Group, GroupStatus.Ready);
+                    } else if (ch == 'A' && item.CanAdvance) {
+                        key.Handled = true;
+                        SetChoice(item.Group, GroupStatus.Advancing);
+                    } else if (ch == 'R' && item.CanRetreat) {
+                        key.Handled = true;
+                        SetChoice(item.Group, GroupStatus.Retreating);
+                    }
+                    break;
             }
         };
 
@@ -526,7 +747,7 @@ internal sealed class TacticalBattleDisplayWindow : Window
         // navigation) while this flow is open -- ShowCommandMenu resets this back to null on exit.
         activePrompt = _ => { };
 
-        ShowGroupActionList(items, "S:stay  A:advance  R:retreat  Enter:confirm all  Esc:cancel all");
+        ShowGroupActionList(items, "<-/-> choose  up/down group  Enter:confirm  Esc:cancel");
     }
 
     private void FinishMove(bool anyQueued)
@@ -568,7 +789,7 @@ internal sealed class TacticalBattleDisplayWindow : Window
             if (g.Sta == GroupStatus.Destroyed) {
                 continue;
             }
-            items.Add(new GroupActionListItem(g, GroupLine(g, i + 1)) { Decision = g.Trg is { } t ? TypeName(t) : "-" });
+            items.Add(new TargetGroupItem(g, GroupLine(g, i + 1)) { Decision = g.Trg is { } t ? TypeName(t) : "-" });
         }
 
         if (items.Count == 0) {
@@ -587,7 +808,7 @@ internal sealed class TacticalBattleDisplayWindow : Window
                 return;
             }
 
-            if (groupListView.Value is not { } item) {
+            if (groupListView.Value is not TargetGroupItem item) {
                 return;
             }
 
