@@ -87,7 +87,7 @@ internal sealed class FleetGroupConfigurationWindow : Window
         SetScheme(new Scheme(DispWindAttribute));
         Border.View?.SetScheme(new Scheme(BorderAttribute));
 
-        AddAt(0, 0, "  fgt   hk  jmp  jtn  pen  str  trn            men ninj");
+        AddAt(0, 0, "  fgt   hk  jmp  jtn  pen  str  trn  men ninj");
         for (var i = 0; i < poolCells.Length; i++) {
             poolCells[i] = AddAt(i * 5, 1, string.Empty);
         }
