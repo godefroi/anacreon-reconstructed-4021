@@ -1,0 +1,37 @@
+# Smoke-test script for Reconstructed4021.TuiDriver, run against
+# assets/saves/Garrisoned Outpost.json:
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Garrisoned Outpost.json" --script assets/tui-driver-scripts/garrisoned-outpost-battle-esc.txt
+#
+# Regression script for issue #5: reaches the Tactical Battle Display the same way
+# garrisoned-outpost-retreat.txt does, then presses Esc at the top-level menu instead of r.
+# Before the fix, an unhandled Esc fell through to Terminal.Gui's default quit behavior and
+# unwound the whole app.Run(gameShell) call, dumping the player back at the turn-start
+# greeting with the battle left dangling (no RestoreCombatant/ResolveAttack ever ran).
+#
+# Checks three things: Esc opens the same "Are you sure (y/N)" Retreat confirmation <R> uses;
+# n cancels back to the command menu without ending the battle; Esc then y retreats through the
+# real code path (InteractiveCombatState.Retreat -> BattleEnded -> ApplyAttackOutcome), producing
+# the normal "attacking force has retreated" dialog instead of an unresolved battle.
+Right Right Right Right Down
+m
+a
+SLEEP 300
+y
+SLEEP 300
+DUMP
+Esc
+SLEEP 300
+DUMP
+n
+SLEEP 300
+DUMP
+Esc
+SLEEP 300
+y
+SLEEP 300
+DUMP
+Enter
+SLEEP 300
+DUMP
