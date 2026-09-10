@@ -5,6 +5,7 @@ using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
+using Reconstructed4021.LegacyNpe;
 using Reconstructed4021.Tui;
 using Game = Reconstructed4021.Core.Game;
 
@@ -15,6 +16,7 @@ using Game = Reconstructed4021.Core.Game;
 // identical on every single launch, which is what TuiDriver's own fixed Random(4021) is *for*
 // (deterministic test scripts), not what the real game should do.
 var random = new Random();
+var npeProvider = new LegacyNpeProvider();
 
 var tuiSettings = TuiSettings.Load(FindRepoRoot(AppContext.BaseDirectory));
 
@@ -98,7 +100,7 @@ try {
     }
 
     if (loadPath is not null) {
-        var loadedGame = GameJson.Deserialize(File.ReadAllText(loadPath), random);
+        var loadedGame = GameJson.Deserialize(File.ReadAllText(loadPath), random, npeProvider);
         if (RunGame(loadedGame) == GameShell.ExitChoice.ExitToOs) {
             return 0;
         }
@@ -135,7 +137,7 @@ try {
                 continue; // Esc, or no saves found -- back to the main menu
             }
 
-            var loadedGame = GameJson.Deserialize(File.ReadAllText(saveGamePicker.SelectedPath), random);
+            var loadedGame = GameJson.Deserialize(File.ReadAllText(saveGamePicker.SelectedPath), random, npeProvider);
             if (RunGame(loadedGame) == GameShell.ExitChoice.MainMenu) {
                 continue;
             }
@@ -195,7 +197,7 @@ try {
         }
 
         var setup = new GalaxySetup(random);
-        var loader = new ScenarioLoader(setup, random);
+        var loader = new ScenarioLoader(setup, random, npeProvider);
         var game = loader.Load(scenarioText, players);
 
         if (RunGame(game) == GameShell.ExitChoice.MainMenu) {

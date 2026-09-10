@@ -30,7 +30,7 @@ namespace Reconstructed4021.Core.NewGame;
 /// no non-fatal-error display path, so "loading is broken" should surface loudly, not silently, same
 /// precedent as GalaxySetup.GetRandomXY's own real "no room left" failure.
 /// </summary>
-public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
+public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random, INpeHandlerProvider? npeProvider = null)
 {
     public sealed record PlayerInfo(string Name, string? Password, bool IsEmpress);
 
@@ -750,13 +750,15 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
     }
 
     /// <summary>
-    /// NEWGAME.PAS:1219-1259 (CreateNPEmpire). Kingdom1/Kingdom2 empires get a KingdomTurnHandler
-    /// registered in Game.TurnHandlers — its constructor is real Pascal's own InitializeNPE call
-    /// (NEWGAME.PAS:1250, right after CreateEmpire), seeding persona/diplomacy state from this same
-    /// <c>random</c> instance so those draws land in the exact position they do in the real
-    /// scenario-load RNG stream. Other NPE types (Pirate/Berserker/Guardian/Trader) get NpeType
-    /// recorded but no handler: this port doesn't model those personalities, matching the existing
-    /// "ai has no entry in TurnHandlers" behavior (see <c>TurnEngineTests</c>).
+    /// NEWGAME.PAS:1219-1259 (CreateNPEmpire). An empire whose <c>npeType</c> the caller's own
+    /// <see cref="INpeHandlerProvider"/> recognizes gets a real <see cref="ITurnHandler"/> registered
+    /// in Game.TurnHandlers — the provider's own <see cref="INpeHandlerProvider.CreateNew"/> is real
+    /// Pascal's own InitializeNPE call (NEWGAME.PAS:1250, right after CreateEmpire), seeding
+    /// persona/diplomacy state from this same <c>random</c> instance so those draws land in the exact
+    /// position they do in the real scenario-load RNG stream. Every other NPE type (no provider
+    /// supplied at all, or one that doesn't recognize this <c>npeType</c>) gets <c>NpeType</c> recorded
+    /// but no handler: this port doesn't model every personality yet, matching the existing "ai has no
+    /// entry in TurnHandlers" behavior (see <c>TurnEngineTests</c>).
     /// </summary>
     private void RunCreateNPEmpire(ScenarioTokenizer tokenizer, Game game)
     {
@@ -778,8 +780,8 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random)
         _empireBySlot[e] = empire;
         game.Empires.Add(empire);
 
-        if (npeType is NpeEmpireType.Kingdom1 or NpeEmpireType.Kingdom2) {
-            game.TurnHandlers[empire] = new KingdomTurnHandler(empire, npeType, random);
+        if (npeProvider?.Handles(npeType) == true) {
+            game.TurnHandlers[empire] = npeProvider.CreateNew(empire, npeType, random);
         }
     }
 

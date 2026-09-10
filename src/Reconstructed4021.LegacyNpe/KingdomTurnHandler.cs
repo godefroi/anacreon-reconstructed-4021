@@ -1,10 +1,12 @@
+using Reconstructed4021.Core;
 using Reconstructed4021.Core.Combat;
 using Reconstructed4021.Core.Entities;
-using Reconstructed4021.Core.Npe;
+using Reconstructed4021.Core.SaveFormat;
+using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
 using static Reconstructed4021.Core.PascalMath;
 
-namespace Reconstructed4021.Core.Turns;
+namespace Reconstructed4021.LegacyNpe;
 
 /// <summary>
 /// AI for Kingdom1 (passive) and Kingdom2 (aggressive) NPE empires — NPE02.PAS's

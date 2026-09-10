@@ -3,6 +3,7 @@ using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
+using Reconstructed4021.LegacyNpe;
 
 namespace Reconstructed4021.Tests;
 
@@ -143,7 +144,7 @@ public class ScenarioLoaderTests
     [Test]
     public async Task Load_CreateNPEmpireWithRndNameAssignsANameFromThePool()
     {
-        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0));
+        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0), new LegacyNpeProvider());
         // E=4 ET=3 Name=RndName RevFactor=0 Tl=1 NoOfTechs=0.
         var text = Header(20) + "CREATENPEMPIRE 4 3 RndName 0 1 0\r\nENDSCENARIO";
 
@@ -159,7 +160,7 @@ public class ScenarioLoaderTests
     [Test]
     public async Task Load_CreateNPEmpireWithExplicitNameUsesItVerbatim()
     {
-        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0));
+        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0), new LegacyNpeProvider());
         var text = Header(20) + "CREATENPEMPIRE 4 2 \"Kellandra\" 0 1 0\r\nENDSCENARIO";
 
         var game = loader.Load(text, _onePlayer);

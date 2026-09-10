@@ -2,7 +2,7 @@ using System.Collections.Frozen;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Types;
 
-namespace Reconstructed4021.Core.Npe;
+namespace Reconstructed4021.LegacyNpe;
 
 /// <summary>
 /// The pure balance data <see cref="NpeToolkit"/>'s targeting/designation/defense-roll logic reads,

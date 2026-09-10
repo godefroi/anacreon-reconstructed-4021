@@ -5,6 +5,7 @@ using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
+using Reconstructed4021.LegacyNpe;
 
 namespace Reconstructed4021.Tests;
 
@@ -70,7 +71,8 @@ public class StuckGroupsFixtureTests
     public async Task StuckGroups_RoundTrips()
     {
         var game = BuildGame();
-        var roundTripped = GameJson.Deserialize(GameJson.Serialize(game), new Random(0));
+        var npeProvider = new LegacyNpeProvider();
+        var roundTripped = GameJson.Deserialize(GameJson.Serialize(game, npeProvider), new Random(0), npeProvider);
 
         var diffs = DeepGraphComparer.FindDifferences(game, roundTripped);
 
@@ -81,7 +83,7 @@ public class StuckGroupsFixtureTests
     [Test, Explicit]
     public async Task RegenerateFixture()
     {
-        File.WriteAllText(FixturePath, GameJson.Serialize(BuildGame()));
+        File.WriteAllText(FixturePath, GameJson.Serialize(BuildGame(), new LegacyNpeProvider()));
         await Task.CompletedTask;
     }
 }

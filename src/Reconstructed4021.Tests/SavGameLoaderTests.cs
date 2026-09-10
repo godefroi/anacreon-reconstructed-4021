@@ -5,6 +5,7 @@ using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
+using Reconstructed4021.LegacyNpe;
 
 namespace Reconstructed4021.Tests;
 
@@ -22,7 +23,7 @@ public class SavGameLoaderTests
     [Test]
     public async Task LoadGame_Intro1_ReadsEnvironment()
     {
-        var game = new SavGameLoader().LoadGame(LoadIntro1());
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadIntro1());
 
         await Assert.That(game.Year).IsEqualTo(4021);
         await Assert.That(game.ScenarioFilename).IsEqualTo("INTRO.SCN");
@@ -33,7 +34,7 @@ public class SavGameLoaderTests
     {
         // Environment.Player=0 -- resolves to empire slot 0 (Empire1), the same object identity
         // Empire Data populates with the real "Player_empire" name.
-        var game = new SavGameLoader().LoadGame(LoadIntro1());
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadIntro1());
 
         await Assert.That(game.CurrentEmpire).IsNotNull();
         await Assert.That(game.CurrentEmpire!.IsIndependent).IsFalse();
@@ -42,7 +43,7 @@ public class SavGameLoaderTests
     [Test]
     public async Task LoadGame_Intro1_GalaxyIsSizedFromSector()
     {
-        var game = new SavGameLoader().LoadGame(LoadIntro1());
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadIntro1());
 
         await Assert.That(game.Galaxy.Size).IsEqualTo(21);
     }
@@ -50,7 +51,7 @@ public class SavGameLoaderTests
     [Test]
     public async Task LoadGame_Intro1_ReconstructsNebulaeFromSpecialLowNibble()
     {
-        var game = new SavGameLoader().LoadGame(LoadIntro1());
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadIntro1());
 
         // Confirmed via savtool.py: 90 real cells carry Special=129 (nebula type 1, no mine);
         // (4,4)/(4,5)/(4,6) are three of them.
@@ -70,7 +71,7 @@ public class SavGameLoaderTests
     [Test]
     public async Task LoadGame_Intro1_HasNoMinefields()
     {
-        var game = new SavGameLoader().LoadGame(LoadIntro1());
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadIntro1());
 
         // A fresh scenario start has no player-placed mines anywhere -- every sector's high
         // nibble is the Ord(Indep)=8 "no mine" sentinel.
@@ -86,7 +87,7 @@ public class SavGameLoaderTests
     [Test]
     public async Task LoadGame_Intro1_ReadsAllFiftyPlanetsDensely()
     {
-        var game = new SavGameLoader().LoadGame(LoadIntro1());
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadIntro1());
 
         await Assert.That(game.Galaxy.Planets.Count).IsEqualTo(50);
     }
@@ -98,7 +99,7 @@ public class SavGameLoaderTests
         // 0-based here since this port's Galaxy.Fleets is a plain list, not keyed by disk index):
         // owner ordinal 4 (Empire5), moving from (2,3) to (5,4), ships [604,0,260,162,21,0,32]
         // (Fighter..Transport order), cargo [318,0,0,0,0,0,0] (Legion only), fuelHigh=0/fuel=4079.
-        var game = new SavGameLoader().LoadGame(LoadSave("INTRO_2.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("INTRO_2.SAV"));
 
         await Assert.That(game.Galaxy.Fleets.Count).IsEqualTo(9);
 
@@ -118,7 +119,7 @@ public class SavGameLoaderTests
     {
         // Fleet 234: xy==dest==(19,20), status=0 (Ready) -- "arrived," not "moving to its own
         // square." This port's own FleetMovementHandler represents that as Destination=null.
-        var game = new SavGameLoader().LoadGame(LoadSave("INTRO_2.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("INTRO_2.SAV"));
 
         var fleet = game.Galaxy.Fleets.Single(f => f.Location == new Coordinate(19, 20) && f.Fuel == 383.0);
         await Assert.That(fleet.Destination).IsNull();
@@ -140,7 +141,7 @@ public class SavGameLoaderTests
         // mid-queue state: the fleet is already travelling toward the first DestCOM's target (its own
         // "dest" field is (19,20), matching Orders[0]) and will resume at Orders[1] (the WaitCOM) once
         // it arrives. Confirms this is genuinely live gameplay state, not dead/legacy bytes.
-        var game = new SavGameLoader().LoadGame(LoadSave("FLEET_ORDERS.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("FLEET_ORDERS.SAV"));
 
         await Assert.That(game.Galaxy.Fleets.Count).IsEqualTo(13);
 
@@ -189,8 +190,8 @@ public class SavGameLoaderTests
         game.Empires.Add(empire);
         game.CurrentEmpire = empire;
 
-        var bytes = SavGameWriter.WriteGame(game);
-        var loaded = new SavGameLoader().LoadGame(bytes);
+        var bytes = SavGameWriter.WriteGame(game, new LegacyNpeProvider());
+        var loaded = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(bytes);
 
         var loadedFleet = loaded.Galaxy.Fleets.Single();
         await Assert.That(loadedFleet.Orders).Count().IsEqualTo(1);
@@ -204,7 +205,7 @@ public class SavGameLoaderTests
     {
         // Ground truth: 10 active starbases. One at (33,36), owner ordinal 4 (Empire5), STyp=22
         // (IndustrialComplex, 22-20), Tech=9 (PreGate), Eff=75, dest==xy -- not moving.
-        var game = new SavGameLoader().LoadGame(LoadSave("GAUNTLET_1.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("GAUNTLET_1.SAV"));
 
         await Assert.That(game.Galaxy.Starbases.Count).IsEqualTo(10);
 
@@ -221,7 +222,7 @@ public class SavGameLoaderTests
     {
         // Ground truth: one completed stargate at (8,18), GTyp=24 (Gate), Dest=Limbo (0,0) -- a
         // lone gate genuinely has no link yet, unlike Fleet/Starbase's different Dest convention.
-        var game = new SavGameLoader().LoadGame(LoadSave("STARGATE_DONE.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("STARGATE_DONE.SAV"));
 
         var stargate = game.Galaxy.Stargates.Single();
         await Assert.That(stargate.Location).IsEqualTo(new Coordinate(8, 18));
@@ -234,7 +235,7 @@ public class SavGameLoaderTests
     {
         // Ground truth: one construction site at (30,38), CTyp=23 (Outpost, 23-19), owner ordinal
         // 0 (Empire1), TimeToCompletion=2.
-        var game = new SavGameLoader().LoadGame(LoadSave("Confront_2.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("Confront_2.SAV"));
 
         var site = game.Galaxy.ConstructionSites.Single();
         await Assert.That(site.Location).IsEqualTo(new Coordinate(30, 38));
@@ -248,7 +249,7 @@ public class SavGameLoaderTests
         // Ground truth: 5 InUse slots (Player_empire is the only player), capitals = planet
         // indices 1-5 respectively, TechLevel=7 (Bio), founding=4021, no CentralEMD modifier.
         // 3 trailing inactive slots correctly excluded from Game.Empires.
-        var game = new SavGameLoader().LoadGame(LoadIntro1());
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadIntro1());
 
         await Assert.That(game.Empires.Count).IsEqualTo(5);
 
@@ -267,7 +268,7 @@ public class SavGameLoaderTests
     [Test]
     public async Task LoadGame_Imperium1_AllEightSlotsActive()
     {
-        var game = new SavGameLoader().LoadGame(LoadSave("IMPERIUM_1.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("IMPERIUM_1.SAV"));
 
         await Assert.That(game.Empires.Count).IsEqualTo(8);
     }
@@ -278,7 +279,7 @@ public class SavGameLoaderTests
         // Ground truth (slot 0's raw TechnologySet ordinals): [3,4,5,7,8,11,12,15,16,17,18] ->
         // Defenses={Gdm,IonCannon}, Ships={Fighter,Jumpship,Jumptransport,Transport},
         // Resources={Legion,Chemicals,Metals,Supplies,Trillum}, Constructions={} (none unlocked).
-        var game = new SavGameLoader().LoadGame(LoadSave("IMPERIUM_1.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("IMPERIUM_1.SAV"));
 
         var empire = game.Empires.Single(e => e.Name == "Imperium_pl_1");
         var tech = empire.Technology;
@@ -297,7 +298,7 @@ public class SavGameLoaderTests
         // Loc1.ID referencing Planet index 1, parm1=6 -- ordinal 6 is ShipType.HunterKiller
         // (Ship category). Slot 2 has headline=46 (MessageReceived, no real AddNews call site
         // anywhere in this port) with an empty Loc1 -- falls back to Position=(0,0), no Subject.
-        var game = new SavGameLoader().LoadGame(LoadSave("FLEET_ORDERS.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("FLEET_ORDERS.SAV"));
         var allNews = game.Empires.SelectMany(e => e.News).ToList();
 
         var techLevelNews = allNews.Single(n => n.Headline == NewsType.TechLevelIncreased && n.Parm1 == 7);
@@ -320,7 +321,7 @@ public class SavGameLoaderTests
         // Ground truth (savtool.py): one real message, sender ordinal 0 ("Cerberon"), recipient
         // set {2} ("Hasarem"), Read/Intercepted both false, one line "yo, this is a message".
         // All 8 empire slots are InUse in this file, so Game.Empires lists them in slot order.
-        var game = new SavGameLoader().LoadGame(LoadSave("FLEET_ORDERS.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("FLEET_ORDERS.SAV"));
 
         var message = game.Messages.Single();
         await Assert.That(message.Sender.Name).IsEqualTo("Cerberon");
@@ -349,8 +350,8 @@ public class SavGameLoaderTests
         // plain stored field, not as evidence Read is independent of that per-recipient tracking.
         game.Messages.Add(new Message(sender, new HashSet<Empire> { recipientA, recipientB }, Read: true, Intercepted: false, ["line one", "line two"]));
 
-        var bytes = SavGameWriter.WriteGame(game);
-        var loaded = new SavGameLoader().LoadGame(bytes);
+        var bytes = SavGameWriter.WriteGame(game, new LegacyNpeProvider());
+        var loaded = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(bytes);
 
         var message = loaded.Messages.Single();
         await Assert.That(message.Sender.Name).IsEqualTo("Sender");
@@ -376,8 +377,8 @@ public class SavGameLoaderTests
         };
         game.Empires.Add(empire);
 
-        var bytes = SavGameWriter.WriteGame(game);
-        var loaded = new SavGameLoader().LoadGame(bytes);
+        var bytes = SavGameWriter.WriteGame(game, new LegacyNpeProvider());
+        var loaded = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(bytes);
 
         await Assert.That(loaded.TimePerTurn).IsEqualTo(120);
         await Assert.That(loaded.AutoSave).IsFalse();
@@ -406,8 +407,8 @@ public class SavGameLoaderTests
 
         game.Messages.Add(new Message(eliminatedSender, new HashSet<Empire> { recipient }, Read: false, Intercepted: false, ["farewell"]));
 
-        var bytes = SavGameWriter.WriteGame(game);
-        var loaded = new SavGameLoader().LoadGame(bytes);
+        var bytes = SavGameWriter.WriteGame(game, new LegacyNpeProvider());
+        var loaded = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(bytes);
 
         // Eliminated empires write InUse=false (SavGameWriter's own EmpireSlotIndex doc comment), so
         // the loader's placeholder gate never adds this slot to Game.Empires -- the message survives,
@@ -425,7 +426,7 @@ public class SavGameLoaderTests
         // Ground truth (savtool.py, ATTACK.PAS:1664/1669/INTRFACE.PAS:1329 confirmed directly):
         // FleetDestroyedByLams/FleetDamagedByLams both carry parm1=4 (Empire5); ProbeDestroyedByYou
         // carries parm1=7 (Empire8).
-        var game = new SavGameLoader().LoadGame(LoadSave("Confront_2.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("Confront_2.SAV"));
         var allNews = game.Empires.SelectMany(e => e.News).ToList();
 
         var destroyedByLams = allNews.Single(n => n.Headline == NewsType.FleetDestroyedByLams);
@@ -448,7 +449,7 @@ public class SavGameLoaderTests
     public async Task LoadGame_Confront2_KeepsDestructionDetailParmsRaw()
     {
         // DestructionDetail has no OtherEmpire/TechGrant mapping -- Parm1/Parm2 stay plain ints.
-        var game = new SavGameLoader().LoadGame(LoadSave("Confront_2.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("Confront_2.SAV"));
         var allNews = game.Empires.SelectMany(e => e.News).ToList();
 
         var detail = allNews.Single(n => n.Headline == NewsType.DestructionDetail && n.Parm1 == 1742);
@@ -461,7 +462,7 @@ public class SavGameLoaderTests
     public async Task LoadGame_Intro1_ConstructsKingdomTurnHandlerForEachNpeEmpire()
     {
         // Ground truth: slots 1-4 (Trantor/Lazarus/Freberon/First Sun) are all Kingdom2NPE (typ=3).
-        var game = new SavGameLoader().LoadGame(LoadIntro1());
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadIntro1());
 
         foreach (var name in new[] { "Trantor", "Lazarus", "Freberon", "First Sun" }) {
             var empire = game.Empires.Single(e => e.Name == name);
@@ -479,7 +480,7 @@ public class SavGameLoaderTests
         // NpeToolkit's own State[Independent] lookup would KeyNotFoundException if the 9-entry
         // State dictionary weren't populated correctly for all 9 slots (Empire1-8 + Indep), and a
         // malformed FleetStates/persona would surface as some other exception during a real turn.
-        var game = new SavGameLoader().LoadGame(LoadIntro1());
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadIntro1());
         var trantor = game.Empires.Single(e => e.Name == "Trantor");
 
         game.TurnHandlers[trantor].PlayTurn(trantor, game);
@@ -490,7 +491,7 @@ public class SavGameLoaderTests
     {
         // Ground truth: slot 5 ("Thinnva") is PirateNPE (typ=1) -- no ITurnHandler exists for
         // Pirate yet, so its 739-byte blob must round-trip opaquely instead of being dropped.
-        var game = new SavGameLoader().LoadGame(LoadSave("GAUNTLET_1.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("GAUNTLET_1.SAV"));
         var pirate = game.Empires.Single(e => e.Name == "Thinnva");
 
         await Assert.That(pirate.NpeType).IsEqualTo(NpeEmpireType.Pirate);
@@ -504,7 +505,7 @@ public class SavGameLoaderTests
     {
         // Ground truth: slot 4 ("Solaria") is GuardianNPE (typ=5, 430-byte blob), slot 6 ("Datan")
         // is BerserkerNPE (typ=4, 930-byte blob) -- neither has an ITurnHandler yet.
-        var game = new SavGameLoader().LoadGame(LoadSave("Confront_1.SAV"));
+        var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("Confront_1.SAV"));
 
         var guardian = game.Empires.Single(e => e.Name == "Solaria");
         await Assert.That(guardian.NpeType).IsEqualTo(NpeEmpireType.Guardian);
@@ -546,8 +547,8 @@ public class SavGameLoaderTests
         game.Empires.Add(human);
         game.CurrentEmpire = conqueror;
 
-        var bytes = SavGameWriter.WriteGame(game);
-        var roundTripped = new SavGameLoader().LoadGame(bytes);
+        var bytes = SavGameWriter.WriteGame(game, new LegacyNpeProvider());
+        var roundTripped = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(bytes);
 
         var roundTrippedHuman = roundTripped.Empires.Single(e => e.Name == "Human");
         await Assert.That(roundTrippedHuman.Capital).IsNull();
@@ -585,8 +586,8 @@ public class SavGameLoaderTests
         game.Empires.Add(watcher);
         game.CurrentEmpire = owner;
 
-        var bytes = SavGameWriter.WriteGame(game);
-        var roundTripped = new SavGameLoader().LoadGame(bytes);
+        var bytes = SavGameWriter.WriteGame(game, new LegacyNpeProvider());
+        var roundTripped = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(bytes);
 
         var rtOwner = roundTripped.Empires.Single(e => e.Name == "Owner");
         var rtWatcher = roundTripped.Empires.Single(e => e.Name == "Watcher");

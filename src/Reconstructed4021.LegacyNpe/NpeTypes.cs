@@ -1,7 +1,9 @@
+using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
 
-namespace Reconstructed4021.Core.Npe;
+namespace Reconstructed4021.LegacyNpe;
 
 /// <summary>
 /// A fleet mission an NPE empire has assigned (NPETYPES.PAS's MissionTypes): real Pascal ordinal

@@ -4,11 +4,12 @@ using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
+using Reconstructed4021.LegacyNpe;
 
 namespace Reconstructed4021.Tests;
 
 /// <summary>
-/// <see cref="Core.Turns.KingdomTurnHandler.PlayTurn"/> — a whole NPE turn running end to end, so
+/// <see cref="LegacyNpe.KingdomTurnHandler.PlayTurn"/> — a whole NPE turn running end to end, so
 /// unlike NpeToolkit's/FleetLifecycle's own per-procedure hardcoded tests, this exercises the real
 /// dispatch wiring a single procedure's own test can't reach: StateDeptRecord entries created lazily
 /// for Empire.Independent (the overwhelmingly common ConquerMSN target), UpdateFleets' liveness guard

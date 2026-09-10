@@ -1,6 +1,5 @@
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
-using Reconstructed4021.Core.Npe;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
 
@@ -19,7 +18,8 @@ namespace Reconstructed4021.Core.SaveFormat;
 /// doesn't eliminate <see cref="EmpireSlotIndex"/>'s orphan-discovery job, though — an empire that
 /// was already not-InUse when the `.SAV` file being round-tripped was originally captured was never
 /// added to <see cref="Game.Empires"/> in the first place (<see cref="SavGameLoader"/>'s own
-/// placeholder gate, unrelated to and unchanged by this redesign), so a Kingdom's own `State` keys,
+/// placeholder gate, unrelated to and unchanged by this redesign), so an NPE handler's own per-enemy
+/// state dictionary keys (see <see cref="Turns.INpeHandlerProvider.ReferencedEmpires"/>),
 /// <see cref="Empire.DefeatedBy"/>, a <see cref="NewsItem"/>'s `OtherEmpire`/`Defender`, a
 /// minefield's owner/scouts, or a <see cref="Entities.Message"/>'s `Sender`/`Recipients` can all
 /// still legitimately reference one — confirmed for real (not just theorized) by
@@ -37,9 +37,11 @@ namespace Reconstructed4021.Core.SaveFormat;
 /// </summary>
 public static class SavGameWriter
 {
-    public static byte[] WriteGame(Game game)
+    /// <param name="game"></param>
+    /// <param name="npeProvider">Required if <paramref name="game"/> has any non-human <see cref="ITurnHandler"/> in <see cref="Game.TurnHandlers"/> whose blob this writer should decode rather than pass through opaquely — see <see cref="INpeHandlerProvider"/>.</param>
+    public static byte[] WriteGame(Game game, INpeHandlerProvider? npeProvider = null)
     {
-        var slots = new EmpireSlotIndex(game);
+        var slots = new EmpireSlotIndex(game, npeProvider);
         var objectIds = new ObjectIdIndex(game.Galaxy);
         var names = new NameRecordIndex(game, objectIds);
         var visibility = new VisibilityIndex(game);
@@ -56,7 +58,7 @@ public static class SavGameWriter
         WriteMessages(writer, game, slots);
         WriteEmpireData(writer, game, slots, objectIds, names);
         WriteNewsData(writer, game, slots, objectIds);
-        WriteNpeData(writer, game, slots, objectIds);
+        WriteNpeData(writer, game, slots, objectIds, npeProvider);
 
         return writer.ToArray();
     }
@@ -597,12 +599,13 @@ public static class SavGameWriter
     /// `SaveNPEData` (`LOADSAVE.PAS:467-479`), two parts, matching `SavGameLoader.LoadNpeData`'s own
     /// structure in reverse. Part 1: the fixed 9-entry `NPEDataArray` type-tag table (`Data` pointer
     /// always written empty). Part 2: for each real, non-player empire slot, its variant blob --
-    /// Kingdom via <see cref="WriteKingdomBlob"/>, everything else (Pirate/Berserker/Guardian/Trader)
+    /// whichever <paramref name="npeProvider"/> understands (see <see cref="INpeHandlerProvider.WriteSav"/>),
+    /// everything else (Pirate/Berserker/Guardian/Trader, or Kingdom with no provider supplied)
     /// passed through verbatim from <see cref="Game.UnimplementedNpeBlobs"/>, which is exactly why
     /// that dictionary exists on the read side: this writer never needs to understand a personality
-    /// it hasn't ported an <see cref="Turns.ITurnHandler"/> for.
+    /// it hasn't been given a provider for.
     /// </summary>
-    private static void WriteNpeData(SavWriter writer, Game game, EmpireSlotIndex slots, ObjectIdIndex objectIds)
+    private static void WriteNpeData(SavWriter writer, Game game, EmpireSlotIndex slots, ObjectIdIndex objectIds, INpeHandlerProvider? npeProvider)
     {
         for (var slot = 0; slot < 8; slot++) {
             var empire = slots.RealEmpireAt(slot);
@@ -628,14 +631,10 @@ public static class SavGameWriter
                 continue; // Not EmpireActive AND NOT EmpirePlayer -- no blob at all, matching the read side.
             }
 
-            switch (empire.NpeType) {
-                case NpeEmpireType.Kingdom1 or NpeEmpireType.Kingdom2:
-                    WriteKingdomBlob(writer, game, empire, slots, objectIds);
-                    break;
-
-                default:
-                    writer.WriteBytes(RequireBlob(game, empire));
-                    break;
+            if (empire.NpeType is { } npeType && npeProvider?.Handles(npeType) == true) {
+                npeProvider.WriteSav(writer, game.TurnHandlers[empire], objectIds, slots);
+            } else {
+                writer.WriteBytes(RequireBlob(game, empire));
             }
         }
     }
@@ -645,101 +644,16 @@ public static class SavGameWriter
             ? blob
             : throw new InvalidOperationException(
                 $"Empire '{empire.Name}' has NpeType {empire.NpeType} but no entry in Game.UnimplementedNpeBlobs " +
-                "and no KingdomTurnHandler -- nothing to write for its NPE Data blob.");
-
-    /// <summary>
-    /// `Kingdom1DataRecord`/`Kingdom2DataRecord` (`NPETYPES.PAS:136-141`), inverse of
-    /// `SavGameLoader.LoadKingdomBlob`. `Midway`/`BlockX`/`BlockY` are confirmed dead/Pirate-only
-    /// (that method's own doc comment) -- always written zero. Only the fleets this Kingdom empire
-    /// actually has AI state for get a real slot (`Index` byte = the fleet's own on-disk index);
-    /// every other one of the 30 fixed slots is all-zero (`Index=0` reads back as "unused",
-    /// `SavGameLoader`'s own loop). `State` always emits exactly the 9 canonical ordinals
-    /// (`Empire1..Empire8` then `Indep`) regardless of which ones this Kingdom's own dictionary
-    /// happens to hold real data for -- matching real Pascal's own fixed-size array; a slot with no
-    /// dictionary entry (never yet encountered as an enemy) writes an all-zero
-    /// <see cref="StateDeptRecord"/>, which decodes as `PolicyType.None`/all-zero fields on the next
-    /// load, not a crash or a wrong empire's data.
-    /// </summary>
-    private static void WriteKingdomBlob(SavWriter writer, Game game, Empire empire, EmpireSlotIndex slots, ObjectIdIndex objectIds)
-    {
-        var handler = (KingdomTurnHandler)game.TurnHandlers[empire];
-
-        var fleetSlots = new (int Index, Fleet Fleet, KingdomFleetState State)[30];
-        var next = 0;
-        foreach (var (fleet, state) in handler.FleetStates) {
-            if (next >= fleetSlots.Length) {
-                throw new NotSupportedException("A Kingdom empire's own 30-fleet NPE-data slot table is full.");
-            }
-            fleetSlots[next] = (objectIds.IdOf(fleet).Index, fleet, state);
-            next++;
-        }
-
-        foreach (var (index, _, state) in fleetSlots) {
-            if (index == 0) {
-                writer.WriteZeros(11);
-                continue;
-            }
-
-            writer.WriteByte((byte)state.Mission);
-            writer.WriteIdNumber(state.Target switch {
-                null => new SavIdNumber(SavObjectType.Void, 0),
-                ISectorObject sectorObject => objectIds.IdOf(sectorObject),
-                _ => throw new NotSupportedException($"Unexpected KingdomFleetState.Target type {state.Target.GetType()}."),
-            });
-            writer.WriteIdNumber(state.HomeBase is { } homeBase ? objectIds.IdOf((ISectorObject)homeBase) : new SavIdNumber(SavObjectType.Void, 0));
-            writer.WriteIdNumber(new SavIdNumber(SavObjectType.Void, 0)); // Midway
-            writer.WriteByte((byte)state.Waiting);
-            writer.WriteByte(0); // BlockX
-            writer.WriteByte(0); // BlockY
-            writer.WriteByte((byte)index);
-        }
-
-        for (var i = 0; i < 9; i++) {
-            // Real Pascal's own State array is keyed by raw ordinal position regardless of whether
-            // that ordinal is InUse (InitializeKingdom1NPE/2NPE seed all 8 unconditionally) -- an
-            // empty slot (never assigned any empire, real or orphan) still gets an entry, just an
-            // all-zero one, since there's no Empire object in this port's model to look one up by.
-            var target = i == 8 ? Empire.Independent : slots.AnyEmpireAt(i);
-
-            if (target is null || !handler.State.TryGetValue(target, out var record)) {
-                writer.WriteZeros(12);
-                continue;
-            }
-
-            writer.WriteByte((byte)record.Policy);
-            writer.WriteByte((byte)record.AttackChance);
-            writer.WriteLongInt((int)record.TotalMilitary);
-            writer.WriteWord((ushort)record.Worlds);
-            writer.WriteByte((byte)record.ThreatAssess);
-            writer.WriteByte((byte)record.Aggressiveness);
-            writer.WriteInteger((short)record.Balance);
-        }
-
-        var persona = handler.Persona;
-        writer.WriteByte((byte)persona.ImperialistGene);
-        writer.WriteByte((byte)persona.DefensiveGene);
-        writer.WriteByte((byte)persona.OffensiveGene);
-        writer.WriteByte((byte)persona.FactorGene);
-        writer.WriteByte((byte)persona.RandomGene);
-        writer.WriteByte((byte)persona.Defensive);
-        writer.WriteByte((byte)persona.Offensive);
-        writer.WriteByte((byte)persona.Techno);
-        writer.WriteByte((byte)persona.Provoke);
-        writer.WriteByte((byte)persona.Imperialist);
-        writer.WriteByte((byte)persona.WorldPower);
-        writer.WriteByte((byte)persona.Honorable);
-        writer.WriteByte((byte)persona.SphereX);
-        writer.WriteWord((ushort)persona.Clock);
-        writer.WriteByte((byte)persona.Offset);
-    }
+                $"and no {nameof(INpeHandlerProvider)} was supplied that recognizes it -- nothing to write for its NPE Data blob.");
 
     /// <summary>
     /// Per-kind on-disk `(SavObjectType, 1-based index)` for every <see cref="ISectorObject"/> --
     /// list position plus one, matching the dense-by-list-order write in `WritePlanets` etc. Built up
-    /// front since <see cref="Empire.Capital"/>, <see cref="NewsItem.Subject"/>, and a Kingdom's own
-    /// `Target`/`HomeBase` all reference an object before its own section is necessarily written.
+    /// front since <see cref="Empire.Capital"/>, <see cref="NewsItem.Subject"/>, and an NPE handler's
+    /// own fleet-mission `Target`/`HomeBase` all reference an object before its own section is
+    /// necessarily written.
     /// </summary>
-    private sealed class ObjectIdIndex
+    private sealed class ObjectIdIndex : ISavObjectIds
     {
         private readonly Dictionary<ISectorObject, SavIdNumber> _ids = new();
 
@@ -867,14 +781,15 @@ public static class SavGameWriter
     }
 
     /// <summary>See this class's own doc comment for the orphan-discovery rationale.</summary>
-    private sealed class EmpireSlotIndex
+    private sealed class EmpireSlotIndex : ISavEmpireSlots
     {
         /// Every empire (real or orphan) assigned a slot, indexed by slot -- <see cref="AnyEmpireAt"/>'s
-        /// backing store. A Kingdom's own `State` dictionary needs this: real Pascal's fixed 9-entry
-        /// array is keyed by raw ordinal regardless of whether that ordinal is `InUse`, so ordinal *i*
-        /// can have a real <see cref="Npe.StateDeptRecord"/> to write even when no real empire (and no
-        /// orphan either) ever occupied slot *i* at all -- see <see cref="WriteKingdomBlob"/>, which
-        /// falls back to an all-zero record rather than indexing this array, for that exact case.
+        /// backing store. An NPE handler's own per-enemy state dictionary needs this: real Pascal's
+        /// fixed 9-entry array is keyed by raw ordinal regardless of whether that ordinal is `InUse`,
+        /// so ordinal *i* can have a real state record to write even when no real empire (and no
+        /// orphan either) ever occupied slot *i* at all -- see <see cref="INpeHandlerProvider.WriteSav"/>'s
+        /// own implementors, which fall back to an all-zero record rather than indexing this array,
+        /// for that exact case.
         private readonly Empire?[] _anyBySlot = new Empire?[8];
 
         /// Real <see cref="Game.Empires"/> members only, indexed by slot -- null for a slot that's
@@ -883,7 +798,7 @@ public static class SavGameWriter
         private readonly Dictionary<Empire, int> _slotOf = new();
         private int _nextFreeSlot;
 
-        public EmpireSlotIndex(Game game)
+        public EmpireSlotIndex(Game game, INpeHandlerProvider? npeProvider)
         {
             foreach (var empire in game.Empires) {
                 var slot = Assign(empire);
@@ -898,9 +813,11 @@ public static class SavGameWriter
             // never added to Game.Empires, so any of the four references below can still legitimately
             // point at one -- confirmed for real by SavGameWriterAcceptanceTests failing against
             // an actual reference save's minefield owner the one time this was tried without them.
-            foreach (var handler in game.TurnHandlers.Values.OfType<KingdomTurnHandler>()) {
-                foreach (var empire in handler.State.Keys) {
-                    Register(empire);
+            if (npeProvider is not null) {
+                foreach (var handler in game.TurnHandlers.Values) {
+                    foreach (var empire in npeProvider.ReferencedEmpires(handler)) {
+                        Register(empire);
+                    }
                 }
             }
 
@@ -970,7 +887,7 @@ public static class SavGameWriter
         /// The real (in <see cref="Game.Empires"/>) empire occupying this slot, or null if it's unused or an orphan-only slot.
         public Empire? RealEmpireAt(int slot) => _realBySlot[slot];
 
-        /// Whichever empire (real or orphan) occupies this slot, or null if truly unused -- see <see cref="WriteKingdomBlob"/>.
+        /// Whichever empire (real or orphan) occupies this slot, or null if truly unused -- see <see cref="ISavEmpireSlots"/>'s own callers.
         public Empire? AnyEmpireAt(int slot) => _anyBySlot[slot];
     }
 }

@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="src/Reconstructed4021/Reconstructed4021.csproj" />
+  <Project Path="src/Reconstructed4021.LegacyNpe/Reconstructed4021.LegacyNpe.csproj" />
   <Project Path="src/Reconstructed4021.Core/Reconstructed4021.Core.csproj" />
   <Project Path="src/Reconstructed4021.Tests/Reconstructed4021.Tests.csproj" />
   <Project Path="src/Reconstructed4021.Tui/Reconstructed4021.Tui.csproj" />

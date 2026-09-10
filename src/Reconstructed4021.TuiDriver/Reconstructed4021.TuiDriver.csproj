@@ -13,6 +13,10 @@
          Reconstructed4021.Tui itself, so a future Tui test project can reference this same driver
          without pulling in Program.cs's own interactive bootstrap. -->
     <ProjectReference Include="..\Reconstructed4021.Tui\Reconstructed4021.Tui.csproj" />
+    <!-- Tui's own reference to this doesn't flow through to a compile-time reference here (confirmed,
+         not assumed: CS0234 without it), so this driver's own direct construction of a
+         LegacyNpeProvider for GameJson.Deserialize needs its own reference. -->
+    <ProjectReference Include="..\Reconstructed4021.LegacyNpe\Reconstructed4021.LegacyNpe.csproj" />
   </ItemGroup>
 
 </Project>
