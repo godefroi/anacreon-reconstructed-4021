@@ -412,9 +412,15 @@ original developers shipped incomplete, not a port gap.
   the shared `NPEINTR.PAS` toolkit's read-and-compute half (6c) and fleet-lifecycle half (6c-2),
   the core per-turn loop (6d), and diplomacy (6e). Disposition of every other NPE personality, so
   picking this phase back up doesn't require re-deriving the reachability table above:
-  - **Pirate** (`NPE01.PAS`) — real, reachable (ARRONAX/GAUNTLET/JAKARTA), not built. Its own future
-    roadmap entry; shares `NPEINTR.PAS`'s toolkit (already built) but has its own separate
-    `Implement`/persona-free dispatch, not a Kingdom variant.
+  - **Pirate** (`NPE01.PAS`) — real, reachable (ARRONAX/GAUNTLET/JAKARTA). Built:
+    `Reconstructed4021.LegacyNpe.PirateTurnHandler`, wired into `LegacyNpeProvider` alongside
+    Kingdom. Shares `NPEINTR.PAS`'s toolkit only for `ImplementReturnMSN`/`PlunderWorld`/
+    `SetEmpireDefenses`; `FindTarget`/`FindNearestBase`/`GetPatrolDestination`/its own
+    `GetFleetComposition`/`GetTarget` are Pirate-private (no second caller yet to justify a shared
+    home). This surfaced one real gap in the earlier Core/LegacyNpe split:
+    `SavGameLoader.LoadNpeData` only ever consulted the provider for `Kingdom1`/`Kingdom2`
+    specifically, not generically via `Handles` the way `SavGameWriter`/`GameJson`/`ScenarioLoader`
+    already did — fixed alongside Pirate landing, not a Pirate-specific concern.
   - **Berserker** (`NPE04.PAS`) — real, reachable (ARRONAX only), not built. Own future entry;
     distinguishing mechanic is that its starbases are the mobile roaming unit, driven by a separate
     `BaseMissionTypes` state machine — a genuinely different shape from Kingdom/Pirate's fleet-based

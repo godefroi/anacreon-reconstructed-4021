@@ -583,7 +583,12 @@ public static class SavGameWriter
                     writer.WriteIdNumber(new SavIdNumber(SavObjectType.Void, 0));
                 } else {
                     writer.WriteCoordinate(default);
-                    writer.WriteIdNumber(item.Subject is { } subject ? objectIds.IdOf(subject) : new SavIdNumber(SavObjectType.Void, 0));
+                    // A news item's Subject can outlive the entity it names -- a fleet destroyed by
+                    // combat after the news was recorded (confirmed live: a Pirate raid destroying a
+                    // transport it just attacked leaves that transport's own attack news dangling
+                    // this same turn) -- Void here matches Pascal's own on-disk shape for a subject
+                    // that's no longer a valid reference, not a corruption.
+                    writer.WriteIdNumber(item.Subject is { } subject && objectIds.TryIdOf(subject, out var subjectId) ? subjectId : new SavIdNumber(SavObjectType.Void, 0));
                 }
 
                 var (parm1, parm2, parm3) = (item.Parm1, item.Parm2, item.Parm3);
@@ -674,6 +679,9 @@ public static class SavGameWriter
         }
 
         public SavIdNumber IdOf(ISectorObject obj) => _ids[obj];
+
+        /// <summary>Non-throwing lookup for a reference that may point at an entity destroyed since it was recorded (<see cref="WriteNewsData"/>'s own <see cref="NewsItem.Subject"/> case) -- see that method's own doc comment.</summary>
+        public bool TryIdOf(ISectorObject obj, out SavIdNumber id) => _ids.TryGetValue(obj, out id);
     }
 
     /// <summary>

@@ -968,15 +968,16 @@ public sealed class SavGameLoader : ISavRefResolver
             var npeType = npeTypes[slot];
             empire.NpeType = npeType;
 
+            if (npeType is { } resolvedType && _npeProvider?.Handles(resolvedType) == true) {
+                game.TurnHandlers[empire] = _npeProvider.ReadSav(reader, empire, resolvedType, this, _random);
+                continue;
+            }
+
             switch (npeType) {
                 case NpeEmpireType.Kingdom1 or NpeEmpireType.Kingdom2:
-                    if (_npeProvider?.Handles(npeType.Value) != true) {
-                        throw new NotSupportedException(
-                            $"No {nameof(INpeHandlerProvider)} registered for {npeType} -- its NPE Data " +
-                            "blob has no fixed byte length to skip past, so it can't be read as an opaque blob either.");
-                    }
-                    game.TurnHandlers[empire] = _npeProvider.ReadSav(reader, empire, npeType.Value, this, _random);
-                    break;
+                    throw new NotSupportedException(
+                        $"No {nameof(INpeHandlerProvider)} registered for {npeType} -- its NPE Data " +
+                        "blob has no fixed byte length to skip past, so it can't be read as an opaque blob either.");
 
                 case NpeEmpireType.Berserker:
                     game.UnimplementedNpeBlobs[empire] = reader.ReadBytes(930);

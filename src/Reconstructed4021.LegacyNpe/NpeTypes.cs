@@ -136,3 +136,24 @@ public sealed class KingdomFleetState
 
     public int Waiting { get; set; }
 }
+
+/// <summary>
+/// One Pirate fleet's AI mission state (NPETYPES.PAS's FleetDataRecord, Pirate's own field usage —
+/// audited directly against NPE01.PAS, not carried over from <see cref="KingdomFleetState"/>'s own
+/// audit): <c>HomeBaseID</c> is dead for Pirate too (grepped: no read or write site anywhere in
+/// NPE01.PAS — a returning fleet re-derives its base fresh via FindNearestBase every time, it never
+/// remembers one), unlike Kingdom where the same field is real. <c>BlockX</c>/<c>BlockY</c> are real
+/// here (they're Pirate-only to begin with — see <see cref="KingdomFleetState"/>'s own doc comment):
+/// the hunting-ground grid cell this fleet's patrol/chase pressure is charged against.
+/// </summary>
+public sealed class PirateFleetState
+{
+    public NpeMissionType Mission { get; set; }
+
+    /// <summary>TargetID — a <see cref="Fleet"/> (the transport being chased/attacked, WaitForTransports/AttackTransports) or an <see cref="IEconomicWorld"/> (the raid target, AttackWorld).</summary>
+    public object? Target { get; set; }
+
+    public int Waiting { get; set; }
+    public int BlockX { get; set; }
+    public int BlockY { get; set; }
+}

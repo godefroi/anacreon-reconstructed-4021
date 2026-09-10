@@ -1,3 +1,4 @@
+using System.Reflection;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
@@ -486,18 +487,63 @@ public class SavGameLoaderTests
         game.TurnHandlers[trantor].PlayTurn(trantor, game);
     }
 
-    [Test]
-    public async Task LoadGame_Gauntlet1_StoresPirateBlobOpaquely()
+    /// <summary>
+    /// <see cref="PirateTurnHandler"/>'s FleetStates/HuntingGround/Sheep are internal (the provider's
+    /// own read-back seam, same as <see cref="KingdomTurnHandler"/>'s Persona/State/FleetStates) --
+    /// no `InternalsVisibleTo` grants this test project access, matching this repo's existing
+    /// precedent (<see cref="DeepGraphComparer"/> reads Kingdom's own internals the same way rather
+    /// than widening the assembly's public surface just for test introspection).
+    /// </summary>
+    private static T GetPirateInternal<T>(PirateTurnHandler handler, string propertyName) =>
+        (T)typeof(PirateTurnHandler).GetProperty(propertyName, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(handler)!;
+
+    private static async Task AssertGauntlet1PirateGroundTruth(PirateTurnHandler handler)
     {
-        // Ground truth: slot 5 ("Thinnva") is PirateNPE (typ=1) -- no ITurnHandler exists for
-        // Pirate yet, so its 739-byte blob must round-trip opaquely instead of being dropped.
+        // Ground truth: turn-1 739-byte blob decodes to FleetData all zero (no raiders/patrols
+        // deployed yet -- InitializePirateNPE zero-fills it), HuntingGround uniformly seeded at 25
+        // (InitializePirateNPE's own FillChar), and Sheep holding real, nonzero, non-uniform bytes --
+        // confirmed directly against a raw hex dump of this file's Thinnva blob, not assumed: Sheep is
+        // declared but never read/written by field access anywhere in NPE01.PAS, so these are Turbo
+        // Pascal's own uninitialized heap bytes from allocation time.
+        var fleetStates = GetPirateInternal<object>(handler, "FleetStates");
+        var sheep = GetPirateInternal<byte[]>(handler, "Sheep");
+        var huntingGround = GetPirateInternal<byte[,]>(handler, "HuntingGround");
+
+        await Assert.That(((System.Collections.ICollection)fleetStates).Count).IsEqualTo(0);
+        await Assert.That(sheep).IsEquivalentTo(new byte[] { 32, 23, 32, 23, 32, 23, 32, 23, 32 });
+
+        for (var x = 0; x < 20; x++) {
+            for (var y = 0; y < 20; y++) {
+                await Assert.That(huntingGround[x, y]).IsEqualTo((byte)25);
+            }
+        }
+    }
+
+    [Test]
+    public async Task LoadGame_Gauntlet1_DecodesPirateFleetAiState()
+    {
+        // Ground truth: slot 5 ("Thinnva") is PirateNPE (typ=1).
         var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("GAUNTLET_1.SAV"));
         var pirate = game.Empires.Single(e => e.Name == "Thinnva");
 
         await Assert.That(pirate.NpeType).IsEqualTo(NpeEmpireType.Pirate);
-        await Assert.That(game.TurnHandlers).DoesNotContainKey(pirate);
-        await Assert.That(game.UnimplementedNpeBlobs).ContainsKey(pirate);
-        await Assert.That(game.UnimplementedNpeBlobs[pirate].Length).IsEqualTo(739);
+        await Assert.That(game.TurnHandlers).ContainsKey(pirate);
+        await Assert.That(game.TurnHandlers[pirate]).IsTypeOf<PirateTurnHandler>();
+
+        await AssertGauntlet1PirateGroundTruth((PirateTurnHandler)game.TurnHandlers[pirate]);
+    }
+
+    [Test]
+    public async Task WriteThenLoad_Gauntlet1PirateBlob_RoundTripsExactly()
+    {
+        var provider = new LegacyNpeProvider();
+        var game = new SavGameLoader(npeProvider: provider).LoadGame(LoadSave("GAUNTLET_1.SAV"));
+
+        var bytes = SavGameWriter.WriteGame(game, provider);
+        var reloaded = new SavGameLoader(npeProvider: provider).LoadGame(bytes);
+        var pirate = reloaded.Empires.Single(e => e.Name == "Thinnva");
+
+        await AssertGauntlet1PirateGroundTruth((PirateTurnHandler)reloaded.TurnHandlers[pirate]);
     }
 
     [Test]

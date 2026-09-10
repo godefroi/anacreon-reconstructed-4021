@@ -24,11 +24,12 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
         Converters = { new JsonStringEnumConverter() },
     };
 
-    public bool Handles(NpeEmpireType type) => type is NpeEmpireType.Kingdom1 or NpeEmpireType.Kingdom2;
+    public bool Handles(NpeEmpireType type) => type is NpeEmpireType.Kingdom1 or NpeEmpireType.Kingdom2 or NpeEmpireType.Pirate;
 
     public ITurnHandler CreateNew(Empire empire, NpeEmpireType type, Random random) =>
-        new KingdomTurnHandler(empire, type, random);
+        type == NpeEmpireType.Pirate ? new PirateTurnHandler(empire, random) : new KingdomTurnHandler(empire, type, random);
 
+    /// <summary>Pirate's own AI state never references another empire directly (its Target is always a Fleet or a world, never an Empire) — no orphan-empire slots to reserve for it.</summary>
     public IEnumerable<Empire> ReferencedEmpires(ITurnHandler handler) =>
         handler is KingdomTurnHandler kingdom ? kingdom.State.Keys : [];
 
@@ -36,11 +37,47 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
 
     public JsonNode CaptureJson(ITurnHandler handler, IJsonRefWriter refs)
     {
+        if (handler is PirateTurnHandler pirate) {
+            return CapturePirateJson(pirate, refs);
+        }
+
         var kingdom = (KingdomTurnHandler)handler;
         return new JsonObject {
             ["persona"] = JsonSerializer.SerializeToNode(kingdom.Persona, PlainOptions),
             ["state"] = WriteState(kingdom.State, refs),
             ["fleetStates"] = WriteFleetStates(kingdom.FleetStates, refs),
+        };
+    }
+
+    private static JsonObject CapturePirateJson(PirateTurnHandler pirate, IJsonRefWriter refs)
+    {
+        var fleetStates = new JsonArray();
+        foreach (var (fleet, state) in pirate.FleetStates) {
+            if (refs.FleetId(fleet) is not { } fleetId) {
+                continue;
+            }
+
+            fleetStates.Add(new JsonObject {
+                ["fleetId"] = fleetId,
+                ["mission"] = state.Mission.ToString(),
+                ["target"] = refs.EncodeObjectRef(state.Target),
+                ["waiting"] = state.Waiting,
+                ["blockX"] = state.BlockX,
+                ["blockY"] = state.BlockY,
+            });
+        }
+
+        var huntingGround = new byte[400];
+        for (var x = 0; x < 20; x++) {
+            for (var y = 0; y < 20; y++) {
+                huntingGround[x * 20 + y] = pirate.HuntingGround[x, y];
+            }
+        }
+
+        return new JsonObject {
+            ["fleetStates"] = fleetStates,
+            ["huntingGround"] = Convert.ToBase64String(huntingGround),
+            ["sheep"] = Convert.ToBase64String(pirate.Sheep),
         };
     }
 
@@ -91,11 +128,45 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
     public ITurnHandler RestoreJson(Empire empire, NpeEmpireType type, JsonNode data, IJsonRefReader refs, Random random)
     {
         var obj = data.AsObject();
+
+        if (type == NpeEmpireType.Pirate) {
+            return RestorePirateJson(obj, refs, random);
+        }
+
         var persona = obj["persona"].Deserialize<NpeCharacter>(PlainOptions)!;
         var state = ReadState(obj["state"]!.AsArray(), refs);
         var fleetStates = ReadFleetStates(obj["fleetStates"]!.AsArray(), refs);
 
         return new KingdomTurnHandler(type, persona, state, fleetStates, random);
+    }
+
+    private static PirateTurnHandler RestorePirateJson(JsonObject obj, IJsonRefReader refs, Random random)
+    {
+        var fleetStates = new Dictionary<Fleet, PirateFleetState>();
+        foreach (var entryNode in obj["fleetStates"]!.AsArray()) {
+            var entry = entryNode!.AsObject();
+            var fleet = refs.Fleet((int)entry["fleetId"]!);
+
+            fleetStates[fleet] = new PirateFleetState {
+                Mission = Enum.Parse<NpeMissionType>((string)entry["mission"]!),
+                Target = refs.DecodeObjectRef(entry["target"]),
+                Waiting = (int)entry["waiting"]!,
+                BlockX = (int)entry["blockX"]!,
+                BlockY = (int)entry["blockY"]!,
+            };
+        }
+
+        var huntingGroundBytes = Convert.FromBase64String((string)obj["huntingGround"]!);
+        var huntingGround = new byte[20, 20];
+        for (var x = 0; x < 20; x++) {
+            for (var y = 0; y < 20; y++) {
+                huntingGround[x, y] = huntingGroundBytes[x * 20 + y];
+            }
+        }
+
+        var sheep = Convert.FromBase64String((string)obj["sheep"]!);
+
+        return new PirateTurnHandler(fleetStates, huntingGround, sheep, random);
     }
 
     private static Dictionary<Empire, StateDeptRecord> ReadState(JsonArray array, IJsonRefReader refs)
@@ -146,6 +217,11 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
     /// </summary>
     public void WriteSav(SavWriter writer, ITurnHandler handler, ISavObjectIds objectIds, ISavEmpireSlots slots)
     {
+        if (handler is PirateTurnHandler pirate) {
+            WritePirateSav(writer, pirate, objectIds);
+            return;
+        }
+
         var kingdom = (KingdomTurnHandler)handler;
 
         var fleetSlots = new (int Index, KingdomFleetState State)[30];
@@ -218,6 +294,54 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
     }
 
     /// <summary>
+    /// PirateDataRecord (`NPETYPES.PAS:127-132`, 739 bytes): `FleetData` (30 x 11), `HuntingGround`
+    /// (400, row-major x then y matching Pascal's `ARRAY[1..20,1..20] OF Byte` layout), `Sheep` (9,
+    /// dead — see <see cref="PirateTurnHandler.Sheep"/>'s own doc comment). `HomeBaseID`/`Midway` are
+    /// dead for Pirate (unlike Kingdom, where `HomeBaseID` is real) — always written as Void, matching
+    /// <see cref="PirateFleetState"/>'s own doc comment.
+    /// </summary>
+    private static void WritePirateSav(SavWriter writer, PirateTurnHandler pirate, ISavObjectIds objectIds)
+    {
+        var fleetSlots = new (int Index, PirateFleetState State)[30];
+        var next = 0;
+        foreach (var (fleet, state) in pirate.FleetStates) {
+            if (next >= fleetSlots.Length) {
+                throw new NotSupportedException("A Pirate empire's own 30-fleet NPE-data slot table is full.");
+            }
+            fleetSlots[next] = (objectIds.IdOf(fleet).Index, state);
+            next++;
+        }
+
+        foreach (var (index, state) in fleetSlots) {
+            if (index == 0) {
+                writer.WriteZeros(11);
+                continue;
+            }
+
+            writer.WriteByte((byte)state.Mission);
+            writer.WriteIdNumber(state.Target switch {
+                null => new SavIdNumber(SavObjectType.Void, 0),
+                ISectorObject sectorObject => objectIds.IdOf(sectorObject),
+                _ => throw new NotSupportedException($"Unexpected PirateFleetState.Target type {state.Target.GetType()}."),
+            });
+            writer.WriteIdNumber(new SavIdNumber(SavObjectType.Void, 0)); // HomeBaseID -- dead for Pirate
+            writer.WriteIdNumber(new SavIdNumber(SavObjectType.Void, 0)); // Midway -- dead
+            writer.WriteByte((byte)state.Waiting);
+            writer.WriteByte((byte)state.BlockX);
+            writer.WriteByte((byte)state.BlockY);
+            writer.WriteByte((byte)index);
+        }
+
+        for (var x = 0; x < 20; x++) {
+            for (var y = 0; y < 20; y++) {
+                writer.WriteByte(pirate.HuntingGround[x, y]);
+            }
+        }
+
+        writer.WriteBytes(pirate.Sheep);
+    }
+
+    /// <summary>
     /// `Kingdom1DataRecord`/`Kingdom2DataRecord` (`NPETYPES.PAS:136-141`, 454 bytes): `FleetData`
     /// (30 × `FleetDataRecord`, 11 bytes each), `State` (9 × `StateDeptRecord`, 12 bytes each,
     /// `Empire1..Empire8` then `Indep`), `Persona` (`NPECharacterRecord`, 16 bytes) — field order
@@ -229,6 +353,10 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
     /// </summary>
     public ITurnHandler ReadSav(SavReader reader, Empire empire, NpeEmpireType type, ISavRefResolver resolver, Random random)
     {
+        if (type == NpeEmpireType.Pirate) {
+            return ReadPirateSav(reader, resolver, random);
+        }
+
         var fleetStates = new Dictionary<Fleet, KingdomFleetState>();
 
         for (var i = 0; i < 30; i++) {
@@ -297,5 +425,49 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
         };
 
         return new KingdomTurnHandler(type, persona, state, fleetStates, random);
+    }
+
+    /// <summary>See <see cref="WritePirateSav"/> for the byte layout this mirrors.</summary>
+    private static PirateTurnHandler ReadPirateSav(SavReader reader, ISavRefResolver resolver, Random random)
+    {
+        var fleetStates = new Dictionary<Fleet, PirateFleetState>();
+
+        for (var i = 0; i < 30; i++) {
+            var mission = (NpeMissionType)reader.ReadByte();
+            var targetId = reader.ReadIdNumber();
+            reader.ReadIdNumber(); // HomeBaseID -- dead for Pirate
+            reader.ReadIdNumber(); // Midway -- dead
+            var waiting = reader.ReadByte();
+            var blockX = reader.ReadByte();
+            var blockY = reader.ReadByte();
+            var index = reader.ReadByte();
+
+            if (index == 0) {
+                continue;
+            }
+
+            if (resolver.ResolveObject(new SavIdNumber(SavObjectType.Flt, index)) is not Fleet fleet) {
+                continue;
+            }
+
+            fleetStates[fleet] = new PirateFleetState {
+                Mission = mission,
+                Target = resolver.ResolveObject(targetId),
+                Waiting = waiting,
+                BlockX = blockX,
+                BlockY = blockY,
+            };
+        }
+
+        var huntingGround = new byte[20, 20];
+        for (var x = 0; x < 20; x++) {
+            for (var y = 0; y < 20; y++) {
+                huntingGround[x, y] = reader.ReadByte();
+            }
+        }
+
+        var sheep = reader.ReadBytes(9);
+
+        return new PirateTurnHandler(fleetStates, huntingGround, sheep, random);
     }
 }
