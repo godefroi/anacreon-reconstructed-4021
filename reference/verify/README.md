@@ -159,73 +159,47 @@ own section rather than assuming it's category 4 just because it looks like one 
 
 ## The ground-truth RNG is a generator this project owns, not fpc's real one
 
-**What changed.** `INT.PAS`'s `Rnd` (the one function nearly everything in this harness draws
-randomness through) no longer calls fpc's builtin `Random`/`RandSeed`. It draws from
-`GroundTruthNextU32`, a plain 32-bit LCG (`seed := seed*1664525 + 1013904223`, implicit mod-2^32
-wraparound — the Numerical Recipes constants) seeded by its own dedicated global,
-`GroundTruthSeed`. `ForcedRandomValue`'s existing override (category 4 above) is untouched and
-still checked first, exactly as before — this only replaces what happens when a real, non-forced
-draw is needed. `src/Reconstructed4021.Tests/GroundTruthRandom.cs` is the C# twin: same generator,
-same Lemire-style high-bit scale into `[0,maxValue)` `PascalRandom`/`FixedRandom` already use
+`INT.PAS`'s `Rnd` (the one function nearly everything in this harness draws randomness through)
+does not call fpc's builtin `Random`/`RandSeed`. Its real (non-`ForcedRandomValue`) branch draws
+from `GroundTruthNextU32`, a plain 32-bit LCG (`seed := seed*1664525 + 1013904223`, implicit
+mod-2^32 wraparound — the Numerical Recipes constants) seeded by its own dedicated global,
+`GroundTruthSeed`. `ForcedRandomValue` (category 4 above) is still checked first, exactly as
+pristine `Rnd` checks its own `Random` call — this generator only sits behind it.
+`src/Reconstructed4021.Tests/GroundTruthRandom.cs` is the C# twin: same generator, same
+Lemire-style high-bit scale into `[0,maxValue)` `FixedRandom` also uses
 (`(int)((ulong)draw * (uint)maxValue >> 32)`), so `Rnd`/`PascalMath.Rnd` consume it exactly the way
-they consume any other `Random` subclass.
+they consume any other `Random` subclass. `GroundTruthNextU32` is promoted to `INT.PAS`'s
+`INTERFACE` section (a test-only promotion, same idea as `LoadScenario`'s own in
+`NEWGAME.PAS.patch`) so `runworld.pas`'s `groundtruthrng` domain (`RunGroundTruthRngCase`) can draw
+raw values directly for its own regression fixture, `groundtruthrng.golden` /
+`GroundTruthRandomTests.MatchesGoldenFile` — the two sides are cross-checked directly there, not
+just by construction in principle.
 
-**Why.** The harness previously depended on `PascalRandom.cs`, a from-scratch, empirically
-reverse-engineered port of fpc 3.2.2's actual `Random`/`RandSeed` algorithm (a Mersenne Twister
-variant with fpc-specific reseed/tempering — see "A real Pascal RNG" below for how that was pinned
-down). That dependency was never actually load-bearing for what this harness exists to verify: this
-project cares whether the C# port reproduces real Pascal's *game logic* (formulas, branching, draw
-counts/order), not whether it reproduces one specific compiler's specific PRNG implementation. Two
-independently-written, correct implementations of "the same algorithm" can still diverge on an
-implementation the C# side has to reverse-engineer from binary behavior rather than read from a
-specification — an unnecessary, ongoing archaeology cost for a component that was never "the game,"
-just plumbing underneath it. Replacing it with a generator this project designs and owns on both
-sides means the two sides match *by construction* — there's no longer anything to reverse-engineer,
-because there's no longer a third-party implementation in the loop at all.
+This project designs and owns both sides of this generator deliberately, rather than matching fpc's
+own `Random`/`RandSeed` implementation: what this harness exists to verify is whether the C# port
+reproduces real Pascal's *game logic* (formulas, branching, draw counts/order), not whether it
+reproduces one specific compiler's specific PRNG. A generator both sides are built from the same
+design means they match by construction, with nothing left to reverse-engineer.
 
-This is a ground-truth *harness* change only. Production `Random` usage in `Core`/`LegacyNpe`
+Simplicity and mutual comprehensibility matter more here than statistical quality — the only
+requirement is that the C# and Pascal sides agree with each other, not that the sequence is a good
+one. A 32-bit LCG needs nothing wider than `LongWord`/`Word` wraparound, which this whole codebase
+(and this harness) already relies on everywhere; 64-bit (`QWord`/`Int64`) arithmetic also behaves
+identically to C#'s `ulong`/`long` wraparound under this project's actual `fpc -Mtp -CfSSE2`
+(confirmed empirically — a probe multiply-add matched a C#-side `ulong` computation of the same
+expression bit-for-bit), so a 64-bit generator would work too, but the 32-bit one is simpler.
+
+This is a ground-truth *harness* generator only. Production `Random` usage in `Core`/`LegacyNpe`
 (`ScenarioLoader`, `KingdomTurnHandler`, `NpeToolkit`, etc.) already takes `Random` as an explicit
-parameter and is untouched — nothing about how the shipped port itself generates randomness changed.
-A separate, later concern (a splittable/counter-based RNG for multiplayer server-side
-re-simulation) is unrelated to this and not addressed here.
+parameter, unrelated to this — nothing about how the shipped port itself generates randomness
+depends on it. A separate, later concern (a splittable/counter-based RNG for multiplayer
+server-side re-simulation) is unrelated too.
 
-**Why a 32-bit LCG, not something fancier.** Simplicity and mutual comprehensibility matter more
-here than statistical quality — the only requirement is that the C# and Pascal sides agree with
-each other, not that the sequence is a good one. A 32-bit LCG needs nothing wider than
-`LongWord`/`Word` wraparound, which this whole codebase (and this harness) already relies on
-everywhere; empirically confirmed first that 64-bit (`QWord`/`Int64`) arithmetic *also* behaves
-identically to C#'s `ulong`/`long` wraparound under this project's actual `fpc -Mtp -CfSSE2` (a
-probe multiply-add matched a C#-side `ulong` computation of the same expression bit-for-bit), so a
-64-bit generator was available too, but the 32-bit choice was kept as the simpler one now that both
-were confirmed safe.
-
-**Where the seed actually comes from.** `NEWGAME.PAS`'s own `LoadScenario` has one production
-`RandSeed:=Seed` call site (its scenario-file-driven reseed), but it's unconditionally skipped in
-this harness's own test mode (`TestNumPlayers>=0` — see that variable's own declaration comment),
-so it was never patched: it's genuinely dead from this harness's point of view, not an oversight.
-The one live seeding site is `runworld.pas`'s own `RunScenarioCase`, which now sets
-`GroundTruthSeed` directly instead of `RandSeed`.
-
-**What this did *not* change.** `RunRngCase` (the `rng` domain) calls fpc's builtin `Random`
-directly, never through `Rnd` — it was never affected by this patch, and `rng.golden` is unchanged.
-It's now a standalone regression fixture for `PascalRandom.cs` alone: nothing else in this harness
-depends on either of them anymore. Left in place (still correct, still passing) rather than removed
-as part of this change — removing a still-correct, still-documented fixture is a separate decision,
-not a natural side effect of replacing what `Rnd` itself draws from. `nebula.golden`'s multi-patch
-cases also didn't change: `NebulaCases.cs` drives them via `ForcedRandomValue` (`RngFixedValue`),
-not a real seeded sequence, so they never exercised the old generator either. Only `scenario.golden`
-actually changed (every case's RNG-dependent sums — population, efficiency, ship/cargo/defense
-totals, nebula cell counts — shifted; draw-independent fields like `year`/`planetcount`/
-`empirecount` did not, exactly as expected since `ScenarioLoaderGoldenTests` only exact-matches the
-latter).
-
-**Its own regression fixture.** `GroundTruthNextU32` was promoted to `INT.PAS`'s `INTERFACE` section
-(pristine `Rnd` never exposed anything this way either — a test-only promotion, same idea as
-`LoadScenario`'s own in `NEWGAME.PAS.patch`) purely so `runworld.pas`'s `groundtruthrng` domain
-(`RunGroundTruthRngCase`) can draw raw values directly, the same role `rng`/`RunRngCase` plays for
-`PascalRandom`. `groundtruthrng.golden` plus `GroundTruthRandomTests.MatchesGoldenFile` in the C#
-project cross-check the two sides directly — the thing that actually enforces "match by
-construction," rather than that claim resting only on this section's prose.
+`NEWGAME.PAS`'s own `LoadScenario` has one production `RandSeed:=Seed` call site (its
+scenario-file-driven reseed), but it's unconditionally skipped in this harness's own test mode
+(`TestNumPlayers>=0` — see that variable's own declaration comment), so it was never patched: it's
+genuinely dead from this harness's point of view, not an oversight. The one live seeding site is
+`runworld.pas`'s own `RunScenarioCase`, which sets `GroundTruthSeed` directly.
 
 ## Adding or changing a patch
 
@@ -507,8 +481,9 @@ own header comment, not repeated here.
 
 ### Not a `UpdateWorld`/`GalaxySetup` domain
 
-- **`rng`** — a standing regression fixture for `PascalRandom.cs`, a from-scratch port of `fpc`'s
-  actual `Random`/`RandSeed` algorithm. See "A real Pascal RNG" below.
+- **`groundtruthrng`** — a standing regression fixture for `GroundTruthRandom.cs`, the C# twin of
+  `Rnd`'s own ground-truth generator. See "The ground-truth RNG is a generator this project owns"
+  above.
 
 ## Call-graph tooling
 
@@ -536,42 +511,6 @@ awareness — confirmed 85 conditional-compilation directives across 53 of the s
 call site inside an excluded region still counts toward `refCount`, so a nonzero count is evidence
 of a real call site in the text, not proof it's compiled into any particular build — read the
 `{$IFDEF}` context by hand before concluding something is (or isn't) live.
-
-## A real Pascal RNG, not a stand-in: `rng.golden` and `PascalRandom`
-
-Every domain above `rng` needs only one `Rnd()` value per case, so `ForcedRandomValue` (a fixed
-offset every call resolves to) has always been enough. `nebula`'s multi-patch cases and a genuine
-end-to-end `.SCN` load (`scenario`) both break that: they retry/redraw multiple times per run, and
-a fixed offset always re-rolls the *same* value, so placing a second world in a zone that already
-has one always blows through the retry cap on both sides. Comparing real multi-draw sequences
-needs matching this project's actual `fpc` runtime's `Random`/`RandSeed` algorithm, not a fixed
-stand-in.
-
-That algorithm isn't the classic Turbo Pascal LCG a DOS-era codebase might suggest, and guessing at
-it from memory would have been exactly the kind of unverified recall this project avoids: `fpc`'s
-RNG implementation changed over its history, and which one a given installed compiler uses has to
-be checked, not assumed. A quick probe program (`RandSeed:=12345; WriteLn(Random(100));` a few
-times) compiled with this repo's actual installed `fpc` (3.2.2) and compared against candidate
-algorithms pulled from `fpc`'s own RTL source at matching tags settled it empirically: `fpc`'s
-`main`/trunk source now uses a SplitMix64-seeded Xoshiro128** generator (didn't match); the
-`release_3_2_2` tag's `rtl/inc/system.inc` uses a Mersenne Twister (MT19937) variant with its own
-reseed/tempering convention — matched exactly, including a mid-run reseed, a fresh-seed replay,
-and a draw crossing the generator's 624-word internal state refill.
-
-**Status: superseded for everything downstream, kept as its own fixture.** `Rnd` no longer calls
-fpc's real `Random` at all (see "The ground-truth RNG is a generator this project owns" above) —
-`rng`/`PascalRandom.cs`/`rng.golden`/`PascalRandomTests.cs` no longer feed anything else in this
-harness. They're left in place as a standalone, still-correct regression fixture for fpc's own real
-RNG (in case something outside this harness ever needs it again), not because any current
-ground-truth domain still depends on them.
-
-`src/Reconstructed4021.Tests/PascalRandom.cs` is a from-scratch `System.Random` subclass
-porting that exact algorithm, test-only (production code has no need for Pascal-bit-exact
-randomness — only a golden-file comparison does). `rng.golden`/`RngCases.cs`/`PascalRandomTests.cs`
-are a standing regression fixture for it: `runworld.pas`'s `RunRngCase` sets a real `RandSeed` and
-draws a real sequence via `Random()` (no `ForcedRandomValue` involved at all), and
-`PascalRandomTests.MatchesGoldenFile` checks the C# port reproduces it exactly, including a
-701-draw case that crosses the state refill boundary.
 
 ## History
 

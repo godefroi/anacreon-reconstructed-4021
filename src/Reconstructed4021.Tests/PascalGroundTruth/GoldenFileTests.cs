@@ -115,10 +115,6 @@ public class GoldenFileTests
             c => $"{c.SizeOfGalaxy},{c.Mode},{c.PatchCount},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "nebula", .. args.Skip(1)]));
 
-        GoldenFile.Regenerate("rng", RngCases.All,
-            c => $"{c.Seed},{c.Range},{c.Count}",
-            args => PatchHarness.CompileAndRun("runworld", ["case", "rng", .. args.Skip(1)]));
-
         GoldenFile.Regenerate("groundtruthrng", GroundTruthRngCases.All,
             c => $"{c.Seed},{c.Range},{c.Count}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "groundtruthrng", .. args.Skip(1)]));

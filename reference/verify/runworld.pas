@@ -126,9 +126,11 @@
                 ordering/early-exit control flow itself is hardcoded-tested on the C# side
                 (VisibilityHandlerProbeTests), since there's no separate Pascal formula to cross-check
                 there.
-     rng        Seed,Range,Count -> "values=<Count comma-joined Random(Range) draws after
-                RandSeed:=Seed>" -- not a UpdateWorld/GalaxySetup domain; a standing regression fixture
-                for the C# test project's PascalRandom (see RunRngCase's own comment)
+     groundtruthrng Seed,Range,Count -> "values=<Count comma-joined GroundTruthNextU32-scaled draws
+                after GroundTruthSeed:=Seed>" -- not a UpdateWorld/GalaxySetup domain; a standing
+                regression fixture for the C# test project's GroundTruthRandom, Rnd's own ground-truth
+                generator (see RunGroundTruthRngCase's own comment and reference/verify/README.md's
+                "ground-truth RNG is a generator this project owns" section)
      scenario   Path,Seed,NumPlayers (Path is a real .SCN file; NumPlayers players get the fixed
                 "PlayerN"/"pwN"/not-empress convention RunScenarioCase and the C# side's own
                 ScenarioLoaderGoldenTests both hard-code, not a CLI field, since a name string can't
@@ -1391,51 +1393,17 @@ procedure RunNebulaCase(const arg: String);
    Dispose(Universe);
    end;
 
-procedure RunRngCase(const arg: String);
-   { Not a UpdateWorld/GalaxySetup domain at all -- a permanent regression fixture for the C# test
-     project's own PascalRandom (a from-scratch port of this fpc runtime's real Random/RandSeed
-     algorithm, empirically reverse-engineered against this exact toolchain: it's a Mersenne Twister
-     variant with fpc-specific reseed/tempering behavior, not the classic Turbo Pascal LCG one might
-     expect and not the newer Xoshiro128** generator later fpc releases moved to -- verified by probing
-     this project's own installed fpc 3.2.2, not by trusting any RTL source line in isolation). Real
-     (non-ForcedRandomValue) Random is otherwise never golden-file-covered anywhere in this harness,
-     since every other domain needs a single repeatable Rnd() value, not a real sequence -- this domain
-     exists so that whenever a future domain genuinely needs a real, non-degenerate multi-call RNG
-     sequence (e.g. Phase 2 commit 2e's CREATERANDOMWORLDS, whose retry-on-collision loop breaks under
-     ForcedRandomValue's fixed-offset convention), PascalRandom is already proven correct against real
-     Pascal output before anything is built on top of it. }
-   var
-      parts: array[0..2] of LongInt;
-      i: Integer;
-      { AnsiString, not the default 255-char-capped String -- StateBlockBoundary's 701 comma-joined
-        draws need well over 255 characters. }
-      Values, Piece: AnsiString;
-   begin
-   ParseFields(arg,parts);
-
-   RandSeed:=parts[0];
-   ForcedRandomValue:=-1;
-
-   Values:='';
-   for i:=1 to parts[2] do
-      begin
-      if i>1 then
-         Values:=Values+',';
-      Str(Random(parts[1]),Piece);
-      Values:=Values+Piece;
-      end;
-
-   WriteLn('values=',Values);
-   end;
-
 procedure RunGroundTruthRngCase(const arg: String);
-   { A standing regression fixture for GroundTruthSeed/GroundTruthNextU32 (see INT.PAS.patch's own
-     doc comment) and its C# twin, src/Reconstructed4021.Tests/GroundTruthRandom.cs -- the same role
-     RunRngCase plays for PascalRandom/fpc's real Random. Calls GroundTruthNextU32 and scales it
-     exactly the way GroundTruthRandom.Next(maxValue) does on the C# side ((draw*range) shr 32), not
-     through Rnd's Min/Max wrapper -- Rnd's own Max<=Min degenerate-range clamp skips drawing
-     entirely, which would desync the two sides' state for a Range=1 case the way this fixture's
-     PascalRandom counterpart (RngCases.DegenerateRangeOne) doesn't have to worry about. }
+   { Not a UpdateWorld/GalaxySetup domain at all -- a permanent regression fixture for the C# test
+     project's own GroundTruthRandom, the generator Rnd's real (non-ForcedRandomValue) branch draws
+     from (see INT.PAS.patch's own doc comment). Calls GroundTruthNextU32 and scales it exactly the
+     way GroundTruthRandom.Next(maxValue) does on the C# side ((draw*range) shr 32), not through Rnd's
+     Min/Max wrapper -- Rnd's own Max<=Min degenerate-range clamp skips drawing entirely, which would
+     desync the two sides' state for a Range=1 case if this domain went through Rnd instead. (This
+     domain replaces a now-deleted one, RunRngCase, which played the same role for PascalRandom.cs, a
+     from-scratch reverse-engineered port of fpc's actual Random/RandSeed algorithm -- retired along
+     with PascalRandom.cs once Rnd itself no longer called fpc's real Random at all, so there was
+     nothing left needing that reverse-engineered replica to be proven correct against.) }
    var
       parts: array[0..2] of LongInt;
       i: Integer;
@@ -1828,8 +1796,6 @@ procedure RunCaseMode;
          RunRandomPlanetCase(ParamStr(i))
       else if domain='nebula' then
          RunNebulaCase(ParamStr(i))
-      else if domain='rng' then
-         RunRngCase(ParamStr(i))
       else if domain='groundtruthrng' then
          RunGroundTruthRngCase(ParamStr(i))
       else if domain='scenario' then

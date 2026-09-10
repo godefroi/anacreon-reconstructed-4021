@@ -80,7 +80,7 @@ public class SavGameWriterAcceptanceTests
     {
         PatchHarness.CompileAndRun("runload");
 
-        var random = new PascalRandom(12345);
+        var random = new GroundTruthRandom(12345);
         var loader = new ScenarioLoader(new GalaxySetup(random), random, new LegacyNpeProvider());
         var text = File.ReadAllText(Path.Combine(PascalHarness.RepoRoot, "reference", "scenarios", "dos_131", "INTRO.SCN"));
         var players = new[] { new ScenarioLoader.PlayerInfo("test_player_1", "test_pass_1", IsEmpress: false) };

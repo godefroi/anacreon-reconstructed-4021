@@ -3,9 +3,10 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// <summary>
 /// Standing regression fixture for <see cref="GroundTruthRandom"/> against its Pascal twin
 /// (INT.PAS.patch's GroundTruthSeed/GroundTruthNextU32, driven here via runworld.pas's
-/// RunGroundTruthRngCase) -- the same role <see cref="RngCases"/> plays for <see cref="PascalRandom"/>,
-/// but for the generator this project now owns on both sides instead of reverse-engineered fpc Random.
-/// Reuses the same seeds/ranges/counts as RngCases so the two fixtures read as obvious counterparts.
+/// RunGroundTruthRngCase) -- the generator Rnd's real (non-ForcedRandomValue) branch now draws from,
+/// this project's own replacement for reverse-engineering fpc's real Random (the now-deleted
+/// PascalRandom.cs/RngCases.cs, which this fixture's seeds/ranges/counts are carried over from, so
+/// the two read as obvious counterparts in git history).
 /// </summary>
 public sealed record GroundTruthRngCase(string Name, uint Seed, int Range, int Count) : INamedCase;
 

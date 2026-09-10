@@ -1,6 +1,6 @@
 --- a/INT.PAS
 +++ b/INT.PAS
-@@ -15,8 +15,52 @@ FUNCTION RndVar(Value,Variation: Integer): Integer;
+@@ -15,8 +15,51 @@ FUNCTION RndVar(Value,Variation: Integer): Integer;
  FUNCTION Sgn(X: LongInt): LongInt;
  PROCEDURE SwapInt(VAR a,b: Integer);
  
@@ -30,8 +30,7 @@
 +
 +{ PATCH: promoted to INTERFACE (pristine Rnd's real body never exposed its
 +  Random call this way either) purely so runworld.pas's test-only
-+  groundtruthrng domain can draw raw values directly, the same role
-+  RunRngCase plays for fpc's real Random -- see runworld.pas's
++  groundtruthrng domain can draw raw values directly -- see runworld.pas's
 +  RunGroundTruthRngCase for why it can't just go through Rnd(Min,Max). }
 +FUNCTION GroundTruthNextU32: LongWord;
 +
@@ -53,7 +52,7 @@
  PROCEDURE SwapInt{VAR a,b: Integer};
  { SwapInt:
     This procedure exchanges the values of a and b. }
-@@ -107,14 +151,32 @@ FUNCTION ISqrt{X: Integer): Integer};
+@@ -107,14 +150,32 @@ FUNCTION ISqrt{X: Integer): Integer};
  
  FUNCTION Rnd{Min,Max: Integer): Integer};
  { Rnd:
@@ -88,7 +87,7 @@
     END;  { Rnd }
  
  FUNCTION RndVar{Value,Variation: Integer): Integer};
-@@ -130,4 +192,7 @@ FUNCTION RndVar{Value,Variation: Integer): Integer};
+@@ -130,4 +191,7 @@ FUNCTION RndVar{Value,Variation: Integer): Integer};
     RndVar:=Rnd(Value-temp1,Value+temp1);
     END;  { RndVar }
  

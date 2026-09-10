@@ -508,13 +508,10 @@ public class GameJsonTests
     {
         // No .SAV involved at all: exercises the "nothing has happened yet" shape -- empty
         // EntityVisibility sets, empty Kingdom State/FleetStates dictionaries, no News.
-        // PascalRandom (a real, varying RNG), not FixedRandom: a real scenario's procedural world
+        // GroundTruthRandom (a real, varying RNG), not FixedRandom: a real scenario's procedural world
         // generation has collision-retry loops (e.g. "re-roll until an unused coordinate"), and
-        // FixedRandom always returning the same value hangs one of those forever. Any real RNG works
-        // here since nothing below compares against a Pascal golden file -- PascalRandom is just a
-        // convenient one already in this project, unlike ScenarioLoaderGoldenTests's GroundTruthRandom,
-        // which specifically needs to match the ground-truth harness's own RNG stream.
-        var random = new PascalRandom(12345);
+        // FixedRandom always returning the same value hangs one of those forever.
+        var random = new GroundTruthRandom(12345);
         var loader = new ScenarioLoader(new Core.NewGame.GalaxySetup(random), random, new LegacyNpeProvider());
         var text = File.ReadAllText(Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "reference", "scenarios", "dos_131", "INTRO.SCN"));
         var players = new[] { new ScenarioLoader.PlayerInfo("test_player_1", "test_pass_1", IsEmpress: false) };
