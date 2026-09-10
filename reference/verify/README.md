@@ -478,6 +478,14 @@ own header comment, not repeated here.
   domain (and `FleetMoveTests`) can call them in isolation. `GetNewBasePos`/`XY2Dir` (`SBASE.PAS`,
   starbase obstacle-avoidance) have no domain here yet — `SBase` is never patched into this
   harness; `FleetMovementHandlerTests.cs` covers that hardcoded instead.
+- **`npepirate`** — NPE01.PAS's real `ImplementPirateNPE`, one turn, against a hand-built
+  `Universe^`/`PirateDataRecord` (no `InitializePirateNPE` call — see `RunNpePirateCase`'s own
+  comment for why). `Mode` selects one of five fixed scenarios: a patrol fleet's deployment and
+  `GetPatrolDestination`'s weighted-block-then-coordinate roll, `WaitForTrnMSN` catching a transport
+  or giving up, `AttackTrnMSN` catching its target, and `AttackWrldMSN` conquering an undefended
+  world (needs landed troops — ship-vs-ship combat alone can never take a world, only wear down its
+  defenses). Cross-checked against `Reconstructed4021.LegacyNpe.PirateTurnHandler` by
+  `PirateGoldenTests.MatchesGoldenFile`.
 
 ### Not a `UpdateWorld`/`GalaxySetup` domain
 

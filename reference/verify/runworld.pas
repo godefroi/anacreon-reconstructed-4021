@@ -131,6 +131,14 @@
                 regression fixture for the C# test project's GroundTruthRandom, Rnd's own ground-truth
                 generator (see RunGroundTruthRngCase's own comment and reference/verify/README.md's
                 "ground-truth RNG is a generator this project owns" section)
+     npepirate  Mode,Seed,HeavyBX,HeavyBY -> "mission=<v>;waiting=<v>;destx=<v>;desty=<v>;blockx=<v>;
+                blocky=<v>;hgvalue=<v>;shfgt=<v>;shhkr=<v>;shjmp=<v>;shtrn=<v>;crche=<v>;crmet=<v>;
+                targetowner=<Empire ordinal>;activefleetcount=<v>" -- NPE01.PAS's real
+                ImplementPirateNPE, one turn, against a hand-built Universe^ and PirateDataRecord (no
+                InitializePirateNPE call -- see RunNpePirateCase's own comment for why). Mode selects
+                one of five fixed scenarios (DeployNewFleets+GetPatrolDestination, WaitForTrnMSN
+                catching/giving up, AttackTrnMSN catching, AttackWrldMSN conquering); see that
+                procedure's own comment for what each exercises and why.
      scenario   Path,Seed,NumPlayers (Path is a real .SCN file; NumPlayers players get the fixed
                 "PlayerN"/"pwN"/not-empress convention RunScenarioCase and the C# side's own
                 ScenarioLoaderGoldenTests both hard-code, not a CLI field, since a name string can't
@@ -164,7 +172,7 @@ PROGRAM RunWorld;
   relaxation, not a behavior change. }
 {$V-}
 
-USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, AttNPE, Fleet, Intrface, DFA, Strg, NewGame;
+USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, AttNPE, Fleet, Intrface, DFA, Strg, NewGame, NPETypes, NPE01;
 
 function ParseLongInt(const s: String): LongInt;
    var
@@ -1757,6 +1765,293 @@ procedure RunProbeScoutCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunNpePirateCase(const arg: String);
+   { Calls the real NPE01.PAS ImplementPirateNPE (Emp,DataPtr) directly, one turn, against a
+     hand-assembled Universe^ and a hand-poked PirateDataRecord -- InitializePirateNPE is
+     deliberately NOT called (it rolls SetEmpireDefenses via Rnd, and its New(Data) leaves Sheep as
+     uninitialized heap garbage, neither of which this domain wants nondeterministic). Galaxy is a
+     fixed SizeOfGalaxy=25 (MaxBX=MaxBY=5 blocks) for every case, matching the C# side's own
+     Game.Galaxy.Size used by GoldenTests/PirateGoldenTests.
+
+     Mode (parts[0]) selects one of five fixed, hand-built scenarios -- Seed (parts[1]) is the only
+     thing that varies within a mode across cases; HeavyBX/HeavyBY (parts[2..3]) only matter for
+     Mode 1:
+
+     1 PatrolDeploy: one Empire1 planet with enough Ships[hkr] to hit DeployNewFleets' third
+       GetFleetComposition band (hkr>250, the other two bands need jtn/jmp this planet has none of).
+       HuntingGround is all-zero except HeavyBX/HeavyBY, so GetPatrolDestination's weighted scan is
+       forced into that exact block deterministically -- only the coordinate roll inside it
+       (Rnd(1+(x-1)*5,x*5)) is actually random. No pre-existing tracked fleet; the one DeployNewFleets
+       creates is found afterward by scanning SetOfActiveFleets.
+     2 WaitForTrnCatchesTarget: one tracked WaitForTrnMSN fleet (BlockX=BlockY=2, HuntingGround[2,2]=25)
+       and one enemy transport fleet in range (dist=2) it's guaranteed to catch (FindTarget's own
+       three conditions are trivially satisfied: enemy Ships[jtn]>0, enemy Jmp+Hkr=0<=anything, enemy
+       Pen+Ssp=0<=anything) -- exercises the transition into AttackTrnMSN, GetNewPos's real
+       one-step-toward-destination prediction, and HuntingGround[2,2]+=15.
+     3 WaitForTrnGivesUp: same tracked fleet, Waiting=0, no enemy anywhere -- exercises the
+       give-up-and-go-home branch (FindNearestBase, Mission->ReturnMSN, HuntingGround[2,2]-=5).
+     4 AttackTrnCatchesTarget: one tracked AttackTrnMSN fleet (carrying Fgt/Trn so their unconditional
+       zeroing afterward is observable) whose TargetID fleet sits at the same XY -- exercises the real
+       NPEAttack(CaptTrnAIT) call, the Sh[fgt]:=0;Sh[trn]:=0;BalanceFleet cleanup, and the
+       ReturnHome-before-attack ordering (Mission is already ReturnMSN by the time NPEAttack can
+       destroy the target fleet).
+     5 AttackWrldConquers: one tracked AttackWrldMSN fleet, overwhelmingly stronger (5000 fgt/hkr)
+       than its target world's own zero defenses/ships -- guaranteed DefConqueredART regardless of
+       which casualty rolls NPEAttack's own internals happen to draw, so PlunderWorld always fires:
+       world's Cargo moves to the fleet, world becomes Indep (matching PlunderWorld's own "leave
+       nothing behind, set independent" behavior, not just ConquerWorld's earlier owner reassignment).
+
+     Emits a fixed field set every mode (fields a mode doesn't touch come out at whatever
+     zero/default the case setup leaves them, and the C# test simply doesn't assert those) rather
+     than per-mode conditional fields: mission/waiting/destx/desty describe the tracked fleet found
+     after the call (Mode 1's freshly-deployed fleet, or Mode 2-5's own Fleet[1]); blockx/blocky/
+     hgvalue describe HuntingGround at the block the case cares about; shfgt/shhkr/shjmp/shtrn/crche/
+     crmet describe that same fleet's post-call Ships/Cargo; targetowner is Ord(GetStatus(Planet[2]))
+     -- meaningful for Mode 5 only (where Planet[2] is this case's real target world); every other
+     mode never builds a Planet[2] at all, so this reads whatever GetStatus returns for an unused
+     array slot (Empire1, from the top-level FillChar) -- plausible-looking, not meaningful, and not
+     asserted by the C# test for those modes; activefleetcount is a count of SetOfActiveFleets, a
+     cheap "nothing got destroyed/created unexpectedly" check. }
+   var
+      parts: array[0..3] of LongInt;
+      Data: PirateDataPtr;
+      Flt1ID, Flt2ID, Pln1ID, Pln2ID: IDNumber;
+      i, FltIndex, Slot, ActiveFleetCount: Word;
+      XY: XYCoord;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   InitializeSector(25);
+   NoOfPlanets:=0;
+   SetOfActivePlanets:=[];
+   SetOfActiveFleets:=[];
+
+   { PATCH-note: EnforceNPEDataLinks (called first inside ImplementPirateNPE) reads
+     Universe^.Fleet[i]^.NPEDataIndex unconditionally for every i in 1..MaxNoOfFleets, not just
+     i IN SetOfActiveFleets -- real gameplay never hits a genuinely-Nil slot here because every
+     Fleet[] pointer is allocated once at galaxy creation and never actually freed back to Nil
+     (DestroyFleet's own Dispose is followed by CreateFleet re-New-ing the same slot on reuse, real
+     DOS Turbo Pascal heap memory also just stays readable garbage after Dispose rather than
+     unmapping the page) -- this domain is the first in this harness to call anything that scans
+     every slot rather than just the ones it explicitly built, so it's also the first to need every
+     slot genuinely allocated, not just the ones this case actually uses. }
+   for i:=1 to MaxNoOfFleets do
+      begin
+      New(Universe^.Fleet[i]);
+      FillChar(Universe^.Fleet[i]^,SizeOf(Universe^.Fleet[i]^),0);
+      end;
+
+   GroundTruthSeed:=LongWord(parts[1]);
+   ForcedRandomValue:=-1;
+
+   New(Data);
+   FillChar(Data^,SizeOf(Data^),0);
+
+   Universe^.EmpireData[Empire1].InUse:=True;
+
+   Flt1ID.ObjTyp:=Flt;  Flt1ID.Index:=1;
+   Flt2ID.ObjTyp:=Flt;  Flt2ID.Index:=2;
+   Pln1ID.ObjTyp:=Pln;  Pln1ID.Index:=1;
+   Pln2ID.ObjTyp:=Pln;  Pln2ID.Index:=2;
+
+   case parts[0] of
+      1: begin
+         NoOfPlanets:=1;
+         Universe^.Planet[1].Cls:=ClsM;  Universe^.Planet[1].Typ:=CapTyp;
+         Universe^.Planet[1].Tech:=TechLevel(0);
+         Universe^.Planet[1].Emp:=Empire1;
+         Universe^.Planet[1].XY.x:=10;  Universe^.Planet[1].XY.y:=10;
+         Universe^.Planet[1].Ships[hkr]:=3000;
+         SetOfActivePlanets:=[1];
+         SetOfPlanetsOf[Empire1]:=[1];
+         Universe^.EmpireData[Empire1].Capital:=Pln1ID;
+
+         Data^.HuntingGround[parts[2],parts[3]]:=200;
+         end;
+
+      2: begin
+         Universe^.Fleet[1]^.Emp:=Empire1;
+         Universe^.Fleet[1]^.XY.x:=20;  Universe^.Fleet[1]^.XY.y:=20;
+         Universe^.Fleet[1]^.Ships[hkr]:=50;  Universe^.Fleet[1]^.Ships[jmp]:=50;
+         SetOfActiveFleets:=[1];
+         SetOfFleetsOf[Empire1]:=[1];
+         XY.x:=20;  XY.y:=20;
+         SetFleetDestination(Flt1ID,XY);
+
+         Universe^.Fleet[2]^.Emp:=Empire2;
+         Universe^.Fleet[2]^.XY.x:=22;  Universe^.Fleet[2]^.XY.y:=20;
+         Universe^.Fleet[2]^.Ships[jtn]:=50;
+         SetOfActiveFleets:=SetOfActiveFleets+[2];
+         SetOfFleetsOf[Empire2]:=[2];
+         XY.x:=25;  XY.y:=20;
+         SetFleetDestination(Flt2ID,XY);
+
+         Data^.FleetData[1].Mission:=WaitForTrnMSN;
+         Data^.FleetData[1].Waiting:=3;
+         Data^.FleetData[1].BlockX:=2;  Data^.FleetData[1].BlockY:=2;
+         Data^.FleetData[1].Index:=1;
+         SetNPEDataIndex(Flt1ID,1);
+         Data^.HuntingGround[2,2]:=25;
+         end;
+
+      3: begin
+         NoOfPlanets:=1;
+         Universe^.Planet[1].Cls:=ClsM;  Universe^.Planet[1].Typ:=CapTyp;
+         Universe^.Planet[1].Tech:=TechLevel(0);
+         Universe^.Planet[1].Emp:=Empire1;
+         Universe^.Planet[1].XY.x:=10;  Universe^.Planet[1].XY.y:=10;
+         SetOfActivePlanets:=[1];
+         SetOfPlanetsOf[Empire1]:=[1];
+         Universe^.EmpireData[Empire1].Capital:=Pln1ID;
+
+         Universe^.Fleet[1]^.Emp:=Empire1;
+         Universe^.Fleet[1]^.XY.x:=20;  Universe^.Fleet[1]^.XY.y:=20;
+         SetOfActiveFleets:=[1];
+         SetOfFleetsOf[Empire1]:=[1];
+         XY.x:=20;  XY.y:=20;
+         SetFleetDestination(Flt1ID,XY);
+
+         Data^.FleetData[1].Mission:=WaitForTrnMSN;
+         Data^.FleetData[1].Waiting:=0;
+         Data^.FleetData[1].BlockX:=2;  Data^.FleetData[1].BlockY:=2;
+         Data^.FleetData[1].Index:=1;
+         SetNPEDataIndex(Flt1ID,1);
+         Data^.HuntingGround[2,2]:=25;
+         end;
+
+      4: begin
+         NoOfPlanets:=1;
+         Universe^.Planet[1].Cls:=ClsM;  Universe^.Planet[1].Typ:=CapTyp;
+         Universe^.Planet[1].Tech:=TechLevel(0);
+         Universe^.Planet[1].Emp:=Empire1;
+         Universe^.Planet[1].XY.x:=10;  Universe^.Planet[1].XY.y:=10;
+         SetOfActivePlanets:=[1];
+         SetOfPlanetsOf[Empire1]:=[1];
+         Universe^.EmpireData[Empire1].Capital:=Pln1ID;
+
+         Universe^.Fleet[1]^.Emp:=Empire1;
+         Universe^.Fleet[1]^.XY.x:=15;  Universe^.Fleet[1]^.XY.y:=15;
+         Universe^.Fleet[1]^.Ships[fgt]:=50;  Universe^.Fleet[1]^.Ships[trn]:=20;
+         Universe^.Fleet[1]^.Ships[hkr]:=100;  Universe^.Fleet[1]^.Ships[jmp]:=100;
+         SetOfActiveFleets:=[1];
+         SetOfFleetsOf[Empire1]:=[1];
+         XY.x:=15;  XY.y:=15;
+         SetFleetDestination(Flt1ID,XY);
+
+         Universe^.Fleet[2]^.Emp:=Empire2;
+         Universe^.Fleet[2]^.XY.x:=15;  Universe^.Fleet[2]^.XY.y:=15;
+         Universe^.Fleet[2]^.Ships[jtn]:=30;  Universe^.Fleet[2]^.Ships[hkr]:=10;
+         SetOfActiveFleets:=SetOfActiveFleets+[2];
+         SetOfFleetsOf[Empire2]:=[2];
+
+         Data^.FleetData[1].Mission:=AttackTrnMSN;
+         Data^.FleetData[1].TargetID:=Flt2ID;
+         Data^.FleetData[1].Waiting:=1;
+         Data^.FleetData[1].Index:=1;
+         SetNPEDataIndex(Flt1ID,1);
+         end;
+
+      5: begin
+         NoOfPlanets:=2;
+         Universe^.Planet[1].Cls:=ClsM;  Universe^.Planet[1].Typ:=CapTyp;
+         Universe^.Planet[1].Tech:=TechLevel(0);
+         Universe^.Planet[1].Emp:=Empire1;
+         Universe^.Planet[1].XY.x:=10;  Universe^.Planet[1].XY.y:=10;
+
+         Universe^.Planet[2].Cls:=ClsM;  Universe^.Planet[2].Typ:=CapTyp;
+         Universe^.Planet[2].Tech:=TechLevel(0);
+         Universe^.Planet[2].Emp:=Empire2;
+         Universe^.Planet[2].XY.x:=50;  Universe^.Planet[2].XY.y:=50;
+         Universe^.Planet[2].Cargo[che]:=500;  Universe^.Planet[2].Cargo[met]:=300;
+         Universe^.Planet[2].Pop:=1000;
+
+         SetOfActivePlanets:=[1,2];
+         SetOfPlanetsOf[Empire1]:=[1];
+         SetOfPlanetsOf[Empire2]:=[2];
+         Universe^.EmpireData[Empire1].Capital:=Pln1ID;
+         Universe^.EmpireData[Empire2].InUse:=True;
+         Universe^.EmpireData[Empire2].DefenseSettings:=InitDefenseRecord;
+         Universe^.EmpireData[Empire2].Capital:=Pln2ID;
+
+         Universe^.Fleet[1]^.Emp:=Empire1;
+         Universe^.Fleet[1]^.XY.x:=15;  Universe^.Fleet[1]^.XY.y:=15;
+         Universe^.Fleet[1]^.Ships[fgt]:=5000;  Universe^.Fleet[1]^.Ships[hkr]:=5000;
+         { A world can only actually be conquered by landed troops (NPEAttackCases.cs's own
+           WeakDefenderWithAttackerTroopsConquers already established this: ship-vs-ship combat
+           alone always ends in AttackerRetreatsART after 30 rounds, however lopsided the force
+           ratio -- FleetRetreats' own NoMenLeft check needs a live troop group to ever be false). }
+         Universe^.Fleet[1]^.Ships[jtn]:=20;  Universe^.Fleet[1]^.Cargo[nnj]:=50;
+         SetOfActiveFleets:=[1];
+         SetOfFleetsOf[Empire1]:=[1];
+         XY.x:=15;  XY.y:=15;
+         SetFleetDestination(Flt1ID,XY);
+
+         Data^.FleetData[1].Mission:=AttackWrldMSN;
+         Data^.FleetData[1].TargetID:=Pln2ID;
+         Data^.FleetData[1].Waiting:=1;
+         Data^.FleetData[1].Index:=1;
+         SetNPEDataIndex(Flt1ID,1);
+         end;
+      end;  { case }
+
+   ImplementPirateNPE(Empire1,Data);
+
+   { Resolve which fleet to report on: Mode 1 creates one from scratch (found by scanning
+     SetOfActiveFleets, since DeployFleet's own slot choice isn't this domain's concern), every
+     other mode already knows it's Fleet[1]. }
+   if parts[0]=1 then
+      begin
+      FltIndex:=0;
+      for i:=1 to MaxNoOfFleets do
+         if i in SetOfActiveFleets then
+            FltIndex:=i;
+      end
+   else
+      FltIndex:=1;
+
+   Flt1ID.Index:=FltIndex;
+
+   Slot:=0;
+   for i:=1 to NoOfFleetsPerEmpire do
+      if Data^.FleetData[i].Index=FltIndex then
+         Slot:=i;
+
+   if Slot=0 then
+      begin
+      WriteLn(StdErr,'runworld: npepirate mode ',parts[0],': no FleetData slot found for FltIndex ',FltIndex);
+      Halt(1);
+      end;
+
+   ActiveFleetCount:=0;
+   for i:=1 to MaxNoOfFleets do
+      if i in SetOfActiveFleets then
+         Inc(ActiveFleetCount);
+
+   WriteLn('mission=',Ord(Data^.FleetData[Slot].Mission),
+           ';waiting=',Data^.FleetData[Slot].Waiting,
+           ';destx=',Universe^.Fleet[FltIndex]^.Dest.x,
+           ';desty=',Universe^.Fleet[FltIndex]^.Dest.y,
+           ';blockx=',Data^.FleetData[Slot].BlockX,
+           ';blocky=',Data^.FleetData[Slot].BlockY,
+           ';hgvalue=',Data^.HuntingGround[Data^.FleetData[Slot].BlockX,Data^.FleetData[Slot].BlockY],
+           ';shfgt=',Universe^.Fleet[FltIndex]^.Ships[fgt],
+           ';shhkr=',Universe^.Fleet[FltIndex]^.Ships[hkr],
+           ';shjmp=',Universe^.Fleet[FltIndex]^.Ships[jmp],
+           ';shtrn=',Universe^.Fleet[FltIndex]^.Ships[trn],
+           ';crche=',Universe^.Fleet[FltIndex]^.Cargo[che],
+           ';crmet=',Universe^.Fleet[FltIndex]^.Cargo[met],
+           ';targetowner=',Ord(GetStatus(Pln2ID)),
+           ';activefleetcount=',ActiveFleetCount);
+
+   Dispose(Data);
+   for i:=1 to MaxNoOfFleets do
+      if i in SetOfActiveFleets then
+         Dispose(Universe^.Fleet[i]);
+   Dispose(Universe);
+   end;
+
 procedure RunCaseMode;
    var
       domain: String;
@@ -1802,6 +2097,8 @@ procedure RunCaseMode;
          RunScenarioCase(ParamStr(i))
       else if domain='probescout' then
          RunProbeScoutCase(ParamStr(i))
+      else if domain='npepirate' then
+         RunNpePirateCase(ParamStr(i))
       else if domain='fleetlogistics' then
          RunFleetLogisticsCase(ParamStr(i))
       else if domain='fleetmove' then
