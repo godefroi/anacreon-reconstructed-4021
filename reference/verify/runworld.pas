@@ -132,13 +132,14 @@
                 generator (see RunGroundTruthRngCase's own comment and reference/verify/README.md's
                 "ground-truth RNG is a generator this project owns" section)
      npepirate  Mode,Seed,HeavyBX,HeavyBY -> "mission=<v>;waiting=<v>;destx=<v>;desty=<v>;blockx=<v>;
-                blocky=<v>;hgvalue=<v>;shfgt=<v>;shhkr=<v>;shjmp=<v>;shtrn=<v>;crche=<v>;crmet=<v>;
-                targetowner=<Empire ordinal>;activefleetcount=<v>" -- NPE01.PAS's real
-                ImplementPirateNPE, one turn, against a hand-built Universe^ and PirateDataRecord (no
-                InitializePirateNPE call -- see RunNpePirateCase's own comment for why). Mode selects
-                one of five fixed scenarios (DeployNewFleets+GetPatrolDestination, WaitForTrnMSN
-                catching/giving up, AttackTrnMSN catching, AttackWrldMSN conquering); see that
-                procedure's own comment for what each exercises and why.
+                blocky=<v>;hgvalue=<v>;shfgt=<v>;shhkr=<v>;shjmp=<v>;shjtn=<v>;shtrn=<v>;crche=<v>;
+                crmet=<v>;crmen=<v>;targetowner=<Empire ordinal>;activefleetcount=<v>" -- NPE01.PAS's
+                real ImplementPirateNPE, one turn, against a hand-built Universe^ and PirateDataRecord
+                (no InitializePirateNPE call -- see RunNpePirateCase's own comment for why). Mode
+                selects one of six fixed scenarios (DeployNewFleets+GetPatrolDestination, WaitForTrnMSN
+                catching/giving up, AttackTrnMSN catching, AttackWrldMSN conquering, DeployRaiders+
+                GetTarget's own scoring formula); see that procedure's own comment for what each
+                exercises and why.
      scenario   Path,Seed,NumPlayers (Path is a real .SCN file; NumPlayers players get the fixed
                 "PlayerN"/"pwN"/not-empress convention RunScenarioCase and the C# side's own
                 ScenarioLoaderGoldenTests both hard-code, not a CLI field, since a name string can't
@@ -1800,23 +1801,44 @@ procedure RunNpePirateCase(const arg: String);
        which casualty rolls NPEAttack's own internals happen to draw, so PlunderWorld always fires:
        world's Cargo moves to the fleet, world becomes Indep (matching PlunderWorld's own "leave
        nothing behind, set independent" behavior, not just ConquerWorld's earlier owner reassignment).
+     6 RaiderDeploy: one Empire1 planet stocked over DeployRaiders' own gate (hkr>1500, jmp>2500,
+       jtn>4000) and one lone Empire2 candidate world (AtomicLvl tech, zero ships/defenses, real
+       Cargo -- Che=100,Met=100,Tri=50,Sup=200, the same figures PirateTurnHandlerTests' own
+       DeploysRaiderFleetAtBestScoringTarget test uses) -- exercises GetTarget's real-arithmetic
+       scoring formula (Round((1-(Protect/FltPower))*(Gain DIV 10)), RndVar's own Trunc jitter), the
+       same arithmetic-risk class that produced the PascalRound bug in `combat` (see this file's own
+       README). Protect=0 here makes the ratio exactly 1 regardless of FltPower's actual (seeded)
+       value, so the lone candidate's own Possible score is itself seed-independent -- only the
+       drafted FltSh composition and GetTarget's own jitter around that fixed score vary by seed, and
+       the single positive-scoring candidate is always chosen regardless. This planet also clears
+       DeployNewFleets' own first composition band (jtn>4000 AND jmp>2000 is implied by DeployRaiders'
+       own stricter gate) -- both Deploy* procedures firing from the same world in the same turn is
+       real, unavoidable Pascal behavior (already covered for its own "does one Deploy* see the
+       other's already-reduced stock" concern by PirateTurnHandlerTests' own class doc comment, not
+       re-litigated here), so this case reports specifically on the raider (Mission=AttackWrldMSN),
+       not whichever fleet happens to end up in a set first.
 
      Emits a fixed field set every mode (fields a mode doesn't touch come out at whatever
      zero/default the case setup leaves them, and the C# test simply doesn't assert those) rather
      than per-mode conditional fields: mission/waiting/destx/desty describe the tracked fleet found
-     after the call (Mode 1's freshly-deployed fleet, or Mode 2-5's own Fleet[1]); blockx/blocky/
-     hgvalue describe HuntingGround at the block the case cares about; shfgt/shhkr/shjmp/shtrn/crche/
-     crmet describe that same fleet's post-call Ships/Cargo; targetowner is Ord(GetStatus(Planet[2]))
-     -- meaningful for Mode 5 only (where Planet[2] is this case's real target world); every other
-     mode never builds a Planet[2] at all, so this reads whatever GetStatus returns for an unused
-     array slot (Empire1, from the top-level FillChar) -- plausible-looking, not meaningful, and not
-     asserted by the C# test for those modes; activefleetcount is a count of SetOfActiveFleets, a
-     cheap "nothing got destroyed/created unexpectedly" check. }
+     after the call (Mode 1/6's freshly-deployed fleet, or Mode 2-5's own Fleet[1]); blockx/blocky/
+     hgvalue describe HuntingGround at the block the case cares about (DeployRaiders never sets
+     BlockX/BlockY, so Mode 6 reads it as 0/0, an out-of-range HuntingGround index the C# test simply
+     doesn't assert for that mode -- no range checking in this tree, so it's a harmless stray read,
+     not a crash); shfgt/shhkr/shjmp/shjtn/shtrn/crche/crmet/crmen describe that same fleet's post-call
+     Ships/Cargo; targetowner is Ord(GetStatus(Planet[2])) -- meaningful for Modes 5 and 6, both of
+     which build a real Planet[2] (Mode 5's conquered world ends up Indep; Mode 6's raid target is
+     never actually attacked this turn, just marked as a future one, so it stays Empire2's); Modes 1-4
+     never build a Planet[2] at all, so this reads whatever GetStatus returns for an unused array slot
+     -- plausible-looking, not meaningful, and not asserted by the C# test for those modes;
+     activefleetcount is a count of SetOfActiveFleets, a cheap "nothing got destroyed/created
+     unexpectedly" check (2 for Mode 6, since DeployNewFleets' own patrol fleet deploys alongside the
+     raider). }
    var
       parts: array[0..3] of LongInt;
       Data: PirateDataPtr;
       Flt1ID, Flt2ID, Pln1ID, Pln2ID: IDNumber;
-      i, FltIndex, Slot, ActiveFleetCount: Word;
+      i, Scratch, FltIndex, Slot, ActiveFleetCount: Word;
       XY: XYCoord;
    begin
    ParseFields(arg,parts);
@@ -1994,19 +2016,57 @@ procedure RunNpePirateCase(const arg: String);
          Data^.FleetData[1].Index:=1;
          SetNPEDataIndex(Flt1ID,1);
          end;
+
+      6: begin
+         NoOfPlanets:=2;
+         Universe^.Planet[1].Cls:=ClsM;  Universe^.Planet[1].Typ:=CapTyp;
+         Universe^.Planet[1].Tech:=TechLevel(0);
+         Universe^.Planet[1].Emp:=Empire1;
+         Universe^.Planet[1].XY.x:=10;  Universe^.Planet[1].XY.y:=10;
+         Universe^.Planet[1].Ships[hkr]:=5000;
+         Universe^.Planet[1].Ships[jmp]:=10000;
+         Universe^.Planet[1].Ships[jtn]:=10000;
+         Universe^.Planet[1].Cargo[men]:=4000;
+
+         { Same Cargo figures as PirateTurnHandlerTests.PlayTurn_DeploysRaiderFleetAtBestScoringTarget:
+           Protect=0 (no Ships/Defns), Gain=100+100+5*50+200 DIV 2=550, Legion+2*NinjaLegion=0 < GAT --
+           the one and only positive-score candidate. }
+         Universe^.Planet[2].Cls:=ClsM;  Universe^.Planet[2].Typ:=AgrTyp;
+         Universe^.Planet[2].Tech:=AtomicLvl;
+         Universe^.Planet[2].Emp:=Empire2;
+         Universe^.Planet[2].XY.x:=12;  Universe^.Planet[2].XY.y:=10;
+         Universe^.Planet[2].Cargo[che]:=100;  Universe^.Planet[2].Cargo[met]:=100;
+         Universe^.Planet[2].Cargo[tri]:=50;  Universe^.Planet[2].Cargo[sup]:=200;
+
+         SetOfActivePlanets:=[1,2];
+         SetOfPlanetsOf[Empire1]:=[1];
+         SetOfPlanetsOf[Empire2]:=[2];
+         Universe^.EmpireData[Empire1].Capital:=Pln1ID;
+         Universe^.EmpireData[Empire2].InUse:=True;
+         Universe^.EmpireData[Empire2].Capital:=Pln2ID;
+         end;
       end;  { case }
 
    ImplementPirateNPE(Empire1,Data);
 
-   { Resolve which fleet to report on: Mode 1 creates one from scratch (found by scanning
-     SetOfActiveFleets, since DeployFleet's own slot choice isn't this domain's concern), every
-     other mode already knows it's Fleet[1]. }
-   if parts[0]=1 then
+   { Resolve which fleet to report on: Modes 1 and 6 create their own fleet(s) from scratch (found by
+     scanning SetOfActiveFleets, since DeployFleet's own slot choice isn't this domain's concern) --
+     Mode 6 specifically reports on the raider (its own FleetData slot's Mission=AttackWrldMSN), since
+     DeployNewFleets' own patrol fleet deploys from the same world in the same turn (see this
+     procedure's own Mode 6 comment). Every other mode already knows it's Fleet[1]. }
+   if parts[0] in [1,6] then
       begin
       FltIndex:=0;
       for i:=1 to MaxNoOfFleets do
          if i in SetOfActiveFleets then
-            FltIndex:=i;
+            begin
+            Slot:=0;
+            for Scratch:=1 to NoOfFleetsPerEmpire do
+               if Data^.FleetData[Scratch].Index=i then
+                  Slot:=Scratch;
+            if (parts[0]=1) or (Data^.FleetData[Slot].Mission=AttackWrldMSN) then
+               FltIndex:=i;
+            end;
       end
    else
       FltIndex:=1;
@@ -2039,9 +2099,11 @@ procedure RunNpePirateCase(const arg: String);
            ';shfgt=',Universe^.Fleet[FltIndex]^.Ships[fgt],
            ';shhkr=',Universe^.Fleet[FltIndex]^.Ships[hkr],
            ';shjmp=',Universe^.Fleet[FltIndex]^.Ships[jmp],
+           ';shjtn=',Universe^.Fleet[FltIndex]^.Ships[jtn],
            ';shtrn=',Universe^.Fleet[FltIndex]^.Ships[trn],
            ';crche=',Universe^.Fleet[FltIndex]^.Cargo[che],
            ';crmet=',Universe^.Fleet[FltIndex]^.Cargo[met],
+           ';crmen=',Universe^.Fleet[FltIndex]^.Cargo[men],
            ';targetowner=',Ord(GetStatus(Pln2ID)),
            ';activefleetcount=',ActiveFleetCount);
 

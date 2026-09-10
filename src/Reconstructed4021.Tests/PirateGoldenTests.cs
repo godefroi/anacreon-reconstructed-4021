@@ -17,9 +17,13 @@ namespace Reconstructed4021.Tests;
 /// sides now share and compares against a live Pascal run — the two sides can only agree by actually
 /// matching, not by both being wrong the same way.
 ///
-/// Every mode pre-seeds at most one tracked fleet (Mode 1 has none until DeployNewFleets creates it),
-/// so there's never an ordering question between this port's Dictionary-keyed FleetStates and Pascal's
-/// slot-indexed FleetData — deliberately, to sidestep needing any cross-side ordering convention at all.
+/// Every mode pre-seeds at most one tracked fleet (Modes 1 and 6 have none until DeployNewFleets/
+/// DeployRaiders creates them), so there's never an ordering question between this port's
+/// Dictionary-keyed FleetStates and Pascal's slot-indexed FleetData — deliberately, to sidestep
+/// needing any cross-side ordering convention at all. Mode 6 deploys two fleets in the same turn
+/// (DeployRaiders' own raider and DeployNewFleets' own patrol, both fire from the same qualifying
+/// world — real Pascal behavior, not a test artifact), so it resolves the one it reports on by
+/// Mission rather than by enumeration order.
 /// </summary>
 public class PirateGoldenTests
 {
@@ -177,6 +181,37 @@ public class PirateGoldenTests
                 break;
             }
 
+            case 6: {
+                var home = new Planet { Location = new Coordinate(10, 10), Owner = owner, Type = WorldType.Capital, Class = WorldClass.EarthLike, TechLevel = TechLevel.Warp };
+                home.Ships[ShipType.HunterKiller] = 5000;
+                home.Ships[ShipType.Jumpship] = 10000;
+                home.Ships[ShipType.Jumptransport] = 10000;
+                home.Cargo[CargoType.Legion] = 4000;
+                owner.Capital = home;
+                galaxy.Planets.Add(home);
+
+                // Same Cargo figures as PirateTurnHandlerTests.PlayTurn_DeploysRaiderFleetAtBestScoringTarget:
+                // Protect=0, Gain=100+100+5*50+200/2=550, Legion+2*NinjaLegion=0 < GAT -- the one and
+                // only positive-score candidate.
+                targetWorld = new Planet { Location = new Coordinate(12, 10), Owner = enemy, Type = WorldType.Agricultural, Class = WorldClass.EarthLike, TechLevel = TechLevel.Atomic };
+                targetWorld.Cargo[CargoType.Chemicals] = 100;
+                targetWorld.Cargo[CargoType.Metals] = 100;
+                targetWorld.Cargo[CargoType.Trillum] = 50;
+                targetWorld.Cargo[CargoType.Supplies] = 200;
+                galaxy.Planets.Add(targetWorld);
+
+                handler.PlayTurn(owner, game);
+
+                // DeployNewFleets' own first composition band fires from the same world in the same
+                // turn (jtn>4000 AND jmp>2000 is implied by DeployRaiders' own stricter gate) -- report
+                // on the raider specifically, not whichever fleet happens to end up in a set first
+                // (already covered for its own "does one Deploy* see the other's already-reduced
+                // stock" concern by PirateTurnHandlerTests' own class doc comment).
+                await Assert.That(galaxy.Fleets).Count().IsEqualTo(2);
+                trackedFleet = galaxy.Fleets.Single(f => FleetStatesOf(handler)[f].Mission == NpeMissionType.AttackWorld);
+                break;
+            }
+
             default:
                 throw new ArgumentOutOfRangeException(nameof(c), c.Mode, "Unknown PirateCase mode.");
         }
@@ -189,9 +224,11 @@ public class PirateGoldenTests
         await Assert.That(trackedFleet.Ships[ShipType.Fighter]).IsEqualTo(int.Parse(golden["shfgt"]));
         await Assert.That(trackedFleet.Ships[ShipType.HunterKiller]).IsEqualTo(int.Parse(golden["shhkr"]));
         await Assert.That(trackedFleet.Ships[ShipType.Jumpship]).IsEqualTo(int.Parse(golden["shjmp"]));
+        await Assert.That(trackedFleet.Ships[ShipType.Jumptransport]).IsEqualTo(int.Parse(golden["shjtn"]));
         await Assert.That(trackedFleet.Ships[ShipType.Transport]).IsEqualTo(int.Parse(golden["shtrn"]));
         await Assert.That(trackedFleet.Cargo[CargoType.Chemicals]).IsEqualTo(int.Parse(golden["crche"]));
         await Assert.That(trackedFleet.Cargo[CargoType.Metals]).IsEqualTo(int.Parse(golden["crmet"]));
+        await Assert.That(trackedFleet.Cargo[CargoType.Legion]).IsEqualTo(int.Parse(golden["crmen"]));
         await Assert.That(galaxy.Fleets.Count).IsEqualTo(int.Parse(golden["activefleetcount"]));
         await Assert.That(state.BlockX).IsEqualTo(int.Parse(golden["blockx"]));
         await Assert.That(state.BlockY).IsEqualTo(int.Parse(golden["blocky"]));

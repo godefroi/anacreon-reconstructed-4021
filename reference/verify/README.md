@@ -480,11 +480,13 @@ own header comment, not repeated here.
   harness; `FleetMovementHandlerTests.cs` covers that hardcoded instead.
 - **`npepirate`** — NPE01.PAS's real `ImplementPirateNPE`, one turn, against a hand-built
   `Universe^`/`PirateDataRecord` (no `InitializePirateNPE` call — see `RunNpePirateCase`'s own
-  comment for why). `Mode` selects one of five fixed scenarios: a patrol fleet's deployment and
+  comment for why). `Mode` selects one of six fixed scenarios: a patrol fleet's deployment and
   `GetPatrolDestination`'s weighted-block-then-coordinate roll, `WaitForTrnMSN` catching a transport
-  or giving up, `AttackTrnMSN` catching its target, and `AttackWrldMSN` conquering an undefended
-  world (needs landed troops — ship-vs-ship combat alone can never take a world, only wear down its
-  defenses). Cross-checked against `Reconstructed4021.LegacyNpe.PirateTurnHandler` by
+  or giving up, `AttackTrnMSN` catching its target, `AttackWrldMSN` conquering an undefended world
+  (needs landed troops — ship-vs-ship combat alone can never take a world, only wear down its
+  defenses), and `DeployRaiders`/`GetTarget`'s own real-arithmetic scoring formula (`Round`/`RndVar`'s
+  `Trunc`, the same arithmetic-risk class as the `PascalRound` bug described under `combat` above).
+  Cross-checked against `Reconstructed4021.LegacyNpe.PirateTurnHandler` by
   `PirateGoldenTests.MatchesGoldenFile`.
 
 ### Not a `UpdateWorld`/`GalaxySetup` domain
