@@ -1,0 +1,5 @@
+case=SmallRangeManySeeds1;values=2,1,54,63,91,11,49,54,59,78
+case=LargeRange;values=20402,16547,543155,634904,910029,112461,495889,548348,596100,783450
+case=SeedOne;values=15496,24200,33046,46195,3312
+case=SeedZero;values=2360,2785,8194,6678,3840
+case=DegenerateRangeOne;values=0,0,0

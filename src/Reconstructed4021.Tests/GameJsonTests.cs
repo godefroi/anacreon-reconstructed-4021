@@ -434,7 +434,9 @@ public class GameJsonTests
     [Test]
     public async Task RoundTrips_Gauntlet1()
     {
-        // Pirate empire -> UnimplementedNpeBlobs.
+        // Pirate empire (Thinnva) -> PirateTurnHandler, round-tripped through native JSON like any
+        // other ITurnHandler (DeepGraphComparer walks its internal FleetStates/HuntingGround/Sheep
+        // properties the same generic way it already walks KingdomTurnHandler's).
         await AssertRoundTrips(LoadSav("GAUNTLET_1.SAV"));
     }
 
@@ -508,8 +510,10 @@ public class GameJsonTests
         // EntityVisibility sets, empty Kingdom State/FleetStates dictionaries, no News.
         // PascalRandom (a real, varying RNG), not FixedRandom: a real scenario's procedural world
         // generation has collision-retry loops (e.g. "re-roll until an unused coordinate"), and
-        // FixedRandom always returning the same value hangs one of those forever -- the same reason
-        // ScenarioLoaderGoldenTests uses PascalRandom for real .SCN files, not FixedRandom.
+        // FixedRandom always returning the same value hangs one of those forever. Any real RNG works
+        // here since nothing below compares against a Pascal golden file -- PascalRandom is just a
+        // convenient one already in this project, unlike ScenarioLoaderGoldenTests's GroundTruthRandom,
+        // which specifically needs to match the ground-truth harness's own RNG stream.
         var random = new PascalRandom(12345);
         var loader = new ScenarioLoader(new Core.NewGame.GalaxySetup(random), random, new LegacyNpeProvider());
         var text = File.ReadAllText(Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "reference", "scenarios", "dos_131", "INTRO.SCN"));

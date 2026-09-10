@@ -1428,6 +1428,35 @@ procedure RunRngCase(const arg: String);
    WriteLn('values=',Values);
    end;
 
+procedure RunGroundTruthRngCase(const arg: String);
+   { A standing regression fixture for GroundTruthSeed/GroundTruthNextU32 (see INT.PAS.patch's own
+     doc comment) and its C# twin, src/Reconstructed4021.Tests/GroundTruthRandom.cs -- the same role
+     RunRngCase plays for PascalRandom/fpc's real Random. Calls GroundTruthNextU32 and scales it
+     exactly the way GroundTruthRandom.Next(maxValue) does on the C# side ((draw*range) shr 32), not
+     through Rnd's Min/Max wrapper -- Rnd's own Max<=Min degenerate-range clamp skips drawing
+     entirely, which would desync the two sides' state for a Range=1 case the way this fixture's
+     PascalRandom counterpart (RngCases.DegenerateRangeOne) doesn't have to worry about. }
+   var
+      parts: array[0..2] of LongInt;
+      i: Integer;
+      Values, Piece: AnsiString;
+   begin
+   ParseFields(arg,parts);
+
+   GroundTruthSeed:=LongWord(parts[0]);
+
+   Values:='';
+   for i:=1 to parts[2] do
+      begin
+      if i>1 then
+         Values:=Values+',';
+      Str((QWord(GroundTruthNextU32)*QWord(parts[1])) SHR 32,Piece);
+      Values:=Values+Piece;
+      end;
+
+   WriteLn('values=',Values);
+   end;
+
 procedure RunScenarioCase(const arg: String);
    { Calls the real NEWGAME.PAS LoadScenario end to end (promoted to this unit's INTERFACE, see
      NEWGAME.PAS's own PATCH note) instead of hand-reimplementing its header-parse/command-dispatch
@@ -1487,7 +1516,11 @@ procedure RunScenarioCase(const arg: String);
 
    New(Universe);
    FillChar(Universe^,SizeOf(Universe^),0);
-   RandSeed:=Seed;
+   { Rnd no longer draws from fpc's real Random/RandSeed (see INT.PAS's own GroundTruthSeed patch) --
+     seed the ground-truth generator instead so LoadScenario's Rnd-driven placement is deterministic
+     from this case's own Seed field. RandSeed itself is left alone: NEWGAME.PAS's own file-driven
+     reseed of it is unconditionally skipped in test mode (TestNumPlayers>=0, set just below) anyway. }
+   GroundTruthSeed:=LongWord(Seed);
    ForcedRandomValue:=-1;
    TestNumPlayers:=NumPlayers;
 
@@ -1797,6 +1830,8 @@ procedure RunCaseMode;
          RunNebulaCase(ParamStr(i))
       else if domain='rng' then
          RunRngCase(ParamStr(i))
+      else if domain='groundtruthrng' then
+         RunGroundTruthRngCase(ParamStr(i))
       else if domain='scenario' then
          RunScenarioCase(ParamStr(i))
       else if domain='probescout' then

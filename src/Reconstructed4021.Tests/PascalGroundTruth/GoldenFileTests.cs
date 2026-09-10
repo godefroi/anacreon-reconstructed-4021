@@ -119,6 +119,10 @@ public class GoldenFileTests
             c => $"{c.Seed},{c.Range},{c.Count}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "rng", .. args.Skip(1)]));
 
+        GoldenFile.Regenerate("groundtruthrng", GroundTruthRngCases.All,
+            c => $"{c.Seed},{c.Range},{c.Count}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "groundtruthrng", .. args.Skip(1)]));
+
         // Path is relative to PatchHarness's own working directory (reference/verify/patched/),
         // not absolute: LoadScenario's real Filename parameter is Pascal's LineStr (STRING[80]),
         // and this repo's absolute path already runs ~96 characters -- comfortably over that limit
