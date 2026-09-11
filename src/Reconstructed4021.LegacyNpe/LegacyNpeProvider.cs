@@ -24,12 +24,15 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
         Converters = { new JsonStringEnumConverter() },
     };
 
-    public bool Handles(NpeEmpireType type) => type is NpeEmpireType.Kingdom1 or NpeEmpireType.Kingdom2 or NpeEmpireType.Pirate;
+    public bool Handles(NpeEmpireType type) => type is NpeEmpireType.Kingdom1 or NpeEmpireType.Kingdom2 or NpeEmpireType.Pirate or NpeEmpireType.Berserker;
 
-    public ITurnHandler CreateNew(Empire empire, NpeEmpireType type, Random random) =>
-        type == NpeEmpireType.Pirate ? new PirateTurnHandler(empire, random) : new KingdomTurnHandler(empire, type, random);
+    public ITurnHandler CreateNew(Empire empire, NpeEmpireType type, Random random) => type switch {
+        NpeEmpireType.Pirate => new PirateTurnHandler(empire, random),
+        NpeEmpireType.Berserker => new BerserkerTurnHandler(empire, random),
+        _ => new KingdomTurnHandler(empire, type, random),
+    };
 
-    /// <summary>Pirate's own AI state never references another empire directly (its Target is always a Fleet or a world, never an Empire) — no orphan-empire slots to reserve for it.</summary>
+    /// <summary>Pirate/Berserker's own AI state never references another empire directly (Target/HomeBase are always a Fleet, Starbase, or world, never an Empire) — no orphan-empire slots to reserve for either.</summary>
     public IEnumerable<Empire> ReferencedEmpires(ITurnHandler handler) =>
         handler is KingdomTurnHandler kingdom ? kingdom.State.Keys : [];
 
@@ -39,6 +42,9 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
     {
         if (handler is PirateTurnHandler pirate) {
             return CapturePirateJson(pirate, refs);
+        }
+        if (handler is BerserkerTurnHandler berserker) {
+            return CaptureBerserkerJson(berserker, refs);
         }
 
         var kingdom = (KingdomTurnHandler)handler;
@@ -78,6 +84,38 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
             ["fleetStates"] = fleetStates,
             ["huntingGround"] = Convert.ToBase64String(huntingGround),
             ["sheep"] = Convert.ToBase64String(pirate.Sheep),
+        };
+    }
+
+    private static JsonObject CaptureBerserkerJson(BerserkerTurnHandler berserker, IJsonRefWriter refs)
+    {
+        var fleetStates = new JsonArray();
+        foreach (var (fleet, state) in berserker.FleetStates) {
+            if (refs.FleetId(fleet) is not { } fleetId) {
+                continue;
+            }
+
+            fleetStates.Add(new JsonObject {
+                ["fleetId"] = fleetId,
+                ["mission"] = state.Mission.ToString(),
+                ["target"] = refs.EncodeObjectRef(state.Target),
+                ["homeBase"] = refs.EncodeObjectRef(state.HomeBase),
+            });
+        }
+
+        var baseStates = new JsonArray();
+        foreach (var (starbase, state) in berserker.BaseStates) {
+            baseStates.Add(new JsonObject {
+                ["baseRef"] = refs.EncodeObjectRef(starbase),
+                ["mission"] = state.Mission.ToString(),
+                ["target"] = refs.EncodeObjectRef(state.Target),
+                ["count"] = state.Count,
+            });
+        }
+
+        return new JsonObject {
+            ["fleetStates"] = fleetStates,
+            ["baseStates"] = baseStates,
         };
     }
 
@@ -132,6 +170,9 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
         if (type == NpeEmpireType.Pirate) {
             return RestorePirateJson(obj, refs, random);
         }
+        if (type == NpeEmpireType.Berserker) {
+            return RestoreBerserkerJson(obj, refs, random);
+        }
 
         var persona = obj["persona"].Deserialize<NpeCharacter>(PlainOptions)!;
         var state = ReadState(obj["state"]!.AsArray(), refs);
@@ -167,6 +208,37 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
         var sheep = Convert.FromBase64String((string)obj["sheep"]!);
 
         return new PirateTurnHandler(fleetStates, huntingGround, sheep, random);
+    }
+
+    private static BerserkerTurnHandler RestoreBerserkerJson(JsonObject obj, IJsonRefReader refs, Random random)
+    {
+        var fleetStates = new Dictionary<Fleet, BerserkerFleetState>();
+        foreach (var entryNode in obj["fleetStates"]!.AsArray()) {
+            var entry = entryNode!.AsObject();
+            var fleet = refs.Fleet((int)entry["fleetId"]!);
+
+            fleetStates[fleet] = new BerserkerFleetState {
+                Mission = Enum.Parse<NpeMissionType>((string)entry["mission"]!),
+                Target = refs.DecodeObjectRef(entry["target"]) as IEconomicWorld,
+                HomeBase = refs.DecodeObjectRef(entry["homeBase"]) as IEconomicWorld,
+            };
+        }
+
+        var baseStates = new Dictionary<Starbase, BerserkerBaseState>();
+        foreach (var entryNode in obj["baseStates"]!.AsArray()) {
+            var entry = entryNode!.AsObject();
+            if (refs.DecodeObjectRef(entry["baseRef"]) is not Starbase starbase) {
+                continue;
+            }
+
+            baseStates[starbase] = new BerserkerBaseState {
+                Mission = Enum.Parse<BaseMissionType>((string)entry["mission"]!),
+                Target = refs.DecodeObjectRef(entry["target"]) as IEconomicWorld,
+                Count = (int)entry["count"]!,
+            };
+        }
+
+        return new BerserkerTurnHandler(fleetStates, baseStates, random);
     }
 
     private static Dictionary<Empire, StateDeptRecord> ReadState(JsonArray array, IJsonRefReader refs)
@@ -219,6 +291,10 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
     {
         if (handler is PirateTurnHandler pirate) {
             WritePirateSav(writer, pirate, objectIds);
+            return;
+        }
+        if (handler is BerserkerTurnHandler berserker) {
+            WriteBerserkerSav(writer, berserker, objectIds);
             return;
         }
 
@@ -342,6 +418,65 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
     }
 
     /// <summary>
+    /// BerserkerDataRecord (`NPETYPES.PAS:145-150`, 930 bytes): `FleetData` (30 × 11, same
+    /// `FleetDataRecord` shape as Kingdom/Pirate — unlike Pirate, `HomeBaseID` is real here, matching
+    /// <see cref="BerserkerFleetState"/>'s own doc comment), then `BaseData`. Unlike `FleetData`,
+    /// `BaseData` (`ARRAY[1..MaxNoOfStarbases] OF BaseDataRecord` — `NPETYPES.PAS:98`) has no
+    /// compaction/`Index` field of its own: `MaxNoOfStarbases` (100) is the whole galaxy's total
+    /// starbase-id space, so `BaseData[i]` is directly the on-disk starbase #`i`'s own slot, real
+    /// Pascal indexing it as `BaseData[BaseID.Index]` everywhere rather than scanning for a used
+    /// slot the way `FleetData`'s 30-slot cap forces. `BaseDataRecord` itself is 5 bytes: `Mission`
+    /// byte, `TargetID` `IDNumber` (2 bytes), `Count` `Word` (2 bytes). A dead 50-word `Spare` block
+    /// (100 bytes) follows both, written as zero.
+    /// </summary>
+    private static void WriteBerserkerSav(SavWriter writer, BerserkerTurnHandler berserker, ISavObjectIds objectIds)
+    {
+        var fleetSlots = new (int Index, BerserkerFleetState State)[30];
+        var next = 0;
+        foreach (var (fleet, state) in berserker.FleetStates) {
+            if (next >= fleetSlots.Length) {
+                throw new NotSupportedException("A Berserker empire's own 30-fleet NPE-data slot table is full.");
+            }
+            fleetSlots[next] = (objectIds.IdOf(fleet).Index, state);
+            next++;
+        }
+
+        foreach (var (index, state) in fleetSlots) {
+            if (index == 0) {
+                writer.WriteZeros(11);
+                continue;
+            }
+
+            writer.WriteByte((byte)state.Mission);
+            writer.WriteIdNumber(state.Target is { } target ? objectIds.IdOf(target) : new SavIdNumber(SavObjectType.Void, 0));
+            writer.WriteIdNumber(state.HomeBase is { } homeBase ? objectIds.IdOf(homeBase) : new SavIdNumber(SavObjectType.Void, 0));
+            writer.WriteIdNumber(new SavIdNumber(SavObjectType.Void, 0)); // Midway -- confirmed dead
+            writer.WriteByte(0); // Waiting -- confirmed dead for Berserker
+            writer.WriteByte(0); // BlockX -- Pirate-only
+            writer.WriteByte(0); // BlockY -- Pirate-only
+            writer.WriteByte((byte)index);
+        }
+
+        var baseByIndex = new Dictionary<int, BerserkerBaseState>();
+        foreach (var (starbase, state) in berserker.BaseStates) {
+            baseByIndex[objectIds.IdOf(starbase).Index] = state;
+        }
+
+        for (var i = 1; i <= 100; i++) {
+            if (!baseByIndex.TryGetValue(i, out var state)) {
+                writer.WriteZeros(5);
+                continue;
+            }
+
+            writer.WriteByte((byte)state.Mission);
+            writer.WriteIdNumber(state.Target is { } target ? objectIds.IdOf(target) : new SavIdNumber(SavObjectType.Void, 0));
+            writer.WriteWord((ushort)state.Count);
+        }
+
+        writer.WriteZeros(100); // Spare[1..50]: Word -- dead
+    }
+
+    /// <summary>
     /// `Kingdom1DataRecord`/`Kingdom2DataRecord` (`NPETYPES.PAS:136-141`, 454 bytes): `FleetData`
     /// (30 × `FleetDataRecord`, 11 bytes each), `State` (9 × `StateDeptRecord`, 12 bytes each,
     /// `Empire1..Empire8` then `Indep`), `Persona` (`NPECharacterRecord`, 16 bytes) — field order
@@ -355,6 +490,9 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
     {
         if (type == NpeEmpireType.Pirate) {
             return ReadPirateSav(reader, resolver, random);
+        }
+        if (type == NpeEmpireType.Berserker) {
+            return ReadBerserkerSav(reader, resolver, random);
         }
 
         var fleetStates = new Dictionary<Fleet, KingdomFleetState>();
@@ -469,5 +607,61 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
         var sheep = reader.ReadBytes(9);
 
         return new PirateTurnHandler(fleetStates, huntingGround, sheep, random);
+    }
+
+    /// <summary>See <see cref="WriteBerserkerSav"/> for the byte layout this mirrors.</summary>
+    private static BerserkerTurnHandler ReadBerserkerSav(SavReader reader, ISavRefResolver resolver, Random random)
+    {
+        var fleetStates = new Dictionary<Fleet, BerserkerFleetState>();
+
+        for (var i = 0; i < 30; i++) {
+            var mission = (NpeMissionType)reader.ReadByte();
+            var targetId = reader.ReadIdNumber();
+            var homeBaseId = reader.ReadIdNumber();
+            reader.ReadIdNumber(); // Midway -- confirmed dead
+            reader.Skip(1); // Waiting -- confirmed dead for Berserker
+            reader.Skip(1); // BlockX -- Pirate-only
+            reader.Skip(1); // BlockY -- Pirate-only
+            var index = reader.ReadByte();
+
+            if (index == 0) {
+                continue;
+            }
+
+            if (resolver.ResolveObject(new SavIdNumber(SavObjectType.Flt, index)) is not Fleet fleet) {
+                continue;
+            }
+
+            fleetStates[fleet] = new BerserkerFleetState {
+                Mission = mission,
+                Target = resolver.ResolveObject(targetId) as IEconomicWorld,
+                HomeBase = resolver.ResolveObject(homeBaseId) as IEconomicWorld,
+            };
+        }
+
+        var baseStates = new Dictionary<Starbase, BerserkerBaseState>();
+
+        for (var i = 1; i <= 100; i++) {
+            var mission = (BaseMissionType)reader.ReadByte();
+            var targetId = reader.ReadIdNumber();
+            var count = reader.ReadWord();
+
+            if (mission == BaseMissionType.None) {
+                continue;
+            }
+            if (resolver.ResolveObject(new SavIdNumber(SavObjectType.Base, (byte)i)) is not Starbase starbase) {
+                continue;
+            }
+
+            baseStates[starbase] = new BerserkerBaseState {
+                Mission = mission,
+                Target = resolver.ResolveObject(targetId) as IEconomicWorld,
+                Count = count,
+            };
+        }
+
+        reader.Skip(100); // Spare[1..50]: Word -- dead
+
+        return new BerserkerTurnHandler(fleetStates, baseStates, random);
     }
 }

@@ -157,3 +157,56 @@ public sealed class PirateFleetState
     public int BlockX { get; set; }
     public int BlockY { get; set; }
 }
+
+/// <summary>
+/// A Berserker starbase's own mission (NPETYPES.PAS's BaseMissionTypes) — real Pascal ordinal
+/// order preserved.
+/// </summary>
+public enum BaseMissionType
+{
+    None,
+    Defend,
+    Attack,
+    FindHome,
+    Refuel,
+    WaitForAttack,
+    WanderAround,
+}
+
+/// <summary>
+/// One Berserker fleet's AI mission state (NPETYPES.PAS's FleetDataRecord, Berserker's own field
+/// usage — audited directly against NPE04.PAS, not carried over from <see cref="KingdomFleetState"/>'s
+/// own audit, matching the precedent <see cref="PirateFleetState"/> already set): <c>Waiting</c>/
+/// <c>BlockX</c>/<c>BlockY</c> are dead here (grepped NPE04.PAS — none referenced). <c>Target</c> and
+/// <c>HomeBase</c> are narrower than Kingdom/Pirate's <c>object?</c>: every real read/write site in
+/// NPE04.PAS assigns a world (never a bare <see cref="Fleet"/>) — an enemy planet being attacked, the
+/// launching <see cref="Entities.Starbase"/> a fleet returns to, or the home planet an escort fleet
+/// departs from.
+/// </summary>
+public sealed class BerserkerFleetState
+{
+    public NpeMissionType Mission { get; set; }
+
+    /// <summary>TargetID — the enemy world being attacked (BerserkerAttack), or the starbase this fleet is returning to merge into (BerserkerReturn).</summary>
+    public IEconomicWorld? Target { get; set; }
+
+    /// <summary>HomeBaseID — the starbase that dispatched this fleet (BerserkerAttack), or the home planet an escort fleet departed from (a refuel run's own BerserkerReturn fleet). Unread for a refuel fleet's own mission handling, but set the same way every DeployFleet call sets it.</summary>
+    public IEconomicWorld? HomeBase { get; set; }
+}
+
+/// <summary>
+/// One Berserker starbase's own AI mission state (NPETYPES.PAS's BaseDataRecord). No pruning
+/// function exists for this dictionary — real Pascal never enforces/prunes BaseData either;
+/// <see cref="BerserkerTurnHandler"/> drives its per-base loop off live starbases each turn and
+/// lazily creates an entry for any owned command-base/fortress that doesn't have one yet, so a
+/// destroyed starbase's stale entry is simply never visited again.
+/// </summary>
+public sealed class BerserkerBaseState
+{
+    public BaseMissionType Mission { get; set; }
+
+    /// <summary>TargetID — always a planet: the enemy world being watched/attacked (Attack/WaitForAttack), or the home world being returned to for resupply (FindHome/Refuel).</summary>
+    public IEconomicWorld? Target { get; set; }
+
+    public int Count { get; set; }
+}

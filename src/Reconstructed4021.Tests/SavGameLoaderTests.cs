@@ -547,10 +547,13 @@ public class SavGameLoaderTests
     }
 
     [Test]
-    public async Task LoadGame_Confront1_StoresGuardianAndBerserkerBlobsOpaquely()
+    public async Task LoadGame_Confront1_StoresGuardianBlobOpaquely_DecodesBerserkerForReal()
     {
-        // Ground truth: slot 4 ("Solaria") is GuardianNPE (typ=5, 430-byte blob), slot 6 ("Datan")
-        // is BerserkerNPE (typ=4, 930-byte blob) -- neither has an ITurnHandler yet.
+        // Ground truth: slot 4 ("Solaria") is GuardianNPE (typ=5, 430-byte blob) -- still no
+        // ITurnHandler (Guardian isn't built, docs/ROADMAP.md's own disposition notes). Slot 6
+        // ("Datan") is BerserkerNPE (typ=4, 930-byte blob) -- now decodes into a real
+        // BerserkerTurnHandler; 930 bytes independently confirms this port's own byte-layout math
+        // (FleetData 30*11=330 + BaseData 100*5=500 + Spare 50 words=100).
         var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(LoadSave("Confront_1.SAV"));
 
         var guardian = game.Empires.Single(e => e.Name == "Solaria");
@@ -560,8 +563,44 @@ public class SavGameLoaderTests
 
         var berserker = game.Empires.Single(e => e.Name == "Datan");
         await Assert.That(berserker.NpeType).IsEqualTo(NpeEmpireType.Berserker);
-        await Assert.That(game.TurnHandlers).DoesNotContainKey(berserker);
-        await Assert.That(game.UnimplementedNpeBlobs[berserker].Length).IsEqualTo(930);
+        await Assert.That(game.TurnHandlers).ContainsKey(berserker);
+        await Assert.That(game.TurnHandlers[berserker]).IsTypeOf<BerserkerTurnHandler>();
+        await Assert.That(game.UnimplementedNpeBlobs).DoesNotContainKey(berserker);
+    }
+
+    private static T GetBerserkerInternal<T>(BerserkerTurnHandler handler, string propertyName) =>
+        (T)typeof(BerserkerTurnHandler).GetProperty(propertyName, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(handler)!;
+
+    /// <summary>
+    /// No known-good ground truth for "Datan"'s own fleet/base AI state (unlike Gauntlet_1's Pirate
+    /// slot) -- this checks the decoded shape survives a save/reload (fleet/base counts, each base's
+    /// own Mission), not a full byte-for-byte comparison. In particular it does NOT confirm
+    /// <c>Waiting</c>/<c>BlockX</c>/<c>BlockY</c>/<c>Midway</c> round-trip correctly, since
+    /// <c>LegacyNpeProvider.WriteBerserkerSav</c> always writes those as zero regardless of what the
+    /// real file's own bytes there hold -- exactly the kind of real, non-zero "uninitialized heap
+    /// garbage" Pirate's own <c>Sheep</c> turned out to carry, unconfirmed either way here.
+    /// </summary>
+    [Test]
+    public async Task WriteThenLoad_Confront1BerserkerBlob_FleetAndBaseShapeSurvives()
+    {
+        var provider = new LegacyNpeProvider();
+        var game = new SavGameLoader(npeProvider: provider).LoadGame(LoadSave("Confront_1.SAV"));
+
+        var bytes = SavGameWriter.WriteGame(game, provider);
+        var reloaded = new SavGameLoader(npeProvider: provider).LoadGame(bytes);
+
+        var original = (BerserkerTurnHandler)game.TurnHandlers[game.Empires.Single(e => e.Name == "Datan")];
+        var roundTripped = (BerserkerTurnHandler)reloaded.TurnHandlers[reloaded.Empires.Single(e => e.Name == "Datan")];
+
+        var originalFleetStates = GetBerserkerInternal<object>(original, "FleetStates");
+        var roundTrippedFleetStates = GetBerserkerInternal<object>(roundTripped, "FleetStates");
+        await Assert.That(((System.Collections.ICollection)roundTrippedFleetStates).Count)
+            .IsEqualTo(((System.Collections.ICollection)originalFleetStates).Count);
+
+        var originalBaseStates = GetBerserkerInternal<IReadOnlyDictionary<Starbase, BerserkerBaseState>>(original, "BaseStates");
+        var roundTrippedBaseStates = GetBerserkerInternal<IReadOnlyDictionary<Starbase, BerserkerBaseState>>(roundTripped, "BaseStates");
+        await Assert.That(roundTrippedBaseStates.Count).IsEqualTo(originalBaseStates.Count);
+        await Assert.That(roundTrippedBaseStates.Values.Select(s => s.Mission)).IsEquivalentTo(originalBaseStates.Values.Select(s => s.Mission));
     }
 
     /// <summary>
