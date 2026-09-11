@@ -75,11 +75,14 @@ internal sealed class CloseUpContentView : View
             // width (Width=80 minus the border), and Label doesn't wrap on its own. An owned fleet
             // always has an Orders tab (CloseUpWindow's own constructor), hence the Ctrl+PgUp/PgDn hint.
             AddAt(1, 17, "D:Deploy  C:Change Destination  T:Transfer  J:Abort/Join  A:Attack  R:Refuel");
-            AddAt(1, 18, "Ctrl+PgUp/PgDn: Orders tab   (other key: close)");
+            AddAt(1, 18, "F2:Rename  Ctrl+PgUp/PgDn: Orders tab   (other key: close)");
         } else if (worldOwned) {
-            AddAt(1, 17, "D:Deploy from here  (other key: close)");
+            AddAt(1, 17, "D:Deploy from here  F2:Rename  (other key: close)");
         } else {
-            AddAt(1, 17, "(any key: close)");
+            // F2:Rename works here too -- naming is gated on Game.Visible (this window can only ever
+            // open on something that's at least Known), never on ownership, matching real Pascal's
+            // own AddName (nothing stops naming an enemy's fleet or an independent world).
+            AddAt(1, 17, "F2:Rename  (other key: close)");
         }
     }
 

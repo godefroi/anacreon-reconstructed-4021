@@ -43,7 +43,7 @@ internal sealed class TabbedWindow
     private readonly record struct Tab(string Name, View View, Action? OnActivated);
 
     private readonly Window window;
-    private readonly string namePrefix;
+    private string namePrefix;
     private readonly List<Tab> tabs = [];
     private int currentIndex;
 
@@ -89,6 +89,13 @@ internal sealed class TabbedWindow
     public void FocusCurrentTab() => tabs[currentIndex].View.SetFocus();
 
     public bool IsShowing(string name) => tabs[currentIndex].Name == name;
+
+    /// <summary>Updates the name prefix in the title (e.g. after a rename) without rebuilding the window -- <see cref="namePrefix"/> is otherwise fixed at construction.</summary>
+    public void Rename(string newPrefix)
+    {
+        namePrefix = newPrefix;
+        UpdateTitle();
+    }
 
     private void Step(int direction)
     {

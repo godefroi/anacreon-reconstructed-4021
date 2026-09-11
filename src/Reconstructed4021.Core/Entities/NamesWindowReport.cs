@@ -10,18 +10,30 @@ namespace Reconstructed4021.Core.Entities;
 /// no Pascal-given relative order beyond "whenever it was named" (also not tracked here), so this port
 /// orders them by <see cref="Galaxy.Galaxy"/>'s own list order within each kind -- Planets, then
 /// Starbases, then Stargates, then ConstructionSites -- a deterministic stand-in, not a transcription of
-/// real Pascal order.
+/// real Pascal order. Bookmarks (bare-coordinate names, <see cref="Empire.Bookmarks"/>) have no object
+/// to sit alongside, so they're appended last.
 /// </summary>
 public static class NamesWindowReport
 {
-    public static List<ISectorObject> BuildRows(Galaxy.Galaxy galaxy, Empire viewer)
+    public static List<NameEntry> BuildRows(Galaxy.Galaxy galaxy, Empire viewer)
     {
-        var rows = new List<ISectorObject>();
-        rows.AddRange(galaxy.Fleets.Where(f => f.Names.ContainsKey(viewer)));
-        rows.AddRange(galaxy.Planets.Where(p => p.Names.ContainsKey(viewer)));
-        rows.AddRange(galaxy.Starbases.Where(s => s.Names.ContainsKey(viewer)));
-        rows.AddRange(galaxy.Stargates.Where(g => g.Names.ContainsKey(viewer)));
-        rows.AddRange(galaxy.ConstructionSites.Where(c => c.Names.ContainsKey(viewer)));
+        var rows = new List<NameEntry>();
+        rows.AddRange(galaxy.Fleets.Where(f => f.Names.ContainsKey(viewer)).Select(NameEntry.For));
+        rows.AddRange(galaxy.Planets.Where(p => p.Names.ContainsKey(viewer)).Select(NameEntry.For));
+        rows.AddRange(galaxy.Starbases.Where(s => s.Names.ContainsKey(viewer)).Select(NameEntry.For));
+        rows.AddRange(galaxy.Stargates.Where(g => g.Names.ContainsKey(viewer)).Select(NameEntry.For));
+        rows.AddRange(galaxy.ConstructionSites.Where(c => c.Names.ContainsKey(viewer)).Select(NameEntry.For));
+        rows.AddRange(viewer.Bookmarks.Select(NameEntry.For));
         return rows;
     }
+}
+
+/// <summary>
+/// A row in the Names window: either a named <see cref="ISectorObject"/> or a bare-coordinate
+/// <see cref="LocationBookmark"/> -- never both, same closed-union shape as <c>NewsItem.Resource</c>.
+/// </summary>
+public sealed record NameEntry(ISectorObject? Object, LocationBookmark? Bookmark)
+{
+    public static NameEntry For(ISectorObject obj) => new(obj, null);
+    public static NameEntry For(LocationBookmark bookmark) => new(null, bookmark);
 }

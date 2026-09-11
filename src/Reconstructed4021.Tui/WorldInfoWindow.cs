@@ -59,4 +59,7 @@ internal sealed class WorldInfoWindow : Window
 
         Initialized += (_, _) => tabs.FocusCurrentTab();
     }
+
+    /// <summary>Updates the title after a rename (F2, GameShell's own RenameObject) -- <paramref name="worldName"/> was only ever a snapshot taken at construction.</summary>
+    public void RefreshTitle(string newName) => tabs.Rename(newName);
 }
