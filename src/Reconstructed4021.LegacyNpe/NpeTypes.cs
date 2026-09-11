@@ -1,7 +1,9 @@
+using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
 
-namespace Reconstructed4021.Core.Npe;
+namespace Reconstructed4021.LegacyNpe;
 
 /// <summary>
 /// A fleet mission an NPE empire has assigned (NPETYPES.PAS's MissionTypes): real Pascal ordinal
@@ -133,4 +135,78 @@ public sealed class KingdomFleetState
     public IEconomicWorld? HomeBase { get; set; }
 
     public int Waiting { get; set; }
+}
+
+/// <summary>
+/// One Pirate fleet's AI mission state (NPETYPES.PAS's FleetDataRecord, Pirate's own field usage —
+/// audited directly against NPE01.PAS, not carried over from <see cref="KingdomFleetState"/>'s own
+/// audit): <c>HomeBaseID</c> is dead for Pirate too (grepped: no read or write site anywhere in
+/// NPE01.PAS — a returning fleet re-derives its base fresh via FindNearestBase every time, it never
+/// remembers one), unlike Kingdom where the same field is real. <c>BlockX</c>/<c>BlockY</c> are real
+/// here (they're Pirate-only to begin with — see <see cref="KingdomFleetState"/>'s own doc comment):
+/// the hunting-ground grid cell this fleet's patrol/chase pressure is charged against.
+/// </summary>
+public sealed class PirateFleetState
+{
+    public NpeMissionType Mission { get; set; }
+
+    /// <summary>TargetID — a <see cref="Fleet"/> (the transport being chased/attacked, WaitForTransports/AttackTransports) or an <see cref="IEconomicWorld"/> (the raid target, AttackWorld).</summary>
+    public object? Target { get; set; }
+
+    public int Waiting { get; set; }
+    public int BlockX { get; set; }
+    public int BlockY { get; set; }
+}
+
+/// <summary>
+/// A Berserker starbase's own mission (NPETYPES.PAS's BaseMissionTypes) — real Pascal ordinal
+/// order preserved.
+/// </summary>
+public enum BaseMissionType
+{
+    None,
+    Defend,
+    Attack,
+    FindHome,
+    Refuel,
+    WaitForAttack,
+    WanderAround,
+}
+
+/// <summary>
+/// One Berserker fleet's AI mission state (NPETYPES.PAS's FleetDataRecord, Berserker's own field
+/// usage — audited directly against NPE04.PAS, not carried over from <see cref="KingdomFleetState"/>'s
+/// own audit, matching the precedent <see cref="PirateFleetState"/> already set): <c>Waiting</c>/
+/// <c>BlockX</c>/<c>BlockY</c> are dead here (grepped NPE04.PAS — none referenced). <c>Target</c> and
+/// <c>HomeBase</c> are narrower than Kingdom/Pirate's <c>object?</c>: every real read/write site in
+/// NPE04.PAS assigns a world (never a bare <see cref="Fleet"/>) — an enemy planet being attacked, the
+/// launching <see cref="Entities.Starbase"/> a fleet returns to, or the home planet an escort fleet
+/// departs from.
+/// </summary>
+public sealed class BerserkerFleetState
+{
+    public NpeMissionType Mission { get; set; }
+
+    /// <summary>TargetID — the enemy world being attacked (BerserkerAttack), or the starbase this fleet is returning to merge into (BerserkerReturn).</summary>
+    public IEconomicWorld? Target { get; set; }
+
+    /// <summary>HomeBaseID — the starbase that dispatched this fleet (BerserkerAttack), or the home planet an escort fleet departed from (a refuel run's own BerserkerReturn fleet). Unread for a refuel fleet's own mission handling, but set the same way every DeployFleet call sets it.</summary>
+    public IEconomicWorld? HomeBase { get; set; }
+}
+
+/// <summary>
+/// One Berserker starbase's own AI mission state (NPETYPES.PAS's BaseDataRecord). No pruning
+/// function exists for this dictionary — real Pascal never enforces/prunes BaseData either;
+/// <see cref="BerserkerTurnHandler"/> drives its per-base loop off live starbases each turn and
+/// lazily creates an entry for any owned command-base/fortress that doesn't have one yet, so a
+/// destroyed starbase's stale entry is simply never visited again.
+/// </summary>
+public sealed class BerserkerBaseState
+{
+    public BaseMissionType Mission { get; set; }
+
+    /// <summary>TargetID — always a planet: the enemy world being watched/attacked (Attack/WaitForAttack), or the home world being returned to for resupply (FindHome/Refuel).</summary>
+    public IEconomicWorld? Target { get; set; }
+
+    public int Count { get; set; }
 }

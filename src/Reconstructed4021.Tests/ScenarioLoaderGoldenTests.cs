@@ -9,8 +9,8 @@ namespace Reconstructed4021.Tests;
 /// Loads real committed dos_131/*.SCN files through the C# ScenarioLoader
 /// and compares an aggregate checksum against the same real file loaded by the patched Pascal
 /// RunScenarioCase — see ScenarioCases' own doc comment for the full rationale (why an aggregate
-/// checksum rather than a per-entity dump, why PRINCES.SCN is excluded, why this domain needed
-/// PascalRandom instead of ForcedRandomValue).
+/// checksum rather than a per-entity dump, why PRINCES.SCN is excluded, why this domain needs a real
+/// seeded RNG sequence (GroundTruthRandom) instead of ForcedRandomValue).
 ///
 /// Only asserts fields that never depend on Rnd()/RndVar() at all: pure counts and per-empire summary
 /// fields that come straight from the scenario file's own explicit data, with no random draw anywhere
@@ -71,7 +71,7 @@ public class ScenarioLoaderGoldenTests
         var path = Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "reference", "scenarios", "dos_131", c.FileName);
         var text = File.ReadAllText(path);
 
-        var random = new PascalRandom(c.Seed);
+        var random = new GroundTruthRandom(c.Seed);
         var setup = new GalaxySetup(random);
         var loader = new ScenarioLoader(setup, random);
         // Matches NEWGAME.PAS's own InputEmpireName patch exactly (reference/verify/README.md) --

@@ -6,6 +6,7 @@ using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
+using Reconstructed4021.LegacyNpe;
 
 namespace Reconstructed4021.Tests;
 
@@ -23,12 +24,13 @@ namespace Reconstructed4021.Tests;
 public class GameJsonTests
 {
     private static Game LoadSav(string fileName) =>
-        new SavGameLoader().LoadGame(File.ReadAllBytes(Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "reference", "saves", fileName)));
+        new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(File.ReadAllBytes(Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "reference", "saves", fileName)));
 
     private static async Task AssertRoundTrips(Game game)
     {
-        var json = GameJson.Serialize(game);
-        var roundTripped = GameJson.Deserialize(json, new Random(0));
+        var npeProvider = new LegacyNpeProvider();
+        var json = GameJson.Serialize(game, npeProvider);
+        var roundTripped = GameJson.Deserialize(json, new Random(0), npeProvider);
 
         var diffs = DeepGraphComparer.FindDifferences(game, roundTripped);
 
@@ -149,7 +151,7 @@ public class GameJsonTests
         // dictionary -- see GameJson's EntityIndex remarks) round-trips correctly *if* INTRO_1.SAV
         // still contains an orphan. Pin that precondition here so a future change that stops
         // producing one fails loudly instead of silently un-covering the path.
-        var json = GameJson.Serialize(LoadSav("INTRO_1.SAV"));
+        var json = GameJson.Serialize(LoadSav("INTRO_1.SAV"), new LegacyNpeProvider());
         var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
         var realEmpireCount = (int)node["realEmpireCount"]!;
         var writtenEmpireCount = node["empires"]!.AsArray().Count;
@@ -190,8 +192,9 @@ public class GameJsonTests
 
         await Assert.That(game.TurnHandlers).DoesNotContainKey(kingdom);
 
-        var json = GameJson.Serialize(game);
-        var roundTripped = GameJson.Deserialize(json, new Random(0));
+        var npeProvider = new LegacyNpeProvider();
+        var json = GameJson.Serialize(game, npeProvider);
+        var roundTripped = GameJson.Deserialize(json, new Random(0), npeProvider);
 
         await Assert.That(roundTripped.TurnHandlers.Keys.Select(e => e.Name)).DoesNotContain(kingdom.Name);
         await Assert.That(roundTripped.Empires.Select(e => e.Name)).Contains(kingdom.Name);
@@ -431,7 +434,9 @@ public class GameJsonTests
     [Test]
     public async Task RoundTrips_Gauntlet1()
     {
-        // Pirate empire -> UnimplementedNpeBlobs.
+        // Pirate empire (Thinnva) -> PirateTurnHandler, round-tripped through native JSON like any
+        // other ITurnHandler (DeepGraphComparer walks its internal FleetStates/HuntingGround/Sheep
+        // properties the same generic way it already walks KingdomTurnHandler's).
         await AssertRoundTrips(LoadSav("GAUNTLET_1.SAV"));
     }
 
@@ -503,12 +508,11 @@ public class GameJsonTests
     {
         // No .SAV involved at all: exercises the "nothing has happened yet" shape -- empty
         // EntityVisibility sets, empty Kingdom State/FleetStates dictionaries, no News.
-        // PascalRandom (a real, varying RNG), not FixedRandom: a real scenario's procedural world
+        // GroundTruthRandom (a real, varying RNG), not FixedRandom: a real scenario's procedural world
         // generation has collision-retry loops (e.g. "re-roll until an unused coordinate"), and
-        // FixedRandom always returning the same value hangs one of those forever -- the same reason
-        // ScenarioLoaderGoldenTests uses PascalRandom for real .SCN files, not FixedRandom.
-        var random = new PascalRandom(12345);
-        var loader = new ScenarioLoader(new Core.NewGame.GalaxySetup(random), random);
+        // FixedRandom always returning the same value hangs one of those forever.
+        var random = new GroundTruthRandom(12345);
+        var loader = new ScenarioLoader(new Core.NewGame.GalaxySetup(random), random, new LegacyNpeProvider());
         var text = File.ReadAllText(Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "reference", "scenarios", "dos_131", "INTRO.SCN"));
         var players = new[] { new ScenarioLoader.PlayerInfo("test_player_1", "test_pass_1", IsEmpress: false) };
 

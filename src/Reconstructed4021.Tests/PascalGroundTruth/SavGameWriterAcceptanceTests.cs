@@ -1,6 +1,7 @@
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.SaveFormat;
+using Reconstructed4021.LegacyNpe;
 
 namespace Reconstructed4021.Tests.PascalGroundTruth;
 
@@ -53,8 +54,8 @@ public class SavGameWriterAcceptanceTests
             var originalBytes = File.ReadAllBytes(Path.Combine(PascalHarness.RepoRoot, "reference", "saves", fileName));
             var checksumA = RunLoadChecksum(originalBytes, "orig.sav");
 
-            var game = new SavGameLoader().LoadGame(originalBytes);
-            var rewritten = SavGameWriter.WriteGame(game);
+            var game = new SavGameLoader(npeProvider: new LegacyNpeProvider()).LoadGame(originalBytes);
+            var rewritten = SavGameWriter.WriteGame(game, new LegacyNpeProvider());
             var checksumB = RunLoadChecksum(rewritten, "rt.sav");
 
             mismatches.AddRange(Diff(fileName, checksumA, checksumB));
@@ -79,13 +80,13 @@ public class SavGameWriterAcceptanceTests
     {
         PatchHarness.CompileAndRun("runload");
 
-        var random = new PascalRandom(12345);
-        var loader = new ScenarioLoader(new GalaxySetup(random), random);
+        var random = new GroundTruthRandom(12345);
+        var loader = new ScenarioLoader(new GalaxySetup(random), random, new LegacyNpeProvider());
         var text = File.ReadAllText(Path.Combine(PascalHarness.RepoRoot, "reference", "scenarios", "dos_131", "INTRO.SCN"));
         var players = new[] { new ScenarioLoader.PlayerInfo("test_player_1", "test_pass_1", IsEmpress: false) };
         var game = loader.Load(text, players);
 
-        var bytes = SavGameWriter.WriteGame(game);
+        var bytes = SavGameWriter.WriteGame(game, new LegacyNpeProvider());
         var checksum = RunLoadChecksum(bytes, "fresh.sav");
         var fields = PascalHarness.ParseFields(checksum);
 

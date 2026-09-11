@@ -11,6 +11,7 @@ using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
+using Reconstructed4021.LegacyNpe;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
 
 namespace Reconstructed4021.Tui;
@@ -402,7 +403,7 @@ public sealed class GameShell : Window
         var tempPath = path + ".tmp";
 
         try {
-            File.WriteAllText(tempPath, GameJson.Serialize(game));
+            File.WriteAllText(tempPath, GameJson.Serialize(game, new LegacyNpeProvider()));
             File.Move(tempPath, path, overwrite: true);
             error = null;
             return true;

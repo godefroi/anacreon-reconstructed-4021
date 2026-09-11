@@ -5,6 +5,7 @@ using Terminal.Gui.Testing;
 using Terminal.Gui.Views;
 using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Core.Turns;
+using Reconstructed4021.LegacyNpe;
 using Reconstructed4021.Tui;
 
 // Headless functional-UI driver for Reconstructed4021.Tui, replacing the psmux (tmux-alike)-driven
@@ -127,7 +128,7 @@ if (playerSetupMode) {
 
     var random = new Random(4021);
     var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random));
-    var game = GameJson.Deserialize(File.ReadAllText(resolvedLoadPath), random);
+    var game = GameJson.Deserialize(File.ReadAllText(resolvedLoadPath), random, new LegacyNpeProvider());
     var human = game.CurrentEmpire ?? throw new InvalidOperationException("Save has no CurrentEmpire set -- nothing to drive.");
     turnEngine.BeginTurn(game);
     window = new GameShell(game, turnEngine, human, random);

@@ -584,25 +584,27 @@
   "turnHandlers": [
     {
       "empireId": 1,
-      "persona": {
-        "imperialistGene": 51,
-        "defensiveGene": 9,
-        "offensiveGene": 86,
-        "factorGene": 25,
-        "randomGene": 50,
-        "defensive": 9,
-        "offensive": 86,
-        "techno": 50,
-        "provoke": 94,
-        "imperialist": 51,
-        "worldPower": 54,
-        "honorable": 50,
-        "sphereX": 56,
-        "clock": 0,
-        "offset": 3
-      },
-      "state": [],
-      "fleetStates": []
+      "data": {
+        "persona": {
+          "imperialistGene": 51,
+          "defensiveGene": 9,
+          "offensiveGene": 86,
+          "factorGene": 25,
+          "randomGene": 50,
+          "defensive": 9,
+          "offensive": 86,
+          "techno": 50,
+          "provoke": 94,
+          "imperialist": 51,
+          "worldPower": 54,
+          "honorable": 50,
+          "sphereX": 56,
+          "clock": 0,
+          "offset": 3
+        },
+        "state": [],
+        "fleetStates": []
+      }
     }
   ],
   "unimplementedNpeBlobs": [],

@@ -3,6 +3,7 @@ using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
+using Reconstructed4021.LegacyNpe;
 
 namespace Reconstructed4021.Tests;
 
@@ -143,7 +144,7 @@ public class ScenarioLoaderTests
     [Test]
     public async Task Load_CreateNPEmpireWithRndNameAssignsANameFromThePool()
     {
-        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0));
+        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0), new LegacyNpeProvider());
         // E=4 ET=3 Name=RndName RevFactor=0 Tl=1 NoOfTechs=0.
         var text = Header(20) + "CREATENPEMPIRE 4 3 RndName 0 1 0\r\nENDSCENARIO";
 
@@ -159,7 +160,7 @@ public class ScenarioLoaderTests
     [Test]
     public async Task Load_CreateNPEmpireWithExplicitNameUsesItVerbatim()
     {
-        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0));
+        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0), new LegacyNpeProvider());
         var text = Header(20) + "CREATENPEMPIRE 4 2 \"Kellandra\" 0 1 0\r\nENDSCENARIO";
 
         var game = loader.Load(text, _onePlayer);
@@ -171,8 +172,12 @@ public class ScenarioLoaderTests
     }
 
     [Test]
-    public async Task Load_CreateNPEmpireOfANonKingdomTypeRecordsTypeButRegistersNoTurnHandler()
+    public async Task Load_CreateNPEmpireWithNoProviderRecordsTypeButRegistersNoTurnHandler()
     {
+        // No npeProvider supplied at all -- ScenarioLoader.Handles is never consulted, so no empire
+        // gets a handler regardless of its NpeType. Pirate now has a real handler when a provider
+        // *is* supplied (see Load_CreateNPEmpireOfPirateTypeGetsPirateTurnHandler below); this test is
+        // about the no-provider path in general, not about Pirate specifically.
         var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0));
         var text = Header(20) + "CREATENPEMPIRE 4 1 \"Blackbeard\" 0 1 0\r\nENDSCENARIO"; // ET=1 -> Pirate
 
@@ -180,6 +185,18 @@ public class ScenarioLoaderTests
 
         await Assert.That(game.Empires[0].NpeType).IsEqualTo(NpeEmpireType.Pirate);
         await Assert.That(game.TurnHandlers.ContainsKey(game.Empires[0])).IsFalse();
+    }
+
+    [Test]
+    public async Task Load_CreateNPEmpireOfPirateTypeGetsPirateTurnHandler()
+    {
+        var loader = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0), new LegacyNpeProvider());
+        var text = Header(20) + "CREATENPEMPIRE 4 1 \"Blackbeard\" 0 1 0\r\nENDSCENARIO"; // ET=1 -> Pirate
+
+        var game = loader.Load(text, _onePlayer);
+
+        await Assert.That(game.Empires[0].NpeType).IsEqualTo(NpeEmpireType.Pirate);
+        await Assert.That(game.TurnHandlers[game.Empires[0]]).IsTypeOf<PirateTurnHandler>();
     }
 
     [Test]

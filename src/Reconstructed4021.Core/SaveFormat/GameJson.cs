@@ -4,7 +4,6 @@ using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
-using Reconstructed4021.Core.Npe;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
 
@@ -50,19 +49,21 @@ namespace Reconstructed4021.Core.SaveFormat;
 /// placeholder-Empire-slots trick — and it's the one type this format never runs through automatic
 /// reflection at all: <see cref="WriteEmpires"/>/<see cref="FillEmpireFields"/> read/write every
 /// field by hand. <see cref="Game.TurnHandlers"/>/<see cref="Game.UnimplementedNpeBlobs"/> are
-/// Empire-keyed with <see cref="ITurnHandler"/> having exactly one real implementor
-/// (<see cref="KingdomTurnHandler"/>), and <see cref="Galaxy.Galaxy"/>'s nebula/minefield/mine-scout
-/// data has no public enumerator — both hand-written for the same reason.
+/// Empire-keyed with <see cref="ITurnHandler"/>'s own AI-personality implementors living outside this
+/// assembly entirely (see <see cref="INpeHandlerProvider"/>), and <see cref="Galaxy.Galaxy"/>'s
+/// nebula/minefield/mine-scout data has no public enumerator — both hand-written for the same reason.
 /// </remarks>
 public static class GameJson
 {
-    /// <summary>For pure-value sub-objects with no entity references at all (<see cref="NpeCharacter"/>, <see cref="Npe.StateDeptRecord"/>, <c>List&lt;Coordinate&gt;</c>, <c>List&lt;LocationBookmark&gt;</c>) — safe to share statically since it carries no per-call state.</summary>
+    /// <summary>For pure-value sub-objects with no entity references at all (<c>List&lt;Coordinate&gt;</c>, <c>List&lt;LocationBookmark&gt;</c>) — safe to share statically since it carries no per-call state.</summary>
     private static readonly JsonSerializerOptions PlainOptions = new() {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Converters = { new JsonStringEnumConverter() },
     };
 
-    public static string Serialize(Game game)
+    /// <param name="game"></param>
+    /// <param name="npeProvider">Required if <paramref name="game"/> has any non-human <see cref="ITurnHandler"/> in <see cref="Game.TurnHandlers"/> — see <see cref="INpeHandlerProvider"/>.</param>
+    public static string Serialize(Game game, INpeHandlerProvider? npeProvider = null)
     {
         var index = new EntityIndex(game);
         var graphOptions = BuildGraphOptions(index, lookup: null);
@@ -71,12 +72,12 @@ public static class GameJson
         node["currentEmpireId"] = EmpireIdOrNull(index, game.CurrentEmpire);
 
         // TurnHandlers/blobs/minefields/mineScoutedBy first -- see EntityIndex's own remarks on why
-        // an empire can still be discovered only here, never in game.Empires (a Kingdom's own State
-        // keys, or -- confirmed by SavGameWriter's own equivalent, see its remarks -- a minefield
+        // an empire can still be discovered only here, never in game.Empires (an NPE handler's own
+        // State keys, or -- confirmed by SavGameWriter's own equivalent, see its remarks -- a minefield
         // owner/scout referencing an empire that was already not-InUse when the .SAV this Game was
         // originally loaded from was captured), and why "empires" must be written last so any such
         // discovery is already reflected in it.
-        var turnHandlersNode = WriteTurnHandlers(game, index);
+        var turnHandlersNode = WriteTurnHandlers(game, index, npeProvider);
         var blobsNode = WriteBlobs(game, index);
         var minefieldsNode = WriteMinefields(game.Galaxy, index);
         var mineScoutedByNode = WriteMineScoutedBy(game.Galaxy, index);
@@ -97,11 +98,12 @@ public static class GameJson
     /// <summary>The inverse of <see cref="Serialize"/>.</summary>
     /// <param name="json">A JSON document previously produced by <see cref="Serialize"/>.</param>
     /// <param name="random">
-    /// Seeds any reconstructed <see cref="KingdomTurnHandler"/>'s ongoing RNG stream — a loaded
+    /// Seeds any reconstructed NPE <see cref="ITurnHandler"/>'s ongoing RNG stream — a loaded
     /// empire's future turns, not its saved state, need this; same rationale as
     /// <see cref="SavGameLoader"/>'s own optional <c>Random</c> parameter.
     /// </param>
-    public static Game Deserialize(string json, Random? random = null)
+    /// <param name="npeProvider">Required if <paramref name="json"/> has any entries under <c>turnHandlers</c> — see <see cref="INpeHandlerProvider"/>.</param>
+    public static Game Deserialize(string json, Random? random = null, INpeHandlerProvider? npeProvider = null)
     {
         var root = JsonNode.Parse(json)!.AsObject();
 
@@ -165,7 +167,7 @@ public static class GameJson
         game.PauseActive = (bool)root["pauseActive"]!;
         game.ReEnterGame = (bool)root["reEnterGame"]!;
 
-        ReadTurnHandlers(root["turnHandlers"], game, lookup, random ?? new Random());
+        ReadTurnHandlers(root["turnHandlers"], game, lookup, random ?? new Random(), npeProvider);
         ReadBlobs(root["unimplementedNpeBlobs"], game, lookup);
         ReadMessages(root["messages"], game, lookup);
 
@@ -299,7 +301,7 @@ public static class GameJson
     // set (Planets/Starbases/Fleets/Stargates/ConstructionSites all share this one helper) can hold an
     // entity destroyed since that empire's own last RefreshVisibility -- confirmed live, a second real
     // crash from the exact same underlying cause, this time via empire.Fleets.Known/Scouted rather
-    // than KingdomTurnHandler.FleetStates. Skipping a stale id is exactly what that empire's own next
+    // than an NPE handler's own fleet-mission state. Skipping a stale id is exactly what that empire's own next
     // RefreshVisibility would already remove (VisibilityHandler.RefreshVisibility rebuilds fleet
     // visibility from scratch every turn, and re-derives Known/Scouted for everything else from
     // scratch too) -- there's nothing meaningful to persist for it in the meantime.
@@ -589,7 +591,7 @@ public static class GameJson
 
     // ---- Game.TurnHandlers / Game.UnimplementedNpeBlobs / Game.Messages: hand-written (see class doc comment) ----
 
-    private static JsonArray WriteTurnHandlers(Game game, EntityIndex index)
+    private static JsonArray WriteTurnHandlers(Game game, EntityIndex index, INpeHandlerProvider? npeProvider)
     {
         var array = new JsonArray();
 
@@ -602,61 +604,15 @@ public static class GameJson
                 continue;
             }
 
-            if (handler is not KingdomTurnHandler kingdom) {
+            if (empire.NpeType is not { } npeType || npeProvider?.Handles(npeType) != true) {
                 throw new NotSupportedException(
-                    $"{nameof(GameJson)} only knows how to serialize {nameof(KingdomTurnHandler)}; " +
-                    $"empire '{empire.Name}' has a {handler.GetType().Name}.");
+                    $"{nameof(GameJson)} has no {nameof(INpeHandlerProvider)} that can serialize " +
+                    $"empire '{empire.Name}''s NpeType {empire.NpeType?.ToString() ?? "(none)"}.");
             }
 
             array.Add(new JsonObject {
                 ["empireId"] = index.EmpireId(empire),
-                ["persona"] = JsonSerializer.SerializeToNode(kingdom.Persona, PlainOptions),
-                ["state"] = WriteState(kingdom.State, index),
-                ["fleetStates"] = WriteFleetStates(kingdom.FleetStates, index),
-            });
-        }
-
-        return array;
-    }
-
-    private static JsonArray WriteState(IReadOnlyDictionary<Empire, StateDeptRecord> state, EntityIndex index)
-    {
-        var array = new JsonArray();
-
-        foreach (var (empire, record) in state) {
-            array.Add(new JsonObject {
-                ["empireId"] = index.EmpireId(empire),
-                ["record"] = JsonSerializer.SerializeToNode(record, PlainOptions),
-            });
-        }
-
-        return array;
-    }
-
-    // A KingdomTurnHandler's own FleetStates can genuinely hold a key for a fleet that's no longer in
-    // game.Galaxy.Fleets: NpeToolkit.EnforceNpeDataLinks (its own real pruning, NPEINTR.PAS's
-    // EnforceNPEDataLinks) only runs at the start of that empire's own PlayTurn, so a Kingdom fleet
-    // destroyed mid-turn by the human (combat, most directly) leaves a dangling entry until that
-    // Kingdom's own next turn -- a real, live window, not a corrupted state, and Serialize can be
-    // called (via Save Game) at any point during the human's own turn, well inside it. Confirmed via a
-    // real crash (KeyNotFoundException) hit live, not a hypothetical. Skipping a stale entry here
-    // matches what EnforceNpeDataLinks would remove anyway on that empire's own next turn -- there's
-    // nothing meaningful left to persist for a fleet that's already gone.
-    private static JsonArray WriteFleetStates(IReadOnlyDictionary<Fleet, KingdomFleetState> fleetStates, EntityIndex index)
-    {
-        var array = new JsonArray();
-
-        foreach (var (fleet, state) in fleetStates) {
-            if (!index.Fleets.TryGetValue(fleet, out var fleetId)) {
-                continue;
-            }
-
-            array.Add(new JsonObject {
-                ["fleetId"] = fleetId,
-                ["mission"] = state.Mission.ToString(),
-                ["target"] = index.EncodeObjectRef(state.Target),
-                ["homeBase"] = index.EncodeObjectRef(state.HomeBase),
-                ["waiting"] = state.Waiting,
+                ["data"] = npeProvider.CaptureJson(handler, index),
             });
         }
 
@@ -677,63 +633,34 @@ public static class GameJson
         return array;
     }
 
-    private static void ReadTurnHandlers(JsonNode? node, Game game, EntityLookup lookup, Random random)
+    private static void ReadTurnHandlers(JsonNode? node, Game game, EntityLookup lookup, Random random, INpeHandlerProvider? npeProvider)
     {
         foreach (var entryNode in node?.AsArray() ?? []) {
             var entry = entryNode!.AsObject();
             var empire = lookup.Empire((int)entry["empireId"]!);
-            var persona = entry["persona"].Deserialize<NpeCharacter>(PlainOptions)!;
-            var state = ReadState(entry["state"]!.AsArray(), lookup);
-            var fleetStates = ReadFleetStates(entry["fleetStates"]!.AsArray(), lookup);
 
             var npeType = empire.NpeType ?? throw new InvalidDataException(
-                $"Empire '{empire.Name}' has a saved Kingdom turn handler but no NpeType.");
+                $"Empire '{empire.Name}' has a saved NPE turn handler but no NpeType.");
 
-            game.TurnHandlers[empire] = new KingdomTurnHandler(npeType, persona, state, fleetStates, random);
+            if (npeProvider?.Handles(npeType) != true) {
+                throw new NotSupportedException(
+                    $"{nameof(GameJson)} has no {nameof(INpeHandlerProvider)} that can deserialize " +
+                    $"empire '{empire.Name}''s NpeType {npeType}.");
+            }
+
+            game.TurnHandlers[empire] = npeProvider.RestoreJson(empire, npeType, entry["data"]!, lookup, random);
         }
 
         // Mirrors ScenarioLoader.RunCreatePlayerEmpire's own registration -- WriteTurnHandlers never
         // writes a HumanTurnHandler (nothing to persist), so every human empire needs a fresh one
         // reconstructed here instead. game.Empires only (not every lookup-known id): an "orphan"
-        // empire reachable only via a Kingdom's own diplomatic memory is never itself a live roster
-        // member TurnEngine would dispatch to.
+        // empire reachable only via an NPE handler's own diplomatic memory is never itself a live
+        // roster member TurnEngine would dispatch to.
         foreach (var empire in game.Empires) {
             if (empire.NpeType is null) {
                 game.TurnHandlers[empire] = new HumanTurnHandler();
             }
         }
-    }
-
-    private static Dictionary<Empire, StateDeptRecord> ReadState(JsonArray array, EntityLookup lookup)
-    {
-        var state = new Dictionary<Empire, StateDeptRecord>();
-
-        foreach (var entryNode in array) {
-            var entry = entryNode!.AsObject();
-            var empire = lookup.Empire((int)entry["empireId"]!);
-            state[empire] = entry["record"].Deserialize<StateDeptRecord>(PlainOptions)!;
-        }
-
-        return state;
-    }
-
-    private static Dictionary<Fleet, KingdomFleetState> ReadFleetStates(JsonArray array, EntityLookup lookup)
-    {
-        var fleetStates = new Dictionary<Fleet, KingdomFleetState>();
-
-        foreach (var entryNode in array) {
-            var entry = entryNode!.AsObject();
-            var fleet = lookup.Fleet((int)entry["fleetId"]!);
-
-            fleetStates[fleet] = new KingdomFleetState {
-                Mission = Enum.Parse<NpeMissionType>((string)entry["mission"]!),
-                Target = lookup.DecodeObjectRef(entry["target"]),
-                HomeBase = lookup.DecodeObjectRef(entry["homeBase"]) as IEconomicWorld,
-                Waiting = (int)entry["waiting"]!,
-            };
-        }
-
-        return fleetStates;
     }
 
     private static void ReadBlobs(JsonNode? node, Game game, EntityLookup lookup)
@@ -795,8 +722,8 @@ public static class GameJson
     /// eliminate the orphan case, though: an empire that was already not-InUse when the `.SAV` file
     /// this <see cref="Game"/> was originally loaded from was captured was never added to
     /// <see cref="Game.Empires"/> in the first place (<see cref="SavGameLoader"/>'s own placeholder
-    /// gate, unrelated to and unchanged by <see cref="Types.EmpireStatus"/>), so a living
-    /// <see cref="Turns.KingdomTurnHandler"/>'s own <c>State</c> dictionary, or a minefield's
+    /// gate, unrelated to and unchanged by <see cref="Types.EmpireStatus"/>), so a living NPE
+    /// handler's own per-enemy diplomatic-memory dictionary, or a minefield's
     /// owner/scouts, can still reference one — confirmed for real (not just theorized) by
     /// <see cref="SavGameWriter"/>'s own equivalent orphan-discovery code, whose otherwise-identical
     /// simplification broke against a real reference save's minefield owner (see its remarks).
@@ -805,7 +732,7 @@ public static class GameJson
     /// orphan can surface) before <c>"empires"</c> so every orphan this call discovers is already
     /// known by the time <see cref="WriteEmpires"/> walks <see cref="AllEmpires"/>.
     /// </summary>
-    private sealed class EntityIndex
+    private sealed class EntityIndex : IJsonRefWriter
     {
         private readonly Dictionary<Empire, int> _empireIds = new();
         private readonly List<Empire> _allEmpires = [];
@@ -861,6 +788,9 @@ public static class GameJson
             return id;
         }
 
+        /// <summary>See <see cref="IJsonRefWriter.FleetId"/> — a real, live dangling-reference window, not a bug; see <see cref="Turns.INpeHandlerProvider"/> implementors' own remarks on why a caller needs to be able to skip one.</summary>
+        public int? FleetId(Fleet fleet) => Fleets.TryGetValue(fleet, out var id) ? id : null;
+
         // Any reference here (a mission's own Target/HomeBase, a fleet order's own DestinationObject,
         // an empire's own Capital) can outlive the object it points to -- same dangling-reference
         // window WriteIds' own doc comment describes, just one level removed (the referencing entity
@@ -888,7 +818,7 @@ public static class GameJson
     /// the point <see cref="Galaxy.Galaxy"/> is being deserialized), then <see cref="AttachGalaxy"/>
     /// once the entity lists exist too.
     /// </summary>
-    private sealed class EntityLookup(List<Empire> empires)
+    private sealed class EntityLookup(List<Empire> empires) : IJsonRefReader
     {
         private Galaxy.Galaxy? _galaxy;
 
@@ -919,6 +849,9 @@ public static class GameJson
                 var kind => throw new NotSupportedException($"Unknown object reference kind '{kind}'."),
             };
         }
+
+        /// <summary><see cref="IJsonRefReader"/>'s own signature is <see cref="object"/>-returning (an <see cref="Turns.INpeHandlerProvider"/> needs it for a mission Target/HomeBase, which can be an <see cref="ISectorObject"/> or, in a shape this port hasn't built any real NPE reader for yet, something else entirely) — explicit implementation keeps <see cref="DecodeObjectRef"/> itself narrowly <see cref="ISectorObject"/>-typed for every other caller in this file.</summary>
+        object? IJsonRefReader.DecodeObjectRef(JsonNode? node) => DecodeObjectRef(node);
     }
 
     /// <summary>
@@ -940,9 +873,9 @@ public static class GameJson
     /// Per-property override for <c>Names</c> on each <see cref="ISectorObject"/> implementor — same
     /// shape as <see cref="EmpireRefConverter"/>, but for a whole <c>Dictionary&lt;Empire,string&gt;</c>
     /// rather than one <see cref="Empire"/> reference (a non-string key isn't natively JSON-safe, so
-    /// this writes/reads an array of <c>{empireId, name}</c> pairs, the same shape
-    /// <see cref="WriteState"/>/<see cref="ReadState"/> already use for
-    /// <c>Dictionary&lt;Empire,StateDeptRecord&gt;</c>).
+    /// this writes/reads an array of <c>{empireId, name}</c> pairs — an <see cref="INpeHandlerProvider"/>
+    /// implementor uses the same array-of-pairs shape, via <see cref="IJsonRefWriter.EmpireId"/>, for its
+    /// own per-enemy state dictionary).
     /// </summary>
     private sealed class NamesConverter(EntityIndex? index, EntityLookup? lookup) : JsonConverter<Dictionary<Empire, string>>
     {
@@ -976,7 +909,8 @@ public static class GameJson
     /// (an interface-typed property) or deserialize (no concrete type to construct), so it's encoded
     /// the same way any other cross-entity reference in this format is -- <see cref="EntityIndex.EncodeObjectRef"/>/
     /// <see cref="EntityLookup.DecodeObjectRef"/>, the same pair <see cref="NewsItem.Subject"/> and
-    /// <see cref="Turns.KingdomFleetState.Target"/>/<c>HomeBase</c> already use.
+    /// an <see cref="INpeHandlerProvider"/> implementor's own fleet-mission Target/HomeBase already use
+    /// (via <see cref="IJsonRefWriter.EncodeObjectRef"/>/<see cref="IJsonRefReader.DecodeObjectRef"/>).
     ///
     /// <see cref="Read"/> deliberately does nothing but skip its own value -- unlike every other
     /// cross-reference in this format, <see cref="FleetOrder.DestinationObject"/> can point at

@@ -2,7 +2,7 @@ using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.NewGame;
-using Reconstructed4021.Core.Npe;
+using Reconstructed4021.LegacyNpe;
 using Reconstructed4021.Core.Types;
 
 namespace Reconstructed4021.Tests;

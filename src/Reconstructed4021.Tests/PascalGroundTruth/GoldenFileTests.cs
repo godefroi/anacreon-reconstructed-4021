@@ -115,9 +115,13 @@ public class GoldenFileTests
             c => $"{c.SizeOfGalaxy},{c.Mode},{c.PatchCount},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "nebula", .. args.Skip(1)]));
 
-        GoldenFile.Regenerate("rng", RngCases.All,
+        GoldenFile.Regenerate("groundtruthrng", GroundTruthRngCases.All,
             c => $"{c.Seed},{c.Range},{c.Count}",
-            args => PatchHarness.CompileAndRun("runworld", ["case", "rng", .. args.Skip(1)]));
+            args => PatchHarness.CompileAndRun("runworld", ["case", "groundtruthrng", .. args.Skip(1)]));
+
+        GoldenFile.Regenerate("npepirate", PirateCases.All,
+            c => $"{c.Mode},{c.Seed},{c.HeavyBX},{c.HeavyBY}",
+            args => PatchHarness.CompileAndRun("runworld", ["case", "npepirate", .. args.Skip(1)]));
 
         // Path is relative to PatchHarness's own working directory (reference/verify/patched/),
         // not absolute: LoadScenario's real Filename parameter is Pascal's LineStr (STRING[80]),

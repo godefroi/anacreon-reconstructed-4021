@@ -5,7 +5,7 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// file through both the C# <c>ScenarioLoader</c> and the real, patched Pascal <c>RunScenarioCase</c>
 /// (NEWGAME.PAS's own header-parse + command-dispatch loop, reimplemented fresh since it's saturated
 /// with dead DOS UI — see UPDATE.PAS's own PATCH comment at the relocation), seeded with the same
-/// <see cref="PascalRandom"/>/<c>RandSeed</c> value on both sides so <c>CREATERANDOMWORLDS</c>'
+/// <see cref="GroundTruthRandom"/>/<c>GroundTruthSeed</c> value on both sides so <c>CREATERANDOMWORLDS</c>'
 /// collision-retry loop — unreachable under every other domain's <c>ForcedRandomValue</c> convention —
 /// finally gets exercised against a real, non-degenerate RNG sequence. <c>RunScenarioCase</c> emits an
 /// aggregate checksum over the whole loaded Universe^, but <c>ScenarioLoaderGoldenTests.MatchesGoldenFile</c>
