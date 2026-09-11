@@ -14,5 +14,13 @@ public class GroundTruthRandomTests
         var values = string.Join(',', Enumerable.Range(0, c.Count).Select(_ => random.Next(c.Range)));
 
         await Assert.That(values).IsEqualTo(golden[c.Name]["values"]);
+
+        // Independent check (fresh instance, same seed) for NextDouble/GroundTruthRandomReal -- matches
+        // RunGroundTruthRngCase's own seed reset before drawing its own "reals=" field, so this doesn't
+        // depend on how many int draws the assertion above already consumed.
+        var realRandom = new GroundTruthRandom(c.Seed);
+        var reals = string.Join(',', Enumerable.Range(0, c.Count).Select(_ => realRandom.NextDouble().ToString("F10")));
+
+        await Assert.That(reals).IsEqualTo(golden[c.Name]["reals"]);
     }
 }

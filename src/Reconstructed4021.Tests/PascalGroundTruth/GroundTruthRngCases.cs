@@ -6,7 +6,9 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// RunGroundTruthRngCase) -- the generator Rnd's real (non-ForcedRandomValue) branch now draws from,
 /// this project's own replacement for reverse-engineering fpc's real Random (the now-deleted
 /// PascalRandom.cs/RngCases.cs, which this fixture's seeds/ranges/counts are carried over from, so
-/// the two read as obvious counterparts in git history).
+/// the two read as obvious counterparts in git history). Each case's own Seed/Range/Count also drives
+/// an independent check of <see cref="GroundTruthRandom.NextDouble"/> against
+/// <c>GroundTruthRandomReal</c> (the bare-Random replacement), not just <c>Next(maxValue)</c>.
 /// </summary>
 public sealed record GroundTruthRngCase(string Name, uint Seed, int Range, int Count) : INamedCase;
 

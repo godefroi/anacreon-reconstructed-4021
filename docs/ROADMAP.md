@@ -421,18 +421,27 @@ original developers shipped incomplete, not a port gap.
     `SavGameLoader.LoadNpeData` only ever consulted the provider for `Kingdom1`/`Kingdom2`
     specifically, not generically via `Handles` the way `SavGameWriter`/`GameJson`/`ScenarioLoader`
     already did — fixed alongside Pirate landing, not a Pirate-specific concern.
-  - **Berserker** (`NPE04.PAS`) — real, reachable (ARRONAX only), not built. Own future entry;
-    distinguishing mechanic is that its starbases are the mobile roaming unit, driven by a separate
-    `BaseMissionTypes` state machine — a genuinely different shape from Kingdom/Pirate's fleet-based
-    missions, not a drop-in reuse of `KingdomFleetState`.
+  - **Berserker** (`NPE04.PAS`) — real, reachable (ARRONAX only). Built:
+    `Reconstructed4021.LegacyNpe.BerserkerTurnHandler`, wired into `LegacyNpeProvider` alongside
+    Kingdom/Pirate. Its distinguishing mechanic is that its starbases are the mobile roaming unit,
+    driven by a separate `BaseMissionType` state machine (`BerserkerBaseState`) — a genuinely
+    different shape from Kingdom/Pirate's fleet-based missions, not a drop-in reuse of
+    `KingdomFleetState`; its own fleet-mission half (`BerserkerFleetState`) is independently audited
+    against `NPE04.PAS`, matching the same per-personality-audit precedent Pirate already set. Reuses
+    the shared `NPEINTR.PAS` toolkit's `GetFleetComposition`/`ImplementJumpAttackMSN`/`PlunderWorld`/
+    `CreateRegionArray`/`SetEmpireDefenses` directly — real Pascal genuinely shares `DeployBattleFleet`
+    between Kingdom and Berserker (`NPE04.PAS` defines no composition logic of its own) — but can't
+    call `NpeToolkit.DeployBattleFleet`/`EnforceNpeDataLinks` themselves (hardcoded to
+    `KingdomFleetState`), so those get a small private glue method, same precedent Pirate already set.
   - **Guardian** (`NPE03.PAS`) — real but zero `dos_131` scenario usage. Deliberately not built
-    ahead of demonstrated need (would be speculative scope); smallest of the four to port when it's
-    actually needed (no fleet movement, no diplomacy — just a per-turn LAM-defense loop).
+    ahead of demonstrated need (would be speculative scope); smallest of the remaining personalities to
+    port when it's actually needed (no fleet movement, no diplomacy — just a per-turn LAM-defense loop).
   - **Trader** — confirmed dead code, not merely unreachable: zero case arms in any of `NPE.PAS`'s 5
     dispatch procedures, no `TraderDataRecord` in `NPETYPES.PAS`, zero scenario usage. Not planned.
-  - `DeployHarassFleet` (`NPEINTR.PAS:777`)/`ImplementDefendBMS` (`NPE04.PAS`) stay confirmed empty
-    stubs for whichever personality eventually needs them (Pirate/Berserker respectively) — nothing
-    to port, already verified in both the 1.31 and 2.0 trees.
+  - `DeployHarassFleet` (`NPEINTR.PAS:777`) stays a confirmed empty stub for whichever personality
+    eventually needs it (Pirate never calls it) — nothing to port, already verified in both the 1.31
+    and 2.0 trees. `ImplementDefendBMS` (`NPE04.PAS`) is the same kind of confirmed-empty stub, now
+    ported as a genuine no-op rather than left pending, since Berserker itself landed this phase.
   - `LoadNPE`/`SaveNPE` (binary `.SAV` serialization, including the `Version<12` legacy-format
     branches) — Phase 7, not this phase, regardless of which personalities exist by then.
 

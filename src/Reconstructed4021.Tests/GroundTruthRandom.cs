@@ -22,6 +22,18 @@ public sealed class GroundTruthRandom(uint seed) : Random
 
     public override int Next(int maxValue) => (int)((ulong)NextU32() * (uint)maxValue >> 32);
 
+    /// <summary>
+    /// The C# twin of <c>GroundTruthRandomReal</c> (<c>INT.PAS.patch</c>'s own bare, zero-arg
+    /// <c>Random</c> replacement — not the same patched symbol as <c>Rnd</c>/<c>Next</c> above,
+    /// which replace <c>Random(N)</c>; see that function's own doc comment for why it isn't just
+    /// named <c>Random</c> there too). Draws one more <see cref="NextU32"/> value from the same
+    /// stream, scaled into [0,1) the same way. <see cref="Random.NextDouble"/> isn't implemented in
+    /// terms of <see cref="Random.Next(int)"/> (same gotcha <see cref="FixedRandom"/>'s own doc
+    /// comment already documents), so leaving this unoverridden would silently draw from the base
+    /// class's own non-deterministic <c>Sample()</c> instead.
+    /// </summary>
+    public override double NextDouble() => NextU32() / 4294967296.0;
+
     private uint NextU32()
     {
         _state = _state * 1664525u + 1013904223u;

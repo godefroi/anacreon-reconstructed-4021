@@ -127,10 +127,12 @@
                 (VisibilityHandlerProbeTests), since there's no separate Pascal formula to cross-check
                 there.
      groundtruthrng Seed,Range,Count -> "values=<Count comma-joined GroundTruthNextU32-scaled draws
-                after GroundTruthSeed:=Seed>" -- not a UpdateWorld/GalaxySetup domain; a standing
-                regression fixture for the C# test project's GroundTruthRandom, Rnd's own ground-truth
-                generator (see RunGroundTruthRngCase's own comment and reference/verify/README.md's
-                "ground-truth RNG is a generator this project owns" section)
+                after GroundTruthSeed:=Seed>;reals=<Count comma-joined GroundTruthRandomReal draws,
+                seed reset to Seed first>" -- not a UpdateWorld/GalaxySetup domain; a standing
+                regression fixture for the C# test project's GroundTruthRandom (both Next(maxValue)
+                and NextDouble), Rnd/NewBSRKBaseTarget's own ground-truth generators (see
+                RunGroundTruthRngCase's own comment and reference/verify/README.md's "ground-truth RNG
+                is a generator this project owns" section)
      npepirate  Mode,Seed,HeavyBX,HeavyBY -> "mission=<v>;waiting=<v>;destx=<v>;desty=<v>;blockx=<v>;
                 blocky=<v>;hgvalue=<v>;shfgt=<v>;shhkr=<v>;shjmp=<v>;shjtn=<v>;shtrn=<v>;crche=<v>;
                 crmet=<v>;crmen=<v>;targetowner=<Empire ordinal>;activefleetcount=<v>" -- NPE01.PAS's
@@ -1412,11 +1414,18 @@ procedure RunGroundTruthRngCase(const arg: String);
      domain replaces a now-deleted one, RunRngCase, which played the same role for PascalRandom.cs, a
      from-scratch reverse-engineered port of fpc's actual Random/RandSeed algorithm -- retired along
      with PascalRandom.cs once Rnd itself no longer called fpc's real Random at all, so there was
-     nothing left needing that reverse-engineered replica to be proven correct against.) }
+     nothing left needing that reverse-engineered replica to be proven correct against.)
+
+     reals= is a second, independent check (seed reset before drawing) for GroundTruthRandomReal --
+     the bare zero-arg Random replacement INT.PAS.patch added for NPE04.PAS's own NewBSRKBaseTarget,
+     scaled the same way GroundTruthRandom.NextDouble does on the C# side (raw draw / 2^32). Reset
+     rather than continuing from wherever the values= loop left the state, so this check doesn't
+     depend on how many int draws preceded it -- matching the C# side's own fresh GroundTruthRandom
+     instance for the same check. }
    var
       parts: array[0..2] of LongInt;
       i: Integer;
-      Values, Piece: AnsiString;
+      Values, Reals, Piece: AnsiString;
    begin
    ParseFields(arg,parts);
 
@@ -1431,7 +1440,18 @@ procedure RunGroundTruthRngCase(const arg: String);
       Values:=Values+Piece;
       end;
 
-   WriteLn('values=',Values);
+   GroundTruthSeed:=LongWord(parts[0]);
+
+   Reals:='';
+   for i:=1 to parts[2] do
+      begin
+      if i>1 then
+         Reals:=Reals+',';
+      Str(GroundTruthRandomReal:0:10,Piece);
+      Reals:=Reals+Piece;
+      end;
+
+   WriteLn('values=',Values,';reals=',Reals);
    end;
 
 procedure RunScenarioCase(const arg: String);

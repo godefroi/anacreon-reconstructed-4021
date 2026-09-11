@@ -201,6 +201,25 @@ scenario-file-driven reseed), but it's unconditionally skipped in this harness's
 genuinely dead from this harness's point of view, not an oversight. The one live seeding site is
 `runworld.pas`'s own `RunScenarioCase`, which sets `GroundTruthSeed` directly.
 
+`Rnd`'s redirect only covers `Random(N)` (the one-arg, integer-range builtin) — real Pascal's bare,
+zero-arg `Random` (0..1 real-valued; `NPE04.PAS`'s `NewBSRKBaseTarget`, `NPEINTR.PAS`'s
+`GetNewDesignation`/several `DeployXxxFleet` power rolls, `INTRFACE.PAS`'s efficiency formula) is a
+separate builtin and was never redirected until Berserker's own `NewBSRKBaseTarget` needed it.
+Shadowing it under the name `Random` itself breaks compilation project-wide: declaring a zero-arg
+`Random` in `INT.PAS` also hides fpc's *one-arg* `Random(N)` overload for every unit that `USES Int`
+(confirmed directly — `ATTACK.PAS:1497`'s own `Random(1)` fails to compile with "Wrong number of
+parameters specified for call to Random"; `build-all-units.ps1`'s standalone-per-unit compile
+doesn't catch this, since it never links `ATTACK.PAS` against a real caller of the shadowed symbol —
+only a real `runworld.pas` build does). So the replacement is named `GroundTruthRandomReal` instead,
+and only the one real call site that needs it is patched to call it explicitly
+(`NPE04.PAS.patch`) — not a blanket redirect the way `Rnd` is, since none of the other bare-`Random`
+call sites are reachable from any golden domain yet either. It's declared `Double`, not `Real`:
+`-Mtp`'s `Real` is lower-precision than IEEE double, and a real divergence surfaced in the golden
+file around the 8th significant digit before this was caught (`GroundTruthRandom`'s own C#
+`double` carries more precision than `Real` can). `groundtruthrng.golden`'s own `reals=` field
+(alongside the pre-existing `values=`) is the regression fixture for this pairing, same as `values=`
+is for `Rnd`/`GroundTruthNextU32`.
+
 ## Adding or changing a patch
 
 1. Run `build.ps1` to get a fresh `patched/` tree, then hand-edit the target file directly under

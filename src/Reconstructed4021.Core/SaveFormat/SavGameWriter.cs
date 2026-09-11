@@ -586,8 +586,13 @@ public static class SavGameWriter
                     // A news item's Subject can outlive the entity it names -- a fleet destroyed by
                     // combat after the news was recorded (confirmed live: a Pirate raid destroying a
                     // transport it just attacked leaves that transport's own attack news dangling
-                    // this same turn) -- Void here matches Pascal's own on-disk shape for a subject
-                    // that's no longer a valid reference, not a corruption.
+                    // this same turn). Real Pascal has no "still valid" concept here at all -- it
+                    // blindly serializes whatever raw slot index NEWS.PAS captured at creation time,
+                    // stale-slot-reuse included, so it would never actually write Void in this case.
+                    // Falling back to Void instead is this port's own choice given its live-reference
+                    // model (a dangling index would resolve to whatever unrelated object now sits in
+                    // that reused slot on load, which is worse), not a reproduction of real Pascal's
+                    // own on-disk shape.
                     writer.WriteIdNumber(item.Subject is { } subject && objectIds.TryIdOf(subject, out var subjectId) ? subjectId : new SavIdNumber(SavObjectType.Void, 0));
                 }
 

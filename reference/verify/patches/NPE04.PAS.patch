@@ -1,0 +1,14 @@
+--- a/NPE04.PAS
++++ b/NPE04.PAS
+@@ -113,7 +113,10 @@ PROCEDURE NewBSRKBaseTarget (Emp: Empire; BaseID: IDNumber; VAR BaseData: BaseDa
+ 					ELSE
+ 						FillChar (TestDf, SizeOf(TestDf), 0);
+ 
+-					IF (BasePower + Round(BasePower * Random))
++					{ PATCH: ground-truth RNG replacement -- bare Random can't be shadowed project-wide
++					  without breaking ATTACK.PAS's own Random(1) call (see GroundTruthRandomReal's own
++					  INT.PAS doc comment), so this one real call site is redirected explicitly instead. }
++					IF (BasePower + Round(BasePower * GroundTruthRandomReal))
+ 						> MilitaryPower (TestSh, TestDf) THEN
+ 						BEGIN
+ 						GetCoord (TestID, TestXY);

@@ -9,7 +9,7 @@ namespace Reconstructed4021.Core.Turns;
 /// The construction/persistence seam a computer-controlled NPE AI implementation plugs into Core
 /// through, so Core never names a concrete personality type (<c>KingdomTurnHandler</c> and friends
 /// live in the separate <c>Reconstructed4021.LegacyNpe</c> assembly, which references this one, not
-/// the other way around — see docs/PORT_DESIGN.md). One provider instance is expected to answer for
+/// the other way around). One provider instance is expected to answer for
 /// every <see cref="NpeEmpireType"/> it recognizes; Core treats "no provider was supplied" and
 /// "the supplied provider doesn't recognize this type" identically — the empire gets no
 /// <see cref="ITurnHandler"/> at all (matching this port's existing "ai has no entry in
