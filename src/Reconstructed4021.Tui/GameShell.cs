@@ -467,6 +467,14 @@ public sealed class GameShell : Window
                 dismiss?.Invoke();
                 DeployFleet(world);
                 key.Handled = true;
+                return;
+            }
+
+            // Same F2:rename CloseUpWindow itself offers -- stacks the rename dialog on top of this
+            // window (RefreshTitle after) rather than closing it first, unlike D above.
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode == KeyCode.F2) {
+                RenameObject(world, window, () => window.RefreshTitle(DisplayName(world)));
+                key.Handled = true;
             }
         };
     }
@@ -541,16 +549,85 @@ public sealed class GameShell : Window
         };
     }
 
+    /// <summary>
+    /// NMSWIND.PAS's own read-only window plus real Pascal's separate Worlds-menu Add/Delete Name,
+    /// unified here (see <see cref="NamesWindow"/>'s own doc comment for why). F2/F8 mutate a row's
+    /// name in place and just re-run <see cref="NamesWindow.RefreshRows"/> -- no need to close/reopen
+    /// the window, unlike Close Up/World Info's F2 (their name lives in a fixed window title, this
+    /// one is redrawn from scratch every time anyway). F3 (add a bookmark) is the one action that
+    /// genuinely needs the map interactive, so it's the only one that closes and reopens this window.
+    /// </summary>
     private void ShowNamesWindow()
     {
-        var window = new NamesWindow(game, human, ShowCloseUp);
-        var dismiss = AddPanel(window);
-        window.KeyDown += (_, key) => {
-            if (key.NoAlt.NoCtrl.NoShift.KeyCode is KeyCode.Esc or KeyCode.F9) {
-                dismiss();
-                key.Handled = true;
+        NamesWindow? window = null;
+        Action? dismiss = null;
+
+        void OpenWindow()
+        {
+            window = new NamesWindow(game, human, ShowCloseUp, JumpToLocation, Rename, Delete, AddBookmark);
+            dismiss = AddPanel(window);
+            window.KeyDown += (_, key) => {
+                if (key.NoAlt.NoCtrl.NoShift.KeyCode is KeyCode.Esc or KeyCode.F9) {
+                    dismiss?.Invoke();
+                    key.Handled = true;
+                }
+            };
+        }
+
+        void JumpToLocation(Coordinate location)
+        {
+            dismiss?.Invoke();
+            galaxyView.MoveCursorTo(location);
+        }
+
+        void Rename(NameEntry entry)
+        {
+            if (entry.Object is { } obj) {
+                RenameObject(obj, window, () => window!.RefreshRows());
+                return;
             }
-        };
+
+            var bookmark = entry.Bookmark!;
+            PromptForName("Name Location", bookmark.Name, newName => {
+                // A bookmark has nothing sensible to fall back to once blanked -- unlike an object,
+                // which still has its coordinate/kind to show -- so blank here just deletes it too.
+                if (newName is null) {
+                    human.Bookmarks.Remove(bookmark);
+                } else {
+                    bookmark.Name = newName;
+                }
+
+                window!.RefreshRows();
+            }, window);
+        }
+
+        void Delete(NameEntry entry)
+        {
+            if (entry.Object is { } obj) {
+                obj.Names.Remove(human);
+            } else {
+                human.Bookmarks.Remove(entry.Bookmark!);
+            }
+
+            galaxyView.Refresh();
+            window!.RefreshRows();
+        }
+
+        void AddBookmark()
+        {
+            dismiss?.Invoke();
+            BeginPick("Add Bookmark -- move cursor to location, Enter: select, Esc: cancel", location => {
+                PromptForName("Name Location", existingName: null, newName => {
+                    if (newName is not null) {
+                        human.Bookmarks.Add(new LocationBookmark { Name = newName, Location = location });
+                    }
+
+                    OpenWindow();
+                }, stackOn: null);
+            });
+        }
+
+        OpenWindow();
     }
 
     private void ShowHelpWindow()
@@ -580,6 +657,58 @@ public sealed class GameShell : Window
     private void Designate() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "Designate");
     private void Issp() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "ISSP");
     private void Production() => ShowWorldInfo(FindWorldAt(galaxyView.CursorLocation), "Production");
+
+    /// <summary>
+    /// NAMES.PAS: AddNameCommand/DeleteNameCommand, generalized to whatever's at the cursor rather
+    /// than a world specifically -- real Pascal lets a player name anything they can see, not just
+    /// their own worlds (<c>PLAYTURN.PAS</c>'s own Add Name parameter row has no <c>NotAWorld</c>
+    /// error condition, unlike Designate's), so this resolves via <see cref="ObjectsAt"/> (the same
+    /// Game.Visible gate Close Up itself uses) rather than <see cref="FindWorldAt"/>, with the same
+    /// picker-on-2+ ExamineCursor already uses.
+    /// </summary>
+    private void ResolveNameTarget(string title, Action<ISectorObject> onResolved)
+    {
+        var objects = ObjectsAt(galaxyView.CursorLocation);
+        switch (objects.Count) {
+            case 0:
+                ShowInfo(title, "Move the cursor onto something you can see first.");
+                break;
+            case 1:
+                onResolved(objects[0]);
+                break;
+            default:
+                ShowObjectPicker(title, objects, onResolved);
+                break;
+        }
+    }
+
+    private void AddNameCommand() => ResolveNameTarget("Add Name", obj => RenameObject(obj, stackOn: null));
+
+    private void DeleteNameCommand() => ResolveNameTarget("Delete Name", obj => {
+        if (!obj.Names.Remove(human)) {
+            ShowInfo("Delete Name", "That hasn't been named.");
+            return;
+        }
+
+        galaxyView.Refresh();
+    });
+
+    /// <summary>
+    /// Shared add/rename/delete-by-blank flow for any nameable object (Worlds menu Add Name, Close
+    /// Up/World Info's own F2) -- <see cref="PromptForName"/> does the actual dialog/capitalization/
+    /// blank-clears-it work; this just knows where an object's own name lives.
+    /// </summary>
+    private void RenameObject(ISectorObject obj, View? stackOn, Action? onRenamed = null) =>
+        PromptForName("Name", obj.Names.GetValueOrDefault(human), newName => {
+            if (newName is null) {
+                obj.Names.Remove(human);
+            } else {
+                obj.Names[human] = newName;
+            }
+
+            galaxyView.Refresh();
+            onRenamed?.Invoke();
+        }, stackOn);
 
     // DesignateCommand's own local TypeN (DESIGN.PAS:672-694) -- "a/an X" phrasing for its own
     // confirm dialogs and final report; distinct from WorldDesignation.TypeName's bare noun (read
@@ -771,6 +900,12 @@ public sealed class GameShell : Window
             // "any key closes" catch-all below run here would silently discard an in-progress edit on
             // any keystroke the editor itself doesn't handle.
             if (window.ShowingOrders) {
+                return;
+            }
+
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode == KeyCode.F2) {
+                RenameObject(obj, window, () => window.RefreshTitle(DisplayName(obj)));
+                key.Handled = true;
                 return;
             }
 
@@ -1291,6 +1426,64 @@ public sealed class GameShell : Window
         };
     }
 
+    // AddNameCommand's own NameVar[1]:=UpCase(NameVar[1]) (NAMES.PAS:52) -- only the first letter,
+    // matching LaunchFleetCommand's identical convention this now shares with (FLTCOMM.PAS:517).
+    private static string CapitalizeFirst(string s) => char.ToUpperInvariant(s[0]) + s[1..];
+
+    /// <summary>
+    /// Shared add/rename/delete-by-blank text prompt (NAMES.PAS: AddNameCommand/DeleteNameCommand,
+    /// unified into one dialog since real Pascal's AddName already overwrites an existing name
+    /// unconditionally -- "add" and "rename" were never different operations). Pre-fills
+    /// <paramref name="existingName"/> if there is one; Enter with non-blank text capitalizes and
+    /// passes it to <paramref name="onSubmit"/>, Enter with blank text passes null (the caller's job
+    /// to treat that as "clear the name" -- <c>Dictionary.Remove</c> on a key that was never there is
+    /// already a safe no-op, so callers don't need to check existence first). <paramref name="stackOn"/>
+    /// lets this stack on top of an already-open Close Up/World Info (<see cref="AddModal"/>'s own
+    /// <c>refocusOnDismiss</c>) instead of requiring that window to close first -- null for the
+    /// Worlds-menu case, where nothing else is open to return focus to.
+    /// </summary>
+    private void PromptForName(string title, string? existingName, Action<string?> onSubmit, View? stackOn)
+    {
+        var dialog = new Window {
+            Title = title,
+            X = Pos.Center(), Y = Pos.Center(),
+            Width = 50, Height = 5,
+            BorderStyle = LineStyle.Single,
+            CanFocus = true,
+        };
+        dialog.SetScheme(new Scheme(DialogNormalAttribute));
+        dialog.Border.View?.SetScheme(new Scheme(DialogBorderAttribute));
+
+        var nameField = new TextField { X = 1, Y = 1, Width = Dim.Fill(1), Text = existingName ?? "" };
+        dialog.Add(new Label { X = 1, Y = 0, Text = "Name (blank to clear):" });
+        dialog.Add(nameField);
+        dialog.Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "Enter: confirm   Esc: cancel" });
+
+        var dismiss = stackOn is not null
+            ? AddModal(dialog, dismissOnOutsideClick: false, refocusOnDismiss: stackOn)
+            : AddModal(dialog, dismissOnOutsideClick: false);
+        nameField.SetFocus();
+
+        nameField.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Enter) {
+                return;
+            }
+
+            var text = nameField.Text?.Trim() ?? "";
+            dismiss();
+            onSubmit(text.Length == 0 ? null : CapitalizeFirst(text));
+            key.Handled = true;
+        };
+        dialog.KeyDown += (_, key) => {
+            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Esc) {
+                return;
+            }
+
+            dismiss();
+            key.Handled = true;
+        };
+    }
+
     // IDParm2 (Question 8, "Where shall we deploy the fleet from?") -- the map-cursor and
     // world-under-a-selected-object paths both land here.
     private void PickDeploySource(Coordinate location, string fleetName)
@@ -1345,7 +1538,7 @@ public sealed class GameShell : Window
             var fleet = FleetLifecycle.DeployFleet(human, holder, fleetShips, fleetCargo, destination, game);
             if (!string.IsNullOrWhiteSpace(fleetName)) {
                 // LaunchFleetCommand's own FleetName[1]:=UpCase(FleetName[1]) (FLTCOMM.PAS:517).
-                fleet.Names[human] = char.ToUpperInvariant(fleetName[0]) + fleetName[1..];
+                fleet.Names[human] = CapitalizeFirst(fleetName);
             }
 
             galaxyView.Refresh();
@@ -2613,8 +2806,8 @@ public sealed class GameShell : Window
             new("_Designate", Key.Empty, Designate),
             new("P_roduction", Key.Empty, Production),
             new("_ISSP", Key.Empty, Issp),
-            new("_Add Name", Key.Empty, () => Stub("Add Name")),
-            new("Delete _Name", Key.Empty, () => Stub("Delete Name")),
+            new("_Add Name", Key.Empty, AddNameCommand),
+            new("Delete _Name", Key.Empty, DeleteNameCommand),
             new("_Liberate", Key.Empty, () => Stub("Liberate")),
             new("_Self-Destruct", Key.Empty, () => Stub("Self-Destruct")),
         }),

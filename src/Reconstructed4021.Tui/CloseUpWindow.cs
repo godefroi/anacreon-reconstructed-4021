@@ -95,6 +95,9 @@ internal sealed class CloseUpWindow : Window
 
     public bool ShowingOrders => tabs.IsShowing("Orders");
 
+    /// <summary>Updates the title after a rename (F2, GameShell's own RenameObject) -- the name shown here was only ever a snapshot taken at construction (see the constructor's own <c>name</c> local).</summary>
+    public void RefreshTitle(string newName) => tabs.Rename(newName);
+
     /// <summary>
     /// DrawScreen's own Line (DISPLAY.PAS:156-162): "Anacreon: {Year} ({Age}{ordinal suffix} year
     /// of your reign.)", Age = EmpireAge(Player)+1 = Game.Year - FoundingYear + 1

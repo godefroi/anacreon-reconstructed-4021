@@ -25,7 +25,7 @@ public class NamesWindowReportTests
 
         var rows = NamesWindowReport.BuildRows(galaxy, viewer);
 
-        await Assert.That(rows).IsEquivalentTo((ISectorObject[])[fleet, planet]);
+        await Assert.That(rows).IsEquivalentTo([NameEntry.For(fleet), NameEntry.For(planet)]);
     }
 
     [Test]
@@ -53,5 +53,21 @@ public class NamesWindowReportTests
         var rows = NamesWindowReport.BuildRows(galaxy, viewer);
 
         await Assert.That(rows).IsEmpty();
+    }
+
+    [Test]
+    public async Task BuildRows_IncludesBookmarks_AfterNamedObjects()
+    {
+        var viewer = NewEmpire("Viewer");
+        var galaxy = new Galaxy(size: 100);
+        var planet = new Planet { Location = new Coordinate(1, 1), Owner = viewer };
+        planet.Names[viewer] = "Homeworld";
+        galaxy.Planets.Add(planet);
+        var bookmark = new LocationBookmark { Name = "Rendezvous", Location = new Coordinate(5, 5) };
+        viewer.Bookmarks.Add(bookmark);
+
+        var rows = NamesWindowReport.BuildRows(galaxy, viewer);
+
+        await Assert.That(rows).IsEquivalentTo([NameEntry.For(planet), NameEntry.For(bookmark)]);
     }
 }

@@ -52,7 +52,7 @@ codebase is in a test file.
   - [ ] `⌂ > About Anacreon`
   - [ ] `Game > Status Hardcopy`
   - [ ] `Empire > Send Message` / `Read Messages` / `Trade Technology`
-  - [ ] `Worlds > Add Name` / `Delete Name` / `Liberate` / `Self-Destruct`
+  - [ ] `Worlds > Liberate` / `Self-Destruct`
 - **No post-conquest world-list report.** `ATTACK.PAS: ConquerEmpire`'s own `Booty` (the set of
   world indices that joined the conqueror mid-`ConquerEmpire`) is declared and threaded through
   real Pascal's call chain but never read anywhere in it — dropped entirely by this port, confirmed

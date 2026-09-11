@@ -1,0 +1,69 @@
+# Smoke-test script for Reconstructed4021.TuiDriver, run against the committed
+# assets/saves/Border Skirmish.json (cursor starts at (0,0), the human capital):
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Border Skirmish.json" --script assets/tui-driver-scripts/naming-system-smoke-test.txt
+#
+# Covers the naming-system UI wired up after 0069adf's storage-only landing: Worlds > Add Name sets
+# a name that the very next Close Up (routed to WorldInfoWindow, since the capital is owned) shows
+# in its title; F2 stacks a rename dialog on top of that same still-open window (pre-filled with the
+# current name) and updates the title live via TabbedWindow.Rename, without closing/reopening it;
+# Worlds > Delete Name clears it back to the DisplayName fallback (a bare relative coordinate). Then
+# the Names window (F9): a live search field that filters to "No matches." and back, F3 adding a
+# bare-coordinate bookmark via the map-cursor pick (BeginPick) with the resulting row's relative
+# coordinate reflecting the actual cursor move, and F8 deleting a row in place.
+w
+a
+SLEEP 200
+C a p i t a l 1
+Enter
+SLEEP 200
+Enter
+SLEEP 300
+DUMP
+F2
+SLEEP 200
+DUMP
+Backspace Backspace Backspace Backspace Backspace Backspace Backspace Backspace
+N e w C a p
+Enter
+SLEEP 300
+DUMP
+Esc
+SLEEP 200
+w
+n
+SLEEP 200
+Enter
+SLEEP 300
+DUMP
+Esc
+SLEEP 200
+w
+a
+T e s t W o r l d
+Enter
+SLEEP 200
+F9
+SLEEP 300
+DUMP
+T e s t
+SLEEP 200
+DUMP
+Backspace Backspace Backspace Backspace z z z
+SLEEP 200
+DUMP
+Backspace Backspace Backspace
+SLEEP 200
+F3
+SLEEP 300
+Right Down
+Enter
+SLEEP 300
+R e n d e z v o u s
+Enter
+SLEEP 300
+DUMP
+F8
+SLEEP 200
+DUMP

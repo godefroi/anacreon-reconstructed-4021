@@ -61,7 +61,7 @@ internal sealed class WorldCloseUpTabView : View
             }
         }
 
-        Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "D: Deploy from here" });
+        Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "D: Deploy from here   F2: Rename" });
     }
 
     private void AddAt(int x, int y, string text) => Add(new Label { X = x, Y = y, Text = text });
