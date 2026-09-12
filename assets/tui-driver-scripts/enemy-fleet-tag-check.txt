@@ -1,0 +1,34 @@
+# Scratch check that ObjectListItem's fleet status tag is redacted for enemy fleets appropriately --
+# run against assets/saves/Enemy Fleet Tag Test.json (NOT committed): Border Skirmish.json plus a
+# Human escort fleet and a Kingdom fleet at each of two cells -- (4,3), distance 4 from the Human
+# capital (0,0) so the Kingdom fleet there is only Known (planet detection range, not adjacent), and
+# (1,1), distance 1 (adjacent, so Scouted). Both Kingdom fleets have two queued WAIT orders
+# (NextOrder=1), to confirm "[orders pending]" never appears for either -- only for the viewer's own
+# fleets.
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Enemy Fleet Tag Test.json" --script assets/tui-driver-scripts/enemy-fleet-tag-check.txt
+Right
+Right
+Right
+Right
+Down
+Down
+Down
+SLEEP 200
+Enter
+SLEEP 200
+DUMP
+Esc
+SLEEP 100
+Left
+Left
+Left
+Up
+Up
+SLEEP 200
+Enter
+SLEEP 200
+DUMP
+Esc
+SLEEP 100

@@ -998,11 +998,17 @@ public sealed class GameShell : Window
     /// </param>
     private void ShowObjectPicker(string title, IReadOnlyList<ISectorObject> objects, Action<ISectorObject> onChosen, bool allowFleetActions = false)
     {
+        var items = objects.Select(o => new ObjectListItem(o, human)).ToList();
+
         var picker = new Window {
             Title = title, // DisplayMenu's own OpenWindow passes '' for the sector-picker case too.
             X = Pos.Center(),
             Y = Pos.Center(),
-            Width = allowFleetActions ? 55 : 45, // wide enough for the fleet-action hint line below
+            // Floor matches the old fixed constant (wide enough for the fleet-action hint line below);
+            // sized up from there to fit the longest row actually shown -- found live: a fixed width
+            // clipped a fleet's own status tag off the end of a long name/owner combo instead of
+            // making room for it.
+            Width = Math.Max(allowFleetActions ? 55 : 45, items.Max(i => i.ToString().Length) + 4),
             Height = allowFleetActions ? 8 : 7, // one hint line, contextual to the highlighted item
             BorderStyle = LineStyle.Single, // ThinBRD
             CanFocus = true,
@@ -1018,7 +1024,7 @@ public sealed class GameShell : Window
         // so it gets an explicit legend instead of staying silent like Enter/Esc do.
         var listView = new ListView<ObjectListItem> { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(allowFleetActions ? 1 : 0) };
         listView.SetScheme(new Scheme { Normal = PickerNormalAttribute, Focus = PickerSelectedAttribute });
-        listView.SetSource(new ObservableCollection<ObjectListItem>(objects.Select(o => new ObjectListItem(o, human))));
+        listView.SetSource(new ObservableCollection<ObjectListItem>(items));
         listView.Index = 0; // SetSource alone leaves nothing selected -- default to the first item.
         if (allowFleetActions) {
             // ListView's own type-ahead search (KeystrokeNavigator) intercepts every plain letter
@@ -1339,12 +1345,42 @@ public sealed class GameShell : Window
     /// <summary>
     /// Display wrapper for <see cref="ShowSectorPicker"/>'s ListView -- ISectorObject implementors
     /// are plain domain entities with no display-formatting concern of their own. Text format
-    /// matches GetMapObject's own CreateMenu (MAPWIND.PAS:858-859): "Name  (Owner)".
+    /// matches GetMapObject's own CreateMenu (MAPWIND.PAS:858-859): "Name  (Owner)", plus (fleets
+    /// only, and only ones the viewer owns or has scouted -- see FleetStatusTag's own doc comment) a
+    /// status tag -- one of the viewer's own fleets sitting at Ready with a full order queue looks
+    /// idle here but isn't: it'll act the moment <see cref="Core.Turns.FleetMovementHandler.ResolveOrders"/>
+    /// next runs, same as one already InTransit is already busy physically stepping.
     /// </summary>
     private sealed record ObjectListItem(ISectorObject Object, Empire Viewer)
     {
-        public override string ToString() =>
-            $"{Object.Names.GetValueOrDefault(Viewer) ?? CloseUpWindow.DescribeLocation(Object, Viewer)}  ({Object.Owner.Name})";
+        public override string ToString()
+        {
+            var name = Object.Names.GetValueOrDefault(Viewer) ?? CloseUpWindow.DescribeLocation(Object, Viewer);
+            var status = Object is Fleet fleet ? FleetStatusTag(fleet) : "";
+            return $"{name}  ({Object.Owner.Name}){status}";
+        }
+
+        /// <summary>
+        /// Same redaction rule as <see cref="CloseUpWindow.DescribeFleetStatus"/>: Ready/InTransit/
+        /// Inactive is real Pascal status info (CLSCOMM.PAS's own FltStatusName), visible for any
+        /// fleet the viewer owns or has scouted. Whether a fleet has orders queued at all is not --
+        /// Pascal never exposes another empire's order queue, so "orders pending" only ever shows for
+        /// the viewer's own fleets, not a scouted enemy's.
+        /// </summary>
+        private string FleetStatusTag(Fleet fleet)
+        {
+            var owned = ReferenceEquals(fleet.Owner, Viewer);
+            if (!owned && !Game.Scouted(Viewer, fleet)) {
+                return "";
+            }
+
+            return fleet.Status switch {
+                FleetStatus.InTransit => " [in transit]",
+                FleetStatus.Inactive => " [out of fuel]",
+                _ when owned && fleet.NextOrder > 0 => " [orders pending]",
+                _ => "",
+            };
+        }
     }
 
     /// <summary>
