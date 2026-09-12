@@ -1,0 +1,14 @@
+# Scratch check for ObjectListItem's new fleet status tag -- run against
+# assets/saves/Fleet Status Tag Test.json (NOT committed): Border Skirmish.json plus four Human
+# fleets at the capital (0,0), one of each status (Ready/idle, InTransit, Ready-with-pending-orders,
+# Inactive/out of fuel).
+#
+#   dotnet run --project src/Reconstructed4021.TuiDriver -- \
+#     --load "assets/saves/Fleet Status Tag Test.json" --script assets/tui-driver-scripts/fleet-status-tag-check.txt
+f
+u
+SLEEP 200
+DUMP
+Esc
+SLEEP 100
+DUMP
