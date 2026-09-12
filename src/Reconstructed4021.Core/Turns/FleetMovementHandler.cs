@@ -21,8 +21,21 @@ namespace Reconstructed4021.Core.Turns;
 /// real DATACNST.PAS constants. Starbase movement (<see cref="AdvanceStarbases"/>) is the real
 /// obstacle-avoiding, fuel-costed <c>MovePlayerStarbases</c>/<c>GetNewBasePos</c> (SBASE.PAS), not a
 /// straight-line stepper.
+///
+/// <paramref name="useLegacyOrderResolution"/> (Tui's own <c>appsettings.json</c> <c>UseLegacyOrderResolution</c>,
+/// default false) reverts <see cref="ResolveOrders"/>'s own two-phase, cross-fleet, compile-time-has-no-side-effects
+/// scheme entirely: <see cref="ResolveOrders"/> becomes a no-op, and a same-location
+/// <see cref="CommandType.Destination"/> once again halts <see cref="ExecuteFleetOrdersStep"/>'s batch
+/// exactly like Pascal's own DEST always does, rather than continuing into the next order the same
+/// call -- leaving only the arrival-triggered <see cref="ExecuteFleetOrders"/> calls below as the sole
+/// order-resolution path, at Pascal's own once-per-round cadence. The one fix this does <em>not</em>
+/// revert either way is <see cref="ShouldAdvanceActingEmpireFleet"/>/<see cref="ShouldAdvanceNextEmpireFleet"/>
+/// no longer excluding a null-<see cref="Fleet.Destination"/> fleet -- that's a plain correctness fix
+/// (a stationary fleet handed a fresh order queue would otherwise never be visited at all, matching
+/// neither Pascal nor any reasonable "legacy" reading of it), not a QoL deviation worth being able to
+/// turn back off.
 /// </summary>
-public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
+public sealed class FleetMovementHandler(Random random, bool useLegacyOrderResolution = false) : IFleetMovementHandler
 {
     private static readonly ShipType[] _mineableShipTypes = [ShipType.HunterKiller, ShipType.Jumpship, ShipType.Jumptransport];
 
@@ -101,9 +114,7 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
 
     private static bool ShouldAdvanceActingEmpireFleet(Fleet fleet, Game game)
     {
-        if (fleet.Destination is null
-            || fleet.Status == FleetStatus.Lost
-            || fleet.Status == FleetStatus.Inactive) {
+        if (fleet.Status == FleetStatus.Lost || fleet.Status == FleetStatus.Inactive) {
             return false;
         }
 
@@ -113,9 +124,7 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
 
     private static bool ShouldAdvanceNextEmpireFleet(Fleet fleet, Game game)
     {
-        if (fleet.Destination is null
-            || fleet.Status == FleetStatus.Lost
-            || fleet.Status == FleetStatus.Inactive) {
+        if (fleet.Status == FleetStatus.Lost || fleet.Status == FleetStatus.Inactive) {
             return false;
         }
 
@@ -133,20 +142,45 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
     /// <see cref="StepFleet"/> allotment afterward from its new position — both apply in the same turn,
     /// not one or the other (verified directly: <c>Teleport</c> stays <c>False</c> on that path, so
     /// control falls through to the normal step loop below it).
+    ///
+    /// A null <see cref="Fleet.Destination"/> (this port's own stand-in for Pascal's <c>Dest=FltXY</c> --
+    /// no null coordinate there) hits the same branch as already-arrived, for the same reason: real
+    /// Pascal's <c>UpdateFleet</c> tail-calls <c>ExecuteFleetOrders</c> unconditionally whenever the fleet
+    /// is Ready (<c>IF (NOT FltDestroyed) AND (GetFleetStatus(FltID)=FReady) THEN ExecuteFleetOrders</c>,
+    /// FLEET.PAS:855-858), regardless of whether it currently has anywhere to go --
+    /// <see cref="ShouldAdvanceActingEmpireFleet"/>/<see cref="ShouldAdvanceNextEmpireFleet"/> used to
+    /// exclude a null-Destination fleet from this loop entirely, which real Pascal's own
+    /// <c>UpdateAllFleets</c> (FLEET.PAS:861-905) never does (it gates only on owner/fleet type). This fix
+    /// itself is unconditional -- not part of <paramref name="useLegacyOrderResolution"/> -- since without
+    /// it a fleet freshly handed an order queue while already stationary is never visited by anything.
+    ///
+    /// The tail call itself, though, only fires here when <paramref name="useLegacyOrderResolution"/> is
+    /// true. When it's false (the default), this arrival moment doesn't execute anything at all beyond
+    /// setting Ready/null-Destination -- <see cref="ResolveOrders"/>'s own next pass (the same
+    /// <see cref="TurnEngine.EndTurn"/> call this arrival happened in, or the very next
+    /// <see cref="TurnEngine.BeginTurn"/>) picks this fleet up instead, with its full cross-fleet Phase
+    /// 1/2 treatment. Keeping this call active in both modes would defeat that treatment for exactly the
+    /// case it matters most: a Transfer sitting right after the DEST that just resolved would execute
+    /// immediately here, single-fleet, no deferral -- clamped needlessly if some other fleet's own
+    /// same-turn order would have freed the room first, precisely the "visited in an unlucky order"
+    /// problem Phase 1 exists to avoid. One accepted gap from skipping it: a
+    /// <see cref="EmpireStatus.PendingElimination"/> empire's fleet never gets a <see cref="ResolveOrders"/>
+    /// pass (gated on <see cref="EmpireStatus.Active"/>), so its queue simply stops progressing in
+    /// non-legacy mode -- deliberate, since that empire is torn down at its own next
+    /// <see cref="TurnEngine.BeginTurn"/> regardless.
     /// </summary>
     private void AdvanceFleet(Fleet fleet, Game game)
     {
-        if (fleet.Destination is null)
-            return;
-
         if (fleet.Status is FleetStatus.Lost or FleetStatus.Inactive)
             return;
 
-        var destination = fleet.Destination.Value;
-        if (fleet.Location == destination) {
+        if (fleet.Destination is not { } destination || fleet.Location == destination) {
             fleet.Destination = null;
             fleet.Status = FleetStatus.Ready;
-            ExecuteFleetOrders(fleet, game);
+            if (useLegacyOrderResolution) {
+                ExecuteFleetOrdersStep(fleet, game, allowWait: true, requireFullTransfer: false, legacyDestHalt: true);
+            }
+
             return;
         }
 
@@ -171,7 +205,9 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
                 fleet.Location = destination;
                 fleet.Destination = null;
                 fleet.Status = FleetStatus.Ready;
-                ExecuteFleetOrders(fleet, game);
+                if (useLegacyOrderResolution) {
+                    ExecuteFleetOrdersStep(fleet, game, allowWait: true, requireFullTransfer: false, legacyDestHalt: true);
+                }
             }
 
             return;
@@ -186,7 +222,9 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
 
         if (fleet.Location == destination) {
             fleet.Destination = null;
-            ExecuteFleetOrders(fleet, game);
+            if (useLegacyOrderResolution) {
+                ExecuteFleetOrdersStep(fleet, game, allowWait: true, requireFullTransfer: false, legacyDestHalt: true);
+            }
         }
     }
 
@@ -194,31 +232,76 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
     /// ExecuteFleetOrders (FLEET.PAS:562-617) -- called right after the three spots above that can
     /// leave a fleet <see cref="FleetStatus.Ready"/> this turn, matching Pascal's own single tail call
     /// in <c>UpdateFleet</c> exactly ("should be called after a fleet has reached its destination but
-    /// before a player takes his/her turn"). Runs commands starting at <see cref="Fleet.NextOrder"/>
-    /// (1-based, matching Pascal) until one of three things happens: a <see cref="CommandType.Destination"/>
-    /// or <see cref="CommandType.Wait"/> command is reached (both represent "this takes a real turn to
-    /// resolve," so execution stops there for now), the list runs out (<see cref="Fleet.NextOrder"/>
-    /// resets to 0 and <see cref="Fleet.Orders"/> is cleared -- Pascal's own <c>DisposeOrders</c>/
-    /// <c>SetFleetCode</c> pairing), or the fleet is destroyed mid-execution (a <see cref="CommandType.Transfer"/>
-    /// emptying the fleet via <see cref="FleetLifecycle.ChangeCompositionOfFleet"/>'s own abort-if-empty
-    /// branch) -- in which case <see cref="Fleet.NextOrder"/> is left untouched, matching Pascal's own
+    /// before a player takes his/her turn"). This overload is that exact single-fleet, single-shot
+    /// behavior, unchanged: a <see cref="CommandType.Transfer"/> that can't be fully satisfied still
+    /// executes with today's own clamping rather than waiting, matching every existing caller (this is
+    /// the one call site elsewhere in this file). See <see cref="ResolveOrders"/> for the cross-fleet,
+    /// two-phase version the turn boundary itself uses instead.
+    ///
+    /// Runs commands starting at <see cref="Fleet.NextOrder"/> (1-based, matching Pascal) until one of
+    /// three things happens: a <see cref="CommandType.Wait"/> command is reached (an explicit "skip a
+    /// turn," always a real stop here since this overload always allows consuming it), a
+    /// <see cref="CommandType.Destination"/> command leaves the fleet genuinely
+    /// <see cref="FleetStatus.InTransit"/> (still real travel pending -- unlike Pascal, one that resolves
+    /// to nowhere new, e.g. a DEST back to the fleet's own current location, is a same-call no-op and
+    /// does not halt the batch), the list runs out (<see cref="Fleet.NextOrder"/> resets to 0 and
+    /// <see cref="Fleet.Orders"/> is cleared -- Pascal's own <c>DisposeOrders</c>/<c>SetFleetCode</c>
+    /// pairing), or the fleet is destroyed mid-execution (a <see cref="CommandType.Transfer"/> emptying
+    /// the fleet via <see cref="FleetLifecycle.ChangeCompositionOfFleet"/>'s own abort-if-empty branch) --
+    /// in which case <see cref="Fleet.NextOrder"/> is left untouched, matching Pascal's own
     /// <c>IF NOT FleetDestroyed THEN SetFleetNextStatement</c> guard. <see cref="CommandType.Repeat"/>
     /// jumps back to command 1 exactly once per call (<c>IgnoreRepeat</c>) so two adjacent Repeats
     /// can't spin forever.
     /// </summary>
-    public static void ExecuteFleetOrders(Fleet fleet, Game game)
+    public static void ExecuteFleetOrders(Fleet fleet, Game game) =>
+        ExecuteFleetOrdersStep(fleet, game, allowWait: true, requireFullTransfer: false, legacyDestHalt: false);
+
+    /// <summary>
+    /// The shared stepping engine behind both <see cref="ExecuteFleetOrders"/> (single-fleet, always
+    /// allows WAIT, never defers a Transfer -- clamps immediately like Pascal always has) and
+    /// <see cref="ResolveOrders"/>'s own two-phase cross-fleet cycling. <paramref name="allowWait"/>
+    /// false leaves a WAIT command entirely untouched (not even "consumed" -- <see cref="Fleet.NextOrder"/>
+    /// stays pointing at the WAIT itself, not past it), so only calls that pass true ever advance past
+    /// one; see <see cref="ResolveOrders"/>'s own doc comment for why that's what makes WAIT cost exactly
+    /// one full turn regardless of which pass first reaches it, with no extra per-fleet state needed.
+    /// <paramref name="requireFullTransfer"/> true defers (also leaves <see cref="Fleet.NextOrder"/>
+    /// untouched) any <see cref="CommandType.Transfer"/> whose full requested amount isn't currently
+    /// available rather than clamping it -- <see cref="ResolveOrders"/>'s Phase 1 uses this to let other
+    /// fleets' orders run first and potentially unblock it, instead of committing to a needlessly-partial
+    /// transfer just because of visitation order. <paramref name="legacyDestHalt"/> true makes every
+    /// <see cref="CommandType.Destination"/> halt the batch unconditionally, matching Pascal's own DEST
+    /// exactly -- only <see cref="FleetMovementHandler"/>'s own legacy-mode arrival calls pass true; every
+    /// other caller passes false, letting a same-location DEST continue into the next order the same call.
+    /// </summary>
+    /// <returns>Whether this call executed at least one command (advanced <see cref="Fleet.NextOrder"/> or mutated game state) -- <see cref="ResolveOrders"/>'s Phase 1 cycles until no active fleet makes any further progress.</returns>
+    private static bool ExecuteFleetOrdersStep(Fleet fleet, Game game, bool allowWait, bool requireFullTransfer, bool legacyDestHalt)
     {
         if (fleet.NextOrder == 0)
-            return;
+            return false;
 
         var com = fleet.NextOrder;
         var lastCommand = fleet.Orders.Count;
         var ignoreRepeat = false;
-        CommandType type;
+        var stopsHere = false;
+        var madeProgress = false;
 
         do {
             var command = fleet.Orders[com - 1];
-            type = command.Type;
+            var type = command.Type;
+
+            if (type == CommandType.Wait && !allowWait) {
+                break; // NextOrder stays exactly here -- not consumed by this call at all
+            }
+
+            if (type == CommandType.Transfer && requireFullTransfer && !CanFullyTransfer(fleet, command, game)) {
+                break; // ditto -- left for a later Phase 1 sweep, or Phase 2's clamped fallback
+            }
+
+            if (requireFullTransfer && type is CommandType.Refuel or CommandType.Join) {
+                break; // Phase 1 never touches these at all -- see ResolveOrders' own doc comment: they
+                       // always "succeed" (no target to compare against), so Phase 2 handles them, once,
+                       // strictly after every fully-satisfiable Transfer has already settled
+            }
 
             switch (type) {
                 case CommandType.Destination:
@@ -235,9 +318,14 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
                     break;
             }
 
+            madeProgress = true;
+
             if (!game.Galaxy.Fleets.Contains(fleet)) {
-                return; // fleet destroyed by ExecuteTransCOM's ChangeCompositionOfFleet or ExecuteJoinCOM -- NextOrder stays whatever it was, matching Pascal
+                return true; // fleet destroyed by ExecuteTransCOM's ChangeCompositionOfFleet or ExecuteJoinCOM -- NextOrder stays whatever it was, matching Pascal
             }
+
+            stopsHere = type == CommandType.Wait
+                || (type == CommandType.Destination && (legacyDestHalt || fleet.Status == FleetStatus.InTransit));
 
             if (type == CommandType.Repeat && !ignoreRepeat) {
                 com = 1;
@@ -248,10 +336,165 @@ public sealed class FleetMovementHandler(Random random) : IFleetMovementHandler
                 com = 0;
                 fleet.Orders.Clear();
             }
-        } while (type is not (CommandType.Destination or CommandType.Wait) && com != 0);
+        } while (!stopsHere && com != 0);
 
         fleet.NextOrder = com;
+        return madeProgress;
     }
+
+    /// <summary>Would <see cref="ExecuteTransCOM"/>'s own <see cref="ClampTransfer"/> move the full requested amount right now, with nothing clamped away? Read-only (no clone/mutate) -- <see cref="ResolveOrders"/>'s Phase 1 uses this to decide whether to defer a Transfer for a later sweep instead of executing it partially.</summary>
+    private static bool CanFullyTransfer(Fleet fleet, FleetOrder command, Game game)
+    {
+        if (game.Galaxy.GetObjectAt(fleet.Location) is not IEconomicWorld ground || ground.Owner != fleet.Owner) {
+            return true; // ExecuteTransCOM itself no-ops here too -- nothing waiting could ever change that
+        }
+
+        if (command.TransferShip is { } shipType) {
+            return ClampTransfer(command.TransferAmount, fleet.Ships[shipType], ground.Ships[shipType], cargoSpacePerUnit: null, fleet.Ships, fleet.Cargo) == command.TransferAmount;
+        }
+
+        if (command.TransferCargo is { } cargoType) {
+            return ClampTransfer(command.TransferAmount, fleet.Cargo[cargoType], ground.Cargo[cargoType], FleetLogistics.CargoSpacePerUnit[cargoType], fleet.Ships, fleet.Cargo) == command.TransferAmount;
+        }
+
+        return true; // a compiled Transfer order always sets exactly one of the two -- defensive only, matching ExecuteTransCOM's own fallback
+    }
+
+    /// <summary>
+    /// Replaces a fleet's order queue -- no side effects, matching Pascal's own <c>FleetOrdersCommand</c>
+    /// (<c>FLTCOMM.PAS:843-915</c>, confirmed: it only ever calls <c>SetFleetNextStatement</c>/
+    /// <c>SetFleetCode</c>, never anything that executes an order). Resolution happens only at the two
+    /// dedicated turn-boundary points (see <see cref="ResolveOrders"/>), never at compile time -- so
+    /// recompiling a fleet's orders can never itself run anything, remove anything from the queue's
+    /// displayed text, or move a resource, regardless of how many times it's done before the turn ends.
+    /// An empty <paramref name="orders"/> list is a plain cancel (<see cref="Fleet.NextOrder"/> resets to
+    /// 0 regardless of <paramref name="startAt"/>), matching <c>GameShell.CancelFleetOrders</c>/Pascal's
+    /// own <c>FleetCancelOrdersCommand</c>.
+    /// </summary>
+    public static void CommitOrders(Fleet fleet, IReadOnlyList<FleetOrder> orders, int startAt, Game game)
+    {
+        fleet.Orders.Clear();
+        fleet.Orders.AddRange(orders);
+        fleet.NextOrder = orders.Count == 0 ? 0 : startAt;
+    }
+
+    /// <summary>
+    /// Resolves as much of every stationary (Ready, no <see cref="Fleet.Destination"/>) order-bearing
+    /// fleet <paramref name="empire"/> owns as it can, right now -- called once immediately before that
+    /// empire's own turn and once immediately after it ends (<see cref="TurnEngine.BeginTurn"/>/
+    /// <see cref="TurnEngine.EndTurn"/>), deliberately not at order-compile time (see
+    /// <see cref="CommitOrders"/>'s own doc comment): orders are for cutting tedium, not a difficulty
+    /// gate, but a queue a player just finished editing shouldn't visibly jump ahead of them while
+    /// they're still looking at it either. Physical fleet stepping (how many sectors a fleet advances
+    /// this round) is untouched -- still <see cref="AdvanceFleet"/>'s own Pascal-derived type/owner
+    /// schedule; this only ever touches fleets that aren't already <see cref="FleetStatus.InTransit"/>.
+    ///
+    /// <para>
+    /// <b>WAIT always costs exactly one full turn.</b> <paramref name="allowWait"/> is false for the
+    /// post-turn call, so a WAIT reached there is left completely untouched (see
+    /// <see cref="ExecuteFleetOrdersStep"/>) -- only the pre-turn call (and the pre-existing
+    /// arrival-triggered <see cref="ExecuteFleetOrders"/> calls inside <see cref="AdvanceFleet"/>, which
+    /// already only ever run once per round) can advance past one. That holds regardless of which pass
+    /// first reaches a given WAIT, with no per-fleet flag needed: whichever pass is running is either
+    /// allowed to touch WAIT or it isn't, full stop.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Two-phase, so cross-fleet resource ordering finds the least-surprising outcome</b> -- the one
+    /// a player interleaving these same transfers by hand would have reached, not whatever a fleet
+    /// happens to be clamped by if it's visited in an unlucky order. Two concrete cases motivate this:
+    /// a same-location Transfer dropoff that would clamp against a full 9999 stack succeeding instead
+    /// once another fleet's same-turn pickup frees room, and a Refuel seeing another fleet's same-turn
+    /// trillum dropoff land before it tops off rather than missing it by a hair of visitation order.
+    /// Clamping never destroys anything either way (confirmed against <see cref="ClampTransfer"/>: a
+    /// clamped amount simply stays wherever it started), so there's no "lost" resource to recover --
+    /// this is purely about finding a good order, not preventing loss.
+    /// </para>
+    ///
+    /// <para>
+    /// Phase 1 repeatedly sweeps every active fleet, advancing through <see cref="CommandType.Destination"/>
+    /// (a same-location one resolves and the fleet keeps going the same sweep) and any
+    /// <see cref="CommandType.Transfer"/> whose full request is satisfiable <em>right now</em>, until a
+    /// full sweep makes no further progress across every fleet -- a Transfer that would still need
+    /// clamping is left untouched rather than run partially, so a later sweep (after some other fleet's
+    /// order changes what's available) gets a real chance to satisfy it in full.
+    /// </para>
+    ///
+    /// <para>
+    /// Phase 2 is one final best-effort sweep over whatever's still pending once Phase 1 can make no more
+    /// progress: <see cref="CommandType.Refuel"/> and <see cref="CommandType.Join"/> always "succeed" by
+    /// design (they request whatever's available, never a fixed target to compare against, so they can
+    /// never usefully "wait" the way Transfer can) and any Transfer that still can't fully satisfy its
+    /// request finally takes today's own clamp -- identical to <see cref="ExecuteFleetOrders"/>'s
+    /// single-shot behavior, just deferred to the best moment this turn boundary can offer instead of an
+    /// arbitrary one.
+    /// </para>
+    /// </summary>
+    public void ResolveOrders(Game game, Empire empire, bool allowWait)
+    {
+        if (useLegacyOrderResolution) {
+            return; // this whole mechanism is off -- see the class doc comment; the arrival-triggered
+                     // calls inside AdvanceFleet are the only order-resolution path in legacy mode
+        }
+
+        // A fleet whose *current* command is WAIT gets exactly one look this whole call (consumed if
+        // allowWait, left untouched otherwise) and is then never revisited again this call, no matter
+        // how many more sweeps happen -- without this, Phase 1's own cycle-to-fixed-point would revisit
+        // it on the very next sweep (nothing about consuming a WAIT changes Destination/Status, so
+        // ActiveFleets' own filter doesn't naturally exclude it the way a genuine-travel DEST does) and
+        // let whatever comes right after the WAIT execute in this same call -- exactly what WAIT costing
+        // a full turn is supposed to prevent.
+        var settledOnWaitThisCall = new HashSet<Fleet>();
+        bool progressed;
+
+        do {
+            progressed = false;
+
+            foreach (var fleet in ActiveFleets(game, empire)) {
+                if (settledOnWaitThisCall.Contains(fleet)) {
+                    continue;
+                }
+
+                var isWait = fleet.Orders[fleet.NextOrder - 1].Type == CommandType.Wait;
+
+                if (ExecuteFleetOrdersStep(fleet, game, allowWait, requireFullTransfer: true, legacyDestHalt: false)) {
+                    progressed = true;
+                }
+
+                if (isWait) {
+                    settledOnWaitThisCall.Add(fleet);
+                }
+            }
+        } while (progressed);
+
+        foreach (var fleet in ActiveFleets(game, empire)) {
+            if (settledOnWaitThisCall.Contains(fleet)) {
+                continue;
+            }
+
+            ExecuteFleetOrdersStep(fleet, game, allowWait, requireFullTransfer: false, legacyDestHalt: false);
+        }
+    }
+
+    /// <summary>
+    /// Snapshotted (not a live view) since <see cref="ResolveOrders"/>'s own execution can destroy fleets
+    /// (a Transfer emptying one via <see cref="FleetLifecycle.ChangeCompositionOfFleet"/>) or otherwise
+    /// mutate <see cref="Game.Galaxy"/>'s own fleet collection while iterating.
+    ///
+    /// <see cref="Fleet.Status"/> alone is the right test here, not an additional
+    /// <c>Destination is null</c> check -- <see cref="FleetLifecycle.SetFleetDestination"/> always keeps
+    /// them in sync (<c>Ready</c> exactly when <c>Destination is null || Destination == Location</c>), so
+    /// a redundant Destination check isn't just extra, it's wrong: a same-location DEST (Resupply's own
+    /// leading no-op back to wherever the fleet already sits) sets Destination to that same coordinate,
+    /// not null, while correctly leaving Status Ready. A prior version of this filter checked
+    /// <c>Destination is null</c> too and silently dropped exactly this fleet from every later Phase 1
+    /// sweep and Phase 2 the moment its next order (a Transfer needing more cargo space than its ship
+    /// composition allows) got deferred rather than executing immediately -- found live: a Resupply
+    /// request larger than the fleet's own cargo capacity left it stuck at NextOrder 2 forever, since
+    /// Phase 2 (which would have clamped it and moved on to the real destination) never got to see it.
+    /// </summary>
+    private static List<Fleet> ActiveFleets(Game game, Empire empire) =>
+        game.Galaxy.Fleets.Where(f => f.Owner == empire && f.Status == FleetStatus.Ready && f.NextOrder > 0).ToList();
 
     /// <summary>ExecuteDestCOM (FLEET.PAS:492-497) -- a target object's own current location wins over the raw compiled coordinate (matching Pascal's own <c>IF SameXY(Loc.XY,Limbo) THEN GetCoord(Loc.ID,Loc.XY)</c>), so a DEST order aimed at a starbase still tracks it if that starbase has since moved.</summary>
     private static void ExecuteDestCOM(Fleet fleet, FleetOrder command)

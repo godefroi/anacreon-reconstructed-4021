@@ -31,7 +31,7 @@ void TechDebugLog(string line) => File.AppendAllText(techDebugLogPath, line + En
 
 // One TurnEngine for the whole process -- stateless itself, just wraps three handlers that all
 // share this same random, matching every other scenario-load/setup component below.
-var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random, TechDebugLog));
+var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random, tuiSettings.UseLegacyOrderResolution), new AnnualTickHandler(random, TechDebugLog));
 
 // NEWGAME.PAS's own ScenarioIntroduction just prompts for a hardcoded filename -- no directory scan or
 // title list. ScenarioLoader.ReadHeader reads only the same header tokens Load() itself would, so this

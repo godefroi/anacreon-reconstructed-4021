@@ -7,6 +7,7 @@ using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Turns;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
 
 namespace Reconstructed4021.Tui;
@@ -110,18 +111,11 @@ internal sealed class FleetOrdersTabView : View
 
         var fleetName = CloseUpWindow.DescribeLocation(fleet, viewer);
         var myLord = Honorifics.MyLord(fleet.Owner.IsEmpress);
-        string message;
 
-        if (result.Orders.Count == 0) {
-            fleet.Orders.Clear();
-            fleet.NextOrder = 0;
-            message = $"All orders to {fleetName} cancelled, {myLord}.";
-        } else {
-            fleet.Orders.Clear();
-            fleet.Orders.AddRange(result.Orders);
-            fleet.NextOrder = result.MarkedOrderIndex;
-            message = $"Orders to {fleetName} completed, {myLord}.";
-        }
+        FleetMovementHandler.CommitOrders(fleet, result.Orders, result.MarkedOrderIndex, game);
+        var message = result.Orders.Count == 0
+            ? $"All orders to {fleetName} cancelled, {myLord}."
+            : $"Orders to {fleetName} completed, {myLord}.";
 
         Committed?.Invoke(this, message);
     }
