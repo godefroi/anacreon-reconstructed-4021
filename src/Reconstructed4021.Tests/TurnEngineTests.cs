@@ -41,6 +41,9 @@ public class TurnEngineTests
             log.Add($"AdvanceFleets:{actingEmpire.Name}->{nextEmpire.Name}");
 
         public void AdvanceStarbases(Game game, Empire empire) => log.Add($"AdvanceStarbases:{empire.Name}");
+
+        public void ResolveOrders(Game game, Empire empire, bool allowWait) =>
+            log.Add($"ResolveOrders:{empire.Name}:{allowWait}");
     }
 
     private sealed class FakeAnnualTickHandler(List<string> log) : IAnnualTickHandler
@@ -87,9 +90,9 @@ public class TurnEngineTests
 
         await Assert.That(string.Join("|", log)).IsEqualTo(string.Join("|",
         [
-            "Visibility:Human", "PlayTurn:Human", "AdvanceFleets:Human->AI2", "AdvanceStarbases:AI2",
-            "Visibility:AI2", "PlayTurn:AI2", "AdvanceFleets:AI2->AI3", "AdvanceStarbases:AI3",
-            "Visibility:AI3", "PlayTurn:AI3", "AdvanceFleets:AI3->Human", "AdvanceStarbases:Human",
+            "Visibility:Human", "ResolveOrders:Human:True", "PlayTurn:Human", "ResolveOrders:Human:False", "AdvanceFleets:Human->AI2", "AdvanceStarbases:AI2",
+            "Visibility:AI2", "ResolveOrders:AI2:True", "PlayTurn:AI2", "ResolveOrders:AI2:False", "AdvanceFleets:AI2->AI3", "AdvanceStarbases:AI3",
+            "Visibility:AI3", "ResolveOrders:AI3:True", "PlayTurn:AI3", "ResolveOrders:AI3:False", "AdvanceFleets:AI3->Human", "AdvanceStarbases:Human",
             "AnnualTick",
         ]));
         await Assert.That(tick.CallCount).IsEqualTo(1);
@@ -240,7 +243,7 @@ public class TurnEngineTests
 
         await Assert.That(string.Join("|", log)).IsEqualTo(string.Join("|",
         [
-            "Visibility:Human", "PlayTurn:Human", "AdvanceFleets:Human->AI", "AdvanceStarbases:AI",
+            "Visibility:Human", "ResolveOrders:Human:True", "PlayTurn:Human", "ResolveOrders:Human:False", "AdvanceFleets:Human->AI", "AdvanceStarbases:AI",
         ]));
         await Assert.That(game.CurrentEmpire).IsSameReferenceAs(ai);
     }

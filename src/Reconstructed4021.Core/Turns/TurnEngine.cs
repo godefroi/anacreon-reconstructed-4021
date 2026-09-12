@@ -40,6 +40,12 @@ public sealed class TurnEngine(
     /// one (the human path used to defer this whole method into "End Turn", which showed them a map
     /// stale by one full round of enemy movement — see docs/OPEN_GAPS.md for how this port's
     /// fog-of-war work found and fixed that ordering bug).
+    ///
+    /// <see cref="IFleetMovementHandler.ResolveOrders"/> runs here too (<c>allowWait: true</c>) --
+    /// this port's own addition, no Pascal equivalent -- right after the fog-of-war refresh and before
+    /// this empire ever sees or acts on its own map, so anything its fleets' order queues could resolve
+    /// without waiting on physical travel already has (see that method's own doc comment for why this
+    /// is one of exactly two points queued orders ever get resolved).
     /// </summary>
     public void BeginTurn(Game game)
     {
@@ -48,6 +54,7 @@ public sealed class TurnEngine(
         switch (current.Status) {
             case EmpireStatus.Active:
                 visibility.RefreshVisibility(current, game);
+                fleetMovement.ResolveOrders(game, current, allowWait: true);
                 game.TurnHandlers[current].PlayTurn(current, game);
                 break;
 
@@ -72,6 +79,21 @@ public sealed class TurnEngine(
     /// empire's news was already cleared as part of <see cref="Combat.CombatOutcome.DestroyEmpire"/>'s
     /// one-time teardown inside <see cref="BeginTurn"/>, and an already-Eliminated empire generates
     /// none to clear (<see cref="Entities.Empire.AddNews"/> no-ops for it).
+    ///
+    /// <see cref="IFleetMovementHandler.ResolveOrders"/> also runs here (<c>allowWait: false</c>), right
+    /// before <see cref="IFleetMovementHandler.AdvanceFleets"/>/<see cref="IFleetMovementHandler.AdvanceStarbases"/>
+    /// -- this empire's own turn-session (whatever ran between <see cref="BeginTurn"/> and this call)
+    /// just finished giving orders, so this is where that gets a chance to run this same turn instead of
+    /// waiting for the next <see cref="BeginTurn"/>. <c>allowWait: false</c> keeps WAIT costing exactly
+    /// one full turn regardless: this call can advance right up to one, never past it.
+    ///
+    /// This has to come before <see cref="IFleetMovementHandler.AdvanceFleets"/>, not after: a
+    /// <see cref="Entities.FleetType.JumpFleet"/> only ever gets its physical step during its own
+    /// owner's <see cref="EndTurn"/> (<see cref="IFleetMovementHandler.AdvanceFleets"/>'s
+    /// acting-empire branch), so a fresh order queue's DEST resolving after that step already ran left
+    /// the fleet loaded and Destination-set but stranded for a full round -- confirmed against a real
+    /// autosave (a Resupply-ordered jump fleet sitting <c>InTransit</c> with cargo loaded, having only
+    /// started moving turns later). Resolving orders first lets that same DEST's step happen this call.
     /// </summary>
     public void EndTurn(Game game)
     {
@@ -82,6 +104,11 @@ public sealed class TurnEngine(
         }
 
         var next = game.NextEmpire(current);
+
+        if (current.Status == EmpireStatus.Active) {
+            fleetMovement.ResolveOrders(game, current, allowWait: false);
+        }
+
         fleetMovement.AdvanceFleets(game, current, next);
         fleetMovement.AdvanceStarbases(game, next);
 

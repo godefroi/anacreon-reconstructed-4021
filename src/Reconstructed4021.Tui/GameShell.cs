@@ -1779,112 +1779,158 @@ public sealed class GameShell : Window
 
     /// <summary>
     /// Fleet menu > Resupply -- no Pascal precedent, a hardcoded fleet-order template (see
-    /// <see cref="FleetOrderTemplates"/>'s own doc comment): pick a fleet, a source world, a cargo
-    /// type and amount, and a destination world, then commit the generated orders directly (matching
-    /// how Refuel/Change Destination commit immediately, no editor preview step). Both worlds must be
-    /// the player's own -- <see cref="FleetOrderTemplates.Resupply"/>'s DEST/TRAN/REFU sequence only
-    /// ever touches ground the fleet actually owns (<see cref="Core.Turns.FleetMovementHandler"/>'s own
-    /// ground guard), so an unowned source/destination would just silently no-op every step.
+    /// <see cref="FleetOrderTemplates"/>'s own doc comment): pick a fleet, a source world, a
+    /// destination world, then a cargo type and amount, and commit the generated orders directly
+    /// (matching how Refuel/Change Destination commit immediately, no editor preview step). The two
+    /// worlds are picked back to back (source, then destination) rather than with the cargo/amount
+    /// step wedged in between them. Both worlds must be the player's own --
+    /// <see cref="FleetOrderTemplates.Resupply"/>'s DEST/TRAN/REFU sequence only ever touches ground
+    /// the fleet actually owns (<see cref="Core.Turns.FleetMovementHandler"/>'s own ground guard), so
+    /// an unowned source/destination would just silently no-op every step.
     /// </summary>
     private void ResupplyMission() => PickOwnFleetAtCursor("Resupply", fleet => PickResupplySource(fleet));
 
     private void PickResupplySource(Fleet fleet) =>
         BeginPick("Resupply -- move cursor to source world, Enter: select, Esc: cancel",
             coordinate => PickOwnWorldOrRetry(coordinate, "Resupply", () => PickResupplySource(fleet),
-                source => PickResupplyCargo(fleet, source)));
+                source => PickResupplyDestination(fleet, source)));
 
-    private void PickResupplyCargo(Fleet fleet, Planet source) =>
-        ShowCargoTypePicker(cargo => PickResupplyAmount(fleet, source, cargo));
+    private void PickResupplyDestination(Fleet fleet, Planet source) =>
+        BeginPick("Resupply -- move cursor to destination world, Enter: select, Esc: cancel",
+            coordinate => PickOwnWorldOrRetry(coordinate, "Resupply", () => PickResupplyDestination(fleet, source),
+                destination => PickResupplyCargoAndAmount(fleet, source, destination)));
 
-    private void PickResupplyAmount(Fleet fleet, Planet source, CargoType cargo)
+    /// <summary>
+    /// Cargo type and amount in one window instead of two separate popups: each row already shows what
+    /// <paramref name="source"/> actually has of that type and how much room the fleet has for it, so
+    /// nothing is picked blind. Enter on the list moves focus down into the amount field (pre-filled
+    /// with that type's own max); Enter there commits. Esc on the list cancels the whole Resupply, same
+    /// as every other picker here; Esc on the amount field steps back up to the list instead, since
+    /// that much has already been picked and re-picking cargo type shouldn't cost the world picks too.
+    /// </summary>
+    private void PickResupplyCargoAndAmount(Fleet fleet, Planet source, Planet destination)
     {
-        var resource = new ResourceKind.Cargo(cargo).DisplayName;
-        var atSource = source.Cargo[cargo];
-        var fleetSpace = Math.Max(0, FleetLogistics.FleetCargoSpaceFor(cargo, fleet.Ships, fleet.Cargo));
-        var maxAmount = Math.Min(atSource, Math.Min(fleetSpace, PascalMath.MaxResources - fleet.Cargo[cargo]));
+        var types = Enum.GetValues<CargoType>();
+        var items = types.Select(t => new CargoTypeListItem(t, source.Cargo[t],
+            Math.Max(0, Math.Min(FleetLogistics.FleetCargoSpaceFor(t, fleet.Ships, fleet.Cargo), PascalMath.MaxResources - fleet.Cargo[t])))).ToList();
 
-        if (maxAmount <= 0) {
-            ShowInfo("Resupply", $"There is no {resource} available to shuttle -- {atSource} at {DisplayName(source)}, fleet has room for {fleetSpace}.");
-            return;
-        }
-
-        // Width sized to the longest of the two info lines rather than a flat constant -- "megatons
-        // of chemicals" alone is longer than the whole label PromptForTrillum's own dialog gets away
-        // with at its fixed Width=50 (a bug found live: the label silently ran off the dialog's own
-        // right edge at a shorter fixed width, same class of issue DosDialogWindow's own word-wrap
-        // fix addresses for confirmation text -- this dialog has too few, too short lines to be worth
-        // wrapping, so it just sizes to fit instead).
-        var line1 = $"{char.ToUpperInvariant(resource[0])}{resource[1..]} to shuttle:";
-        var line2 = $"{atSource} at {DisplayName(source)}; fleet has room for {fleetSpace}.";
-        var width = Math.Max(line1.Length, line2.Length) + 6;
+        // Sized to the longest amount-step label across every type up front, since the window can't be
+        // resized once a type is picked and a fixed too-narrow width would just run text off the edge.
+        var amountLines = items.Select(i => $"{i.DisplayName} to shuttle from {DisplayName(source)} (max {i.MaxAmount}):");
+        var width = Math.Max(40, amountLines.Max(l => l.Length) + 4);
+        var listHeight = Math.Min(types.Length, 7);
 
         var dialog = new Window {
             Title = "Resupply",
             X = Pos.Center(), Y = Pos.Center(),
-            Width = width, Height = 7,
+            Width = width, Height = listHeight + 1 + 5 + 2,
             BorderStyle = LineStyle.Single,
             CanFocus = true,
         };
         dialog.SetScheme(new Scheme(DialogNormalAttribute));
         dialog.Border.View?.SetScheme(new Scheme(DialogBorderAttribute));
 
-        var amountField = new TextField { X = 1, Y = 2, Width = Dim.Fill(1) };
-        var errorLabel = new Label { X = 1, Y = 3 };
-        dialog.Add(new Label { X = 1, Y = 0, Text = line1 });
-        dialog.Add(new Label { X = 1, Y = 1, Text = line2 });
+        dialog.Add(new Label { X = 1, Y = 0, Text = CargoTypeListItem.FormatRow("Cargo", "Available", "Capacity") });
+
+        // Height reserves one blank row (below the list, above the amount step) in addition to the
+        // amountLabel/amountField/errorLabel/footer rows -- found live: with none, the amount prompt sat
+        // right up against the table with no breathing room.
+        var listView = new ListView<CargoTypeListItem> { X = 0, Y = 1, Width = Dim.Fill(), Height = Dim.Fill(5) };
+        listView.SetScheme(new Scheme { Normal = PickerNormalAttribute, Focus = PickerSelectedAttribute });
+        listView.SetSource(new ObservableCollection<CargoTypeListItem>(items));
+        listView.Index = 0;
+        dialog.Add(listView);
+
+        var amountLabel = new Label { X = 1, Y = Pos.AnchorEnd(4), Visible = false };
+        var amountField = new TextField { X = 1, Y = Pos.AnchorEnd(3), Width = Dim.Fill(1), Visible = false };
+        var errorLabel = new Label { X = 1, Y = Pos.AnchorEnd(2) };
+        var footer = new Label { X = 1, Y = Pos.AnchorEnd(1), Text = "Enter: select   Esc: cancel" };
+        dialog.Add(amountLabel);
         dialog.Add(amountField);
         dialog.Add(errorLabel);
-        dialog.Add(new Label { X = 1, Y = Pos.AnchorEnd(1), Text = $"Enter: confirm (0 = max {maxAmount})   Esc: cancel" });
+        dialog.Add(footer);
 
         var dismiss = AddModal(dialog, dismissOnOutsideClick: false);
-        amountField.SetFocus();
+        listView.SetFocus();
 
-        // Same "0/blank defaults to max, out-of-range re-prompts" convention as PromptForTrillum's own
-        // GetTrillumToUse (FLTCOMM.PAS:692-724).
-        amountField.KeyDown += (_, key) => {
-            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Enter) {
-                return;
-            }
+        CargoTypeListItem? chosen = null;
 
-            key.Handled = true;
-            var text = amountField.Text?.Trim() ?? "";
-            if (!int.TryParse(text, out var amount) && text.Length > 0) {
-                errorLabel.Text = "Enter a whole number.";
-                return;
-            }
-            if (amount == 0) {
-                amount = maxAmount;
-            } else if (amount < 0) {
-                errorLabel.Text = "Enter a positive number.";
-                return;
-            } else if (amount > maxAmount) {
-                errorLabel.Text = $"The maximum amount allowable is {maxAmount}.";
-                return;
-            }
+        void ShowAmountStep(CargoTypeListItem item)
+        {
+            chosen = item;
+            errorLabel.Text = "";
+            amountLabel.Text = $"{item.DisplayName} to shuttle from {DisplayName(source)} (max {item.MaxAmount}):";
+            amountLabel.Visible = true;
+            amountField.Text = item.MaxAmount.ToString();
+            amountField.Visible = true;
+            footer.Text = "Enter: confirm   Esc: back";
+            amountField.SetFocus();
+        }
 
-            dismiss();
-            PickResupplyDestination(fleet, source, cargo, amount);
-        };
+        void BackToList()
+        {
+            chosen = null;
+            amountLabel.Visible = false;
+            amountField.Visible = false;
+            errorLabel.Text = "";
+            footer.Text = "Enter: select   Esc: cancel";
+            listView.SetFocus();
+        }
+
         dialog.KeyDown += (_, key) => {
-            if (key.NoAlt.NoCtrl.NoShift.KeyCode != KeyCode.Esc) {
-                return;
-            }
+            switch (key.NoAlt.NoCtrl.NoShift.KeyCode) {
+                case KeyCode.Enter when chosen is null:
+                    key.Handled = true;
+                    if (listView.Value is not { } item) {
+                        return;
+                    }
+                    if (item.Available <= 0) {
+                        errorLabel.Text = $"No {item.DisplayName} available at {DisplayName(source)}.";
+                        return;
+                    }
+                    if (item.Capacity <= 0) {
+                        errorLabel.Text = "The fleet has no room for that.";
+                        return;
+                    }
+                    ShowAmountStep(item);
+                    break;
+                case KeyCode.Enter: {
+                    key.Handled = true;
+                    var maxAmount = chosen!.MaxAmount;
+                    var text = amountField.Text?.Trim() ?? "";
+                    if (!int.TryParse(text, out var amount) && text.Length > 0) {
+                        errorLabel.Text = "Enter a whole number.";
+                        return;
+                    }
+                    if (amount == 0) {
+                        amount = maxAmount;
+                    } else if (amount < 0) {
+                        errorLabel.Text = "Enter a positive number.";
+                        return;
+                    } else if (amount > maxAmount) {
+                        errorLabel.Text = $"The maximum amount allowable is {maxAmount}.";
+                        return;
+                    }
 
-            dismiss();
-            key.Handled = true;
+                    dismiss();
+                    CommitResupply(fleet, source, destination, chosen.Type, amount);
+                    break;
+                }
+                case KeyCode.Esc when chosen is null:
+                    dismiss();
+                    key.Handled = true;
+                    break;
+                case KeyCode.Esc:
+                    BackToList();
+                    key.Handled = true;
+                    break;
+            }
         };
     }
 
-    private void PickResupplyDestination(Fleet fleet, Planet source, CargoType cargo, int amount) =>
-        BeginPick("Resupply -- move cursor to destination world, Enter: select, Esc: cancel",
-            coordinate => PickOwnWorldOrRetry(coordinate, "Resupply", () => PickResupplyDestination(fleet, source, cargo, amount),
-                destination => CommitResupply(fleet, source, destination, cargo, amount)));
-
     private void CommitResupply(Fleet fleet, Planet source, Planet destination, CargoType cargo, int amount)
     {
-        fleet.Orders.Clear();
-        fleet.Orders.AddRange(FleetOrderTemplates.Resupply(source, destination, cargo, amount));
-        fleet.NextOrder = 1;
+        FleetMovementHandler.CommitOrders(fleet, FleetOrderTemplates.Resupply(source, destination, cargo, amount), startAt: 1, game);
         galaxyView.Refresh();
 
         var resource = new ResourceKind.Cargo(cargo).DisplayName;
@@ -1912,47 +1958,28 @@ public sealed class GameShell : Window
         };
     }
 
-    private void ShowCargoTypePicker(Action<CargoType> onChosen)
+    /// <summary>
+    /// <paramref name="Available"/> (what's actually sitting at the source right now) and
+    /// <paramref name="Capacity"/> (how much room the fleet has for this type right now) are shown as
+    /// two separate honest numbers rather than collapsed into one "you'll get this much" figure --
+    /// the fleet has to travel to the source first, so what's actually there on arrival isn't something
+    /// this screen can know in the general case.
+    /// </summary>
+    private sealed record CargoTypeListItem(CargoType Type, int Available, int Capacity)
     {
-        var types = Enum.GetValues<CargoType>();
-        var picker = new Window {
-            Title = "Resupply",
-            X = Pos.Center(), Y = Pos.Center(),
-            Width = 40, Height = Math.Min(types.Length, 12) + 2,
-            BorderStyle = LineStyle.Single,
-            CanFocus = true,
-        };
-        picker.SetScheme(new Scheme(PickerNormalAttribute));
-        picker.Border.View?.SetScheme(new Scheme(PickerBorderAttribute));
+        // "megatons of chemicals" and friends run well past a flat 16-column guess (found live: the
+        // Available column didn't line up at all) -- sized to the longest real display name instead.
+        public static readonly int NameColumnWidth = Enum.GetValues<CargoType>().Max(t => new ResourceKind.Cargo(t).DisplayName.Length) + 1;
 
-        var listView = new ListView<CargoTypeListItem> { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill() };
-        listView.SetScheme(new Scheme { Normal = PickerNormalAttribute, Focus = PickerSelectedAttribute });
-        listView.SetSource(new ObservableCollection<CargoTypeListItem>(types.Select(t => new CargoTypeListItem(t))));
-        listView.Index = 0;
-        picker.Add(listView);
+        public string DisplayName { get; } = new ResourceKind.Cargo(Type).DisplayName;
 
-        var dismiss = AddModal(picker);
-        picker.KeyDown += (_, key) => {
-            switch (key.NoAlt.NoCtrl.NoShift.KeyCode) {
-                case KeyCode.Enter:
-                    var chosen = listView.Value;
-                    dismiss();
-                    if (chosen is not null) {
-                        onChosen(chosen.Type);
-                    }
-                    key.Handled = true;
-                    break;
-                case KeyCode.Esc:
-                    dismiss();
-                    key.Handled = true;
-                    break;
-            }
-        };
-    }
+        /// <summary>The largest amount the amount step will actually accept right now -- not shown as its own column, see this record's own doc comment.</summary>
+        public int MaxAmount => Math.Max(0, Math.Min(Available, Capacity));
 
-    private sealed record CargoTypeListItem(CargoType Type)
-    {
-        public override string ToString() => new ResourceKind.Cargo(Type).DisplayName;
+        public static string FormatRow(string name, string available, string capacity) =>
+            $"{name.PadRight(NameColumnWidth)}{available,9}  {capacity,9}";
+
+        public override string ToString() => FormatRow(DisplayName, Available.ToString(), Capacity.ToString());
     }
 
     /// <summary>

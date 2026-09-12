@@ -618,10 +618,48 @@ public class FleetMovementHandlerTests
         fleet.NextOrder = 1;
         game.Galaxy.Fleets.Add(fleet);
 
+        // Legacy mode specifically: in the default (non-legacy) mode, arrival no longer executes
+        // anything itself -- ResolveOrders' own next pass picks this fleet up instead (see
+        // FleetMovementHandler's own class doc comment on why keeping both would defeat Phase 1's
+        // cross-fleet deferral for exactly the case that matters most).
+        var handler = new FleetMovementHandler(new FixedRandom(0), useLegacyOrderResolution: true);
+        handler.AdvanceFleets(game, new Empire { Name = "AI" }, empire);
+
+        await Assert.That(fleet.Location).IsEqualTo(new Coordinate(10, 0));
+        await Assert.That(fleet.Destination).IsEqualTo(new Coordinate(20, 0));
+        await Assert.That(fleet.Status).IsEqualTo(FleetStatus.InTransit);
+    }
+
+    /// <summary>
+    /// Default (non-legacy) mode's actual behavior on the exact same scenario as the sibling legacy
+    /// test above: arrival sets Ready/null-Destination but executes nothing itself -- the fleet just
+    /// sits there, pending order intact, until a real ResolveOrders call (the production path:
+    /// TurnEngine.BeginTurn/EndTurn) picks it up with the full cross-fleet treatment.
+    /// </summary>
+    [Test]
+    public async Task AdvanceFleet_ReachingItsDestination_NonLegacyMode_ExecutesNothingUntilResolveOrders()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var fleet = new Fleet {
+            Owner = empire, Location = new Coordinate(9, 0), Destination = new Coordinate(10, 0),
+            Fuel = 100, Status = FleetStatus.Ready,
+        };
+        fleet.Ships.Fighters = 1;
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(20, 0)));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
         var handler = new FleetMovementHandler(new FixedRandom(0));
         handler.AdvanceFleets(game, new Empire { Name = "AI" }, empire);
 
         await Assert.That(fleet.Location).IsEqualTo(new Coordinate(10, 0));
+        await Assert.That(fleet.Destination).IsNull(); // arrival alone never touched the pending order
+        await Assert.That(fleet.Status).IsEqualTo(FleetStatus.Ready);
+        await Assert.That(fleet.NextOrder).IsEqualTo(1);
+
+        handler.ResolveOrders(game, empire, allowWait: true);
+
         await Assert.That(fleet.Destination).IsEqualTo(new Coordinate(20, 0));
         await Assert.That(fleet.Status).IsEqualTo(FleetStatus.InTransit);
     }
@@ -778,10 +816,304 @@ public class FleetMovementHandlerTests
         fleet.NextOrder = 1;
         game.Galaxy.Fleets.Add(fleet);
 
-        var handler = new FleetMovementHandler(new FixedRandom(0));
+        // Legacy mode specifically -- see the sibling DEST-redirect test's own comment on why.
+        var handler = new FleetMovementHandler(new FixedRandom(0), useLegacyOrderResolution: true);
         handler.AdvanceFleets(game, new Empire { Name = "AI" }, empire);
 
         await Assert.That(planet.Ships.Fighters).IsEqualTo(4);
         await Assert.That(game.Galaxy.Fleets).DoesNotContain(fleet);
+    }
+
+    /// <summary>
+    /// A freshly-compiled Resupply queue on a fleet already sitting at its own source: the leading
+    /// same-location DEST no longer halts (issue: it used to cost a whole extra round for nothing), so
+    /// the pickup Transfer runs in the same call, and only the genuine-travel DEST to the (distant)
+    /// destination actually stops the batch -- matching FleetOrderTemplates.Resupply's own real shape.
+    /// </summary>
+    [Test]
+    public async Task ResolveOrders_SameLocationDestThenTransfer_ChainsIntoOneCallUntilGenuineTravel()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var source = new Planet { Location = new Coordinate(0, 0), Owner = empire, Class = WorldClass.EarthLike, Type = WorldType.Base };
+        source.Cargo.Metals = 200;
+        game.Galaxy.Planets.Add(source);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Transports = 100;
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(0, 0))); // already here -- a no-op
+        fleet.Orders.Add(new FleetOrder(CommandType.Transfer, TransferCargo: CargoType.Metals, TransferAmount: 200));
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(9, 9))); // genuine travel
+        fleet.Orders.Add(new FleetOrder(CommandType.Transfer, TransferCargo: CargoType.Metals, TransferAmount: -200));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        var handler = new FleetMovementHandler(new FixedRandom(0));
+        handler.ResolveOrders(game, empire, allowWait: true);
+
+        await Assert.That(fleet.Cargo.Metals).IsEqualTo(200); // pickup already happened
+        await Assert.That(source.Cargo.Metals).IsEqualTo(0);
+        await Assert.That(fleet.Destination).IsEqualTo(new Coordinate(9, 9));
+        await Assert.That(fleet.Status).IsEqualTo(FleetStatus.InTransit);
+        await Assert.That(fleet.NextOrder).IsEqualTo(4); // stopped at the drop-off, waiting on real travel
+    }
+
+    /// <summary>
+    /// WAIT costs exactly one full turn regardless of which turn-boundary pass first reaches it: the
+    /// post-turn pass (allowWait: false) leaves a WAIT completely untouched -- not even "consumed" --
+    /// so only a later allowWait:true call ever advances past one. No per-fleet flag needed; it's purely
+    /// which pass is running. And once a call *does* consume a WAIT, whatever comes right after it still
+    /// waits for a whole separate call -- Phase 1's own cycle-to-fixed-point must not revisit this same
+    /// fleet again within the call that just consumed its WAIT (found live: it did, letting a same-call
+    /// DEST run right after, before this test's own fix).
+    /// </summary>
+    [Test]
+    public async Task ResolveOrders_PostTurnPass_NeverAdvancesPastWait()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Fighters = 1;
+        fleet.Orders.Add(new FleetOrder(CommandType.Wait));
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(5, 5)));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        var handler = new FleetMovementHandler(new FixedRandom(0));
+
+        handler.ResolveOrders(game, empire, allowWait: false);
+        await Assert.That(fleet.NextOrder).IsEqualTo(1); // untouched -- still sitting at the WAIT itself
+        await Assert.That(fleet.Destination).IsNull();
+
+        handler.ResolveOrders(game, empire, allowWait: true);
+        await Assert.That(fleet.NextOrder).IsEqualTo(2); // WAIT consumed, but the DEST after it does NOT run this same call
+        await Assert.That(fleet.Destination).IsNull();
+
+        handler.ResolveOrders(game, empire, allowWait: true);
+        await Assert.That(fleet.Destination).IsEqualTo(new Coordinate(5, 5)); // a genuinely separate call finally runs it
+    }
+
+    /// <summary>
+    /// Two fleets at a full (9999-cap) planet: one dropping off metals (would clamp to 0 if it went
+    /// first), one picking metals up (frees exactly enough room). Phase 1 defers the drop-off instead of
+    /// executing it partially, retries after the pickup succeeds, and reaches the same "least surprising"
+    /// outcome regardless of which fleet happens to be visited first -- confirmed by running both
+    /// insertion orders.
+    /// </summary>
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task ResolveOrders_DropOffDefersUntilAPickupFreesRoom_RegardlessOfVisitOrder(bool dropOffFleetAddedFirst)
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var ground = new Planet { Location = new Coordinate(0, 0), Owner = empire, Class = WorldClass.EarthLike, Type = WorldType.Base };
+        ground.Cargo.Metals = PascalMath.MaxResources;
+        game.Galaxy.Planets.Add(ground);
+
+        var dropOff = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        dropOff.Ships.Transports = 100;
+        dropOff.Cargo.Metals = 50;
+        dropOff.Orders.Add(new FleetOrder(CommandType.Transfer, TransferCargo: CargoType.Metals, TransferAmount: -50));
+        dropOff.NextOrder = 1;
+
+        var pickup = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        pickup.Ships.Transports = 100;
+        pickup.Orders.Add(new FleetOrder(CommandType.Transfer, TransferCargo: CargoType.Metals, TransferAmount: 30));
+        pickup.NextOrder = 1;
+
+        game.Galaxy.Fleets.Add(dropOffFleetAddedFirst ? dropOff : pickup);
+        game.Galaxy.Fleets.Add(dropOffFleetAddedFirst ? pickup : dropOff);
+
+        var handler = new FleetMovementHandler(new FixedRandom(0));
+        handler.ResolveOrders(game, empire, allowWait: true);
+
+        await Assert.That(ground.Cargo.Metals).IsEqualTo(PascalMath.MaxResources); // pickup's 30 backfilled by drop-off's 30
+        await Assert.That(pickup.Cargo.Metals).IsEqualTo(30); // picked up in full
+        await Assert.That(dropOff.Cargo.Metals).IsEqualTo(20); // delivered 30 of the 50 it wanted, kept the rest -- not destroyed
+    }
+
+    /// <summary>
+    /// Refuel has no target amount to retry against (it always asks for "whatever's available"), so it
+    /// can never itself defer the way Transfer does -- Phase 2 gives it the benefit anyway by running
+    /// strictly after every fully-satisfiable Transfer this turn has already settled, regardless of
+    /// which fleet is visited first.
+    /// </summary>
+    [Test]
+    public async Task ResolveOrders_RefuelSeesASameTurnTrillumDropOffBeforeToppingOff()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var ground = new Planet { Location = new Coordinate(0, 0), Owner = empire, Class = WorldClass.EarthLike, Type = WorldType.Base };
+        game.Galaxy.Planets.Add(ground);
+
+        var tanker = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        tanker.Ships.Transports = 100;
+        // Already topped off -- isolates this test from ChangeCompositionOfFleet's own auto-refuel side
+        // effect (any transfer that touches a world also tops off the *acting* fleet's own fuel from its
+        // trillum, FLEET.PAS-derived; a tanker starting at Fuel=0 would silently siphon some of its own
+        // drop-off to fuel itself before it ever reaches the ground, confounding what this test measures).
+        tanker.Fuel = FleetLogistics.FuelCapacity(tanker.Ships);
+        tanker.Cargo.Trillum = 500;
+        tanker.Orders.Add(new FleetOrder(CommandType.Transfer, TransferCargo: CargoType.Trillum, TransferAmount: -500));
+        tanker.NextOrder = 1;
+
+        var thirsty = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Fuel = 0, Status = FleetStatus.Ready };
+        thirsty.Ships.Transports = 10;
+        thirsty.Orders.Add(new FleetOrder(CommandType.Refuel));
+        thirsty.NextOrder = 1;
+
+        // Refuel's fleet added first: if Refuel ran before the drop-off it would top off against 0
+        // trillum instead of 500.
+        game.Galaxy.Fleets.Add(thirsty);
+        game.Galaxy.Fleets.Add(tanker);
+
+        // MaxTrillumToRefuel reads ground.Cargo.Trillum -- compute the expectation against the amount
+        // it will actually hold once the drop-off lands (500), not whatever's left after refueling
+        // already happened, then put the ground back to its real starting state (0) for the real run.
+        ground.Cargo.Trillum = 500;
+        var expectedRefuel = FleetLifecycle.MaxTrillumToRefuel(thirsty, ground);
+        ground.Cargo.Trillum = 0;
+
+        var handler = new FleetMovementHandler(new FixedRandom(0));
+        handler.ResolveOrders(game, empire, allowWait: true);
+
+        await Assert.That(ground.Cargo.Trillum).IsEqualTo(500 - expectedRefuel);
+        await Assert.That(thirsty.Fuel).IsGreaterThan(0);
+    }
+
+    /// <summary>
+    /// CommitOrders itself must never execute anything, no matter how many times a fleet's queue is
+    /// recompiled mid-turn -- resolution only ever happens at ResolveOrders' own two call sites.
+    /// </summary>
+    [Test]
+    public async Task CommitOrders_NeverExecutesAnything()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var ground = new Planet { Location = new Coordinate(0, 0), Owner = empire, Class = WorldClass.EarthLike, Type = WorldType.Base };
+        game.Galaxy.Planets.Add(ground);
+
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Transports = 100;
+        fleet.Cargo.Metals = 50;
+        game.Galaxy.Fleets.Add(fleet);
+
+        var orders = new List<FleetOrder> {
+            new(CommandType.Destination, DestinationPosition: new Coordinate(0, 0)),
+            new(CommandType.Transfer, TransferCargo: CargoType.Metals, TransferAmount: -50),
+        };
+
+        FleetMovementHandler.CommitOrders(fleet, orders, startAt: 1, game);
+        FleetMovementHandler.CommitOrders(fleet, orders, startAt: 1, game); // recompiling again changes nothing either
+
+        await Assert.That(fleet.Cargo.Metals).IsEqualTo(50);
+        await Assert.That(ground.Cargo.Metals).IsEqualTo(0);
+        await Assert.That(fleet.NextOrder).IsEqualTo(1);
+        await Assert.That(fleet.Destination).IsNull();
+    }
+
+    /// <summary>
+    /// The appsettings-driven escape hatch (Tui.TuiSettings.UseLegacyOrderResolution): with it on,
+    /// ResolveOrders must be a complete no-op regardless of what a fleet has pending -- the only
+    /// resolution path left is the arrival-triggered one inside AdvanceFleet (see FleetMovementHandler's
+    /// own class doc comment).
+    /// </summary>
+    [Test]
+    public async Task ResolveOrders_LegacyMode_IsANoOp()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready };
+        fleet.Ships.Fighters = 1;
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(5, 5)));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        var handler = new FleetMovementHandler(new FixedRandom(0), useLegacyOrderResolution: true);
+        handler.ResolveOrders(game, empire, allowWait: true);
+
+        await Assert.That(fleet.NextOrder).IsEqualTo(1);
+        await Assert.That(fleet.Destination).IsNull();
+        await Assert.That(fleet.Status).IsEqualTo(FleetStatus.Ready);
+    }
+
+    /// <summary>
+    /// Only a JumpFleet ever gets its physical step during its own owner's AdvanceFleets call (the
+    /// acting-empire branch) -- a Standard or Penetrator fleet gets no such chance, ever (it only steps
+    /// as some other empire's "next" fleet, grouped identically to Standard -- see
+    /// <see cref="FleetMovementHandler"/>'s own ShouldAdvanceNextEmpireFleet, which lists Penetrator
+    /// alongside Standard/AdvancedWarpFleet/HunterKillerFleet). TurnEngine.EndTurn must therefore call
+    /// ResolveOrders before AdvanceFleets: found live (a real Resupply order on a jump fleet, sitting
+    /// InTransit with cargo already loaded but stranded at its starting coordinate for a full round in an
+    /// autosave) when EndTurn still called them in the other order -- the freshly-set Destination missed
+    /// that round's only step opportunity. This same-call step is exclusive to JumpFleet: Standard and
+    /// Penetrator instead spend this call with Destination set and Status InTransit, unmoved, waiting on
+    /// the next empire's-turn boundary where they're the "next" fleet (already covered for Standard by
+    /// <see cref="SequentialMovement_ActingEmpireJumpFleetAndNextEmpireWarpFleetAdvanceTogether"/>).
+    /// </summary>
+    [Test]
+    [Arguments(FleetType.Standard)]
+    [Arguments(FleetType.Penetrator)]
+    [Arguments(FleetType.JumpFleet)]
+    public async Task ResolveOrders_ThenAdvanceFleets_OnlyJumpFleetStepsAsActingEmpireTheSameCall(FleetType kind)
+    {
+        var empire = new Empire { Name = "Human" };
+        var ai = new Empire { Name = "AI" };
+        var game = new Game(new Galaxy(size: 20));
+        var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Status = FleetStatus.Ready, Fuel = 100 };
+        switch (kind) {
+            case FleetType.Standard: fleet.Ships.Fighters = 1; break;
+            case FleetType.Penetrator: fleet.Ships.Penetrators = 1; break;
+            case FleetType.JumpFleet: fleet.Ships.Jumpships = 2; break;
+        }
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(10, 0)));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        var handler = new FleetMovementHandler(new FixedRandom(0));
+        handler.ResolveOrders(game, empire, allowWait: false);
+        handler.AdvanceFleets(game, empire, ai);
+
+        await Assert.That(fleet.Destination).IsEqualTo(kind == FleetType.JumpFleet ? null : new Coordinate(10, 0));
+        if (kind == FleetType.JumpFleet) {
+            await Assert.That(fleet.Location).IsEqualTo(new Coordinate(10, 0));
+            await Assert.That(fleet.Status).IsEqualTo(FleetStatus.Ready);
+        } else {
+            await Assert.That(fleet.Location).IsEqualTo(new Coordinate(0, 0)); // order resolved, but this call's acting-empire step never touches it
+            await Assert.That(fleet.Status).IsEqualTo(FleetStatus.InTransit);
+        }
+    }
+
+    /// <summary>
+    /// Legacy mode's arrival-triggered execution (<see cref="FleetMovementHandler.AdvanceFleet"/>'s own
+    /// tail call, legacyDestHalt: true) doesn't care about fleet type -- it's ResolveOrders being a
+    /// no-op in legacy mode (see <see cref="ResolveOrders_LegacyMode_IsANoOp"/>) that matters here: a
+    /// JumpFleet's freshly-committed order queue only ever gets touched when AdvanceFleet next runs for
+    /// it, same as in real Pascal, and TurnEngine.EndTurn's ResolveOrders/AdvanceFleets swap changes
+    /// nothing for legacy mode since ResolveOrders contributes nothing to it either way.
+    /// </summary>
+    [Test]
+    public async Task AdvanceFleet_LegacyMode_JumpFleetDestRedirectsOnArrivalSameAsStandardFleet()
+    {
+        var empire = new Empire { Name = "Human" };
+        var game = new Game(new Galaxy(size: 20));
+        var fleet = new Fleet {
+            Owner = empire, Location = new Coordinate(9, 0), Destination = new Coordinate(10, 0),
+            Fuel = 100, Status = FleetStatus.Ready,
+        };
+        fleet.Ships.Jumpships = 2;
+        fleet.Orders.Add(new FleetOrder(CommandType.Destination, DestinationPosition: new Coordinate(20, 0)));
+        fleet.NextOrder = 1;
+        game.Galaxy.Fleets.Add(fleet);
+
+        var handler = new FleetMovementHandler(new FixedRandom(0), useLegacyOrderResolution: true);
+        // JumpFleet only advances via the acting-empire branch -- empire must be acting here, unlike the
+        // sibling Standard-fleet test which passes it as nextEmpire instead.
+        handler.AdvanceFleets(game, empire, new Empire { Name = "AI" });
+
+        await Assert.That(fleet.Location).IsEqualTo(new Coordinate(10, 0));
+        await Assert.That(fleet.Destination).IsEqualTo(new Coordinate(20, 0));
+        await Assert.That(fleet.Status).IsEqualTo(FleetStatus.InTransit);
     }
 }
