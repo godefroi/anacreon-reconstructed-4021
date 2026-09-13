@@ -54,7 +54,7 @@ internal sealed class PlayerCountScreen : IScreen
     {
         var box = Chrome.Draw(fb, _header.Title, _starfield);
         fb.DrawText(box.X + 1, box.Y + 1, $"How many players ({_header.MinPlayers}-{_header.MaxPlayers}) ? ", Chrome.ContentFg, Chrome.ContentBg);
-        _field.Draw(fb, box.X + 1, box.Y + 2, 10, Chrome.ContentFg, Chrome.ContentBg);
+        _field.Draw(fb, box.X + 1, box.Y + 2, 10, TextInputField.DefaultFg, TextInputField.DefaultBg);
         fb.DrawText(box.X + 1, box.Y + 4, _error, Chrome.ContentFg, Chrome.ContentBg);
         fb.DrawText(box.X + 1, box.Y + box.Height - 2, "Enter: confirm   Esc: back to main menu", Chrome.ContentFg, Chrome.ContentBg);
     }

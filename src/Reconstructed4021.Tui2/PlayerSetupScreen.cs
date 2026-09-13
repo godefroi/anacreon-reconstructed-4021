@@ -100,7 +100,7 @@ internal sealed class PlayerSetupScreen : IScreen
     {
         var box = Chrome.Draw(fb, _header.Title, _starfield);
         fb.DrawText(box.X + 1, box.Y + 1, $"Name of player empire #{_playerNumber} : ", Chrome.ContentFg, Chrome.ContentBg);
-        _nameField.Draw(fb, box.X + 1, box.Y + 2, 32, Chrome.ContentFg, Chrome.ContentBg);
+        _nameField.Draw(fb, box.X + 1, box.Y + 2, 32, TextInputField.DefaultFg, TextInputField.DefaultBg);
 
         if (_step == Step.Gender)
         {
