@@ -6,4 +6,6 @@
   <Project Path="src/Reconstructed4021.Tui/Reconstructed4021.Tui.csproj" />
   <Project Path="src/Reconstructed4021.TuiDriver/Reconstructed4021.TuiDriver.csproj" />
   <Project Path="src/Reconstructed4021.Panemonde/Reconstructed4021.Panemonde.csproj" />
+  <Project Path="src/Reconstructed4021.Tui2/Reconstructed4021.Tui2.csproj" />
+  <Project Path="src/Reconstructed4021.Tui2Driver/Reconstructed4021.Tui2Driver.csproj" />
 </Solution>

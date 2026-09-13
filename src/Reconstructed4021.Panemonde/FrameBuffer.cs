@@ -7,7 +7,7 @@ namespace Reconstructed4021.Panemonde;
 // stream. Terminal.Gui's own OutputBase.Write does a separate write per dirty row instead (see the
 // SingleFlushAnsiOutput comment in Reconstructed4021.Tui.csproj) -- that's the specific mechanism
 // under test here, not output correctness in general.
-internal sealed class FrameBuffer
+public sealed class FrameBuffer
 {
     private readonly int _width;
     private readonly int _height;
@@ -37,6 +37,29 @@ internal sealed class FrameBuffer
     public void Clear(Cell fill)
     {
         Array.Fill(_back, fill);
+    }
+
+    // Draws every character of text (including literal spaces -- callers that want spaces to show
+    // whatever's already behind them, like AnacreonTitleWindow's title-over-stars, skip those cells
+    // themselves and call Set directly instead of using this helper). Out-of-bounds columns/rows are
+    // silently clipped, matching Terminal.Gui's own Label clipping at the view edge.
+    public void DrawText(int x, int y, ReadOnlySpan<char> text, ConsoleColor fg, ConsoleColor bg)
+    {
+        if (y < 0 || y >= _height)
+        {
+            return;
+        }
+
+        for (var i = 0; i < text.Length; i++)
+        {
+            var col = x + i;
+            if (col < 0 || col >= _width)
+            {
+                continue;
+            }
+
+            Set(col, y, new Cell(new Rune(text[i]), fg, bg));
+        }
     }
 
     // Diffs _back against _front, writes one batched frame to stdout, swaps the buffers so _back
@@ -116,10 +139,15 @@ internal sealed class FrameBuffer
 
     private static int AnsiCode(ConsoleColor color, bool isBackground)
     {
-        // ConsoleColor's own numeric values aren't in ANSI order (e.g. DarkYellow=6 isn't ANSI
-        // yellow), so this table is a real translation, not a formatting nicety.
+        // ConsoleColor's own numeric values aren't in ANSI order: bit 3 is intensity in both, but the
+        // low 3 bits are Windows console's BGR bit order (Blue=1, Green=2, Red=4 -- the Win32 console
+        // API's FOREGROUND_BLUE/GREEN/RED flag values), not ANSI's RGB order (Red=1, Green=2, Blue=4).
+        // Using the raw low 3 bits directly swaps every red and blue (confirmed against a real
+        // terminal: DarkRed rendered as blue) -- bit 0 and bit 2 have to be swapped, bit 1 (green)
+        // stays put.
         var bright = ((int)color & 8) != 0;
-        var baseIndex = (int)color & 7;
+        var raw = (int)color & 7;
+        var baseIndex = (raw & 0b010) | ((raw & 0b100) >> 2) | ((raw & 0b001) << 2);
         var ansiBase = isBackground ? 40 : 30;
         return bright ? ansiBase + 60 + baseIndex : ansiBase + baseIndex;
     }
@@ -134,5 +162,26 @@ internal sealed class FrameBuffer
     public Cell[] SnapshotBack()
     {
         return (Cell[])_back.Clone();
+    }
+
+    // Plain-text render of whatever's currently on the front buffer (i.e. the last frame Present()
+    // wrote), one string per row with trailing spaces trimmed -- for PanemondeDriver's DUMP script
+    // instruction. No color/attribute info, same tradeoff TuiDriver's own screen dump makes.
+    public IReadOnlyList<string> RenderText()
+    {
+        var lines = new string[_height];
+        for (var y = 0; y < _height; y++)
+        {
+            var chars = new char[_width];
+            for (var x = 0; x < _width; x++)
+            {
+                var rune = _front[(y * _width) + x].Glyph;
+                chars[x] = rune.IsBmp ? (char)rune.Value : '?';
+            }
+
+            lines[y] = new string(chars).TrimEnd();
+        }
+
+        return lines;
     }
 }
