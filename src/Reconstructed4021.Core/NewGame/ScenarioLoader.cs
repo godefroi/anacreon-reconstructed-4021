@@ -260,11 +260,17 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random, INpeH
     /// fixed-line-count fallback chunker for "a real page still too long for one screen" -- confirmed
     /// wrong against real Pascal (EASTWEST.SCN's real single 22-line page shows as one screen, not two)
     /// and removed; there is no such case in real Pascal because there's no such enforcement to begin
-    /// with. Each real NEWPAGE-delimited page has its own trailing blank lines trimmed and is dropped
-    /// entirely if that leaves it empty (FENCES.SCN's trailing NEWPAGE immediately before ENDTEXT does
-    /// this -- see CollectIntroTextPages' own doc comment on why that's correct, not a bug). Returns an
-    /// empty list for a scenario with no real content between BEGINTEXT/ENDTEXT (a caller decides
-    /// whether to skip showing an intro screen at all in that case).
+    /// with. No trailing-line trimming either (a former version stripped trailing blank/whitespace lines
+    /// here -- confirmed wrong against real Pascal: NEWGAME.PAS:1501-1502's own print loop, <c>FOR i:=1
+    /// TO LineNo-1 DO WriteString(Line[i],1,i,...)</c>, never filters, so a page's real trailing blank
+    /// line still occupies its own row and shifts every later row down by one -- PERIPHER.SCN's own
+    /// title page has exactly this: a lone-space line right before its NEWPAGE that the old trim
+    /// silently dropped, which is what let IntroTextWindow's PressAnyKey prompt (bottommost row) land on
+    /// the wrong, visible line above it instead of that harmless blank one). A NEWPAGE-then-ENDTEXT page
+    /// with zero real lines (FENCES.SCN does this) still drops via the same `lines.Count > 0` check below
+    /// -- see CollectIntroTextPages' own doc comment. Returns an empty list for a scenario with no real
+    /// content between BEGINTEXT/ENDTEXT (a caller decides whether to skip showing an intro screen at all
+    /// in that case).
     /// </summary>
     public static IReadOnlyList<string> ReadIntroPages(string scenarioText)
     {
@@ -273,11 +279,7 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random, INpeH
         ReadHeaderTokens(tokenizer);
 
         var pages = new List<string>();
-        foreach (var pageLines in CollectIntroTextPages(tokenizer)) {
-            var lines = pageLines;
-            while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[^1]))
-                lines.RemoveAt(lines.Count - 1);
-
+        foreach (var lines in CollectIntroTextPages(tokenizer)) {
             if (lines.Count > 0)
                 pages.Add(string.Join('\n', lines));
         }

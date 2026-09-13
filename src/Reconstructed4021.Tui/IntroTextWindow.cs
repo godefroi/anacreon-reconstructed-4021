@@ -34,13 +34,25 @@ internal sealed class IntroTextWindow : NewGameWindow
         // would silently clip that page's last line.
         var textLabel = new Label { X = 1, Y = 0, Text = pages[0], CanFocus = false };
 
-        // Real Pascal's own PressAnyKey(40,22,'Press any key to continue...') -- column 40, one content
-        // row above the bottommost, confirmed against a real DOSBox run. X=40 is literal, not
-        // percentage-scaled, since Content is a fixed 80-wide box now (not Dim.Fill()). NEWGAME.PAS:1502's
-        // WriteString loop has no length check against row 22 either, so on the rare page long enough to
-        // reach it (see the textLabel comment above), the real DOS game would visibly overwrite that
-        // page's own text with this prompt -- an authentic quirk, not something to engineer around.
-        var prompt = new Label { X = 40, Y = Pos.AnchorEnd(2), Text = PromptText(0, pages.Count) };
+        // Real Pascal's own PressAnyKey(40,22,'Press any key to continue...') -- column 40, row 22 of the
+        // box's 22-row interior (24 tall minus the top/bottom border), i.e. the exact bottommost content
+        // row, not one above it: AnchorEnd(1) (interior height 22 minus offset 1 = row 21, 0-indexed --
+        // Pascal's 1-indexed row 22). A former AnchorEnd(2) placed this one row too high, which combined
+        // with ReadIntroPages' own former trailing-blank-line trim (see that method's own doc comment) to
+        // land the prompt on a visible content row instead of the bottommost one, on any scenario whose
+        // last real line was blank (PERIPHER.SCN's title page, reported as visibly clobbered). X=40 is
+        // literal, not percentage-scaled, since Content is a fixed 80-wide box now (not Dim.Fill()).
+        // NEWGAME.PAS:1502's WriteString loop has no length check against row 22 either, so on a page
+        // whose real last line reaches that row (see the textLabel comment above), the real DOS game does
+        // visibly overwrite that line with this prompt (GAUNTLET.SCN's title page, confirmed against a
+        // real DOSBox run) -- an authentic quirk, not something to engineer around.
+        //
+        // NEWGAME.PAS:1503-1504 only calls PressAnyKey `IF NOT EndText` -- the last page never gets this
+        // prompt; the loop just falls through into GetNoOfPlayers/player setup input right after, which is
+        // what actually gates the player on that final page. Hidden here (not omitted outright) on the
+        // last page for the same reason: this window still needs one explicit keypress to Dismiss, since
+        // unlike Pascal's single continuous screen, it's a separate Toplevel with nothing else to progress it.
+        var prompt = new Label { X = 40, Y = Pos.AnchorEnd(1), Text = PromptText(0, pages.Count), Visible = pages.Count > 1 };
         Content.Add(textLabel);
         Content.Add(prompt);
 
@@ -58,6 +70,7 @@ internal sealed class IntroTextWindow : NewGameWindow
             } else {
                 textLabel.Text = pages[pageIndex];
                 prompt.Text = PromptText(pageIndex, pages.Count);
+                prompt.Visible = pageIndex < pages.Count - 1;
             }
 
             key.Handled = true;
