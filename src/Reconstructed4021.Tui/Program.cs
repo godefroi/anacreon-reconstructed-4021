@@ -74,6 +74,20 @@ var loadPath = loadIndex >= 0 && loadIndex + 1 < args.Length
 
 IApplication app = Application.Create().Init();
 
+// Windows Terminal/ConPTY defers or throttles a backgrounded session's servicing (see issue #1);
+// this reproduced as a multi-minute freeze on reactivation, but only on screens that redraw solely
+// in response to input -- never ones that redraw continuously while idle (the main menu's orbit
+// animation never froze). Originally added to GameShell alone (the galaxy map) since that's where
+// it was first noticed, but the same input-driven-redraw shape applies to every other window in
+// this app (e.g. the player-count/setup prompts) -- so it's a heartbeat on `app` itself instead,
+// covering every Run() session for the process's whole lifetime rather than needing to be wired
+// into each window individually. TopRunnableView is whichever window is actually on screen at the
+// time this fires.
+app.AddTimeout(TimeSpan.FromMilliseconds(200), () => {
+    app.TopRunnableView?.SetNeedsDraw();
+    return true;
+});
+
 // A window constructor or event handler throwing mid-Run (like the OptionSelector<TEnum> crash this
 // try/finally was added for) would otherwise skip every app.Dispose() call below it, leaving the
 // console in whatever raw mode/alt-screen-buffer state Init() put it in -- garbled colors and all,

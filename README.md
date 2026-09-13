@@ -56,9 +56,10 @@ woke from sleep (fixed):** reproduced under both the default renderer and Direct
 reproduce under `conhost.exe` or on screens that redraw continuously while idle (e.g. the main
 menu's orbit animation) -- only ones that only redraw in response to input (e.g. the galaxy map),
 pointing at Windows Terminal/ConPTY deferring or throttling a backgrounded session's servicing
-rather than a bug in this app or Terminal.Gui (see issue #1). Giving the galaxy map the same kind
-of continuous-idle redraw the main menu already had -- a low-frequency
-`Application.AddTimeout` heartbeat in `GameShell` -- resolved it in testing.
+rather than a bug in this app or Terminal.Gui (see issue #1). Giving every window the same kind
+of continuous-idle redraw the main menu already had -- a low-frequency `Application.AddTimeout`
+heartbeat on `app` itself in `Program.cs`, covering every window for the process's whole lifetime
+rather than just the galaxy map -- resolved it in testing.
 
 ## Repository layout
 
