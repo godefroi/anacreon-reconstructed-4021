@@ -26,6 +26,9 @@ reference/verify/scratch/
 # regenerate on demand rather than commit.
 reference/verify/dos_131_callgraph.json
 
+# the dosbox-hosted version of Anacreon v1.31
+reference/dos/
+
 # dotenv files
 .env
 
