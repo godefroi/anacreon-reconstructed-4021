@@ -2,6 +2,7 @@ using Terminal.Gui.Drawing;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Presentation;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
 
 namespace Reconstructed4021.Tui;

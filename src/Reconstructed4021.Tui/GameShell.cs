@@ -7,6 +7,7 @@ using Terminal.Gui.Views;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Combat;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Core.Turns;

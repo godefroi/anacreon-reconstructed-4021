@@ -6,6 +6,7 @@ using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Types;
 using CoreGalaxy = Reconstructed4021.Core.Galaxy.Galaxy;
 using Coordinate = Reconstructed4021.Core.Galaxy.Coordinate;
