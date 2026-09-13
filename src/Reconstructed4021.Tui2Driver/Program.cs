@@ -115,6 +115,21 @@ string RenderCurrentFrame()
 // A few friendlier spellings on top of ConsoleKey's own names, matching TuiDriver's script vocabulary.
 static bool TryParseKey(string token, out ConsoleKeyInfo key)
 {
+    // General modifier prefix -- recurses on the remainder so "Ctrl+PageDown" (WorldInfoOverlay's own
+    // tab-switch chord) works the same way "Alt+<letter>" already did for the menu bar, without a
+    // separate single-letter-only special case like that one.
+    if (token.StartsWith("Ctrl+", StringComparison.OrdinalIgnoreCase))
+    {
+        if (TryParseKey(token[5..], out var inner))
+        {
+            key = new ConsoleKeyInfo(inner.KeyChar, inner.Key, inner.Modifiers.HasFlag(ConsoleModifiers.Shift), inner.Modifiers.HasFlag(ConsoleModifiers.Alt), control: true);
+            return true;
+        }
+
+        key = default;
+        return false;
+    }
+
     if (token.StartsWith("Alt+", StringComparison.OrdinalIgnoreCase) && token.Length == 5)
     {
         var ch = token[4];

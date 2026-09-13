@@ -12,6 +12,16 @@ public sealed class TabFrame
 
     public int ActiveIndex { get; private set; }
 
+    // For a caller that opens the frame directly onto a specific tab (e.g. re-entering a world's
+    // Designate tab after a designation just resolved) rather than always starting at tab 0.
+    public void SelectIndex(int index)
+    {
+        if (index >= 0 && index < _tabLabels.Count)
+        {
+            ActiveIndex = index;
+        }
+    }
+
     public TabFrame(IReadOnlyList<string> tabLabels)
     {
         if (tabLabels.Count == 0)

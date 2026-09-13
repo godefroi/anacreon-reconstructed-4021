@@ -1,0 +1,35 @@
+# Galaxy map -> Enter on the capital (an owned world) now opens WorldInfoOverlay instead of
+# CloseUpOverlay. Cycle to Production (Ctrl+PgDn), then ISSP, nudge a dial, then Designate, move the
+# selection down a few rows (into something that should trigger a risk confirm), Enter it.
+DUMP
+
+Enter
+DUMP
+
+Ctrl+PageDown
+DUMP
+
+Ctrl+PageDown
+DUMP
+
+RightArrow
+DUMP
+
+DownArrow
+Ctrl+PageDown
+DUMP
+
+Down
+Down
+Down
+Down
+Down
+Down
+Down
+Down
+Down
+Down
+DUMP
+
+Enter
+DUMP

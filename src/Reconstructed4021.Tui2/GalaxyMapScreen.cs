@@ -196,9 +196,9 @@ internal sealed class GalaxyMapScreen : IScreen
         ]),
         new MenuBar.TopItem("_Worlds", [
             new MenuBar.Item("_Close Up", ExamineCursor),
-            new MenuBar.Item("_Designate", Stub),
-            new MenuBar.Item("P_roduction", Stub),
-            new MenuBar.Item("_ISSP", Stub),
+            new MenuBar.Item("_Designate", () => OpenOwnWorldTab("Designate")),
+            new MenuBar.Item("P_roduction", () => OpenOwnWorldTab("Production")),
+            new MenuBar.Item("_ISSP", () => OpenOwnWorldTab("ISSP")),
             new MenuBar.Item("_Add Name", Stub),
             new MenuBar.Item("Delete _Name", Stub),
             new MenuBar.Item("_Liberate", Stub),
@@ -299,12 +299,42 @@ internal sealed class GalaxyMapScreen : IScreen
             case 0:
                 return;
             case 1:
-                _overlays.Add(new CloseUpOverlay(objects[0], _player, _game));
+                OpenExamine(objects[0], "Close Up");
                 break;
             default:
-                _overlays.Add(new ObjectPickerOverlay(objects, _player, obj => _overlays.Add(new CloseUpOverlay(obj, _player, _game))));
+                _overlays.Add(new ObjectPickerOverlay(objects, _player, obj => OpenExamine(obj, "Close Up")));
                 break;
         }
+    }
+
+    // GameShell.ShowCloseUp's own routing: one of the player's own worlds gets the full tabbed
+    // WorldInfoOverlay (Close Up is just its first tab); anything else -- a fleet, another empire's
+    // world -- gets the standalone CloseUpOverlay, which still needs its own general-purpose
+    // Known/Scouted redaction since it can't assume ownership.
+    private void OpenExamine(ISectorObject obj, string initialTab)
+    {
+        if (obj is IEconomicWorld ownWorld && ReferenceEquals(ownWorld.Owner, _player))
+        {
+            _overlays.Add(new WorldInfoOverlay(ownWorld, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, initialTab));
+            return;
+        }
+
+        _overlays.Add(new CloseUpOverlay(obj, _player, _game));
+    }
+
+    // GameShell.Designate/Issp/Production: all three (and Close Up) route through the one
+    // WorldInfoOverlay, just opened on a different starting tab -- unlike ExamineCursor, these only
+    // ever make sense on one of the player's own worlds, so anything else is a plain error message
+    // rather than a picker.
+    private void OpenOwnWorldTab(string tab)
+    {
+        if (_objectsByLocation.TryGetValue(_cursor, out var obj) && obj is IEconomicWorld world && ReferenceEquals(world.Owner, _player))
+        {
+            _overlays.Add(new WorldInfoOverlay(world, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, tab));
+            return;
+        }
+
+        ShowInfo(tab, "Move the cursor onto one of your own worlds first.");
     }
 
     // GameShell.ObjectsAt: every object at location the player can actually see (Game.Visible) --

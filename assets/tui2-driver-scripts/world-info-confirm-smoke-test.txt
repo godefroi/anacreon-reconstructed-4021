@@ -1,0 +1,22 @@
+# Verifies: (1) an ISSP edit invalidates the Production tab's cached preview, (2) Designate's risk
+# confirm actually shows a ConfirmOverlay and both Enter=yes and any-other-key=no work.
+Enter
+Ctrl+PageDown
+Ctrl+PageDown
+RightArrow
+RightArrow
+Ctrl+PageUp
+DUMP
+
+Ctrl+PageDown
+Ctrl+PageDown
+Down
+Down
+Enter
+DUMP
+
+Escape
+DUMP
+
+Enter
+DUMP
