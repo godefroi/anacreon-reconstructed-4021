@@ -1,0 +1,24 @@
+# Redesignate the capital itself (0,0) away to Jumpship base -- no warning applies (none of the five
+# risk cases key off "is this world currently the capital"), matching real Pascal's own DesignateWorld
+# (INTRFACE.PAS:187-221), which only special-cases NewType=CapTyp, never "this world already is the
+# capital". Confirms the type change/efficiency penalty actually took effect and the map glyph updated.
+Enter
+Ctrl+PageDown
+Ctrl+PageDown
+Ctrl+PageDown
+Down
+Down
+Down
+Down
+Down
+DUMP
+
+Enter
+DUMP
+
+Enter
+Escape
+DUMP
+
+Enter
+DUMP

@@ -82,9 +82,18 @@ internal sealed class GalaxyMapScreen : IScreen
     private TextInputField? _savePrompt;
 
     // Close Up (and, once 2+ objects share a sector, the picker in front of it) -- only the top
-    // overlay ever sees a key; it's popped the frame its own IsDismissed goes true. See IOverlay's own
-    // doc comment for why "route to every overlay" is the bug this avoids.
+    // overlay ever sees a key; it's popped by reference the frame its own IsDismissed goes true (never
+    // by index -- an overlay whose own HandleKey both dismisses itself and pushes a replacement, like
+    // Deploy's fleet-name prompt handing off to a map-cursor pick, would otherwise pop whatever's on
+    // top *after* that push, not the dismissed one). See IOverlay's own doc comment for why "route to
+    // every overlay" is the bug this avoids.
     private readonly List<IOverlay> _overlays = [];
+
+    // "Move the cursor and confirm" mode -- GameShell.BeginPick/EndPick's own map-cursor-reuse pattern
+    // for Deploy's source/destination picks (and, later, Change Destination/Transfer/etc.). Menu bar
+    // and overlays are irrelevant while this is set; arrows still move the cursor via HandleMapKey,
+    // Enter confirms at the current cursor location, Esc cancels with no callback.
+    private (string Prompt, Action<Coordinate> OnConfirm)? _pendingPick;
 
     public IScreen? NextScreen { get; private set; }
 
@@ -205,7 +214,7 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("_Self-Destruct", Stub),
         ]),
         new MenuBar.TopItem("_Fleet", [
-            new MenuBar.Item("_Deploy", Stub),
+            new MenuBar.Item("_Deploy", DeployFleet),
             new MenuBar.Item("_Change Destination", Stub),
             new MenuBar.Item("_Transfer", Stub),
             new MenuBar.Item("_Abort/Join", Stub),
@@ -256,9 +265,27 @@ internal sealed class GalaxyMapScreen : IScreen
             top.HandleKey(key);
             if (top.IsDismissed)
             {
-                _overlays.RemoveAt(_overlays.Count - 1);
+                // By reference, not index -- see _overlays's own doc comment.
+                _overlays.Remove(top);
             }
 
+            return;
+        }
+
+        if (_pendingPick is { } pick)
+        {
+            switch (key.Key)
+            {
+                case ConsoleKey.Enter:
+                    _pendingPick = null;
+                    pick.OnConfirm(_cursor);
+                    return;
+                case ConsoleKey.Escape:
+                    _pendingPick = null;
+                    return;
+            }
+
+            HandleMapKey(key);
             return;
         }
 
@@ -283,6 +310,12 @@ internal sealed class GalaxyMapScreen : IScreen
 
         HandleMapKey(key);
     }
+
+    // GameShell.BeginPick, minus the openPanelDismiss call: that existed only to work around TG's own
+    // AddModal disabling the map underneath a still-open panel, which this engine's overlay stack has
+    // no equivalent of -- an overlay that wants a pick already dismissed itself (by reference removal,
+    // immediately) before calling this, so the stack is already empty by the time the next key arrives.
+    private void BeginPick(string prompt, Action<Coordinate> onConfirm) => _pendingPick = (prompt, onConfirm);
 
     /// <summary>
     /// Enter on the map, or Worlds menu &gt; Close Up (MAPWIND.PAS: GetMapObject/SelectPoint feeding
@@ -351,6 +384,94 @@ internal sealed class GalaxyMapScreen : IScreen
         result.AddRange(_fleetsByLocation[location]);
         return result.Where(o => Game.Visible(_player, o)).ToList();
     }
+
+    // LaunchFleetCommand's own real parameter order (FLTCOMM.PAS): name, then source (map-cursor pick
+    // -- Fleet menu > Deploy has no context object to launch from), then destination, then composition
+    // last. The context-object shortcuts (Deploy from a Close Up/Sector Picker selection) aren't wired
+    // up yet -- their own follow-on slice, same cut CloseUpOverlay's own D-key note already flagged.
+    private void DeployFleet()
+    {
+        _overlays.Add(new TextPromptOverlay("Name This Fleet", "Fleet name (optional):", string.Empty, name =>
+            BeginPick("Deploy Fleet -- move cursor to a world to launch from, Enter: select, Esc: cancel",
+                location => PickDeploySource(location, name)),
+            maxLength: 40, borderFg: ConsoleColor.Gray, borderBg: ConsoleColor.Black));
+    }
+
+    // IDParm2 (Question 8, "Where shall we deploy the fleet from?").
+    private void PickDeploySource(Coordinate location, string fleetName)
+    {
+        if (!_objectsByLocation.TryGetValue(location, out var obj) || obj is not IEconomicWorld source || !ReferenceEquals(source.Owner, _player))
+        {
+            ShowInfo("Deploy Fleet", "That isn't one of your own worlds.");
+            return;
+        }
+
+        ValidateDeploySource(source, fleetName);
+    }
+
+    private void ValidateDeploySource(IShipCargoHolder source, string fleetName)
+    {
+        if (!HasAnyShips(source.Ships))
+        {
+            ShowInfo("Deploy Fleet", "There are no ships here to deploy.");
+            return;
+        }
+
+        // XYParm (Question 9, "What shall its destination be?").
+        BeginPick("Deploy Fleet -- move cursor to destination, Enter: select, Esc: cancel",
+            destination => BeginDeployDistribution(source, fleetName, destination));
+    }
+
+    private void BeginDeployDistribution(IShipCargoHolder source, string fleetName, Coordinate destination)
+    {
+        // A snapshot, not the source's own live Ships/Cargo -- FleetLifecycle.ChangeCompositionOfFleet
+        // (which DeployFleet calls internally) overwrites the launch world's own Ships in place, and
+        // the editor mutates ground counts live as the player fills/empties columns; passing the real
+        // object through would let that happen before the player ever confirms anything.
+        var groundShips = CloneShips(source.Ships);
+        var groundCargo = CloneCargo(source.Cargo);
+        var fleetShips = new ShipCounts();
+        var fleetCargo = new CargoHold();
+        var sourceObj = (ISectorObject)source;
+        var sourceName = sourceObj.Names.GetValueOrDefault(_player) ?? CloseUpOverlay.DescribeLocation(sourceObj, _player);
+
+        _overlays.Add(new ResourceDistributionOverlay(
+            $"Deploy Fleet from {sourceName}", fleetShips, fleetCargo, groundShips, groundCargo,
+            groundIsPlayerOwned: true, groundIsAFleet: source is Fleet,
+            onCommitted: () =>
+            {
+                // NoShips (MISC.PAS) -- LaunchFleetCommand's own "IF NOT NoShips(FltSh)" guard: nothing
+                // was actually put aboard, so there's nothing to deploy.
+                if (!HasAnyShips(fleetShips))
+                {
+                    return;
+                }
+
+                var fleet = FleetLifecycle.DeployFleet(_player, source, fleetShips, fleetCargo, destination, _game);
+                if (!string.IsNullOrWhiteSpace(fleetName))
+                {
+                    // LaunchFleetCommand's own FleetName[1]:=UpCase(FleetName[1]) (FLTCOMM.PAS:517).
+                    fleet.Names[_player] = char.ToUpperInvariant(fleetName[0]) + fleetName[1..];
+                }
+
+                Refresh();
+            }));
+    }
+
+    private static bool HasAnyShips(ShipCounts s) =>
+        s.Fighters + s.HunterKillers + s.Jumpships + s.Jumptransports + s.Penetrators + s.Starships + s.Transports > 0;
+
+    private static ShipCounts CloneShips(ShipCounts s) => new()
+    {
+        Fighters = s.Fighters, HunterKillers = s.HunterKillers, Jumpships = s.Jumpships,
+        Jumptransports = s.Jumptransports, Penetrators = s.Penetrators, Starships = s.Starships, Transports = s.Transports,
+    };
+
+    private static CargoHold CloneCargo(CargoHold c) => new()
+    {
+        Legions = c.Legions, NinjaLegions = c.NinjaLegions, Ambrosia = c.Ambrosia,
+        Chemicals = c.Chemicals, Metals = c.Metals, Supplies = c.Supplies, Trillum = c.Trillum,
+    };
 
     private void HandleSavePromptKey(ConsoleKeyInfo key)
     {
@@ -774,10 +895,11 @@ internal sealed class GalaxyMapScreen : IScreen
 
     private void DrawStatusLine(FrameBuffer fb, int row)
     {
-        // Decorative for now -- F1/F3/F5/F7/F8/F9 aren't wired to anything until their overlay panels
-        // exist (Help/Status/Fleet/News/Empire/Names), same "exists but stubbed" precedent as the menu
-        // leaves above.
-        fb.DrawText(1, row, "F1:Help  F3:Status  F5:Fleet  F7:News  F8:Empire  F9:Names", HelpLineFg, HelpLineBg);
+        // A pending pick's own prompt replaces the F-key legend entirely while it's active -- matching
+        // GameShell's own pickerPromptLabel taking over the same screen real estate.
+        var leftText = _pendingPick?.Prompt
+            ?? "F1:Help  F3:Status  F5:Fleet  F7:News  F8:Empire  F9:Names";
+        fb.DrawText(1, row, leftText, HelpLineFg, HelpLineBg);
 
         var coordinateText = RelativeCoordinate.Format(_cursor, _origin);
         fb.DrawText(Math.Max(0, fb.Width - coordinateText.Length - 1), row, coordinateText, HelpLineFg, HelpLineBg);

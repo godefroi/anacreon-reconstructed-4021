@@ -1,0 +1,26 @@
+# Fleet > Deploy end-to-end: name prompt (blank) -> pick source (the capital, 0,0) -> pick destination
+# a few sectors away -> Resource Distribution Editor -> fill fighters into the new fleet -> Esc to
+# finish. Confirms BeginPick's cross-screen pick mode, the fleet-name prompt, and the distribution
+# editor all chain correctly and FleetLifecycle.DeployFleet actually creates a fleet.
+Alt+F
+D
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
+
+Right
+Right
+Down
+Down
+Enter
+DUMP
+
+Up
+DUMP
+
+Escape
+DUMP
