@@ -1,5 +1,6 @@
 using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Panemonde;
+using Reconstructed4021.Panemonde.Widgets;
 
 namespace Reconstructed4021.Tui2;
 

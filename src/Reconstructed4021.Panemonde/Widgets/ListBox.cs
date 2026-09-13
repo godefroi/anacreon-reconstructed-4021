@@ -1,4 +1,6 @@
-namespace Reconstructed4021.Panemonde;
+using Reconstructed4021.Panemonde;
+
+namespace Reconstructed4021.Panemonde.Widgets;
 
 // A vertically-scrolling, single-selection list -- the same shape needed by the scenario picker, the
 // save-game picker, and the sector-object picker: arrow keys move a highlighted row, Enter (handled by

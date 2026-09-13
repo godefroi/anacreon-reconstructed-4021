@@ -1,6 +1,7 @@
 using System.Text;
+using Reconstructed4021.Panemonde;
 
-namespace Reconstructed4021.Panemonde;
+namespace Reconstructed4021.Panemonde.Widgets;
 
 // End-of-string editing only -- printable characters append, Backspace removes the last character, no
 // mid-string cursor movement. A deliberate simplification (Terminal.Gui's TextField supports full

@@ -38,6 +38,7 @@ internal sealed class NewGameFlow
         var setup = new GalaxySetup(Context.Random);
         var loader = new ScenarioLoader(setup, Context.Random, Context.NpeProvider);
         var game = loader.Load(ScenarioText, players);
-        return new NewGameReadyScreen(Header.Title, game, Context);
+        var player = game.CurrentEmpire ?? throw new InvalidOperationException("ScenarioLoader.Load must set Game.CurrentEmpire.");
+        return new GalaxyMapScreen(game, player, Context);
     }
 }

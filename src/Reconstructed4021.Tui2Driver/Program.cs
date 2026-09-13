@@ -1,3 +1,5 @@
+using Reconstructed4021.Core.SaveFormat;
+using Reconstructed4021.LegacyNpe;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Tui2;
 
@@ -17,6 +19,9 @@ using Reconstructed4021.Tui2;
 //
 // Usage: dotnet run --project src/Reconstructed4021.Tui2Driver -- --script path/to/script.txt
 //          [--cols 100] [--rows 40] [--output path/to/output.log]
+//          [--load path/to/save.json]  -- skip the whole pre-game flow (splash/title/picker/player
+//          setup) and drop straight into the galaxy map from a save fixture, same purpose as
+//          Reconstructed4021.Tui's own Program.cs --load flag.
 //
 // Script format, one instruction per line:
 //   # comment                    -- ignored, as is a blank line
@@ -50,7 +55,20 @@ Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 Console.WriteLine($"Output: {outputPath}");
 using var output = new StreamWriter(outputPath) { AutoFlush = true };
 
-var runner = new ScreenRunner(Bootstrap.CreateInitialScreen(repoRoot), new FrameBuffer(cols, rows, Stream.Null));
+var loadPathArg = OptionalArg("--load");
+IScreen initialScreen;
+if (loadPathArg is not null)
+{
+    var resolvedLoadPath = Path.IsPathRooted(loadPathArg) ? loadPathArg : Path.Combine(repoRoot, loadPathArg);
+    var game = GameJson.Deserialize(File.ReadAllText(resolvedLoadPath), new Random(4021), new LegacyNpeProvider());
+    initialScreen = Bootstrap.CreateGalaxyMapScreen(repoRoot, game);
+}
+else
+{
+    initialScreen = Bootstrap.CreateInitialScreen(repoRoot);
+}
+
+var runner = new ScreenRunner(initialScreen, new FrameBuffer(cols, rows, Stream.Null));
 
 foreach (var (lineNumber, rawLine) in File.ReadLines(resolvedScriptPath).Select((line, i) => (i + 1, line)))
 {

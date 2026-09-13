@@ -1,3 +1,4 @@
+using Reconstructed4021.Core;
 using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.LegacyNpe;
 using Reconstructed4021.Panemonde;
@@ -12,6 +13,22 @@ namespace Reconstructed4021.Tui2;
 public static class Bootstrap
 {
     public static IScreen CreateInitialScreen(string repoRoot, bool skipIntro = false)
+    {
+        var titleScreen = CreateContext(repoRoot).MakeTitleScreen();
+        return skipIntro ? titleScreen : new TmaLogoScreen(titleScreen);
+    }
+
+    // Skips the whole pre-game flow (splash/title/picker/player setup) straight into a running game --
+    // for testing the map without re-running New Game's ~10 keypresses every time, matching
+    // Reconstructed4021.Tui's own Program.cs --load flag ("skip the whole pre-game flow ... for
+    // testing a hand-built fixture without routing it through scenario authoring").
+    public static IScreen CreateGalaxyMapScreen(string repoRoot, Game game)
+    {
+        var player = game.CurrentEmpire ?? throw new InvalidOperationException("Save has no CurrentEmpire set -- nothing to drive.");
+        return new GalaxyMapScreen(game, player, CreateContext(repoRoot));
+    }
+
+    private static NewGameContext CreateContext(string repoRoot)
     {
         var random = new Random();
         var npeProvider = new LegacyNpeProvider();
@@ -35,9 +52,9 @@ public static class Bootstrap
                 .ToList();
         }
 
-        IScreen MakeTitleScreen() => new TitleScreen(new NewGameContext(random, npeProvider, MakeTitleScreen, LoadScenarios));
-
-        var titleScreen = MakeTitleScreen();
-        return skipIntro ? titleScreen : new TmaLogoScreen(titleScreen);
+        NewGameContext? context = null;
+        IScreen MakeTitleScreen() => new TitleScreen(context!);
+        context = new NewGameContext(random, npeProvider, MakeTitleScreen, LoadScenarios);
+        return context;
     }
 }
