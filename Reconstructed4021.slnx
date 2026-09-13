@@ -5,4 +5,5 @@
   <Project Path="src/Reconstructed4021.Tests/Reconstructed4021.Tests.csproj" />
   <Project Path="src/Reconstructed4021.Tui/Reconstructed4021.Tui.csproj" />
   <Project Path="src/Reconstructed4021.TuiDriver/Reconstructed4021.TuiDriver.csproj" />
+  <Project Path="src/Reconstructed4021.Panemonde/Reconstructed4021.Panemonde.csproj" />
 </Solution>
