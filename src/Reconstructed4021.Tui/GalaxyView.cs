@@ -374,34 +374,54 @@ internal sealed class GalaxyView : View
         DrawColumn(col, row, rune, PlayerAttribute, viewportWidth);
     }
 
-    /// <summary>Arrows move the cursor one sector, PageUp/PageDown jump it CursorJump rows, Home/End jump it to the X axis's edges; the viewport auto-follows to keep the cursor visible.</summary>
+    /// <summary>
+    /// Arrows move the cursor one sector, Shift+arrow jumps it CursorJump sectors on that same axis,
+    /// PageUp/PageDown jump it CursorJump rows, Home/End jump it to the X axis's edges, and
+    /// Ctrl+arrow jumps it on a single axis to the next visible sector object or fleet beyond the
+    /// cursor in that direction (see <see cref="TryMoveCursorToNextObject"/>) -- the viewport
+    /// auto-follows to keep the cursor visible in every case.
+    /// </summary>
     private void OnKeyDown(object? sender, Key key)
     {
-        var newX = _cursor.X;
-        var newY = _cursor.Y;
+        var baseKeyCode = key.NoAlt.NoCtrl.NoShift.KeyCode;
+        var isArrow = baseKeyCode is KeyCode.CursorLeft or KeyCode.CursorRight or KeyCode.CursorUp or KeyCode.CursorDown;
 
-        // Strip modifiers defensively before matching -- not a confirmed fix for anything (the actual
-        // "arrow keys don't redraw" bug turned out to be the missing SetNeedsDraw() below), just cheap
-        // insurance against a terminal reporting stray modifier bits on an otherwise-unmodified arrow key.
-        switch (key.NoAlt.NoCtrl.NoShift.KeyCode) {
-            case KeyCode.CursorLeft: newX--; break;
-            case KeyCode.CursorRight: newX++; break;
-            case KeyCode.Home: newX = 0; break;
-            case KeyCode.End: newX = _galaxy.Size - 1; break;
-            case KeyCode.CursorUp: newY--; break;
-            case KeyCode.CursorDown: newY++; break;
-            case KeyCode.PageUp: newY -= CursorJump; break;
-            case KeyCode.PageDown: newY += CursorJump; break;
-            default: return;
+        if (isArrow && key.IsCtrl && !key.IsShift && !key.IsAlt) {
+            if (!TryMoveCursorToNextObject(baseKeyCode)) {
+                return;
+            }
+        } else {
+            var newX = _cursor.X;
+            var newY = _cursor.Y;
+
+            // Shift only changes the step size of a plain arrow move -- Home/End/PageUp/PageDown
+            // already ignore it (their step is fixed), so this doesn't need its own branch above.
+            var step = isArrow && key.IsShift && !key.IsCtrl && !key.IsAlt ? CursorJump : 1;
+
+            // Strip modifiers defensively before matching -- not a confirmed fix for anything (the actual
+            // "arrow keys don't redraw" bug turned out to be the missing SetNeedsDraw() below), just cheap
+            // insurance against a terminal reporting stray modifier bits on an otherwise-unmodified arrow key.
+            switch (baseKeyCode) {
+                case KeyCode.CursorLeft: newX -= step; break;
+                case KeyCode.CursorRight: newX += step; break;
+                case KeyCode.Home: newX = 0; break;
+                case KeyCode.End: newX = _galaxy.Size - 1; break;
+                case KeyCode.CursorUp: newY -= step; break;
+                case KeyCode.CursorDown: newY += step; break;
+                case KeyCode.PageUp: newY -= CursorJump; break;
+                case KeyCode.PageDown: newY += CursorJump; break;
+                default: return;
+            }
+
+            newX = Math.Clamp(newX, 0, _galaxy.Size - 1);
+            newY = Math.Clamp(newY, 0, _galaxy.Size - 1);
+            if (newX == _cursor.X && newY == _cursor.Y) {
+                return;
+            }
+
+            _cursor = new Coordinate(newX, newY);
         }
 
-        newX = Math.Clamp(newX, 0, _galaxy.Size - 1);
-        newY = Math.Clamp(newY, 0, _galaxy.Size - 1);
-        if (newX == _cursor.X && newY == _cursor.Y) {
-            return;
-        }
-
-        _cursor = new Coordinate(newX, newY);
         EnsureCursorVisible();
 
         // EnsureCursorVisible only reassigns Viewport, which is a no-op redraw trigger when the new
@@ -411,6 +431,83 @@ internal sealed class GalaxyView : View
         SetNeedsDraw();
         key.Handled = true;
         CursorCoordinateChanged?.Invoke(this, CursorCoordinateText);
+    }
+
+    /// <summary>
+    /// Ctrl+arrow support: moves <see cref="_cursor"/> on a single axis to the coordinate of the next
+    /// visible sector object or fleet beyond the cursor in <paramref name="direction"/>, leaving the
+    /// other axis untouched -- a one-axis projection, not "nearest object in the cursor's current row
+    /// or column". E.g. cursor at (0,0) with the only object at (10,10): Ctrl+Right lands on (10,0),
+    /// not (10,10); reaching the object fully takes a second keypress (Ctrl+Down from there). This is
+    /// deliberately more useful than searching only the cursor's starting row/column, since a target
+    /// will rarely already share it. Falls back to the galaxy edge on that axis when nothing qualifies,
+    /// matching Home/End. Returns false if the cursor doesn't move (already at that edge/coordinate).
+    /// </summary>
+    private bool TryMoveCursorToNextObject(KeyCode direction)
+    {
+        var axisIsX = direction is KeyCode.CursorLeft or KeyCode.CursorRight;
+        var positive = direction is KeyCode.CursorRight or KeyCode.CursorDown;
+        var target = FindNextObjectCoordinate(axisIsX, positive) ?? (positive ? _galaxy.Size - 1 : 0);
+
+        if (axisIsX) {
+            if (target == _cursor.X) {
+                return false;
+            }
+
+            _cursor = new Coordinate(target, _cursor.Y);
+        } else {
+            if (target == _cursor.Y) {
+                return false;
+            }
+
+            _cursor = new Coordinate(_cursor.X, target);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The nearest X (or Y, per <paramref name="axisIsX"/>) among sector objects and fleets that
+    /// actually draw something on the map (per <see cref="WorldGlyphAt"/>/<see cref="FleetPresent"/>),
+    /// strictly beyond the cursor's own coordinate on that axis, in the given direction -- null if
+    /// none qualify. Mines aren't included (no equivalent of "the next mine" in the feature request).
+    /// </summary>
+    private int? FindNextObjectCoordinate(bool axisIsX, bool positive)
+    {
+        var cursorValue = axisIsX ? _cursor.X : _cursor.Y;
+        int? best = null;
+
+        void Consider(Coordinate location)
+        {
+            var value = axisIsX ? location.X : location.Y;
+            if (positive ? value <= cursorValue : value >= cursorValue) {
+                return;
+            }
+
+            if (best is null || (positive ? value < best.Value : value > best.Value)) {
+                best = value;
+            }
+        }
+
+        foreach (var (location, sectorObject) in _objectsByLocation) {
+            // Matches WorldGlyphAt's own two ways a sector object reads as "something here": fully
+            // visible (any object type), or an unscouted planet inside a nebula, which still draws
+            // UnkPlanetRune even though Game.Visible is false for it -- Ctrl+arrow should stop there
+            // too, since the player can already see there's *something* to investigate.
+            if (Game.Visible(_player, sectorObject) || (sectorObject is Planet && _galaxy.GetNebula(location) != NebulaType.None)) {
+                Consider(location);
+            }
+        }
+
+        foreach (var fleet in _galaxy.Fleets) {
+            // Same visibility rule as FleetPresent: the player's own fleets are trivially visible, an
+            // enemy fleet needs Game.Visible.
+            if (ReferenceEquals(fleet.Owner, _player) || Game.Visible(_player, fleet)) {
+                Consider(fleet.Location);
+            }
+        }
+
+        return best;
     }
 
     /// <summary>
