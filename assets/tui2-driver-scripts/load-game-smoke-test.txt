@@ -1,0 +1,7 @@
+# Title -> Load Game -> pick the first save -> lands on the galaxy map.
+Enter
+l
+DUMP
+
+Enter
+DUMP

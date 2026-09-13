@@ -3,6 +3,7 @@ using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.Presentation;
+using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Core.Types;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
@@ -72,6 +73,13 @@ internal sealed class GalaxyMapScreen : IScreen
     private int _viewportX;
     private int _viewportY;
     private bool _viewportInitialized;
+
+    // At most one of these is active at a time: an info popup (dismissed on any key) or the save-name
+    // prompt (Enter confirms, Esc cancels) -- both take over HandleKey/Draw ahead of the menu bar/map
+    // while set.
+    private string? _infoTitle;
+    private string? _infoMessage;
+    private TextInputField? _savePrompt;
 
     public IScreen? NextScreen { get; private set; }
 
@@ -168,12 +176,12 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("_About Anacreon", Stub),
         ]),
         new MenuBar.TopItem("_Game", [
-            new MenuBar.Item("_Pause", Stub),
+            new MenuBar.Item("_Pause", () => ShowInfo("Paused", "Time has stopped. Press any key to continue.")),
             new MenuBar.Item("_Status Hardcopy", Stub),
-            new MenuBar.Item("Sa_ve", Stub),
-            new MenuBar.Item("_Next Turn", Stub),
+            new MenuBar.Item("Sa_ve", () => _savePrompt = new TextInputField($"{_player.Name}-{_game.Year}", maxLength: 60)),
+            new MenuBar.Item("_Next Turn", Stub), // needs the whole per-empire turn loop -- its own slice.
             new MenuBar.Item("_Quit", () => NextScreen = _context.MakeTitleScreen()), // no confirm dialog yet -- add one alongside a real dialog widget.
-            new MenuBar.Item("E_xit to OS", Stub),
+            new MenuBar.Item("E_xit to OS", () => NextScreen = QuitScreen.Instance), // same no-confirm simplification as Quit above.
         ]),
         new MenuBar.TopItem("_Empire", [
             new MenuBar.Item("_Send Message", Stub),
@@ -224,6 +232,19 @@ internal sealed class GalaxyMapScreen : IScreen
 
     public void HandleKey(ConsoleKeyInfo key)
     {
+        if (_infoMessage is not null)
+        {
+            _infoTitle = null;
+            _infoMessage = null;
+            return;
+        }
+
+        if (_savePrompt is not null)
+        {
+            HandleSavePromptKey(key);
+            return;
+        }
+
         if (_menuBar.HandleKey(key))
         {
             return;
@@ -238,6 +259,82 @@ internal sealed class GalaxyMapScreen : IScreen
         }
 
         HandleMapKey(key);
+    }
+
+    private void HandleSavePromptKey(ConsoleKeyInfo key)
+    {
+        switch (key.Key)
+        {
+            case ConsoleKey.Enter:
+                var name = _savePrompt!.Text.Trim();
+                _savePrompt = null;
+                if (name.Length > 0)
+                {
+                    SaveGameAs(name);
+                }
+
+                return;
+            case ConsoleKey.Escape:
+                _savePrompt = null;
+                return;
+        }
+
+        _savePrompt!.HandleKey(key);
+    }
+
+    /// <summary>
+    /// SaveGame (LOADSAVE.PAS:645-714): writes to a temp file first and only swaps it in on success,
+    /// so a failed write can never corrupt an existing save -- kept even though this port's own format
+    /// is JSON, not the DOS binary layout, since it's a real correctness property, not a DOS-era
+    /// artifact. Ported from GameShell.WriteSaveFile/SaveGameAs/AvoidCollision.
+    /// </summary>
+    private void SaveGameAs(string name)
+    {
+        var fileName = name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? name : $"{name}.json";
+        var saveDir = Path.Combine(_context.RepoRoot, "saves");
+        Directory.CreateDirectory(saveDir);
+        fileName = AvoidCollision(saveDir, fileName);
+
+        var path = Path.Combine(saveDir, fileName);
+        var tempPath = path + ".tmp";
+        try
+        {
+            File.WriteAllText(tempPath, GameJson.Serialize(_game, _context.NpeProvider));
+            File.Move(tempPath, path, overwrite: true);
+            ShowInfo("Save Game", $"Game saved to {fileName}.");
+        }
+        catch (IOException ex)
+        {
+            ShowInfo("Save Game", $"Could not save: {ex.Message}");
+        }
+    }
+
+    // GameShell.AvoidCollision: the suggested save name ("{player}-{year}") makes picking the same
+    // name twice easy to do by accident, so a second save under that name would otherwise silently
+    // destroy the first with no confirmation. Appends " (1)", " (2)", etc. instead.
+    private static string AvoidCollision(string directory, string fileName)
+    {
+        if (!File.Exists(Path.Combine(directory, fileName)))
+        {
+            return fileName;
+        }
+
+        var baseName = Path.GetFileNameWithoutExtension(fileName);
+        var extension = Path.GetExtension(fileName);
+        for (var i = 1; ; i++)
+        {
+            var candidate = $"{baseName} ({i}){extension}";
+            if (!File.Exists(Path.Combine(directory, candidate)))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    private void ShowInfo(string title, string message)
+    {
+        _infoTitle = title;
+        _infoMessage = message;
     }
 
     /// <summary>
@@ -348,6 +445,47 @@ internal sealed class GalaxyMapScreen : IScreen
         DrawMap(fb, mapTop, mapHeight);
         _menuBar.Draw(fb, menuRow, MenuBarFg, MenuBarBg, MenuHotColor, DropdownFg, DropdownBg, MenuSelectedFg, MenuSelectedBg);
         DrawStatusLine(fb, statusRow);
+
+        if (_savePrompt is not null)
+        {
+            DrawSavePrompt(fb);
+        }
+
+        if (_infoMessage is not null)
+        {
+            DrawInfoPopup(fb);
+        }
+    }
+
+    private void DrawSavePrompt(FrameBuffer fb)
+    {
+        const int width = 50;
+        const int height = 4;
+        var x = (fb.Width - width) / 2;
+        var y = (fb.Height - height) / 2;
+
+        BoxDrawing.DrawSingleLine(fb, x, y, width, height, ConsoleColor.Gray, ConsoleColor.Black);
+        fb.DrawText(x + 1, y + 1, "Filename to save to:", ConsoleColor.White, ConsoleColor.Black);
+        _savePrompt!.Draw(fb, x + 1, y + 2, width - 2, TextInputField.DefaultFg, TextInputField.DefaultBg);
+    }
+
+    private void DrawInfoPopup(FrameBuffer fb)
+    {
+        var lines = _infoMessage!.Split('\n');
+        var width = Math.Max(lines.Max(l => l.Length), _infoTitle!.Length + 2) + 4;
+        var height = lines.Length + 5;
+        var x = (fb.Width - width) / 2;
+        var y = (fb.Height - height) / 2;
+
+        BoxDrawing.DrawSingleLine(fb, x, y, width, height, ConsoleColor.Gray, ConsoleColor.Black);
+        var titleText = $" {_infoTitle} ";
+        fb.DrawText(x + Math.Max(1, (width - titleText.Length) / 2), y, titleText, ConsoleColor.White, ConsoleColor.Black);
+        for (var i = 0; i < lines.Length; i++)
+        {
+            fb.DrawText(x + 2, y + 2 + i, lines[i], ConsoleColor.White, ConsoleColor.Black);
+        }
+
+        fb.DrawText(x + 2, y + height - 2, "Press any key to continue...", ConsoleColor.Gray, ConsoleColor.Black);
     }
 
     private void DrawMap(FrameBuffer fb, int mapTop, int mapHeight)

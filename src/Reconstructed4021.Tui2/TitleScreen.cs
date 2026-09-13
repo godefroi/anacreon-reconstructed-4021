@@ -95,7 +95,7 @@ public sealed class TitleScreen : IScreen
             // actually picks New Game -- see NewGameContext's own doc comment for why that's deferred
             // this far rather than done once up front.
             new MenuButton("New Game", 'N', () => NextScreen = new ScenarioPickerScreen(context.LoadScenarios(), context)),
-            new MenuButton("Load Game", 'L', () => { }), // ponytail: no Load Game screen yet, wire up when it exists.
+            new MenuButton("Load Game", 'L', () => NextScreen = new SaveGamePickerScreen(context.LoadSaves(), context)),
             new MenuButton("Options", 'O', () => { }), // ponytail: no Options screen yet, wire up when it exists.
             new MenuButton("Quit", 'Q', () => NextScreen = QuitScreen.Instance),
         ];

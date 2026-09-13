@@ -52,9 +52,27 @@ public static class Bootstrap
                 .ToList();
         }
 
+        // saves/ is gitignored (a player's own save files, never committed); auto/ is GameShell's own
+        // autosave subdirectory, listed alongside manual saves rather than as a separate screen --
+        // same layout Reconstructed4021.Tui's own Program.cs Load Game branch uses.
+        IReadOnlyList<SaveGamePickerScreen.SaveChoice> LoadSaves()
+        {
+            var saveDir = Path.Combine(repoRoot, "saves");
+            var autoSaveDir = Path.Combine(saveDir, "auto");
+            Directory.CreateDirectory(saveDir);
+            Directory.CreateDirectory(autoSaveDir);
+
+            return Directory.GetFiles(saveDir, "*.json")
+                .Concat(Directory.GetFiles(autoSaveDir, "*.json"))
+                .OrderByDescending(File.GetLastWriteTime)
+                .Select(path => new SaveGamePickerScreen.SaveChoice(path,
+                    $"{(Path.GetDirectoryName(path) == autoSaveDir ? "[auto]" : "[save]"),-7}{Path.GetFileNameWithoutExtension(path),-30} {File.GetLastWriteTime(path):yyyy-MM-dd HH:mm}"))
+                .ToList();
+        }
+
         NewGameContext? context = null;
         IScreen MakeTitleScreen() => new TitleScreen(context!);
-        context = new NewGameContext(random, npeProvider, MakeTitleScreen, LoadScenarios);
+        context = new NewGameContext(random, npeProvider, repoRoot, MakeTitleScreen, LoadScenarios, LoadSaves);
         return context;
     }
 }
