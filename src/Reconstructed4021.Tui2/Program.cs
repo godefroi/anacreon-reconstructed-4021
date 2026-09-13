@@ -3,7 +3,10 @@ using Reconstructed4021.Tui2;
 
 // Run this in a real Windows Terminal window -- not through a tool-captured shell, which has
 // redirected stdio and no real VT-processing terminal on the other end.
-ScreenHost.Run(Bootstrap.CreateInitialScreen(FindRepoRoot(AppContext.BaseDirectory)));
+// --no-intro: skip the TMA logo splash, straight to the title menu -- same flag Reconstructed4021.Tui's
+// own Program.cs supports.
+var noIntro = args.Contains("--no-intro");
+ScreenHost.Run(Bootstrap.CreateInitialScreen(FindRepoRoot(AppContext.BaseDirectory), skipIntro: noIntro));
 
 static string FindRepoRoot(string start)
 {

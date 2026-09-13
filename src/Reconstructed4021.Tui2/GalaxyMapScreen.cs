@@ -81,6 +81,11 @@ internal sealed class GalaxyMapScreen : IScreen
     private string? _infoMessage;
     private TextInputField? _savePrompt;
 
+    // Close Up (and, once 2+ objects share a sector, the picker in front of it) -- only the top
+    // overlay ever sees a key; it's popped the frame its own IsDismissed goes true. See IOverlay's own
+    // doc comment for why "route to every overlay" is the bug this avoids.
+    private readonly List<IOverlay> _overlays = [];
+
     public IScreen? NextScreen { get; private set; }
 
     public GalaxyMapScreen(Game game, Empire player, NewGameContext context)
@@ -190,7 +195,7 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("Te_ch Tree", Stub),
         ]),
         new MenuBar.TopItem("_Worlds", [
-            new MenuBar.Item("_Close Up", Stub),
+            new MenuBar.Item("_Close Up", ExamineCursor),
             new MenuBar.Item("_Designate", Stub),
             new MenuBar.Item("P_roduction", Stub),
             new MenuBar.Item("_ISSP", Stub),
@@ -245,6 +250,18 @@ internal sealed class GalaxyMapScreen : IScreen
             return;
         }
 
+        if (_overlays.Count > 0)
+        {
+            var top = _overlays[^1];
+            top.HandleKey(key);
+            if (top.IsDismissed)
+            {
+                _overlays.RemoveAt(_overlays.Count - 1);
+            }
+
+            return;
+        }
+
         if (_menuBar.HandleKey(key))
         {
             return;
@@ -258,7 +275,51 @@ internal sealed class GalaxyMapScreen : IScreen
             return;
         }
 
+        if (key.Key == ConsoleKey.Enter)
+        {
+            ExamineCursor();
+            return;
+        }
+
         HandleMapKey(key);
+    }
+
+    /// <summary>
+    /// Enter on the map, or Worlds menu &gt; Close Up (MAPWIND.PAS: GetMapObject/SelectPoint feeding
+    /// PLAYTURN.PAS's InfoCom/CLSCOMM.PAS's CloseUpCom): a single object at the cursor opens
+    /// <see cref="CloseUpOverlay"/> directly; 2+ opens <see cref="ObjectPickerOverlay"/> first; none is
+    /// a silent no-op in real Pascal either, but this port has nothing useful to say when there's
+    /// truly nothing there, so it stays a no-op.
+    /// </summary>
+    private void ExamineCursor()
+    {
+        var objects = ObjectsAt(_cursor);
+        switch (objects.Count)
+        {
+            case 0:
+                return;
+            case 1:
+                _overlays.Add(new CloseUpOverlay(objects[0], _player, _game));
+                break;
+            default:
+                _overlays.Add(new ObjectPickerOverlay(objects, _player, obj => _overlays.Add(new CloseUpOverlay(obj, _player, _game))));
+                break;
+        }
+    }
+
+    // GameShell.ObjectsAt: every object at location the player can actually see (Game.Visible) --
+    // _objectsByLocation only ever holds one non-fleet slot per coordinate (real Pascal's own
+    // Sector[x]^[y].Obj is the same single slot), so fleets need their own separate lookup here too.
+    private List<ISectorObject> ObjectsAt(Coordinate location)
+    {
+        var result = new List<ISectorObject>();
+        if (_objectsByLocation.TryGetValue(location, out var obj))
+        {
+            result.Add(obj);
+        }
+
+        result.AddRange(_fleetsByLocation[location]);
+        return result.Where(o => Game.Visible(_player, o)).ToList();
     }
 
     private void HandleSavePromptKey(ConsoleKeyInfo key)
@@ -445,6 +506,11 @@ internal sealed class GalaxyMapScreen : IScreen
         DrawMap(fb, mapTop, mapHeight);
         _menuBar.Draw(fb, menuRow, MenuBarFg, MenuBarBg, MenuHotColor, DropdownFg, DropdownBg, MenuSelectedFg, MenuSelectedBg);
         DrawStatusLine(fb, statusRow);
+
+        foreach (var overlay in _overlays)
+        {
+            overlay.Draw(fb);
+        }
 
         if (_savePrompt is not null)
         {
