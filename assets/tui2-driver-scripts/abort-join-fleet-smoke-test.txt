@@ -1,0 +1,29 @@
+# Deploy a fleet off the capital (0,0), move the cursor back onto it, then Fleet > Abort/Join: picks
+# the fleet, picks the ground (the capital -- player-owned, no confirm needed, no overflow either),
+# dumps the whole fleet onto it and removes the fleet. Confirms the fleet glyph disappears and the
+# capital's own ship counts absorb everything back.
+Alt+F
+D
+Enter
+Enter
+Right
+Right
+Down
+Down
+Enter
+Up
+Escape
+DUMP
+
+Left
+Left
+Up
+Up
+DUMP
+
+Alt+F
+A
+DUMP
+
+Enter
+DUMP

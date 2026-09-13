@@ -216,8 +216,8 @@ internal sealed class GalaxyMapScreen : IScreen
         new MenuBar.TopItem("_Fleet", [
             new MenuBar.Item("_Deploy", DeployFleet),
             new MenuBar.Item("_Change Destination", Stub),
-            new MenuBar.Item("_Transfer", Stub),
-            new MenuBar.Item("_Abort/Join", Stub),
+            new MenuBar.Item("_Transfer", TransferFleet),
+            new MenuBar.Item("_Abort/Join", AbortJoinFleet),
             new MenuBar.Item("_Refuel", Stub),
             new MenuBar.Item("_SRM Sweep", Stub),
             new MenuBar.Item("_Orders", Stub),
@@ -472,6 +472,178 @@ internal sealed class GalaxyMapScreen : IScreen
         Legions = c.Legions, NinjaLegions = c.NinjaLegions, Ambrosia = c.Ambrosia,
         Chemicals = c.Chemicals, Metals = c.Metals, Supplies = c.Supplies, Trillum = c.Trillum,
     };
+
+    // GameShell.PickOwnFleetAtCursor: resolves "the player's own fleet under the cursor" for every
+    // Fleet-menu command below -- 0 own fleets there is an error, exactly 1 auto-picks, 2+ opens the
+    // same object picker ExamineCursor uses (two of the player's own fleets can share a sector, e.g.
+    // to Transfer between them).
+    private void PickOwnFleetAtCursor(string title, Action<Fleet> onChosen)
+    {
+        var fleets = _fleetsByLocation[_cursor].Where(f => ReferenceEquals(f.Owner, _player)).ToList();
+        switch (fleets.Count)
+        {
+            case 0:
+                ShowInfo(title, "Move the cursor onto one of your own fleets first.");
+                break;
+            case 1:
+                onChosen(fleets[0]);
+                break;
+            default:
+                _overlays.Add(new ObjectPickerOverlay(fleets.Cast<ISectorObject>().ToList(), _player, obj => onChosen((Fleet)obj)));
+                break;
+        }
+    }
+
+    private IEconomicWorld? FindWorldAt(Coordinate location) =>
+        _objectsByLocation.TryGetValue(location, out var obj) ? obj as IEconomicWorld : null;
+
+    /// <summary>
+    /// GameShell.PickGround (FLTCOMM.PAS's own GetGround): every candidate at <paramref name="source"/>'s
+    /// own location that Transfer/Abort-Join can target -- the player's own fleets and world sort
+    /// first, then anyone else's, matching real Pascal's own display order. Always opens the picker,
+    /// even for a single candidate (unlike ExamineCursor's own auto-pick-on-1) -- GetGround has no such
+    /// shortcut either.
+    /// </summary>
+    private void PickGround(Fleet source, bool playerOnly, bool includeFleet, string title, string emptyMessage, Action<ISectorObject> onPicked)
+    {
+        var ownFleets = new List<ISectorObject>();
+        var enemyFleets = new List<ISectorObject>();
+        foreach (var f in _fleetsByLocation[source.Location])
+        {
+            if (!includeFleet && ReferenceEquals(f, source))
+            {
+                continue;
+            }
+
+            var isOwn = ReferenceEquals(f.Owner, _player);
+            if (playerOnly && !isOwn)
+            {
+                continue;
+            }
+
+            (isOwn ? ownFleets : enemyFleets).Add(f);
+        }
+
+        ISectorObject? ownWorld = null;
+        ISectorObject? enemyWorld = null;
+        if (FindWorldAt(source.Location) is { } world)
+        {
+            if (ReferenceEquals(world.Owner, _player))
+            {
+                ownWorld = world;
+            }
+            else if (!playerOnly)
+            {
+                enemyWorld = world;
+            }
+        }
+
+        var candidates = new List<ISectorObject>();
+        candidates.AddRange(ownFleets);
+        if (ownWorld is not null)
+        {
+            candidates.Add(ownWorld);
+        }
+
+        candidates.AddRange(enemyFleets);
+        if (enemyWorld is not null)
+        {
+            candidates.Add(enemyWorld);
+        }
+
+        if (candidates.Count == 0)
+        {
+            ShowInfo(title, emptyMessage);
+            return;
+        }
+
+        _overlays.Add(new ObjectPickerOverlay(candidates, _player, onPicked));
+    }
+
+    // Fleet menu > Transfer (FLTCOMM.PAS: TransferFleetCommand) -- the same Resource Distribution
+    // Editor Deploy uses, between one of the player's own fleets and whatever PickGround picks as the
+    // other side (any owner).
+    private void TransferFleet() => PickOwnFleetAtCursor("Transfer Fleet", fleet =>
+        PickGround(fleet, playerOnly: false, includeFleet: false, "Transfer Fleet",
+            "There is nothing here to transfer with.",
+            ground => BeginTransferDistribution(fleet, ground)));
+
+    private void BeginTransferDistribution(Fleet fleet, ISectorObject ground)
+    {
+        var groundHolder = (IShipCargoHolder)ground;
+        var fleetShips = CloneShips(fleet.Ships);
+        var fleetCargo = CloneCargo(fleet.Cargo);
+        var groundShips = CloneShips(groundHolder.Ships);
+        var groundCargo = CloneCargo(groundHolder.Cargo);
+        var fleetName = fleet.Names.GetValueOrDefault(_player) ?? CloseUpOverlay.DescribeLocation(fleet, _player);
+        var groundName = ground.Names.GetValueOrDefault(_player) ?? CloseUpOverlay.DescribeLocation(ground, _player);
+
+        _overlays.Add(new ResourceDistributionOverlay(
+            $"Transfer -- {fleetName} <-> {groundName}", fleetShips, fleetCargo, groundShips, groundCargo,
+            groundIsPlayerOwned: ReferenceEquals(ground.Owner, _player), groundIsAFleet: ground is Fleet,
+            onCommitted: () =>
+            {
+                // ChangeCompositionOfFleet (FLEET.PAS:282-389) -- may destroy either side, see that
+                // method's own doc comment; TransferFleetCommand calls it unconditionally too.
+                FleetLifecycle.ChangeCompositionOfFleet(fleet, groundHolder, fleetShips, fleetCargo, groundShips, groundCargo, _game);
+                Refresh();
+            }));
+    }
+
+    /// <summary>
+    /// Fleet menu > Abort/Join (FLTCOMM.PAS: AbortFleetCommand): dumps the whole fleet onto whatever
+    /// PickGround picks -- no distribution grid, matching real Pascal exactly. Two confirmations, both
+    /// transcribed from source: target not the player's own, and any single ship type's combined total
+    /// exceeding <see cref="ResourceDistribution.MaxResources"/> ("some will be lost"). Declining the
+    /// first skips the second -- both just decline the same operation either way.
+    /// </summary>
+    private void AbortJoinFleet() => PickOwnFleetAtCursor("Abort/Join Fleet", fleet =>
+        PickGround(fleet, playerOnly: false, includeFleet: false, "Abort/Join Fleet",
+            "There is nothing here to abort the fleet to.",
+            ground => ConfirmAbortJoin(fleet, ground)));
+
+    private void ConfirmAbortJoin(Fleet fleet, ISectorObject ground)
+    {
+        if (!ReferenceEquals(ground.Owner, _player))
+        {
+            var groundName = ground.Names.GetValueOrDefault(_player) ?? CloseUpOverlay.DescribeLocation(ground, _player);
+            _overlays.Add(new ConfirmOverlay("Abort/Join Fleet",
+                $"{groundName} is not part of your empire. Are you sure you want to abort the fleet?",
+                yes =>
+                {
+                    if (yes)
+                    {
+                        ConfirmAbortJoinOverflow(fleet, ground);
+                    }
+                }));
+            return;
+        }
+
+        ConfirmAbortJoinOverflow(fleet, ground);
+    }
+
+    private void ConfirmAbortJoinOverflow(Fleet fleet, ISectorObject ground)
+    {
+        var groundHolder = (IShipCargoHolder)ground;
+        var overflow = Enum.GetValues<ShipType>().Any(t => groundHolder.Ships[t] + fleet.Ships[t] > ResourceDistribution.MaxResources);
+        if (overflow)
+        {
+            _overlays.Add(new ConfirmOverlay("Abort/Join Fleet",
+                "An object cannot hold so many ships -- some will be lost. Are you sure?",
+                yes =>
+                {
+                    if (yes)
+                    {
+                        FleetLifecycle.AbortFleet(fleet, groundHolder, _game);
+                        Refresh();
+                    }
+                }));
+            return;
+        }
+
+        FleetLifecycle.AbortFleet(fleet, groundHolder, _game);
+        Refresh();
+    }
 
     private void HandleSavePromptKey(ConsoleKeyInfo key)
     {
