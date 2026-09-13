@@ -82,7 +82,7 @@ public sealed class TitleScreen : IScreen
 
     public IScreen? NextScreen { get; private set; }
 
-    public TitleScreen()
+    public TitleScreen(NewGameContext context)
     {
         for (var i = 0; i < OrbitStars; i++)
         {
@@ -90,7 +90,10 @@ public sealed class TitleScreen : IScreen
         }
 
         _buttons = [
-            new MenuButton("New Game", 'N', () => { }), // ponytail: no New Game screen yet, wire up when it exists.
+            // LoadScenarios() runs the scenario-directory scan lazily, right here, only once the player
+            // actually picks New Game -- see NewGameContext's own doc comment for why that's deferred
+            // this far rather than done once up front.
+            new MenuButton("New Game", 'N', () => NextScreen = new ScenarioPickerScreen(context.LoadScenarios(), context)),
             new MenuButton("Load Game", 'L', () => { }), // ponytail: no Load Game screen yet, wire up when it exists.
             new MenuButton("Options", 'O', () => { }), // ponytail: no Options screen yet, wire up when it exists.
             new MenuButton("Quit", 'Q', () => NextScreen = QuitScreen.Instance),

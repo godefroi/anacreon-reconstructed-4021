@@ -1,0 +1,18 @@
+# Regression check: every screen in the New Game chain is freshly constructed on every transition
+# (never reused), so returning to the title screen and picking New Game again must show a normal
+# picker -- not transition again on its own before any key is even pressed.
+Enter
+n
+DUMP
+
+Escape
+DUMP
+
+n
+DUMP
+
+Escape
+DUMP
+
+n
+DUMP

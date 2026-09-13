@@ -50,7 +50,7 @@ Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 Console.WriteLine($"Output: {outputPath}");
 using var output = new StreamWriter(outputPath) { AutoFlush = true };
 
-var runner = new ScreenRunner(new TmaLogoScreen(new TitleScreen()), new FrameBuffer(cols, rows, Stream.Null));
+var runner = new ScreenRunner(Bootstrap.CreateInitialScreen(repoRoot), new FrameBuffer(cols, rows, Stream.Null));
 
 foreach (var (lineNumber, rawLine) in File.ReadLines(resolvedScriptPath).Select((line, i) => (i + 1, line)))
 {
