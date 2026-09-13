@@ -115,6 +115,19 @@ string RenderCurrentFrame()
 // A few friendlier spellings on top of ConsoleKey's own names, matching TuiDriver's script vocabulary.
 static bool TryParseKey(string token, out ConsoleKeyInfo key)
 {
+    if (token.StartsWith("Alt+", StringComparison.OrdinalIgnoreCase) && token.Length == 5)
+    {
+        var ch = token[4];
+        if (char.IsLetterOrDigit(ch) && Enum.TryParse<ConsoleKey>(char.ToUpperInvariant(ch).ToString(), out var altKey))
+        {
+            key = new ConsoleKeyInfo(ch, altKey, shift: false, alt: true, control: false);
+            return true;
+        }
+
+        key = default;
+        return false;
+    }
+
     var alias = token switch
     {
         "Up" => "UpArrow",

@@ -5,6 +5,7 @@ using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Types;
 using Reconstructed4021.Panemonde;
+using Reconstructed4021.Panemonde.Widgets;
 
 namespace Reconstructed4021.Tui2;
 
@@ -50,13 +51,13 @@ internal sealed class GalaxyMapScreen : IScreen
 
     private const ConsoleColor MenuBarFg = ConsoleColor.White;
     private const ConsoleColor MenuBarBg = ConsoleColor.DarkRed; // SYSMenuBar.
+    private const ConsoleColor MenuHotColor = ConsoleColor.Yellow; // no Pascal equivalent -- see MenuBar's own doc comment.
+    private const ConsoleColor MenuSelectedFg = ConsoleColor.Black;
+    private const ConsoleColor MenuSelectedBg = ConsoleColor.Gray; // SYSDispSelect.
     private const ConsoleColor DropdownFg = ConsoleColor.Gray;
     private const ConsoleColor DropdownBg = ConsoleColor.Black; // SYSMenu.
     private const ConsoleColor HelpLineFg = ConsoleColor.DarkRed;
     private const ConsoleColor HelpLineBg = ConsoleColor.Black; // SYSHelpLine.
-
-    private sealed record MenuLeaf(string Label, Action Activate);
-    private sealed record TopMenu(string Label, IReadOnlyList<MenuLeaf> Leaves);
 
     private readonly Game _game;
     private readonly Empire _player;
@@ -64,17 +65,13 @@ internal sealed class GalaxyMapScreen : IScreen
     private readonly Coordinate _origin;
     private readonly Dictionary<Coordinate, ISectorObject> _objectsByLocation = [];
     private readonly Dictionary<Empire, ConsoleColor> _empireColors;
-    private readonly IReadOnlyList<TopMenu> _menus;
+    private readonly MenuBar _menuBar;
     private ILookup<Coordinate, Fleet> _fleetsByLocation = null!;
 
     private Coordinate _cursor;
     private int _viewportX;
     private int _viewportY;
     private bool _viewportInitialized;
-
-    private bool _menuOpen;
-    private int _activeMenuIndex;
-    private int _selectedLeafIndex;
 
     public IScreen? NextScreen { get; private set; }
 
@@ -86,7 +83,7 @@ internal sealed class GalaxyMapScreen : IScreen
         _origin = player.Capital?.Location ?? new Coordinate(game.Galaxy.Size / 2, game.Galaxy.Size / 2);
         _cursor = _origin;
         _empireColors = BuildEmpireColors(game.Empires, player);
-        _menus = BuildMenus();
+        _menuBar = new MenuBar(BuildMenus());
 
         RebuildIndex();
     }
@@ -161,102 +158,86 @@ internal sealed class GalaxyMapScreen : IScreen
         return colors;
     }
 
-    private IReadOnlyList<TopMenu> BuildMenus() =>
+    // Verbatim from Reconstructed4021.Tui's own GameShell.BuildMenus (hotkeys included) -- every leaf
+    // is a stub except Quit, matching TitleScreen's own Load Game/Options precedent. End Turn needs
+    // the whole per-empire turn loop (its own slice); every other stub needs an overlay panel that
+    // doesn't exist yet.
+    private IReadOnlyList<MenuBar.TopItem> BuildMenus() =>
     [
-        new TopMenu("Game", [
-            new MenuLeaf("Pause", () => { }), // ponytail: purely informational in real Pascal too; nothing to pause yet.
-            new MenuLeaf("Next Turn", () => { }), // ponytail: needs the per-empire turn loop -- its own slice.
-            new MenuLeaf("Quit", () => NextScreen = _context.MakeTitleScreen()), // no confirm dialog yet -- add one alongside a real dialog widget.
+        new MenuBar.TopItem("⌂", [
+            new MenuBar.Item("_About Anacreon", Stub),
         ]),
-        new TopMenu("Empire", [
-            new MenuLeaf("Send Message", () => { }),
-            new MenuLeaf("Tech Tree", () => { }),
+        new MenuBar.TopItem("_Game", [
+            new MenuBar.Item("_Pause", Stub),
+            new MenuBar.Item("_Status Hardcopy", Stub),
+            new MenuBar.Item("Sa_ve", Stub),
+            new MenuBar.Item("_Next Turn", Stub),
+            new MenuBar.Item("_Quit", () => NextScreen = _context.MakeTitleScreen()), // no confirm dialog yet -- add one alongside a real dialog widget.
+            new MenuBar.Item("E_xit to OS", Stub),
         ]),
-        new TopMenu("Worlds", [
-            new MenuLeaf("Close Up", () => { }),
-            new MenuLeaf("Designate", () => { }),
-            new MenuLeaf("Production", () => { }),
-            new MenuLeaf("ISSP", () => { }),
+        new MenuBar.TopItem("_Empire", [
+            new MenuBar.Item("_Send Message", Stub),
+            new MenuBar.Item("_Read Messages", Stub),
+            new MenuBar.Item("_Trade Technology", Stub),
+            new MenuBar.Item("Te_ch Tree", Stub),
         ]),
-        new TopMenu("Fleet", [
-            new MenuLeaf("Deploy", () => { }),
-            new MenuLeaf("Change Destination", () => { }),
-            new MenuLeaf("Transfer", () => { }),
-            new MenuLeaf("Attack", () => { }),
+        new MenuBar.TopItem("_Worlds", [
+            new MenuBar.Item("_Close Up", Stub),
+            new MenuBar.Item("_Designate", Stub),
+            new MenuBar.Item("P_roduction", Stub),
+            new MenuBar.Item("_ISSP", Stub),
+            new MenuBar.Item("_Add Name", Stub),
+            new MenuBar.Item("Delete _Name", Stub),
+            new MenuBar.Item("_Liberate", Stub),
+            new MenuBar.Item("_Self-Destruct", Stub),
         ]),
-        new TopMenu("Build", [
-            new MenuLeaf("Site Status", () => { }),
-            new MenuLeaf("New", () => { }),
+        new MenuBar.TopItem("_Fleet", [
+            new MenuBar.Item("_Deploy", Stub),
+            new MenuBar.Item("_Change Destination", Stub),
+            new MenuBar.Item("_Transfer", Stub),
+            new MenuBar.Item("_Abort/Join", Stub),
+            new MenuBar.Item("_Refuel", Stub),
+            new MenuBar.Item("_SRM Sweep", Stub),
+            new MenuBar.Item("_Orders", Stub),
+            new MenuBar.Item("Canc_el Orders", Stub),
+            new MenuBar.Item("Res_upply", Stub),
+            new MenuBar.Item("_Probe", Stub),
+        ]),
+        new MenuBar.TopItem("_Build", [
+            new MenuBar.Item("_Site Status", Stub),
+            new MenuBar.Item("_New", Stub),
+            new MenuBar.Item("_Abort", Stub),
+        ]),
+        new MenuBar.TopItem("_Ministry of War", [
+            new MenuBar.Item("_Attack", Stub),
+            new MenuBar.Item("Auto A_ttack", Stub),
+            new MenuBar.Item("Launch _LAMs", Stub),
+            new MenuBar.Item("_Defenses", Stub),
         ]),
     ];
 
+    private static void Stub()
+    {
+        // No overlay-panel/dialog system yet -- every leaf above but Quit is inert until its own
+        // surface exists.
+    }
+
     public void HandleKey(ConsoleKeyInfo key)
     {
-        if (_menuOpen)
+        if (_menuBar.HandleKey(key))
         {
-            HandleMenuKey(key);
             return;
         }
 
-        if (key.Modifiers.HasFlag(ConsoleModifiers.Alt))
-        {
-            var typed = char.ToUpperInvariant(key.KeyChar);
-            for (var i = 0; i < _menus.Count; i++)
-            {
-                if (char.ToUpperInvariant(_menus[i].Label[0]) == typed)
-                {
-                    OpenMenu(i);
-                    return;
-                }
-            }
-
-            return;
-        }
-
+        // Not consumed by the menu bar (it only opens on Alt+<letter> while closed) -- Esc still opens
+        // the Game menu specifically, matching GameShell's own precedent (index 1: ⌂ is index 0).
         if (key.Key == ConsoleKey.Escape)
         {
-            OpenMenu(activeMenuIndex: 0); // matches GameShell's own Esc-opens-Game-menu precedent.
+            _menuBar.Open(1);
             return;
         }
 
         HandleMapKey(key);
-    }
-
-    private void OpenMenu(int activeMenuIndex)
-    {
-        _menuOpen = true;
-        _activeMenuIndex = activeMenuIndex;
-        _selectedLeafIndex = 0;
-    }
-
-    private void HandleMenuKey(ConsoleKeyInfo key)
-    {
-        var leaves = _menus[_activeMenuIndex].Leaves;
-        switch (key.Key)
-        {
-            case ConsoleKey.LeftArrow:
-                _activeMenuIndex = (_activeMenuIndex + _menus.Count - 1) % _menus.Count;
-                _selectedLeafIndex = 0;
-                return;
-            case ConsoleKey.RightArrow:
-                _activeMenuIndex = (_activeMenuIndex + 1) % _menus.Count;
-                _selectedLeafIndex = 0;
-                return;
-            case ConsoleKey.UpArrow:
-                _selectedLeafIndex = (_selectedLeafIndex + leaves.Count - 1) % leaves.Count;
-                return;
-            case ConsoleKey.DownArrow:
-                _selectedLeafIndex = (_selectedLeafIndex + 1) % leaves.Count;
-                return;
-            case ConsoleKey.Enter:
-                var activate = leaves[_selectedLeafIndex].Activate;
-                _menuOpen = false;
-                activate();
-                return;
-            case ConsoleKey.Escape:
-                _menuOpen = false;
-                return;
-        }
     }
 
     /// <summary>
@@ -365,13 +346,8 @@ internal sealed class GalaxyMapScreen : IScreen
         }
 
         DrawMap(fb, mapTop, mapHeight);
-        DrawMenuBar(fb, menuRow);
+        _menuBar.Draw(fb, menuRow, MenuBarFg, MenuBarBg, MenuHotColor, DropdownFg, DropdownBg, MenuSelectedFg, MenuSelectedBg);
         DrawStatusLine(fb, statusRow);
-
-        if (_menuOpen)
-        {
-            DrawDropdown(fb, menuRow);
-        }
     }
 
     private void DrawMap(FrameBuffer fb, int mapTop, int mapHeight)
@@ -562,20 +538,6 @@ internal sealed class GalaxyMapScreen : IScreen
         _viewportY = Math.Clamp(_viewportY, 0, maxY);
     }
 
-    private void DrawMenuBar(FrameBuffer fb, int row)
-    {
-        fb.DrawText(0, row, new string(' ', fb.Width), MenuBarFg, MenuBarBg);
-
-        var col = 1;
-        for (var i = 0; i < _menus.Count; i++)
-        {
-            var label = $" {_menus[i].Label} ";
-            var highlighted = _menuOpen && i == _activeMenuIndex;
-            fb.DrawText(col, row, label, highlighted ? MenuBarBg : MenuBarFg, highlighted ? MenuBarFg : MenuBarBg);
-            col += label.Length + 1;
-        }
-    }
-
     private void DrawStatusLine(FrameBuffer fb, int row)
     {
         // Decorative for now -- F1/F3/F5/F7/F8/F9 aren't wired to anything until their overlay panels
@@ -587,53 +549,4 @@ internal sealed class GalaxyMapScreen : IScreen
         fb.DrawText(Math.Max(0, fb.Width - coordinateText.Length - 1), row, coordinateText, HelpLineFg, HelpLineBg);
     }
 
-    private void DrawDropdown(FrameBuffer fb, int menuRow)
-    {
-        var col = 1;
-        for (var i = 0; i < _activeMenuIndex; i++)
-        {
-            col += _menus[i].Label.Length + 3;
-        }
-
-        var leaves = _menus[_activeMenuIndex].Leaves;
-        var width = leaves.Max(l => l.Label.Length) + 2;
-        var height = leaves.Count + 2;
-        var x = Math.Min(col, Math.Max(0, fb.Width - width));
-        var y = menuRow + 1;
-
-        DrawDoubleBox(fb, x, y, width, height);
-        for (var i = 0; i < leaves.Count; i++)
-        {
-            var selected = i == _selectedLeafIndex;
-            fb.DrawText(x + 1, y + 1 + i, leaves[i].Label.PadRight(width - 2),
-                selected ? DropdownBg : DropdownFg, selected ? DropdownFg : DropdownBg);
-        }
-    }
-
-    private static void DrawDoubleBox(FrameBuffer fb, int x, int y, int width, int height)
-    {
-        for (var row = 0; row < height; row++)
-        {
-            for (var col = 0; col < width; col++)
-            {
-                fb.Set(x + col, y + row, new Cell(new Rune(' '), DropdownFg, DropdownBg));
-            }
-        }
-
-        fb.Set(x, y, new Cell(new Rune('┌'), DropdownFg, DropdownBg));
-        fb.Set(x + width - 1, y, new Cell(new Rune('┐'), DropdownFg, DropdownBg));
-        fb.Set(x, y + height - 1, new Cell(new Rune('└'), DropdownFg, DropdownBg));
-        fb.Set(x + width - 1, y + height - 1, new Cell(new Rune('┘'), DropdownFg, DropdownBg));
-        for (var i = 1; i < width - 1; i++)
-        {
-            fb.Set(x + i, y, new Cell(new Rune('─'), DropdownFg, DropdownBg));
-            fb.Set(x + i, y + height - 1, new Cell(new Rune('─'), DropdownFg, DropdownBg));
-        }
-
-        for (var i = 1; i < height - 1; i++)
-        {
-            fb.Set(x, y + i, new Cell(new Rune('│'), DropdownFg, DropdownBg));
-            fb.Set(x + width - 1, y + i, new Cell(new Rune('│'), DropdownFg, DropdownBg));
-        }
-    }
 }
