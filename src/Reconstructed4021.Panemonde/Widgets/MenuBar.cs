@@ -182,7 +182,7 @@ public sealed class MenuBar
         // DrawBox already filled the whole interior with (fg, bg) blanks, so a selected row just needs
         // its own background swapped across the full interior width before the label draws on top --
         // an unselected row needs no padding at all, the fill underneath already covers it.
-        DrawBox(fb, x, y, width, height, fg, bg);
+        BoxDrawing.DrawSingleLine(fb, x, y, width, height, fg, bg);
         for (var i = 0; i < leaves.Count; i++)
         {
             if (i == _selectedLeafIndex)
@@ -217,30 +217,4 @@ public sealed class MenuBar
         }
     }
 
-    private static void DrawBox(FrameBuffer fb, int x, int y, int width, int height, ConsoleColor fg, ConsoleColor bg)
-    {
-        for (var row = 0; row < height; row++)
-        {
-            for (var col = 0; col < width; col++)
-            {
-                fb.Set(x + col, y + row, new Cell(new System.Text.Rune(' '), fg, bg));
-            }
-        }
-
-        fb.Set(x, y, new Cell(new System.Text.Rune('┌'), fg, bg));
-        fb.Set(x + width - 1, y, new Cell(new System.Text.Rune('┐'), fg, bg));
-        fb.Set(x, y + height - 1, new Cell(new System.Text.Rune('└'), fg, bg));
-        fb.Set(x + width - 1, y + height - 1, new Cell(new System.Text.Rune('┘'), fg, bg));
-        for (var i = 1; i < width - 1; i++)
-        {
-            fb.Set(x + i, y, new Cell(new System.Text.Rune('─'), fg, bg));
-            fb.Set(x + i, y + height - 1, new Cell(new System.Text.Rune('─'), fg, bg));
-        }
-
-        for (var i = 1; i < height - 1; i++)
-        {
-            fb.Set(x, y + i, new Cell(new System.Text.Rune('│'), fg, bg));
-            fb.Set(x + width - 1, y + i, new Cell(new System.Text.Rune('│'), fg, bg));
-        }
-    }
 }

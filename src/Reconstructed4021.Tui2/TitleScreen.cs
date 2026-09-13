@@ -1,5 +1,6 @@
 using System.Text;
 using Reconstructed4021.Panemonde;
+using Reconstructed4021.Panemonde.Widgets;
 
 namespace Reconstructed4021.Tui2;
 
@@ -272,7 +273,7 @@ public sealed class TitleScreen : IScreen
         var focused = index == _focusedIndex;
         var color = focused ? ButtonFocusColor : ButtonNormalColor;
 
-        DrawDoubleBox(fb, x, y, width, height, color);
+        BoxDrawing.DrawDoubleLine(fb, x, y, width, height, color, Bg);
 
         var button = _buttons[index];
         var textY = y + (height / 2);
@@ -284,23 +285,4 @@ public sealed class TitleScreen : IScreen
         }
     }
 
-    private static void DrawDoubleBox(FrameBuffer fb, int x, int y, int width, int height, ConsoleColor color)
-    {
-        fb.Set(x, y, new Cell(new Rune('╔'), color, Bg));
-        fb.Set(x + width - 1, y, new Cell(new Rune('╗'), color, Bg));
-        fb.Set(x, y + height - 1, new Cell(new Rune('╚'), color, Bg));
-        fb.Set(x + width - 1, y + height - 1, new Cell(new Rune('╝'), color, Bg));
-
-        for (var i = 1; i < width - 1; i++)
-        {
-            fb.Set(x + i, y, new Cell(new Rune('═'), color, Bg));
-            fb.Set(x + i, y + height - 1, new Cell(new Rune('═'), color, Bg));
-        }
-
-        for (var i = 1; i < height - 1; i++)
-        {
-            fb.Set(x, y + i, new Cell(new Rune('║'), color, Bg));
-            fb.Set(x + width - 1, y + i, new Cell(new Rune('║'), color, Bg));
-        }
-    }
 }

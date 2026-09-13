@@ -114,19 +114,15 @@ internal sealed class PlayerSetupScreen : IScreen
 
     private void DrawGenderPopup(FrameBuffer fb, Chrome.Box box)
     {
+        // NEWGAME.PAS's own OpenWindow(20,12,50,7,ThinBRD,'',C.CommWind,C.SYSWBorder,...): a
+        // single-line-bordered popup (border color SYSWBorder=7 -> LightGray on Black), content
+        // CommWind=15 -> White on Black.
         const int width = 34;
         const int height = 5;
         var x = box.X + ((box.Width - width) / 2);
         var y = box.Y + 6;
 
-        for (var row = 0; row < height; row++)
-        {
-            for (var col = 0; col < width; col++)
-            {
-                fb.Set(x + col, y + row, new Cell(new System.Text.Rune(' '), ConsoleColor.White, ConsoleColor.Black));
-            }
-        }
-
+        BoxDrawing.DrawSingleLine(fb, x, y, width, height, ConsoleColor.Gray, ConsoleColor.Black);
         fb.DrawText(x + 1, y + 1, "Are you male or female? (M/F)", ConsoleColor.White, ConsoleColor.Black);
         fb.DrawText(x + 1, y + 2, _isEmpress ? "  Male   [ Female ]" : "[ Male ]   Female", ConsoleColor.White, ConsoleColor.Black);
     }

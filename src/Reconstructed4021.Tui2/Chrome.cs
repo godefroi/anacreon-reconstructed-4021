@@ -1,5 +1,6 @@
 using System.Text;
 using Reconstructed4021.Panemonde;
+using Reconstructed4021.Panemonde.Widgets;
 
 namespace Reconstructed4021.Tui2;
 
@@ -35,17 +36,7 @@ internal static class Chrome
         starfield.Draw(fb);
 
         var box = GetBox(fb);
-        DrawBorder(fb, box);
-
-        // Content draws over whatever stars fall inside the box's own rect during the fill below,
-        // same as NewGameWindow's own opaque child View did.
-        for (var row = 1; row < box.Height - 1; row++)
-        {
-            for (var col = 1; col < box.Width - 1; col++)
-            {
-                fb.Set(box.X + col, box.Y + row, new Cell(new Rune(' '), ContentFg, ContentBg));
-            }
-        }
+        BoxDrawing.DrawSingleLine(fb, box.X, box.Y, box.Width, box.Height, ContentFg, ContentBg);
 
         if (title.Length > 0 && box.Width > 4)
         {
@@ -54,25 +45,5 @@ internal static class Chrome
         }
 
         return box;
-    }
-
-    private static void DrawBorder(FrameBuffer fb, Box box)
-    {
-        fb.Set(box.X, box.Y, new Cell(new Rune('┌'), ContentFg, ContentBg));
-        fb.Set(box.X + box.Width - 1, box.Y, new Cell(new Rune('┐'), ContentFg, ContentBg));
-        fb.Set(box.X, box.Y + box.Height - 1, new Cell(new Rune('└'), ContentFg, ContentBg));
-        fb.Set(box.X + box.Width - 1, box.Y + box.Height - 1, new Cell(new Rune('┘'), ContentFg, ContentBg));
-
-        for (var i = 1; i < box.Width - 1; i++)
-        {
-            fb.Set(box.X + i, box.Y, new Cell(new Rune('─'), ContentFg, ContentBg));
-            fb.Set(box.X + i, box.Y + box.Height - 1, new Cell(new Rune('─'), ContentFg, ContentBg));
-        }
-
-        for (var i = 1; i < box.Height - 1; i++)
-        {
-            fb.Set(box.X, box.Y + i, new Cell(new Rune('│'), ContentFg, ContentBg));
-            fb.Set(box.X + box.Width - 1, box.Y + i, new Cell(new Rune('│'), ContentFg, ContentBg));
-        }
     }
 }
