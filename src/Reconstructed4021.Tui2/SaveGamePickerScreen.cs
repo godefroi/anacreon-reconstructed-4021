@@ -50,8 +50,17 @@ public sealed class SaveGamePickerScreen : IScreen
         {
             case ConsoleKey.Enter:
                 var game = GameJson.Deserialize(File.ReadAllText(_list.SelectedItem!.Path), _context.Random, _context.NpeProvider);
-                var player = game.CurrentEmpire ?? throw new InvalidOperationException("Save has no CurrentEmpire set -- nothing to drive.");
-                NextScreen = new GalaxyMapScreen(game, player, _context);
+                if (game.CurrentEmpire is null)
+                {
+                    throw new InvalidOperationException("Save has no CurrentEmpire set -- nothing to drive.");
+                }
+
+                // TurnLoop.Start, not a direct GalaxyMapScreen: Reconstructed4021.Tui's own Program.cs
+                // routes a loaded save through the exact same RunGame loop as a fresh game (its Load Game
+                // branch and --load flag both call RunGame(loadedGame)) -- so the loaded empire's turn
+                // start greeting and status report show again here too, same as they would on any other
+                // entry into that empire's turn.
+                NextScreen = TurnLoop.Start(game, _context);
                 return;
             case ConsoleKey.Escape:
                 NextScreen = _context.MakeTitleScreen();
