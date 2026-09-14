@@ -261,12 +261,18 @@ internal sealed class GalaxyMapScreen : IScreen
 
         if (_overlays.Count > 0)
         {
-            var top = _overlays[^1];
-            top.HandleKey(key);
-            if (top.IsDismissed)
+            _overlays[^1].HandleKey(key);
+
+            // A loop, not a single check: a confirm overlay's own callback can reach past itself and
+            // dismiss the overlay underneath it too (e.g. CloseUpOverlay.TryCommitOrders's discard
+            // path dismisses both the ConfirmOverlay and the CloseUpOverlay it's stacked on, in the
+            // same key dispatch) -- checking only the one overlay whose HandleKey just ran left that
+            // parent sitting on screen, already dismissed, until some unrelated later keystroke
+            // happened to reach it. Popping from the top while it's dismissed cascades through the
+            // whole chain immediately instead.
+            while (_overlays.Count > 0 && _overlays[^1].IsDismissed)
             {
-                // By reference, not index -- see _overlays's own doc comment.
-                _overlays.Remove(top);
+                _overlays.RemoveAt(_overlays.Count - 1);
             }
 
             return;
@@ -352,7 +358,7 @@ internal sealed class GalaxyMapScreen : IScreen
             return;
         }
 
-        _overlays.Add(new CloseUpOverlay(obj, _player, _game));
+        _overlays.Add(new CloseUpOverlay(obj, _player, _game, ShowInfo, _overlays.Add));
     }
 
     // GameShell.Designate/Issp/Production: all three (and Close Up) route through the one
@@ -960,33 +966,40 @@ internal sealed class GalaxyMapScreen : IScreen
 
     private void DrawSavePrompt(FrameBuffer fb)
     {
-        const int width = 50;
-        const int height = 4;
-        var x = (fb.Width - width) / 2;
-        var y = (fb.Height - height) / 2;
+        var width = Math.Min(50, fb.Width);
+        var height = Math.Min(4, fb.Height);
+        var x = Math.Max(0, (fb.Width - width) / 2);
+        var y = Math.Max(0, (fb.Height - height) / 2);
 
         BoxDrawing.DrawSingleLine(fb, x, y, width, height, ConsoleColor.Gray, ConsoleColor.Black);
         fb.DrawText(x + 1, y + 1, "Filename to save to:", ConsoleColor.White, ConsoleColor.Black);
-        _savePrompt!.Draw(fb, x + 1, y + 2, width - 2, TextInputField.DefaultFg, TextInputField.DefaultBg);
+        _savePrompt!.Draw(fb, x + 1, y + 2, Math.Max(0, width - 2), TextInputField.DefaultFg, TextInputField.DefaultBg);
     }
 
     private void DrawInfoPopup(FrameBuffer fb)
     {
         var lines = _infoMessage!.Split('\n');
-        var width = Math.Max(lines.Max(l => l.Length), _infoTitle!.Length + 2) + 4;
-        var height = lines.Length + 5;
-        var x = (fb.Width - width) / 2;
-        var y = (fb.Height - height) / 2;
+        // Every other overlay in this project clamps its frame to fb.Width/fb.Height before centering
+        // -- this one (and DrawSavePrompt above) predate that convention and didn't, so a long message
+        // (or a narrow terminal) could compute a negative x and write clipped/garbled columns instead
+        // of just a smaller box. Same Math.Min/Math.Max(0, ...) clamp as everywhere else now.
+        var width = Math.Min(Math.Max(lines.Max(l => l.Length), _infoTitle!.Length + 2) + 4, fb.Width);
+        var height = Math.Min(lines.Length + 5, fb.Height);
+        var x = Math.Max(0, (fb.Width - width) / 2);
+        var y = Math.Max(0, (fb.Height - height) / 2);
 
         BoxDrawing.DrawSingleLine(fb, x, y, width, height, ConsoleColor.Gray, ConsoleColor.Black);
         var titleText = $" {_infoTitle} ";
         fb.DrawText(x + Math.Max(1, (width - titleText.Length) / 2), y, titleText, ConsoleColor.White, ConsoleColor.Black);
-        for (var i = 0; i < lines.Length; i++)
+        for (var i = 0; i < lines.Length && i + 2 < height; i++)
         {
-            fb.DrawText(x + 2, y + 2 + i, lines[i], ConsoleColor.White, ConsoleColor.Black);
+            var clipped = lines[i].Length > width - 2 ? lines[i][..Math.Max(0, width - 2)] : lines[i];
+            fb.DrawText(x + 2, y + 2 + i, clipped, ConsoleColor.White, ConsoleColor.Black);
         }
 
-        fb.DrawText(x + 2, y + height - 2, "Press any key to continue...", ConsoleColor.Gray, ConsoleColor.Black);
+        const string continueHint = "Press any key to continue...";
+        var visibleHint = continueHint.Length > width - 2 ? continueHint[..Math.Max(0, width - 2)] : continueHint;
+        fb.DrawText(x + 2, y + height - 2, visibleHint, ConsoleColor.Gray, ConsoleColor.Black);
     }
 
     private void DrawMap(FrameBuffer fb, int mapTop, int mapHeight)

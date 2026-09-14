@@ -158,7 +158,7 @@ internal sealed class WorldInfoOverlay : IOverlay
                 DrawCloseUp(fb, cx, cy, cw, ch);
                 break;
             case TabKind.Production:
-                DrawProduction(fb, cx, cy, cw);
+                DrawProduction(fb, cx, cy, cw, ch);
                 break;
             case TabKind.Issp:
                 DrawIssp(fb, cx, cy, cw, ch);
@@ -172,9 +172,14 @@ internal sealed class WorldInfoOverlay : IOverlay
         }
     }
 
-    private static void DrawClipped(FrameBuffer fb, int cx, int cy, int cw, int x, int y, string text)
+    // Every field this feeds sits at a fixed row/column transcribed from real Pascal's own fixed
+    // 80x24-DOS-screen layout -- on a terminal smaller than this frame's own natural size (88x24,
+    // clamped in Draw), a row past the bottom border would otherwise draw straight over it instead of
+    // just being omitted. Real Pascal never needed this (its screen could never be smaller than the
+    // layout it drew); this port's own equivalent, not a restoration.
+    private static void DrawClipped(FrameBuffer fb, int cx, int cy, int cw, int ch, int x, int y, string text)
     {
-        if (x >= cw)
+        if (x >= cw || y >= ch)
         {
             return;
         }
@@ -188,7 +193,7 @@ internal sealed class WorldInfoOverlay : IOverlay
     // ownership is a given here, unlike CloseUpOverlay's own general-purpose redaction.
     private void DrawCloseUp(FrameBuffer fb, int cx, int cy, int cw, int ch)
     {
-        void At(int x, int y, string text) => DrawClipped(fb, cx, cy, cw, x, y, text);
+        void At(int x, int y, string text) => DrawClipped(fb, cx, cy, cw, ch, x, y, text);
         var world = _world;
 
         At(1, 0, " Cls:"); At(1, 1, "Tech:"); At(1, 2, " Pop:");
@@ -242,7 +247,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         ("Tri", IndustryType.TrillumMining),
     ];
 
-    private void DrawProduction(FrameBuffer fb, int cx, int cy, int cw)
+    private void DrawProduction(FrameBuffer fb, int cx, int cy, int cw, int ch)
     {
         if (_productionDirty || _productionCache is null)
         {
@@ -251,7 +256,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         }
 
         var preview = _productionCache;
-        void At(int x, int y, string text) => DrawClipped(fb, cx, cy, cw, x, y, text);
+        void At(int x, int y, string text) => DrawClipped(fb, cx, cy, cw, ch, x, y, text);
 
         var columns = (IReadOnlyList<(string Label, IndustryType Type)>)
             [.. ProductionColumnsTemplate[..3], ("SY-", ActiveShipyardIndustry(_world.Type)), .. ProductionColumnsTemplate[4..]];
@@ -349,7 +354,7 @@ internal sealed class WorldInfoOverlay : IOverlay
 
     private void DrawIssp(FrameBuffer fb, int cx, int cy, int cw, int ch)
     {
-        void At(int x, int y, string text) => DrawClipped(fb, cx, cy, cw, x, y, text);
+        void At(int x, int y, string text) => DrawClipped(fb, cx, cy, cw, ch, x, y, text);
         At(1, 0, "How much of a raw material a world produces relative to what it needs. Below 100%,");
         At(1, 1, "the shortfall must be shipped in by transport; above 100%, the surplus sits there");
         At(1, 2, "for you to ship out.");
@@ -452,7 +457,7 @@ internal sealed class WorldInfoOverlay : IOverlay
     private void DrawDesignate(FrameBuffer fb, int cx, int cy, int cw, int ch)
     {
         var header = $"{"World Type",-30}{"Main Industry",-22}{"Suit.",4}";
-        DrawClipped(fb, cx, cy, cw, 0, 0, header);
+        DrawClipped(fb, cx, cy, cw, ch, 0, 0, header);
 
         const int hintLines = 4;
         var listHeight = Math.Max(1, ch - 1 - hintLines);
@@ -462,7 +467,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         var wrapped = WrapText(hint, cw);
         for (var i = 0; i < hintLines && i < wrapped.Count; i++)
         {
-            DrawClipped(fb, cx, cy, cw, 0, ch - hintLines + i, wrapped[i]);
+            DrawClipped(fb, cx, cy, cw, ch, 0, ch - hintLines + i, wrapped[i]);
         }
     }
 
@@ -627,7 +632,7 @@ internal sealed class WorldInfoOverlay : IOverlay
 
     private void DrawRedirect(FrameBuffer fb, int cx, int cy, int cw, int ch)
     {
-        void At(int x, int y, string text) => DrawClipped(fb, cx, cy, cw, x, y, text);
+        void At(int x, int y, string text) => DrawClipped(fb, cx, cy, cw, ch, x, y, text);
         At(1, 0, "Newly produced ships/legions/ninja are auto-dispatched here every turn -- never");
         At(1, 1, "the planet's existing stockpile.");
 
