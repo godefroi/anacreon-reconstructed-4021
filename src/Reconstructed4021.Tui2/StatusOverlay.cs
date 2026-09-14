@@ -123,11 +123,15 @@ internal sealed class StatusOverlay : IOverlay
         _ => "---",
     };
 
+    // STAWIND.PAS: InitHeight=21 -> NoOfLines=(21 div 2)-1=9, and TotalContentRows works out to
+    // header+9+divider+9=20, +2 border = 22 -- the window's own fixed size at 80x25, not shrink-
+    // wrapped to whatever terminal this happens to run in.
+    private const int Height = NoOfLines * 2 + 4;
+
     public void Draw(FrameBuffer fb)
     {
         var width = Math.Min(Width, fb.Width);
-        var paneRows = Math.Min(NoOfLines, Math.Max(1, (fb.Height - 6) / 2));
-        var height = Math.Min(paneRows * 2 + 5, fb.Height - 2);
+        var height = Math.Min(Height, fb.Height);
         var x = Math.Max(0, (fb.Width - width) / 2);
         var y = Math.Max(0, (fb.Height - height) / 2);
 
@@ -135,13 +139,13 @@ internal sealed class StatusOverlay : IOverlay
         fb.DrawText(x + Math.Max(1, (width - 8) / 2), y, " Status ", ConsoleColor.White, ConsoleColor.Black);
 
         fb.DrawText(x + 1, y + 1, WorldHeader, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
-        _list.Draw(fb, x + 1, y + 2, width - 2, paneRows, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
+        _list.Draw(fb, x + 1, y + 2, width - 2, NoOfLines, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
 
-        var militaryHeaderRow = y + 2 + paneRows;
+        var militaryHeaderRow = y + 2 + NoOfLines;
         fb.DrawText(x + 1, militaryHeaderRow, MilitaryHeader, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
 
         var offset = _list.ScrollOffset;
-        for (var row = 0; row < paneRows; row++)
+        for (var row = 0; row < NoOfLines; row++)
         {
             var index = offset + row;
             var selected = index == _list.SelectedIndex;

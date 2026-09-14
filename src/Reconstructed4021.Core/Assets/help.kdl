@@ -27,8 +27,9 @@
 // at SWINDOWS.PAS:245/253/261) reads exactly "F1:Help F3:Status F5:Fleets F7:News F8:Empire F9:Names
 // F10:Map" -- no F2/F4/F6 at all, World and Military status already merged into F3, Fleet position
 // and composition already merged into F5. Corrected here to match that authoritative, load-bearing
-// string rather than the unmaintained help text (everything else on every other page is transcribed
-// as-is, typos included).
+// string rather than the unmaintained help text. Everything else is transcribed close to as-is --
+// the goal is a game that feels like and plays like the original, not a byte-for-byte reproduction of
+// its help file, so an obvious typo (page 2's "cartessian") is corrected rather than preserved.
 
 help {
     index {
@@ -73,7 +74,7 @@ help {
  If you have NOT read the manual, here are some quick hints to play the game:
 
  ■ You can refer to planets by their coordinates. The coordinate system is
-   cartessian (positive x to the right, positive y towards the top) and
+   cartesian (positive x to the right, positive y towards the top) and
    centered on your capital.
 
  ■ You must deploy fleets to attack worlds or move ships about. Fleets do not

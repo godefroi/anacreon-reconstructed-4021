@@ -15,6 +15,10 @@ internal sealed class FleetOverlay : IOverlay
     private const int NoOfLines = 9; // FLTWIND.PAS: NoOfLines:=(InitHeight DIV 2)-1, InitHeight=21.
     private const int Width = 86;
 
+    // Fixed at the window's own size at 80x25 (see StatusOverlay's identical Height comment), not
+    // shrink-wrapped to whatever terminal this happens to run in.
+    private const int Height = NoOfLines * 2 + 4;
+
     private static readonly string PositionHeader = $"{"Fleet",-8} {"Pos",-8} {"Des",-8} {"Status",-16} {"Range",5}";
     private const string ShipCargoHeader = "Fleet     fgt  hkr  jmp  jtn  pen  str  trn  men  nnj  amb  che  met  sup  tri ";
 
@@ -107,8 +111,7 @@ internal sealed class FleetOverlay : IOverlay
     public void Draw(FrameBuffer fb)
     {
         var width = Math.Min(Width, fb.Width);
-        var paneRows = Math.Min(NoOfLines, Math.Max(1, (fb.Height - 6) / 2));
-        var height = Math.Min(paneRows * 2 + 5, fb.Height - 2);
+        var height = Math.Min(Height, fb.Height);
         var x = Math.Max(0, (fb.Width - width) / 2);
         var y = Math.Max(0, (fb.Height - height) / 2);
 
@@ -122,13 +125,13 @@ internal sealed class FleetOverlay : IOverlay
         }
 
         fb.DrawText(x + 1, y + 1, PositionHeader, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
-        _list.Draw(fb, x + 1, y + 2, width - 2, paneRows, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
+        _list.Draw(fb, x + 1, y + 2, width - 2, NoOfLines, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
 
-        var cargoHeaderRow = y + 2 + paneRows;
+        var cargoHeaderRow = y + 2 + NoOfLines;
         fb.DrawText(x + 1, cargoHeaderRow, ShipCargoHeader, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
 
         var offset = _list.ScrollOffset;
-        for (var row = 0; row < paneRows; row++)
+        for (var row = 0; row < NoOfLines; row++)
         {
             var index = offset + row;
             var selected = index == _list.SelectedIndex;

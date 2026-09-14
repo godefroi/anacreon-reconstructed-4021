@@ -11,7 +11,12 @@ namespace Reconstructed4021.Tui2;
 // (NWSWIND.PAS's own LocalNews set), each block keeping the empire's own existing order.
 internal sealed class NewsOverlay : IOverlay
 {
+    private const int NoOfLines = 19; // NWSWIND.PAS: NoOfLines:=InitHeight-2, InitHeight=21.
     private const int Width = 90;
+
+    // Fixed at the window's own size at 80x25, not shrink-wrapped to the news list's own length --
+    // real Pascal's own window is always full height regardless of how much news there is to show.
+    private const int Height = NoOfLines + 2;
 
     // NEWS.PAS:125-129's own LocalNews set.
     private static readonly HashSet<NewsType> LocalHeadlines = [
@@ -165,7 +170,7 @@ internal sealed class NewsOverlay : IOverlay
     public void Draw(FrameBuffer fb)
     {
         var width = Math.Min(Width, fb.Width);
-        var height = Math.Min(Math.Max(_list.Items.Count, 1) + 2, fb.Height - 2);
+        var height = Math.Min(Height, fb.Height);
         var x = Math.Max(0, (fb.Width - width) / 2);
         var y = Math.Max(0, (fb.Height - height) / 2);
 
