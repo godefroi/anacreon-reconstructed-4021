@@ -5,6 +5,7 @@ using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.SaveFormat;
+using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
@@ -222,9 +223,12 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("_Abort/Join", AbortJoinFleet),
             new MenuBar.Item("_Refuel", RefuelFleet),
             new MenuBar.Item("_SRM Sweep", SrmSweep),
-            new MenuBar.Item("_Orders", Stub), // needs a multi-line order-script editor -- its own slice.
-            new MenuBar.Item("Canc_el Orders", Stub), // trivial once Orders itself exists (clear the same queue).
-            new MenuBar.Item("Res_upply", Stub), // its own fleet-order template -- deferred alongside Orders.
+            new MenuBar.Item("_Orders", FleetOrders),
+            // Not "Canc_el" -- 'E' collides with the top-level "_Empire" menu's own hotkey, and
+            // MenuBar checks top-level hotkeys first while a dropdown is open (its own doc comment:
+            // an item's hotkey must never collide with a *menu's*, only with another item's).
+            new MenuBar.Item("Cance_l Orders", CancelFleetOrders),
+            new MenuBar.Item("Res_upply", ResupplyMission),
             new MenuBar.Item("_Probe", LaunchProbe),
         ]),
         new MenuBar.TopItem("_Build", [
@@ -261,6 +265,37 @@ internal sealed class GalaxyMapScreen : IScreen
             return;
         }
 
+        // F1/F3/F5/F7/F8/F9 switch directly between the six Fn report windows, same as real Pascal's
+        // own dispatch loop -- no need to back out of Status before News is reachable. Only live when
+        // the overlay stack is empty or already rooted in one of these six (SwitchFKeyOverlay's own
+        // doc comment): a fleet-name prompt or a confirm dialog stacked on top of the map shouldn't
+        // get silently hijacked by a stray F-key.
+        if (key.Key is ConsoleKey.F1 or ConsoleKey.F3 or ConsoleKey.F5 or ConsoleKey.F7 or ConsoleKey.F8 or ConsoleKey.F9 &&
+            (_overlays.Count == 0 || _overlays.Exists(IsFKeyOverlay)))
+        {
+            switch (key.Key)
+            {
+                case ConsoleKey.F1:
+                    SwitchFKeyOverlay(new HelpOverlay(_overlays.Add));
+                    return;
+                case ConsoleKey.F3:
+                    SwitchFKeyOverlay(new StatusOverlay(_game, _player, obj => OpenExamine(obj, "Close Up")));
+                    return;
+                case ConsoleKey.F5:
+                    SwitchFKeyOverlay(new FleetOverlay(_game, _player, _origin, obj => OpenExamine(obj, "Close Up")));
+                    return;
+                case ConsoleKey.F7:
+                    SwitchFKeyOverlay(new NewsOverlay(_player, _origin, obj => OpenExamine(obj, "Close Up")));
+                    return;
+                case ConsoleKey.F8:
+                    SwitchFKeyOverlay(new EmpireOverlay(_game, _player, obj => OpenExamine(obj, "Close Up")));
+                    return;
+                case ConsoleKey.F9:
+                    OpenNames();
+                    return;
+            }
+        }
+
         if (_overlays.Count > 0)
         {
             _overlays[^1].HandleKey(key);
@@ -293,28 +328,6 @@ internal sealed class GalaxyMapScreen : IScreen
 
             HandleMapKey(key);
             return;
-        }
-
-        switch (key.Key)
-        {
-            case ConsoleKey.F1:
-                _overlays.Add(new HelpOverlay(_overlays.Add));
-                return;
-            case ConsoleKey.F3:
-                _overlays.Add(new StatusOverlay(_game, _player, obj => OpenExamine(obj, "Close Up")));
-                return;
-            case ConsoleKey.F5:
-                _overlays.Add(new FleetOverlay(_game, _player, _origin, obj => OpenExamine(obj, "Close Up")));
-                return;
-            case ConsoleKey.F7:
-                _overlays.Add(new NewsOverlay(_player, _origin, obj => OpenExamine(obj, "Close Up")));
-                return;
-            case ConsoleKey.F8:
-                _overlays.Add(new EmpireOverlay(_game, _player, obj => OpenExamine(obj, "Close Up")));
-                return;
-            case ConsoleKey.F9:
-                OpenNames();
-                return;
         }
 
         if (_menuBar.HandleKey(key))
@@ -388,7 +401,31 @@ internal sealed class GalaxyMapScreen : IScreen
     // this back -- BeginPick's own doc comment requires the overlay stack already be empty by the
     // time it's called, which is exactly the state right after that self-dismissal.
     private void OpenNames() =>
-        _overlays.Add(new NamesOverlay(_game, _player, obj => OpenExamine(obj, "Close Up"), JumpToLocation, _overlays.Add, AddBookmark));
+        SwitchFKeyOverlay(new NamesOverlay(_game, _player, obj => OpenExamine(obj, "Close Up"), JumpToLocation, _overlays.Add, AddBookmark));
+
+    // Status/Fleet/News/Empire/Help/Names -- the six report windows an F-key can jump straight to
+    // from any of the others, no Esc needed first (real Pascal's own dispatch loop). Distinguished by
+    // type rather than tracking a separate "current Fn overlay" field: every push site for these six
+    // adds to an empty stack (the top-level F-key dispatch above is the only place that constructs
+    // one), so whichever one is present is always at index 0 -- anything stacked above it (Close Up
+    // drilled into from Status, Help's own Index/Search, a Names rename prompt) is that overlay's own
+    // business, not a second Fn overlay.
+    private static bool IsFKeyOverlay(IOverlay overlay) =>
+        overlay is StatusOverlay or FleetOverlay or NewsOverlay or EmpireOverlay or HelpOverlay or NamesOverlay;
+
+    // Truncates back to (and including) the Fn overlay at the root of the stack, discarding anything
+    // stacked on top of it, then opens the next one in its place -- the same "one active window"
+    // switch pressing another F-key gives you in real Pascal.
+    private void SwitchFKeyOverlay(IOverlay next)
+    {
+        var root = _overlays.FindIndex(IsFKeyOverlay);
+        if (root >= 0)
+        {
+            _overlays.RemoveRange(root, _overlays.Count - root);
+        }
+
+        _overlays.Add(next);
+    }
 
     private void JumpToLocation(Coordinate location) => _cursor = location;
 
@@ -843,6 +880,61 @@ internal sealed class GalaxyMapScreen : IScreen
         Refresh();
         ShowInfo("SRM Sweep", "Mine sweeping completed.");
     });
+
+    // Fleet menu > Orders (FLTCOMM.PAS: FleetOrdersCommand): opens Close Up on the picked fleet,
+    // already on its own Orders tab -- see CloseUpOverlay's own Orders-tab doc comment for the
+    // compile/commit flow.
+    private void FleetOrders() => PickOwnFleetAtCursor("Orders", fleet => OpenExamine(fleet, "Orders"));
+
+    // Fleet menu > Cancel Orders (FLTCOMM.PAS: FleetCancelOrdersCommand, :917-931) -- no window at
+    // all, matching real Pascal's own body exactly: clear the queue, zero the resume cursor, report.
+    private void CancelFleetOrders() => PickOwnFleetAtCursor("Cancel Orders", fleet =>
+    {
+        fleet.Orders.Clear();
+        fleet.NextOrder = 0;
+        var fleetName = DisplayName(fleet);
+        ShowInfo("Cancel Orders", $"All orders to {fleetName} cancelled, {MyLord()}.");
+    });
+
+    // Fleet menu > Resupply -- no Pascal precedent, a hardcoded fleet-order template
+    // (FleetOrderTemplates' own doc comment): pick a fleet, a source world, a destination world, then
+    // a cargo type and amount, and commit the generated orders directly (matching how Refuel/Change
+    // Destination commit immediately, no editor preview step). Both worlds must be the player's own --
+    // FleetOrderTemplates.Resupply's DEST/TRAN/REFU sequence only ever touches ground the fleet
+    // actually owns, so an unowned source/destination would just silently no-op every step.
+    private void ResupplyMission() => PickOwnFleetAtCursor("Resupply", PickResupplySource);
+
+    private void PickResupplySource(Fleet fleet) =>
+        BeginPick("Resupply -- move cursor to source world, Enter: select, Esc: cancel",
+            location => PickOwnPlanetOrRetry(location, "Resupply", () => PickResupplySource(fleet),
+                source => PickResupplyDestination(fleet, source)));
+
+    private void PickResupplyDestination(Fleet fleet, Planet source) =>
+        BeginPick("Resupply -- move cursor to destination world, Enter: select, Esc: cancel",
+            location => PickOwnPlanetOrRetry(location, "Resupply", () => PickResupplyDestination(fleet, source),
+                destination => _overlays.Add(new ResupplyCargoOverlay(source, fleet, DisplayName(source), (cargo, amount) =>
+                {
+                    FleetMovementHandler.CommitOrders(fleet, FleetOrderTemplates.Resupply(source, destination, cargo, amount), startAt: 1, _game);
+                    var resource = new ResourceKind.Cargo(cargo).DisplayName;
+                    ShowInfo("Resupply",
+                        $"{DisplayName(fleet)} will shuttle {amount} {resource} from {DisplayName(source)} " +
+                        $"to {DisplayName(destination)} and return, {MyLord()}.");
+                }))));
+
+    // GameShell.PickOwnWorldOrRetry, narrowed to Planet (Resupply's own FleetOrderTemplates.Resupply
+    // signature) -- re-prompts via retry instead of silently failing when the picked coordinate isn't
+    // one of the player's own planets.
+    private void PickOwnPlanetOrRetry(Coordinate location, string title, Action retry, Action<Planet> onOwnPlanet)
+    {
+        if (FindWorldAt(location) is Planet planet && ReferenceEquals(planet.Owner, _player))
+        {
+            onOwnPlanet(planet);
+            return;
+        }
+
+        ShowInfo(title, "That isn't one of your own worlds.");
+        retry();
+    }
 
     // GameShell.FindAttackTarget (ATTCOMM.PAS's own GetTarget, :663-715), shared by Attack and Auto
     // Attack alike -- attacker and target must already be in the same sector (real Pascal's exact range
