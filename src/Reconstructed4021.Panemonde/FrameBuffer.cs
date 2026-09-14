@@ -59,14 +59,20 @@ public sealed class FrameBuffer
     // whatever's already behind them, like AnacreonTitleWindow's title-over-stars, skip those cells
     // themselves and call Set directly instead of using this helper). Out-of-bounds columns/rows are
     // silently clipped, matching Terminal.Gui's own Label clipping at the view edge.
-    public void DrawText(int x, int y, ReadOnlySpan<char> text, ConsoleColor fg, ConsoleColor bg)
+    //
+    // maxWidth clips to a caller-owned logical width (e.g. the interior of a bordered box) rather than
+    // the buffer's own absolute bounds -- without it, screens kept reinventing the same
+    // "text.Length > w - x ? text[..(w - x)] : text" arithmetic themselves (WorldInfoOverlay,
+    // CloseUpOverlay) to keep fixed-layout content from spilling past its own frame's border.
+    public void DrawText(int x, int y, ReadOnlySpan<char> text, ConsoleColor fg, ConsoleColor bg, int? maxWidth = null)
     {
         if (y < 0 || y >= _height)
         {
             return;
         }
 
-        for (var i = 0; i < text.Length; i++)
+        var length = maxWidth is int w ? Math.Min(text.Length, Math.Max(0, w)) : text.Length;
+        for (var i = 0; i < length; i++)
         {
             var col = x + i;
             if (col < 0 || col >= _width)

@@ -184,8 +184,7 @@ internal sealed class WorldInfoOverlay : IOverlay
             return;
         }
 
-        var clipped = text.Length > cw - x ? text[..(cw - x)] : text;
-        fb.DrawText(cx + x, cy + y, clipped, ContentFg, ContentBg);
+        fb.DrawText(cx + x, cy + y, text, ContentFg, ContentBg, maxWidth: cw - x);
     }
 
     // WorldCloseUpTabView: CLSCOMM.PAS's own DisplayBasicInfo/DisplayCargoInfo/DisplayMilitaryInfo/

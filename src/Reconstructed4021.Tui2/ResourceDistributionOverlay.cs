@@ -253,7 +253,7 @@ internal sealed class ResourceDistributionOverlay : IOverlay
                 return;
             }
 
-            fb.DrawText(cx + px, cy + py, text.Length > cw - px ? text[..(cw - px)] : text, ContentFg, ContentBg);
+            fb.DrawText(cx + px, cy + py, text, ContentFg, ContentBg, maxWidth: cw - px);
         }
 
         At(0, 0, "  fgt   hk  jmp  jtn  pen  str  trn  men ninj  amb  che  met  sup  tri  Cargo");

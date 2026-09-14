@@ -186,8 +186,8 @@ internal sealed class CloseUpOverlay : IOverlay
         var editorHeight = Math.Max(1, ch - 1 - hintLines);
         _ordersEditor!.Draw(fb, cx, cy + 1, cw, editorHeight, ContentFg, ContentBg, GutterFg, CursorFg, CursorBg);
 
-        fb.DrawText(cx, cy + ch - 2, "DESTination <name/x,y>  TRANsfer <amt> <code>  REPEat  WAIT  REFUel  JOIN [OVER]", ContentFg, ContentBg);
-        fb.DrawText(cx, cy + ch - 1, "Ctrl+N: mark as next order   Esc: compile and close", ContentFg, ContentBg);
+        fb.DrawText(cx, cy + ch - 2, "DESTination <name/x,y>  TRANsfer <amt> <code>  REPEat  WAIT  REFUel  JOIN [OVER]", ContentFg, ContentBg, maxWidth: cw);
+        fb.DrawText(cx, cy + ch - 1, "Ctrl+N: mark as next order   Esc: compile and close", ContentFg, ContentBg, maxWidth: cw);
     }
 
     private void DrawContent(FrameBuffer fb, int cx, int cy, int cw, int ch)
@@ -202,7 +202,7 @@ internal sealed class CloseUpOverlay : IOverlay
         {
             if (x < cw && y < ch)
             {
-                fb.DrawText(cx + x, cy + y, text.Length > cw - x ? text[..(cw - x)] : text, ContentFg, ContentBg);
+                fb.DrawText(cx + x, cy + y, text, ContentFg, ContentBg, maxWidth: cw - x);
             }
         }
 
