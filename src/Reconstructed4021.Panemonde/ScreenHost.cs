@@ -20,6 +20,20 @@ public static class ScreenHost
         }
 
         Console.CursorVisible = false;
+
+        // Cosmetic only, so a terminal/environment that can't set it (redirected output, an unusual
+        // console host) shouldn't take the whole run down over it.
+        if (!Console.IsOutputRedirected)
+        {
+            try
+            {
+                Console.Title = "Anacreon";
+            }
+            catch (PlatformNotSupportedException)
+            {
+            }
+        }
+
         var width = Console.IsOutputRedirected ? 120 : Console.WindowWidth;
         var height = Console.IsOutputRedirected ? 30 : Console.WindowHeight;
         var runner = new ScreenRunner(initial, new FrameBuffer(width, height, Console.OpenStandardOutput()));
