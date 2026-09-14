@@ -145,12 +145,30 @@ public sealed class FrameBuffer
         return bytes.Length;
     }
 
-    // ponytail: 16-color ANSI only (30-37/90-97 fg, 40-47/100-107 bg), no truecolor -- matches what
-    // the synthetic scene actually uses (ConsoleColor), add 24-bit SGR only if a real palette needs it.
+    // 16-color ANSI (30-37/90-97 fg, 40-47/100-107 bg) for everything except DarkRed: DOS's CGA red
+    // (COLORS.INC value 4, used for the menu bar, help line, unscouted-sector color, and title/logo
+    // text) renders noticeably brighter/more orange as ANSI 31 than the real DOSBox color -- tui1's
+    // own DosColors.cs made the same fix, measured directly off a screenshot at r=154 g=0 b=0. Special
+    // -cased here rather than widening Cell/DrawText to a general truecolor type, since DarkRed is the
+    // only color this project needs corrected.
     private static void AppendSgr(StringBuilder sb, ConsoleColor fg, ConsoleColor bg)
     {
-        sb.Append("\x1b[").Append(AnsiCode(fg, isBackground: false))
-          .Append(';').Append(AnsiCode(bg, isBackground: true)).Append('m');
+        sb.Append("\x1b[");
+        AppendColorCode(sb, fg, isBackground: false);
+        sb.Append(';');
+        AppendColorCode(sb, bg, isBackground: true);
+        sb.Append('m');
+    }
+
+    private static void AppendColorCode(StringBuilder sb, ConsoleColor color, bool isBackground)
+    {
+        if (color == ConsoleColor.DarkRed)
+        {
+            sb.Append(isBackground ? "48;2;154;0;0" : "38;2;154;0;0");
+            return;
+        }
+
+        sb.Append(AnsiCode(color, isBackground));
     }
 
     private static int AnsiCode(ConsoleColor color, bool isBackground)
