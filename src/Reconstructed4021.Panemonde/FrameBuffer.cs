@@ -9,8 +9,8 @@ namespace Reconstructed4021.Panemonde;
 // under test here, not output correctness in general.
 public sealed class FrameBuffer
 {
-    private readonly int _width;
-    private readonly int _height;
+    private int _width;
+    private int _height;
     private readonly Stream _stdout;
     private Cell[] _front;
     private Cell[] _back;
@@ -23,6 +23,22 @@ public sealed class FrameBuffer
         _width = width;
         _height = height;
         _stdout = stdout;
+        _front = new Cell[width * height];
+        _back = new Cell[width * height];
+        Array.Fill(_front, Cell.Blank);
+        Array.Fill(_back, Cell.Blank);
+    }
+
+    // ScreenHost's own resize detection (Console.WindowWidth/Height changed since the last frame) --
+    // every screen already recomputes its own layout fresh from Width/Height on every Draw call (no
+    // screen in this project caches a size once and reuses it, GalaxyMapScreen's initial viewport
+    // centering aside), so reallocating here and letting the next Draw()/Present() cycle repaint from
+    // scratch is the whole fix. Front and back both reset to blank rather than trying to preserve or
+    // remap old content across a size change that no caller asked for.
+    public void Resize(int width, int height)
+    {
+        _width = width;
+        _height = height;
         _front = new Cell[width * height];
         _back = new Cell[width * height];
         Array.Fill(_front, Cell.Blank);

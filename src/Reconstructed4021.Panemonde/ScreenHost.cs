@@ -52,6 +52,28 @@ public static class ScreenHost
 
             while (!runner.Quit)
             {
+                // Real terminal windows resize live -- redirected output (the driver, a piped/logged
+                // run) never does, and Console.WindowWidth/Height either throw or return meaningless
+                // values there, so this only ever runs against a real console. Cheap enough (two
+                // property reads) to check every frame rather than on some poll interval.
+                if (!Console.IsOutputRedirected)
+                {
+                    var currentWidth = Console.WindowWidth;
+                    var currentHeight = Console.WindowHeight;
+                    if (currentWidth != runner.FrameBuffer.Width || currentHeight != runner.FrameBuffer.Height)
+                    {
+                        runner.FrameBuffer.Resize(currentWidth, currentHeight);
+
+                        // A real clear, not just relying on Present()'s own diff: growing the window
+                        // exposes real terminal cells our own front/back buffers have never touched --
+                        // if the next frame's content there also happens to be blank, Present() would
+                        // treat back==front and skip writing it, leaving whatever stale glass content
+                        // (or the terminal's own default fill) showing through uncleared.
+                        Console.Out.Write("\x1b[2J");
+                        Console.Out.Flush();
+                    }
+                }
+
                 while (keys.TryDequeue(out var key))
                 {
                     runner.HandleKey(key);
