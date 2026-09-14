@@ -597,22 +597,35 @@ internal sealed class GalaxyMapScreen : IScreen
     // Fleet menu > Transfer (FLTCOMM.PAS: TransferFleetCommand) -- the same Resource Distribution
     // Editor Deploy uses, between one of the player's own fleets and whatever PickGround picks as the
     // other side (any owner).
-    // GameShell.ResolveFleetContextAction: C/T/J/R, the four Fleet/Ministry-of-War commands reachable
+    // GameShell.ResolveFleetContextAction: C/T/J/A/R, the five Fleet/Ministry-of-War commands reachable
     // directly off an already-selected owned fleet in CloseUpOverlay and the sector object picker. D
     // (Deploy) isn't here -- CloseUpOverlay/the sector picker never carry a source object Tui2's own
     // Deploy flow can consume directly (it only launches from a world picked via the map cursor, not an
     // existing fleet), so wiring D would mean building that fleet-source deploy path first, not just
-    // pointing at an existing method. A (Attack) isn't here either -- Attack lives on the Ministry of
-    // War menu instead (same as tui1's own BuildMenus), and wiring a same-sector shortcut here as well
-    // isn't something the user has asked for.
-    private Action<Fleet>? ResolveFleetContextAction(char letter) => letter switch
+    // pointing at an existing method. A (Attack) is gated on HasAttackTarget -- a port-only refinement
+    // over tui1's own FleetActionHint (which shows it unconditionally for any owned fleet) per the
+    // user's own explicit request: no point offering Attack from a fleet sitting somewhere with nothing
+    // to hit.
+    private Action<Fleet>? ResolveFleetContextAction(char letter, Fleet fleet) => letter switch
     {
         'C' => ChangeDestination,
         'T' => TransferFleet,
         'J' => AbortJoinFleet,
+        'A' => HasAttackTarget(fleet) ? Attack : null,
         'R' => RefuelFleet,
         _ => null,
     };
+
+    // Shared by ObjectPickerOverlay/CloseUpOverlay's own fleet-action hint lines: built from whichever
+    // letters resolve actually resolves for this fleet right now, rather than a fixed string, so the
+    // hint can never drift out of sync with what a keypress would actually do (A:attack in particular,
+    // now that it's conditionally available).
+    internal static string FleetActionHint(Fleet fleet, Func<char, Fleet, Action<Fleet>?> resolve) =>
+        string.Join("  ", FleetActionLabels.Where(l => resolve(l.Letter, fleet) is not null).Select(l => $"{l.Letter}:{l.Label}"));
+
+    private static readonly (char Letter, string Label)[] FleetActionLabels = [
+        ('C', "dest"), ('T', "transfer"), ('J', "abort/join"), ('A', "attack"), ('R', "refuel"),
+    ];
 
     private void TransferFleet() => PickOwnFleetAtCursor("Transfer Fleet", TransferFleet);
 
@@ -798,7 +811,7 @@ internal sealed class GalaxyMapScreen : IScreen
     private void FindAttackTarget(Fleet attacker, Action<ISectorObject> onTargetFound)
     {
         var location = attacker.Location;
-        var enemyFleets = _fleetsByLocation[location].Where(f => !ReferenceEquals(f.Owner, _player) && Game.Scouted(_player, f)).ToList();
+        var enemyFleets = EnemyFleetsAt(location);
 
         if (enemyFleets.Count > 1)
         {
@@ -817,6 +830,18 @@ internal sealed class GalaxyMapScreen : IScreen
         }
 
         onTargetFound(target);
+    }
+
+    private List<Fleet> EnemyFleetsAt(Coordinate location) =>
+        _fleetsByLocation[location].Where(f => !ReferenceEquals(f.Owner, _player) && Game.Scouted(_player, f)).ToList();
+
+    // Per the user's own explicit request: the sector picker/Close Up's own Attack shortcut should only
+    // be offered when this fleet actually has somewhere to point it -- same target-existence check
+    // FindAttackTarget itself uses, without resolving (or picking, for 2+ enemy fleets) an actual one.
+    private bool HasAttackTarget(Fleet attacker)
+    {
+        var location = attacker.Location;
+        return EnemyFleetsAt(location).Count > 0 || (_objectsByLocation.TryGetValue(location, out var obj) && !ReferenceEquals(obj.Owner, _player));
     }
 
     private void Attack() => PickOwnFleetAtCursor("Attack", Attack);

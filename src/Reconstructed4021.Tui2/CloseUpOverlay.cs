@@ -47,14 +47,14 @@ internal sealed class CloseUpOverlay : IOverlay
     private readonly Game _game;
     private readonly Action<string, string> _showInfo;
     private readonly Action<IOverlay> _push;
-    private readonly Func<char, Action<Fleet>?> _resolveFleetAction;
+    private readonly Func<char, Fleet, Action<Fleet>?> _resolveFleetAction;
     private readonly TabKind[] _tabKinds;
     private readonly TabFrame _frame;
     private readonly TextEditor? _ordersEditor;
 
     public bool IsDismissed { get; private set; }
 
-    public CloseUpOverlay(ISectorObject obj, Empire viewer, Game game, Action<string, string> showInfo, Action<IOverlay> push, Func<char, Action<Fleet>?> resolveFleetAction)
+    public CloseUpOverlay(ISectorObject obj, Empire viewer, Game game, Action<string, string> showInfo, Action<IOverlay> push, Func<char, Fleet, Action<Fleet>?> resolveFleetAction)
     {
         _obj = obj;
         _viewer = viewer;
@@ -103,7 +103,7 @@ internal sealed class CloseUpOverlay : IOverlay
         }
 
         if (_obj is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, _viewer) &&
-            _resolveFleetAction(char.ToUpperInvariant(key.KeyChar)) is { } action)
+            _resolveFleetAction(char.ToUpperInvariant(key.KeyChar), ownFleet) is { } action)
         {
             IsDismissed = true;
             action(ownFleet);
@@ -256,11 +256,9 @@ internal sealed class CloseUpOverlay : IOverlay
         var fleetOwned = fleet is not null && ReferenceEquals(fleet.Owner, _viewer);
         var worldOwned = _obj is IEconomicWorld ownedWorld && ReferenceEquals(ownedWorld.Owner, _viewer);
         At(1, 17, fleetOwned
-            // D (Deploy) and A (Attack) are deliberately absent: Deploy has no path here from an
-            // existing fleet (it only launches from a world picked via the map cursor), and Attack
-            // itself was never ported to Tui2 -- both their own follow-on slice, see
-            // GalaxyMapScreen.ResolveFleetContextAction's own doc comment.
-            ? "Ctrl+PgUp/PgDn: Orders tab   C:dest  T:transfer  J:abort/join  R:refuel"
+            // D (Deploy) is deliberately absent: Deploy has no path here from an existing fleet (it
+            // only launches from a world picked via the map cursor) -- its own follow-on slice.
+            ? $"Ctrl+PgUp/PgDn: Orders tab   {GalaxyMapScreen.FleetActionHint(fleet!, _resolveFleetAction)}"
             : worldOwned
                 ? "(world actions not wired up yet -- any key closes)"
                 : "(any key closes)");

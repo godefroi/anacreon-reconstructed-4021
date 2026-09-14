@@ -15,7 +15,7 @@ internal sealed class ObjectPickerOverlay : IOverlay
     private readonly ListBox<ISectorObject> _list;
     private readonly Empire _viewer;
     private readonly Action<ISectorObject> _onChosen;
-    private readonly Func<char, Action<Fleet>?>? _resolveFleetAction;
+    private readonly Func<char, Fleet, Action<Fleet>?>? _resolveFleetAction;
 
     public bool IsDismissed { get; private set; }
 
@@ -23,7 +23,7 @@ internal sealed class ObjectPickerOverlay : IOverlay
     // "this is the target" at every other call site (PickGround, PickOwnFleetAtCursor's own fleet-only
     // picker), so C/T/J/R must not double as fleet-command shortcuts there, matching tui1's own
     // ShowObjectPicker(allowFleetActions:) gating.
-    public ObjectPickerOverlay(IReadOnlyList<ISectorObject> objects, Empire viewer, Action<ISectorObject> onChosen, Func<char, Action<Fleet>?>? resolveFleetAction = null)
+    public ObjectPickerOverlay(IReadOnlyList<ISectorObject> objects, Empire viewer, Action<ISectorObject> onChosen, Func<char, Fleet, Action<Fleet>?>? resolveFleetAction = null)
     {
         _viewer = viewer;
         _onChosen = onChosen;
@@ -46,7 +46,7 @@ internal sealed class ObjectPickerOverlay : IOverlay
 
         if (_resolveFleetAction is not null && !key.Modifiers.HasFlag(ConsoleModifiers.Control) &&
             _list.SelectedItem is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, _viewer) &&
-            _resolveFleetAction(char.ToUpperInvariant(key.KeyChar)) is { } action)
+            _resolveFleetAction(char.ToUpperInvariant(key.KeyChar), ownFleet) is { } action)
         {
             IsDismissed = true;
             action(ownFleet);
@@ -78,7 +78,7 @@ internal sealed class ObjectPickerOverlay : IOverlay
         // the row it occupies is unconditionally reserved.
         var reservesHintRow = _resolveFleetAction is not null;
         var hint = reservesHintRow && _list.SelectedItem is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, _viewer)
-            ? "C:dest  T:transfer  J:abort/join  R:refuel"
+            ? GalaxyMapScreen.FleetActionHint(ownFleet, _resolveFleetAction!)
             : "";
 
         var width = Math.Min(Width, fb.Width);
