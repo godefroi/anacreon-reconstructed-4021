@@ -215,15 +215,15 @@ internal sealed class GalaxyMapScreen : IScreen
         ]),
         new MenuBar.TopItem("_Fleet", [
             new MenuBar.Item("_Deploy", DeployFleet),
-            new MenuBar.Item("_Change Destination", Stub),
+            new MenuBar.Item("_Change Destination", ChangeDestination),
             new MenuBar.Item("_Transfer", TransferFleet),
             new MenuBar.Item("_Abort/Join", AbortJoinFleet),
-            new MenuBar.Item("_Refuel", Stub),
-            new MenuBar.Item("_SRM Sweep", Stub),
-            new MenuBar.Item("_Orders", Stub),
-            new MenuBar.Item("Canc_el Orders", Stub),
-            new MenuBar.Item("Res_upply", Stub),
-            new MenuBar.Item("_Probe", Stub),
+            new MenuBar.Item("_Refuel", RefuelFleet),
+            new MenuBar.Item("_SRM Sweep", SrmSweep),
+            new MenuBar.Item("_Orders", Stub), // needs a multi-line order-script editor -- its own slice.
+            new MenuBar.Item("Canc_el Orders", Stub), // trivial once Orders itself exists (clear the same queue).
+            new MenuBar.Item("Res_upply", Stub), // its own fleet-order template -- deferred alongside Orders.
+            new MenuBar.Item("_Probe", LaunchProbe),
         ]),
         new MenuBar.TopItem("_Build", [
             new MenuBar.Item("_Site Status", Stub),
@@ -504,7 +504,8 @@ internal sealed class GalaxyMapScreen : IScreen
     /// even for a single candidate (unlike ExamineCursor's own auto-pick-on-1) -- GetGround has no such
     /// shortcut either.
     /// </summary>
-    private void PickGround(Fleet source, bool playerOnly, bool includeFleet, string title, string emptyMessage, Action<ISectorObject> onPicked)
+    private void PickGround(Fleet source, bool playerOnly, bool includeFleet, string title, string emptyMessage, Action<ISectorObject> onPicked,
+        Func<ISectorObject, bool>? exclude = null, string? excludedEmptyMessage = null)
     {
         var ownFleets = new List<ISectorObject>();
         var enemyFleets = new List<ISectorObject>();
@@ -555,6 +556,16 @@ internal sealed class GalaxyMapScreen : IScreen
         {
             ShowInfo(title, emptyMessage);
             return;
+        }
+
+        if (exclude is not null)
+        {
+            candidates = candidates.Where(c => !exclude(c)).ToList();
+            if (candidates.Count == 0)
+            {
+                ShowInfo(title, excludedEmptyMessage ?? emptyMessage);
+                return;
+            }
         }
 
         _overlays.Add(new ObjectPickerOverlay(candidates, _player, onPicked));
@@ -643,6 +654,107 @@ internal sealed class GalaxyMapScreen : IScreen
 
         FleetLifecycle.AbortFleet(fleet, groundHolder, _game);
         Refresh();
+    }
+
+    // Fleet menu > Change Destination (FLTCOMM.PAS: ChangeDestinationCommand, :614-630): reuses the
+    // same map-cursor destination pick Deploy's own XYParm step uses. FleetLifecycle.SetFleetDestination
+    // is unconditional -- no legality check beyond "a coordinate" -- works whether the fleet is Ready
+    // or already InTransit.
+    private void ChangeDestination() => PickOwnFleetAtCursor("Change Destination", fleet =>
+        BeginPick("Change Destination -- move cursor to new destination, Enter: select, Esc: cancel",
+            destination =>
+            {
+                FleetLifecycle.SetFleetDestination(fleet, destination);
+                Refresh();
+            }));
+
+    // Fleet menu > Refuel (FLTCOMM.PAS: RefuelFleetCommand): PickGround restricted to the player's own
+    // (IncludeFleet lets the fleet refuel from trillum already in its own cargo), excluding any
+    // candidate with nothing to actually refuel from, then a numeric prompt for tons of trillum.
+    private void RefuelFleet() => PickOwnFleetAtCursor("Refuel Fleet", fleet =>
+        PickGround(fleet, playerOnly: true, includeFleet: true, "Refuel Fleet",
+            "There is no world or fleet of yours here to refuel from.",
+            ground => PromptForTrillum(fleet, (IShipCargoHolder)ground),
+            exclude: ground => FleetLifecycle.MaxTrillumToRefuel(fleet, (IShipCargoHolder)ground) <= 0,
+            excludedEmptyMessage: "There is no trillum available to refuel with."));
+
+    // GetTrillumToUse (FLTCOMM.PAS:692-724): 0 (or a blank field) defaults to the max; out-of-range
+    // re-prompts with an error instead of closing -- reopened as a fresh TextPromptOverlay with the
+    // error folded into its label, since that widget has no separate error slot of its own.
+    private void PromptForTrillum(Fleet fleet, IShipCargoHolder ground, string? errorPrefix = null)
+    {
+        var maxTri = FleetLifecycle.MaxTrillumToRefuel(fleet, ground);
+        var label = (errorPrefix is null ? "" : errorPrefix + " ") + $"Tons of trillum (max {maxTri}, 0 = max):";
+
+        _overlays.Add(new TextPromptOverlay("Refuel Fleet", label, string.Empty, text =>
+        {
+            if (!int.TryParse(text, out var amount) && text.Length > 0)
+            {
+                PromptForTrillum(fleet, ground, "Enter a whole number of tons.");
+                return;
+            }
+
+            if (amount == 0)
+            {
+                amount = maxTri;
+            }
+            else if (amount < 0)
+            {
+                PromptForTrillum(fleet, ground, "That is a most bizarre request.");
+                return;
+            }
+            else if (amount > maxTri)
+            {
+                PromptForTrillum(fleet, ground, $"The maximum amount allowable is {maxTri} tons.");
+                return;
+            }
+
+            FleetLifecycle.RefuelFleet(fleet, ground, amount);
+            Refresh();
+        }));
+    }
+
+    // Fleet menu > SRM Sweep (FLTCOMM.PAS: SrmSweepCommand): clears any mine at the fleet's own
+    // location -- AddNews only fires when the mine belonged to someone else.
+    private void SrmSweep() => PickOwnFleetAtCursor("SRM Sweep", fleet =>
+    {
+        var location = fleet.Location;
+        var mineOwner = _game.Galaxy.GetMineOwner(location);
+        if (mineOwner is null)
+        {
+            ShowInfo("SRM Sweep", "No SRMs found.");
+            return;
+        }
+
+        if (!ReferenceEquals(mineOwner, _player))
+        {
+            mineOwner.AddNews(NewsType.MineFieldCleared, position: location, otherEmpire: _player);
+        }
+
+        _game.Galaxy.ClearMine(location);
+        _game.Galaxy.ClearMineScouted(location);
+        Refresh();
+        ShowInfo("SRM Sweep", "Mine sweeping completed.");
+    });
+
+    // Fleet menu > Probe (FLTCOMM.PAS: LaunchProbeCommand, :761-786): unlike every other Fleet-menu
+    // command, real Pascal never ties this to a specific fleet -- just a destination coordinate,
+    // reusing the map cursor the same way Deploy's own destination pick does, with no source-fleet
+    // step first.
+    private void LaunchProbe()
+    {
+        if (_player.ProbesInTransit.Count >= Empire.MaxProbesInTransit)
+        {
+            ShowInfo("Probe", "There are no more probes available.");
+            return;
+        }
+
+        BeginPick("Launch Probe -- move cursor to target, Enter: select, Esc: cancel", destination =>
+        {
+            var probeNumber = _player.ProbesInTransit.Count + 1;
+            _player.TryLaunchProbe(destination);
+            ShowInfo("Probe", $"Probe {probeNumber} of {Empire.MaxProbesInTransit} sent.");
+        });
     }
 
     private void HandleSavePromptKey(ConsoleKeyInfo key)
