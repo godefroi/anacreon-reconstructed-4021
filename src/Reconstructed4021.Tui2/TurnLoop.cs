@@ -118,7 +118,7 @@ internal static class TurnLoop
         lines.Add("");
         foreach (var ship in Enum.GetValues<ShipType>())
         {
-            lines.Add($"{ShipThingName(ship),24}: {report.TotalShips[ship],6}");
+            lines.Add($"{new ResourceKind.Ship(ship).DisplayName,24}: {report.TotalShips[ship],6}");
         }
 
         return string.Join('\n', lines);
@@ -145,19 +145,6 @@ internal static class TurnLoop
 
         return sb.ToString();
     }
-
-    // ThingNames (DATACNST.PAS:100-112), fgt..trn only.
-    private static string ShipThingName(ShipType ship) => ship switch
-    {
-        ShipType.Fighter => "fighter squadrons",
-        ShipType.HunterKiller => "hunter-killers",
-        ShipType.Jumpship => "jumpships",
-        ShipType.Jumptransport => "jumptransports",
-        ShipType.Penetrator => "penetrators",
-        ShipType.Starship => "starships",
-        ShipType.Transport => "transports",
-        _ => throw new ArgumentOutOfRangeException(nameof(ship)),
-    };
 
     // EmpireNews (PROLOG.PAS:456-488), the "Capital Fallen Report" -- transcribed verbatim from
     // Reconstructed4021.Tui's own Program.cs.
