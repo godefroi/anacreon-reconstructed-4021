@@ -12,11 +12,13 @@ namespace Reconstructed4021.Tui2;
 // WorldInfoWindow, ported from Reconstructed4021.Tui: one of the player's own worlds, shown as a
 // TabFrame with Close Up/Production/Designate always present and ISSP/Redirect added only for a
 // Planet (a starbase has no settable ISSP dial or redirection field to edit -- see
-// WorldCloseUpTabView/RedirectTabView's own doc comments). Unlike CloseUpOverlay, only Esc dismisses
-// this -- every other key belongs to whichever tab is showing (arrows/Enter for its own editing).
+// WorldCloseUpTabView/RedirectTabView's own doc comments). Esc dismisses and D:Deploy is intercepted
+// globally regardless of which tab is showing (matching GameShell.ShowWorldInfo's own external
+// window.KeyDown handler, which runs the same way ahead of any tab-specific key handling) -- every
+// other key belongs to whichever tab is showing (arrows/Enter for its own editing).
 //
 // Deliberately deferred: Redirect's destination pick (a new cross-screen map-cursor input mode, not a
-// port of anything -- its own slice), D:Deploy and F2:Rename (same scope cut CloseUpOverlay made).
+// port of anything -- its own slice) and F2:Rename (same scope cut CloseUpOverlay made).
 internal sealed class WorldInfoOverlay : IOverlay
 {
     private const int FrameWidth = 88;
@@ -38,6 +40,7 @@ internal sealed class WorldInfoOverlay : IOverlay
     private readonly Action _refresh;
     private readonly Action<string, string> _showInfo;
     private readonly Action<IOverlay> _push;
+    private readonly Action<IEconomicWorld> _deployFleet;
 
     private readonly TabKind[] _tabKinds;
     private readonly TabFrame _frame;
@@ -52,7 +55,7 @@ internal sealed class WorldInfoOverlay : IOverlay
     public bool IsDismissed { get; private set; }
 
     public WorldInfoOverlay(IEconomicWorld world, Empire viewer, Game game, Random random,
-        Action refresh, Action<string, string> showInfo, Action<IOverlay> push, string initialTab = "Close Up")
+        Action refresh, Action<string, string> showInfo, Action<IOverlay> push, Action<IEconomicWorld> deployFleet, string initialTab = "Close Up")
     {
         _world = world;
         _viewer = viewer;
@@ -61,6 +64,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         _refresh = refresh;
         _showInfo = showInfo;
         _push = push;
+        _deployFleet = deployFleet;
 
         var isPlanet = world is Planet;
         List<TabKind> kinds = [TabKind.CloseUp, TabKind.Production];
@@ -116,6 +120,15 @@ internal sealed class WorldInfoOverlay : IOverlay
         if (key.Key == ConsoleKey.Escape)
         {
             IsDismissed = true;
+            return;
+        }
+
+        // Ctrl+PageUp/PageDown already went through _frame.HandleKey above; anything else with Ctrl
+        // held falls through here and must never match the bare 'D' check below.
+        if (!key.Modifiers.HasFlag(ConsoleModifiers.Control) && char.ToUpperInvariant(key.KeyChar) == 'D')
+        {
+            IsDismissed = true;
+            _deployFleet(_world);
             return;
         }
 
@@ -230,7 +243,7 @@ internal sealed class WorldInfoOverlay : IOverlay
             }
         }
 
-        At(1, ch - 1, "Esc: close");
+        At(1, ch - 1, "D: deploy   Esc: close");
     }
 
     // ProductionWindow.Rebuild -- recomputed only when the Production tab becomes active or a value

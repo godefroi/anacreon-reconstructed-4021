@@ -352,7 +352,7 @@ internal sealed class GalaxyMapScreen : IScreen
     {
         if (obj is IEconomicWorld ownWorld && ReferenceEquals(ownWorld.Owner, _player))
         {
-            _overlays.Add(new WorldInfoOverlay(ownWorld, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, initialTab));
+            _overlays.Add(new WorldInfoOverlay(ownWorld, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, initialTab));
             return;
         }
 
@@ -367,7 +367,7 @@ internal sealed class GalaxyMapScreen : IScreen
     {
         if (_objectsByLocation.TryGetValue(_cursor, out var obj) && obj is IEconomicWorld world && ReferenceEquals(world.Owner, _player))
         {
-            _overlays.Add(new WorldInfoOverlay(world, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, tab));
+            _overlays.Add(new WorldInfoOverlay(world, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, tab));
             return;
         }
 
@@ -389,15 +389,26 @@ internal sealed class GalaxyMapScreen : IScreen
         return result.Where(o => Game.Visible(_player, o)).ToList();
     }
 
-    // LaunchFleetCommand's own real parameter order (FLTCOMM.PAS): name, then source (map-cursor pick
-    // -- Fleet menu > Deploy has no context object to launch from), then destination, then composition
-    // last. The context-object shortcuts (Deploy from a Close Up/Sector Picker selection) aren't wired
-    // up yet -- their own follow-on slice, same cut CloseUpOverlay's own D-key note already flagged.
+    // LaunchFleetCommand's own real parameter order (FLTCOMM.PAS): name, then source, then destination,
+    // then composition last. Name is always asked first regardless of which overload is used, matching
+    // that same real parameter order (name before source is ever validated).
     private void DeployFleet()
     {
         _overlays.Add(new TextPromptOverlay("Name This Fleet", "Fleet name (optional):", string.Empty, name =>
             BeginPick("Deploy Fleet -- move cursor to a world to launch from, Enter: select, Esc: cancel",
                 location => PickDeploySource(location, name)),
+            maxLength: 40, borderFg: ConsoleColor.Gray, borderBg: ConsoleColor.Black));
+    }
+
+    // Contextual Deploy from an owned world's own Close Up (WorldInfoOverlay's D shortcut): that world
+    // is already the deploy source, no map-cursor source pick needed -- GameShell.DeployFleet(ISectorObject)'s
+    // own equivalent, narrowed to a world since that's the only source WorldInfoOverlay can ever offer
+    // (a Fleet source would need FleetLifecycle.DeployFleet to accept a Fleet, which nothing here wires
+    // up yet -- CloseUpOverlay's own D-key note already flagged that as its own follow-on slice).
+    private void DeployFleet(IEconomicWorld source)
+    {
+        _overlays.Add(new TextPromptOverlay("Name This Fleet", "Fleet name (optional):", string.Empty, name =>
+            ValidateDeploySource(source, name),
             maxLength: 40, borderFg: ConsoleColor.Gray, borderBg: ConsoleColor.Black));
     }
 
