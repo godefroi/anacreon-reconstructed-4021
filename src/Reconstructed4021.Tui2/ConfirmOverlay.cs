@@ -3,10 +3,14 @@ using Reconstructed4021.Panemonde.Widgets;
 
 namespace Reconstructed4021.Tui2;
 
-// GameShell.ShowConfirm/DosDialogWindow's own Yes/No shape -- Enter confirms, Esc/anything else
-// declines. Pushed on top of whatever overlay asked for the confirmation (e.g. WorldInfoOverlay's own
-// Designate risk warnings); the overlay stack's own top-only routing means the overlay underneath
-// never sees a key while this is up.
+// GameShell.ShowConfirm/DosDialogWindow's own Yes/No shape -- real Pascal's own AttentionWindow
+// (WND.PAS:558-614) is actually "Esc cancels, any other key confirms", but DosDialogWindow's own doc
+// comment explains why tui1 departed from that: several callers (e.g. GameShell.BeginAttack's "Standard
+// battle configuration?") need to tell an explicit No apart from Esc/cancel, which "any key confirms"
+// can't express. Y or Enter confirms, N or Esc declines, anything else is ignored and the dialog stays
+// open -- ported from that same departure, not from AttentionWindow directly. Pushed on top of whatever
+// overlay asked for the confirmation (e.g. WorldInfoOverlay's own Designate risk warnings); the overlay
+// stack's own top-only routing means the overlay underneath never sees a key while this is up.
 internal sealed class ConfirmOverlay : IOverlay
 {
     private readonly string _title;
@@ -24,11 +28,26 @@ internal sealed class ConfirmOverlay : IOverlay
 
     public void HandleKey(ConsoleKeyInfo key)
     {
-        IsDismissed = true;
-        _onAnswered(key.Key == ConsoleKey.Enter);
+        var letter = char.ToUpperInvariant(key.KeyChar);
+        if (key.Key == ConsoleKey.Enter || letter == 'Y')
+        {
+            IsDismissed = true;
+            _onAnswered(true);
+            return;
+        }
+
+        if (key.Key == ConsoleKey.Escape || letter == 'N')
+        {
+            IsDismissed = true;
+            _onAnswered(false);
+            return;
+        }
+
+        // Any other key is ignored -- matches DosDialogWindow's own behavior of staying open rather
+        // than treating an unrecognized key as an implicit No.
     }
 
-    private const string Hint = "Enter: yes   any other key: no";
+    private const string Hint = "(Y)es / (N)o   Esc: cancel";
 
     public void Draw(FrameBuffer fb)
     {
