@@ -108,6 +108,7 @@ internal sealed class GalaxyMapScreen : IScreen
         _empireColors = BuildEmpireColors(game.Empires, player);
         _menuBar = new MenuBar(BuildMenus());
 
+        ScreenHost.SetTitle($"Anacreon - {player.Name}");
         RebuildIndex();
     }
 

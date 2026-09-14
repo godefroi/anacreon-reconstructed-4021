@@ -20,19 +20,7 @@ public static class ScreenHost
         }
 
         Console.CursorVisible = false;
-
-        // Cosmetic only, so a terminal/environment that can't set it (redirected output, an unusual
-        // console host) shouldn't take the whole run down over it.
-        if (!Console.IsOutputRedirected)
-        {
-            try
-            {
-                Console.Title = "Anacreon";
-            }
-            catch (PlatformNotSupportedException)
-            {
-            }
-        }
+        SetTitle("Anacreon");
 
         var width = Console.IsOutputRedirected ? 120 : Console.WindowWidth;
         var height = Console.IsOutputRedirected ? 30 : Console.WindowHeight;
@@ -133,5 +121,24 @@ public static class ScreenHost
         Console.Out.Write("\x1b[?1049l"); // leave alternate screen buffer, restoring the user's scrollback.
         Console.Out.Flush();
         Console.CursorVisible = true;
+    }
+
+    // Cosmetic only, so a terminal/environment that can't set it (redirected output, an unusual
+    // console host) shouldn't take the whole run down over it. Called both at startup (plain
+    // "Anacreon") and once a game loads (GalaxyMapScreen, "Anacreon - {empire name}").
+    public static void SetTitle(string title)
+    {
+        if (Console.IsOutputRedirected)
+        {
+            return;
+        }
+
+        try
+        {
+            Console.Title = title;
+        }
+        catch (PlatformNotSupportedException)
+        {
+        }
     }
 }
