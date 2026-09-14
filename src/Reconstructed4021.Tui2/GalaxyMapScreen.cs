@@ -449,8 +449,7 @@ internal sealed class GalaxyMapScreen : IScreen
         var groundCargo = CloneCargo(source.Cargo);
         var fleetShips = new ShipCounts();
         var fleetCargo = new CargoHold();
-        var sourceObj = (ISectorObject)source;
-        var sourceName = sourceObj.Names.GetValueOrDefault(_player) ?? CloseUpOverlay.DescribeLocation(sourceObj, _player);
+        var sourceName = CloseUpOverlay.DisplayName((ISectorObject)source, _player);
 
         _overlays.Add(new ResourceDistributionOverlay(
             $"Deploy Fleet from {sourceName}", fleetShips, fleetCargo, groundShips, groundCargo,
@@ -632,8 +631,8 @@ internal sealed class GalaxyMapScreen : IScreen
         var fleetCargo = CloneCargo(fleet.Cargo);
         var groundShips = CloneShips(groundHolder.Ships);
         var groundCargo = CloneCargo(groundHolder.Cargo);
-        var fleetName = fleet.Names.GetValueOrDefault(_player) ?? CloseUpOverlay.DescribeLocation(fleet, _player);
-        var groundName = ground.Names.GetValueOrDefault(_player) ?? CloseUpOverlay.DescribeLocation(ground, _player);
+        var fleetName = CloseUpOverlay.DisplayName(fleet, _player);
+        var groundName = CloseUpOverlay.DisplayName(ground, _player);
 
         _overlays.Add(new ResourceDistributionOverlay(
             $"Transfer -- {fleetName} <-> {groundName}", fleetShips, fleetCargo, groundShips, groundCargo,
@@ -665,7 +664,7 @@ internal sealed class GalaxyMapScreen : IScreen
     {
         if (!ReferenceEquals(ground.Owner, _player))
         {
-            var groundName = ground.Names.GetValueOrDefault(_player) ?? CloseUpOverlay.DescribeLocation(ground, _player);
+            var groundName = CloseUpOverlay.DisplayName(ground, _player);
             _overlays.Add(new ConfirmOverlay("Abort/Join Fleet",
                 $"{groundName} is not part of your empire. Are you sure you want to abort the fleet?",
                 yes =>
@@ -858,20 +857,15 @@ internal sealed class GalaxyMapScreen : IScreen
     // was configured rather than pretending to resolve a battle it can't actually run.
     private void StartEngagement(Fleet attacker, ISectorObject target, IReadOnlyList<GroupRecord> groups)
     {
+        // AttackCommand's own IF NoOfGroups>0 (ATTCOMM.PAS:1619) -- zero groups skips the battle
+        // entirely, matching real Pascal exactly rather than fighting an empty engagement.
         if (groups.Count == 0)
         {
             return;
         }
 
-        var lines = groups.Select(g =>
-        {
-            var line = $"Group: {g.Num} {g.Typ.ToResourceKind().DisplayName}";
-            return g.Gat > 0 ? $"{line} ({g.Gat} {g.GatTyp!.Value.ToResourceKind().DisplayName})" : line;
-        });
-
-        ShowInfo("Attack", $"{groups.Count} group{(groups.Count == 1 ? "" : "s")} ready to attack {DisplayName(target)}.\n" +
-            "(Tactical Battle Display is not wired up yet -- the battle itself has not been fought.)\n\n" +
-            string.Join('\n', lines));
+        var state = InteractiveCombat.BeginEngagement(_player, (IShipCargoHolder)target, [.. groups]);
+        NextScreen = new TacticalBattleScreen(_game, _player, _context, attacker, target, state);
     }
 
     private void AutoAttack() => PickOwnFleetAtCursor("Auto Attack", AutoAttack);
@@ -917,21 +911,13 @@ internal sealed class GalaxyMapScreen : IScreen
         AttackResultType.AttackerRetreats => $"I'm sorry, {MyLord()}, the fleet was forced to retreat.",
         AttackResultType.DefenderConquered => subject is Fleet
             ? $"The enemy fleet has been destroyed, {MyLord()}."
-            : SovereigntyDeclaration(subject),
+            : Honorifics.SovereigntyDeclaration(_player, subject),
         _ => $"Result: {result}",
     };
 
-    private string SovereigntyDeclaration(ISectorObject subject)
-    {
-        var empireName = _player.Name;
-        var noun = subject switch { Fleet => "fleet", Starbase => "starbase", _ => "planet" };
-        var lord = _player.IsEmpress ? "Her Imperial Majesty, Lady" : "His Imperial Majesty, Lord";
-        return $"In the name of {lord} of {empireName}, I hereby declare\nthis {noun} to be under the sovereign jurisdiction of the\n{empireName} Empire.";
-    }
-
     private string MyLord() => Honorifics.MyLord(_player.IsEmpress);
 
-    private string DisplayName(ISectorObject obj) => obj.Names.GetValueOrDefault(_player) ?? CloseUpOverlay.DescribeLocation(obj, _player);
+    private string DisplayName(ISectorObject obj) => CloseUpOverlay.DisplayName(obj, _player);
 
     // GameShell.ConfirmQuit: real Quit (PLAYTURN.PAS's XXXCom) only unwinds back to the main menu, not
     // a full process exit.
