@@ -11,7 +11,7 @@ public sealed class SaveGamePickerScreen : IScreen
 {
     public sealed record SaveChoice(string Path, string DisplayName);
 
-    private readonly ListBox<SaveChoice> _list;
+    private ListBox<SaveChoice> _list;
     private readonly NewGameContext _context;
     private readonly Starfield _starfield = new();
 
@@ -40,6 +40,12 @@ public sealed class SaveGamePickerScreen : IScreen
             return;
         }
 
+        if (key.Key == ConsoleKey.D && key.Modifiers.HasFlag(ConsoleModifiers.Control))
+        {
+            DeleteSelected();
+            return;
+        }
+
         switch (key.Key)
         {
             case ConsoleKey.Enter:
@@ -51,6 +57,25 @@ public sealed class SaveGamePickerScreen : IScreen
                 NextScreen = _context.MakeTitleScreen();
                 return;
         }
+    }
+
+    // Moves rather than deletes outright, so an accidental Ctrl+D is recoverable by hand -- deleted/
+    // sits alongside saves/ and auto/, and LoadSaves' own Directory.GetFiles calls are non-recursive, so
+    // it's never picked back up by the listing.
+    private void DeleteSelected()
+    {
+        var path = _list.SelectedItem!.Path;
+        var deletedDir = Path.Combine(_context.RepoRoot, "saves", "deleted");
+        Directory.CreateDirectory(deletedDir);
+
+        var destPath = Path.Combine(deletedDir, Path.GetFileName(path));
+        if (File.Exists(destPath))
+        {
+            destPath = Path.Combine(deletedDir, $"{Path.GetFileNameWithoutExtension(path)}-{DateTime.Now:yyyyMMddHHmmss}{Path.GetExtension(path)}");
+        }
+
+        File.Move(path, destPath);
+        _list = new ListBox<SaveChoice>(_context.LoadSaves(), choice => choice.DisplayName);
     }
 
     public void Update(TimeSpan elapsed) => _starfield.Update(elapsed);
@@ -69,6 +94,6 @@ public sealed class SaveGamePickerScreen : IScreen
                 Chrome.ContentFg, Chrome.ContentBg, ConsoleColor.Black, Chrome.ContentFg);
         }
 
-        fb.DrawText(box.X + 1, box.Y + box.Height - 2, "Enter: choose   Esc: back to main menu", Chrome.ContentFg, Chrome.ContentBg);
+        fb.DrawText(box.X + 1, box.Y + box.Height - 2, "Enter: choose   Ctrl+D: delete   Esc: back to main menu", Chrome.ContentFg, Chrome.ContentBg, maxWidth: box.Width - 2);
     }
 }
