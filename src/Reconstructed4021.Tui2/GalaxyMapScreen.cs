@@ -295,6 +295,28 @@ internal sealed class GalaxyMapScreen : IScreen
             return;
         }
 
+        switch (key.Key)
+        {
+            case ConsoleKey.F1:
+                _overlays.Add(new HelpOverlay(_overlays.Add));
+                return;
+            case ConsoleKey.F3:
+                _overlays.Add(new StatusOverlay(_game, _player, obj => OpenExamine(obj, "Close Up")));
+                return;
+            case ConsoleKey.F5:
+                _overlays.Add(new FleetOverlay(_game, _player, _origin, obj => OpenExamine(obj, "Close Up")));
+                return;
+            case ConsoleKey.F7:
+                _overlays.Add(new NewsOverlay(_player, _origin, obj => OpenExamine(obj, "Close Up")));
+                return;
+            case ConsoleKey.F8:
+                _overlays.Add(new EmpireOverlay(_game, _player, obj => OpenExamine(obj, "Close Up")));
+                return;
+            case ConsoleKey.F9:
+                OpenNames();
+                return;
+        }
+
         if (_menuBar.HandleKey(key))
         {
             return;
@@ -360,6 +382,27 @@ internal sealed class GalaxyMapScreen : IScreen
 
         _overlays.Add(new CloseUpOverlay(obj, _player, _game, ShowInfo, _overlays.Add, ResolveFleetContextAction));
     }
+
+    // GameShell.ShowNamesWindow: F2/F8 mutate in place and just refresh, but F3 (add a bookmark)
+    // genuinely needs the map cursor interactive, so NamesOverlay dismisses itself first and calls
+    // this back -- BeginPick's own doc comment requires the overlay stack already be empty by the
+    // time it's called, which is exactly the state right after that self-dismissal.
+    private void OpenNames() =>
+        _overlays.Add(new NamesOverlay(_game, _player, obj => OpenExamine(obj, "Close Up"), JumpToLocation, _overlays.Add, AddBookmark));
+
+    private void JumpToLocation(Coordinate location) => _cursor = location;
+
+    private void AddBookmark() =>
+        BeginPick("Add Bookmark -- move cursor to location, Enter: select, Esc: cancel", location =>
+            _overlays.Add(new TextPromptOverlay("Name Location", "Bookmark name:", string.Empty, name =>
+            {
+                if (name.Length > 0)
+                {
+                    _player.Bookmarks.Add(new LocationBookmark { Name = name, Location = location });
+                }
+
+                OpenNames();
+            })));
 
     // GameShell.Designate/Issp/Production: all three (and Close Up) route through the one
     // WorldInfoOverlay, just opened on a different starting tab -- unlike ExamineCursor, these only

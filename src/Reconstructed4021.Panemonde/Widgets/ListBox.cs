@@ -14,6 +14,11 @@ public sealed class ListBox<T>
     public int SelectedIndex { get; private set; }
     public T? SelectedItem => Items.Count > 0 ? Items[SelectedIndex] : default;
 
+    // Exposed for a caller that needs to mirror this list's own scroll position into a second,
+    // synced pane (Status/Fleet windows' own two-pane-per-row layout) instead of duplicating the
+    // clamping logic in Draw below.
+    public int ScrollOffset => _scrollOffset;
+
     private int _scrollOffset;
 
     public ListBox(IReadOnlyList<T> items, Func<T, string> format)

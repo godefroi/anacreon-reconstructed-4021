@@ -29,7 +29,7 @@ internal static class CloseUpWindowText
         _ => "----",
     };
 
-    private static readonly string[] FleetStatusNames = ["at destination", "In transit", "out of trillum", "lost"];
+    internal static readonly string[] FleetStatusNames = ["at destination", "In transit", "out of trillum", "lost"];
 
     internal static string DescribeFleetStatus(Fleet fleet, Empire viewer, Game game)
     {
