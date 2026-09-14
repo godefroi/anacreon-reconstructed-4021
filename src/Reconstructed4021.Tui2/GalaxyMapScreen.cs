@@ -515,9 +515,10 @@ internal sealed class GalaxyMapScreen : IScreen
     /// <summary>
     /// GameShell.PickGround (FLTCOMM.PAS's own GetGround): every candidate at <paramref name="source"/>'s
     /// own location that Transfer/Abort-Join can target -- the player's own fleets and world sort
-    /// first, then anyone else's, matching real Pascal's own display order. Always opens the picker,
-    /// even for a single candidate (unlike ExamineCursor's own auto-pick-on-1) -- GetGround has no such
-    /// shortcut either.
+    /// first, then anyone else's, matching real Pascal's own display order. Real GetGround always opens
+    /// the picker even for a single candidate; this port auto-picks it instead (same
+    /// PickOwnFleetAtCursor exactly-1-auto-picks convenience below), per the user's own explicit
+    /// request -- a deliberate deviation, not a restoration.
     /// </summary>
     private void PickGround(Fleet source, bool playerOnly, bool includeFleet, string title, string emptyMessage, Action<ISectorObject> onPicked,
         Func<ISectorObject, bool>? exclude = null, string? excludedEmptyMessage = null)
@@ -581,6 +582,12 @@ internal sealed class GalaxyMapScreen : IScreen
                 ShowInfo(title, excludedEmptyMessage ?? emptyMessage);
                 return;
             }
+        }
+
+        if (candidates.Count == 1)
+        {
+            onPicked(candidates[0]);
+            return;
         }
 
         _overlays.Add(new ObjectPickerOverlay(candidates, _player, onPicked));
