@@ -71,20 +71,26 @@ internal sealed class ObjectPickerOverlay : IOverlay
 
     public void Draw(FrameBuffer fb)
     {
-        var hint = _resolveFleetAction is not null && _list.SelectedItem is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, _viewer)
+        // reservesHintRow depends only on _resolveFleetAction (fixed for this overlay's whole
+        // lifetime), never on which item is currently highlighted -- the box's own size has to stay
+        // constant regardless of selection, or it visibly grows/shrinks by a row every time the
+        // highlight moves on/off an owned fleet. The hint text itself still varies per-selection; only
+        // the row it occupies is unconditionally reserved.
+        var reservesHintRow = _resolveFleetAction is not null;
+        var hint = reservesHintRow && _list.SelectedItem is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, _viewer)
             ? "C:dest  T:transfer  J:abort/join  R:refuel"
-            : null;
+            : "";
 
         var width = Math.Min(Width, fb.Width);
-        var height = Math.Min(_list.Items.Count + 2 + (hint is null ? 0 : 1), Math.Max(3, fb.Height - 2));
+        var height = Math.Min(_list.Items.Count + 2 + (reservesHintRow ? 1 : 0), Math.Max(3, fb.Height - 2));
         var x = Math.Max(0, (fb.Width - width) / 2);
         var y = Math.Max(0, (fb.Height - height) / 2);
 
         BoxDrawing.DrawSingleLine(fb, x, y, width, height, ConsoleColor.Gray, ConsoleColor.Black);
-        var listHeight = height - 2 - (hint is null ? 0 : 1);
+        var listHeight = height - 2 - (reservesHintRow ? 1 : 0);
         _list.Draw(fb, x + 1, y + 1, width - 2, listHeight, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
 
-        if (hint is not null)
+        if (reservesHintRow)
         {
             fb.DrawText(x + 1, y + 1 + listHeight, hint, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
         }
