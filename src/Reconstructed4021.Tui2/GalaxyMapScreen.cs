@@ -194,8 +194,8 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("_Status Hardcopy", Stub),
             new MenuBar.Item("Sa_ve", () => _savePrompt = new TextInputField($"{_player.Name}-{_game.Year}", maxLength: 60)),
             new MenuBar.Item("_Next Turn", Stub), // needs the whole per-empire turn loop -- its own slice.
-            new MenuBar.Item("_Quit", () => NextScreen = _context.MakeTitleScreen()), // no confirm dialog yet -- add one alongside a real dialog widget.
-            new MenuBar.Item("E_xit to OS", () => NextScreen = QuitScreen.Instance), // same no-confirm simplification as Quit above.
+            new MenuBar.Item("_Quit", ConfirmQuit),
+            new MenuBar.Item("E_xit to OS", ConfirmExitToOs),
         ]),
         new MenuBar.TopItem("_Empire", [
             new MenuBar.Item("_Send Message", Stub),
@@ -743,6 +743,30 @@ internal sealed class GalaxyMapScreen : IScreen
         ShowInfo("SRM Sweep", "Mine sweeping completed.");
     });
 
+    // GameShell.ConfirmQuit: real Quit (PLAYTURN.PAS's XXXCom) only unwinds back to the main menu, not
+    // a full process exit.
+    private void ConfirmQuit() =>
+        _overlays.Add(new ConfirmOverlay("Quit", "Are you sure you want to quit? You'll return to the main menu.",
+            yes =>
+            {
+                if (yes)
+                {
+                    NextScreen = _context.MakeTitleScreen();
+                }
+            }));
+
+    // GameShell.ConfirmExitToOs: no Pascal equivalent, a TUI-only convenience once Quit stopped exiting
+    // the app outright.
+    private void ConfirmExitToOs() =>
+        _overlays.Add(new ConfirmOverlay("Exit to OS", "Are you sure you want to exit to the operating system?",
+            yes =>
+            {
+                if (yes)
+                {
+                    NextScreen = QuitScreen.Instance;
+                }
+            }));
+
     // Fleet menu > Probe (FLTCOMM.PAS: LaunchProbeCommand, :761-786): unlike every other Fleet-menu
     // command, real Pascal never ties this to a specific fleet -- just a destination coordinate,
     // reusing the map cursor the same way Deploy's own destination pick does, with no source-fleet
@@ -976,6 +1000,8 @@ internal sealed class GalaxyMapScreen : IScreen
         _savePrompt!.Draw(fb, x + 1, y + 2, Math.Max(0, width - 2), TextInputField.DefaultFg, TextInputField.DefaultBg);
     }
 
+    private const string ContinueHint = "Press any key to continue...";
+
     private void DrawInfoPopup(FrameBuffer fb)
     {
         var lines = _infoMessage!.Split('\n');
@@ -983,7 +1009,13 @@ internal sealed class GalaxyMapScreen : IScreen
         // -- this one (and DrawSavePrompt above) predate that convention and didn't, so a long message
         // (or a narrow terminal) could compute a negative x and write clipped/garbled columns instead
         // of just a smaller box. Same Math.Min/Math.Max(0, ...) clamp as everywhere else now.
-        var width = Math.Min(Math.Max(lines.Max(l => l.Length), _infoTitle!.Length + 2) + 4, fb.Width);
+        //
+        // ContinueHint's own length has to factor into width too -- it used to be sized only off the
+        // message/title, so a short message (e.g. "Game saved to a.json.") produced a box too narrow
+        // for the fixed hint string, which then overran the right border: the hint is drawn at x+2 (one
+        // column deeper than the box's x+1 interior), so the safe text length from there is width-3, not
+        // width-2 -- the old clip used width-2, letting the hint's last character land on the border.
+        var width = Math.Min(Math.Max(Math.Max(lines.Max(l => l.Length), _infoTitle!.Length + 2), ContinueHint.Length) + 4, fb.Width);
         var height = Math.Min(lines.Length + 5, fb.Height);
         var x = Math.Max(0, (fb.Width - width) / 2);
         var y = Math.Max(0, (fb.Height - height) / 2);
@@ -993,13 +1025,10 @@ internal sealed class GalaxyMapScreen : IScreen
         fb.DrawText(x + Math.Max(1, (width - titleText.Length) / 2), y, titleText, ConsoleColor.White, ConsoleColor.Black);
         for (var i = 0; i < lines.Length && i + 2 < height; i++)
         {
-            var clipped = lines[i].Length > width - 2 ? lines[i][..Math.Max(0, width - 2)] : lines[i];
-            fb.DrawText(x + 2, y + 2 + i, clipped, ConsoleColor.White, ConsoleColor.Black);
+            fb.DrawText(x + 2, y + 2 + i, lines[i], ConsoleColor.White, ConsoleColor.Black, maxWidth: width - 3);
         }
 
-        const string continueHint = "Press any key to continue...";
-        var visibleHint = continueHint.Length > width - 2 ? continueHint[..Math.Max(0, width - 2)] : continueHint;
-        fb.DrawText(x + 2, y + height - 2, visibleHint, ConsoleColor.Gray, ConsoleColor.Black);
+        fb.DrawText(x + 2, y + height - 2, ContinueHint, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 3);
     }
 
     private void DrawMap(FrameBuffer fb, int mapTop, int mapHeight)
