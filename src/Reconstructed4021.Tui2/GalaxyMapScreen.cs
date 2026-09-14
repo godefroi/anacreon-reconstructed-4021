@@ -1,5 +1,6 @@
 using System.Text;
 using Reconstructed4021.Core;
+using Reconstructed4021.Core.Combat;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.Presentation;
@@ -231,8 +232,8 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("_Abort", Stub),
         ]),
         new MenuBar.TopItem("_Ministry of War", [
-            new MenuBar.Item("_Attack", Stub),
-            new MenuBar.Item("Auto A_ttack", Stub),
+            new MenuBar.Item("_Attack", Stub), // needs Fleet Group Configuration + Tactical Battle Display -- its own follow-on slice.
+            new MenuBar.Item("Auto A_ttack", AutoAttack),
             new MenuBar.Item("Launch _LAMs", Stub),
             new MenuBar.Item("_Defenses", Stub),
         ]),
@@ -786,6 +787,96 @@ internal sealed class GalaxyMapScreen : IScreen
         Refresh();
         ShowInfo("SRM Sweep", "Mine sweeping completed.");
     });
+
+    // GameShell.FindAttackTarget (ATTCOMM.PAS's own GetTarget, :663-715), shared by Attack and Auto
+    // Attack alike -- attacker and target must already be in the same sector (real Pascal's exact range
+    // rule wasn't re-derived here, an MVP gate called out rather than silent, same cut tui1 made). Only
+    // an enemy fleet is gated on Scouted; the world at that location (Planet/Starbase) is offered only
+    // when no enemy fleet is present at all -- a world defended by any scouted enemy fleet can't be
+    // attacked directly, the fleet(s) must be dealt with first (confirmed against tui1's own doc
+    // comment on this exact ordering mistake and the wildly wrong result it produced once).
+    private void FindAttackTarget(Fleet attacker, Action<ISectorObject> onTargetFound)
+    {
+        var location = attacker.Location;
+        var enemyFleets = _fleetsByLocation[location].Where(f => !ReferenceEquals(f.Owner, _player) && Game.Scouted(_player, f)).ToList();
+
+        if (enemyFleets.Count > 1)
+        {
+            _overlays.Add(new ObjectPickerOverlay(enemyFleets.Cast<ISectorObject>().ToList(), _player, onTargetFound));
+            return;
+        }
+
+        ISectorObject? target = enemyFleets.Count == 1
+            ? enemyFleets[0]
+            : _objectsByLocation.TryGetValue(location, out var obj) && !ReferenceEquals(obj.Owner, _player) ? obj : null;
+
+        if (target is null)
+        {
+            ShowInfo("Attack", "No enemy target in this sector.");
+            return;
+        }
+
+        onTargetFound(target);
+    }
+
+    private void AutoAttack() => PickOwnFleetAtCursor("Auto Attack", AutoAttack);
+
+    private void AutoAttack(Fleet attacker) => FindAttackTarget(attacker, target => BeginAutoAttack(attacker, target));
+
+    // AutoAttackCommand (ATTCOMM.PAS:1640-1746): same target pick as Attack, but skips Fleet Group
+    // Configuration/Tactical Battle Display entirely -- one confirm, then the whole engagement resolves
+    // in a single call to CombatResolution.NPEAttack, the same headless engine the Kingdom AI itself
+    // already uses (DefaultDistribution, hardcoded AttackIntentionType.Conquer -- Pascal's own hardcoded
+    // ConquerAIT). No OldShipsFound/AskToCapture/scenario background text here: NPEAttack already runs
+    // ResolveAttack internally with Capture hardcoded true, matching AutoAttackCommand's own plain
+    // ResultMessage + CasualtyReport pair.
+    private void BeginAutoAttack(Fleet attacker, ISectorObject target)
+    {
+        _overlays.Add(new ConfirmOverlay("Auto Attack", $"{DisplayName(attacker)} ready to attack {DisplayName(target)}.\nGive confirmation order?", yes =>
+        {
+            if (!yes)
+            {
+                return;
+            }
+
+            var before = new ShipCounts();
+            foreach (var shipType in Enum.GetValues<ShipType>())
+            {
+                before[shipType] = attacker.Ships[shipType];
+            }
+
+            var engagement = CombatResolution.NPEAttack(_player, attacker, target, AttackIntentionType.Conquer, _game, _context.Random);
+            Refresh();
+
+            var casualties = Enum.GetValues<ShipType>().Select(t => $"{new ResourceKind.Ship(t).DisplayName}: {Math.Max(0, before[t] - attacker.Ships[t])}");
+            var report = $"{AutoAttackResultText(engagement.Result, target)}\n\nCasualties:\n{string.Join('\n', casualties)}";
+            ShowInfo("Auto Attack", report);
+        }));
+    }
+
+    // ResultMessage (ATTCOMM.PAS:1652-1686) -- only these three cases are ever reached (DefCapturedART
+    // is declared but never assigned anywhere in real Pascal, see CombatOutcome.cs's own note).
+    private string AutoAttackResultText(AttackResultType result, ISectorObject subject) => result switch
+    {
+        AttackResultType.AttackerDestroyed => $"I'm sorry, {MyLord()}, the entire attack force has been destroyed.",
+        AttackResultType.AttackerRetreats => $"I'm sorry, {MyLord()}, the fleet was forced to retreat.",
+        AttackResultType.DefenderConquered => subject is Fleet
+            ? $"The enemy fleet has been destroyed, {MyLord()}."
+            : SovereigntyDeclaration(subject),
+        _ => $"Result: {result}",
+    };
+
+    private string SovereigntyDeclaration(ISectorObject subject)
+    {
+        var empireName = _player.Name;
+        var noun = subject switch { Fleet => "fleet", Starbase => "starbase", _ => "planet" };
+        var lord = _player.IsEmpress ? "Her Imperial Majesty, Lady" : "His Imperial Majesty, Lord";
+        return $"In the name of {lord} of {empireName}, I hereby declare\nthis {noun} to be under the sovereign jurisdiction of the\n{empireName} Empire.";
+    }
+
+    private string MyLord() => Honorifics.MyLord(_player.IsEmpress);
+
+    private string DisplayName(ISectorObject obj) => obj.Names.GetValueOrDefault(_player) ?? CloseUpOverlay.DescribeLocation(obj, _player);
 
     // GameShell.ConfirmQuit: real Quit (PLAYTURN.PAS's XXXCom) only unwinds back to the main menu, not
     // a full process exit.
