@@ -18,6 +18,11 @@ internal sealed class ResupplyCargoOverlay : IOverlay
     // header(1) + list(ListHeight) + blank/label/field/error/footer(5) + border(2).
     private static readonly int Height = ListHeight + 1 + 5 + 2;
 
+    // "megatons of chemicals" and friends run well past a flat guess (GameShell's own
+    // CargoTypeListItem.NameColumnWidth hit this same "Available column didn't line up" bug first) --
+    // sized to the longest real display name instead.
+    private static readonly int NameColumnWidth = Enum.GetValues<CargoType>().Max(t => new ResourceKind.Cargo(t).DisplayName.Length) + 1;
+
     private sealed record Row(CargoType Type, int Available, int MaxAmount)
     {
         public string DisplayName => new ResourceKind.Cargo(Type).DisplayName;
@@ -40,7 +45,7 @@ internal sealed class ResupplyCargoOverlay : IOverlay
         _list = new ListBox<Row>(rows, FormatRow);
     }
 
-    private static string FormatRow(Row row) => $"{row.DisplayName,-10} {row.Available,9} {row.MaxAmount,9}";
+    private static string FormatRow(Row row) => $"{row.DisplayName.PadRight(NameColumnWidth)}{row.Available,9}  {row.MaxAmount,9}";
 
     public void HandleKey(ConsoleKeyInfo key)
     {
@@ -139,7 +144,7 @@ internal sealed class ResupplyCargoOverlay : IOverlay
         BoxDrawing.DrawSingleLine(fb, x, y, width, height, ConsoleColor.Gray, ConsoleColor.Black);
         fb.DrawText(x + Math.Max(1, (width - 10) / 2), y, " Resupply ", ConsoleColor.White, ConsoleColor.Black);
 
-        fb.DrawText(x + 1, y + 1, $"{"Cargo",-10} {"Available",9} {"Capacity",9}", ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
+        fb.DrawText(x + 1, y + 1, $"{"Cargo".PadRight(NameColumnWidth)}{"Available",9}  {"Capacity",9}", ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
         _list.Draw(fb, x + 1, y + 2, width - 2, ListHeight, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
 
         var row = y + 2 + ListHeight;
