@@ -47,19 +47,21 @@ internal sealed class CloseUpOverlay : IOverlay
     private readonly Game _game;
     private readonly Action<string, string> _showInfo;
     private readonly Action<IOverlay> _push;
+    private readonly Func<char, Action<Fleet>?> _resolveFleetAction;
     private readonly TabKind[] _tabKinds;
     private readonly TabFrame _frame;
     private readonly TextEditor? _ordersEditor;
 
     public bool IsDismissed { get; private set; }
 
-    public CloseUpOverlay(ISectorObject obj, Empire viewer, Game game, Action<string, string> showInfo, Action<IOverlay> push)
+    public CloseUpOverlay(ISectorObject obj, Empire viewer, Game game, Action<string, string> showInfo, Action<IOverlay> push, Func<char, Action<Fleet>?> resolveFleetAction)
     {
         _obj = obj;
         _viewer = viewer;
         _game = game;
         _showInfo = showInfo;
         _push = push;
+        _resolveFleetAction = resolveFleetAction;
 
         if (obj is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, viewer))
         {
@@ -88,6 +90,23 @@ internal sealed class CloseUpOverlay : IOverlay
         if (_tabKinds[_frame.ActiveIndex] == TabKind.Orders)
         {
             HandleOrdersKey(key);
+            return;
+        }
+
+        // _frame.HandleKey already owns Ctrl+PageUp/PageDown (the tab switch); a Ctrl chord it doesn't
+        // recognize must still never fall through to the C/T/J/R letter match below (Ctrl+T etc. isn't
+        // a fleet-action shortcut) or the any-key-closes fallback (Ctrl+<anything unhandled> should just
+        // be ignored, not close the overlay).
+        if (key.Modifiers.HasFlag(ConsoleModifiers.Control))
+        {
+            return;
+        }
+
+        if (_obj is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, _viewer) &&
+            _resolveFleetAction(char.ToUpperInvariant(key.KeyChar)) is { } action)
+        {
+            IsDismissed = true;
+            action(ownFleet);
             return;
         }
 
@@ -237,7 +256,11 @@ internal sealed class CloseUpOverlay : IOverlay
         var fleetOwned = fleet is not null && ReferenceEquals(fleet.Owner, _viewer);
         var worldOwned = _obj is IEconomicWorld ownedWorld && ReferenceEquals(ownedWorld.Owner, _viewer);
         At(1, 17, fleetOwned
-            ? "Ctrl+PgUp/PgDn: Orders tab   (other fleet actions not wired up yet -- other key closes)"
+            // D (Deploy) and A (Attack) are deliberately absent: Deploy has no path here from an
+            // existing fleet (it only launches from a world picked via the map cursor), and Attack
+            // itself was never ported to Tui2 -- both their own follow-on slice, see
+            // GalaxyMapScreen.ResolveFleetContextAction's own doc comment.
+            ? "Ctrl+PgUp/PgDn: Orders tab   C:dest  T:transfer  J:abort/join  R:refuel"
             : worldOwned
                 ? "(world actions not wired up yet -- any key closes)"
                 : "(any key closes)");

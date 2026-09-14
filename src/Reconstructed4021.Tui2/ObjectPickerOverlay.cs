@@ -15,13 +15,19 @@ internal sealed class ObjectPickerOverlay : IOverlay
     private readonly ListBox<ISectorObject> _list;
     private readonly Empire _viewer;
     private readonly Action<ISectorObject> _onChosen;
+    private readonly Func<char, Action<Fleet>?>? _resolveFleetAction;
 
     public bool IsDismissed { get; private set; }
 
-    public ObjectPickerOverlay(IReadOnlyList<ISectorObject> objects, Empire viewer, Action<ISectorObject> onChosen)
+    // resolveFleetAction is only passed by ExamineCursor's own sector picker -- Enter already means
+    // "this is the target" at every other call site (PickGround, PickOwnFleetAtCursor's own fleet-only
+    // picker), so C/T/J/R must not double as fleet-command shortcuts there, matching tui1's own
+    // ShowObjectPicker(allowFleetActions:) gating.
+    public ObjectPickerOverlay(IReadOnlyList<ISectorObject> objects, Empire viewer, Action<ISectorObject> onChosen, Func<char, Action<Fleet>?>? resolveFleetAction = null)
     {
         _viewer = viewer;
         _onChosen = onChosen;
+        _resolveFleetAction = resolveFleetAction;
         _list = new ListBox<ISectorObject>(objects, Format);
     }
 
@@ -35,6 +41,15 @@ internal sealed class ObjectPickerOverlay : IOverlay
     {
         if (_list.HandleKey(key))
         {
+            return;
+        }
+
+        if (_resolveFleetAction is not null && !key.Modifiers.HasFlag(ConsoleModifiers.Control) &&
+            _list.SelectedItem is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, _viewer) &&
+            _resolveFleetAction(char.ToUpperInvariant(key.KeyChar)) is { } action)
+        {
+            IsDismissed = true;
+            action(ownFleet);
             return;
         }
 
@@ -56,12 +71,22 @@ internal sealed class ObjectPickerOverlay : IOverlay
 
     public void Draw(FrameBuffer fb)
     {
+        var hint = _resolveFleetAction is not null && _list.SelectedItem is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, _viewer)
+            ? "C:dest  T:transfer  J:abort/join  R:refuel"
+            : null;
+
         var width = Math.Min(Width, fb.Width);
-        var height = Math.Min(_list.Items.Count + 2, Math.Max(3, fb.Height - 2));
+        var height = Math.Min(_list.Items.Count + 2 + (hint is null ? 0 : 1), Math.Max(3, fb.Height - 2));
         var x = Math.Max(0, (fb.Width - width) / 2);
         var y = Math.Max(0, (fb.Height - height) / 2);
 
         BoxDrawing.DrawSingleLine(fb, x, y, width, height, ConsoleColor.Gray, ConsoleColor.Black);
-        _list.Draw(fb, x + 1, y + 1, width - 2, height - 2, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
+        var listHeight = height - 2 - (hint is null ? 0 : 1);
+        _list.Draw(fb, x + 1, y + 1, width - 2, listHeight, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
+
+        if (hint is not null)
+        {
+            fb.DrawText(x + 1, y + 1 + listHeight, hint, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
+        }
     }
 }

@@ -263,17 +263,15 @@ internal sealed class GalaxyMapScreen : IScreen
         {
             _overlays[^1].HandleKey(key);
 
-            // A loop, not a single check: a confirm overlay's own callback can reach past itself and
-            // dismiss the overlay underneath it too (e.g. CloseUpOverlay.TryCommitOrders's discard
-            // path dismisses both the ConfirmOverlay and the CloseUpOverlay it's stacked on, in the
-            // same key dispatch) -- checking only the one overlay whose HandleKey just ran left that
-            // parent sitting on screen, already dismissed, until some unrelated later keystroke
-            // happened to reach it. Popping from the top while it's dismissed cascades through the
-            // whole chain immediately instead.
-            while (_overlays.Count > 0 && _overlays[^1].IsDismissed)
-            {
-                _overlays.RemoveAt(_overlays.Count - 1);
-            }
+            // RemoveAll, not just popping from the top while it's dismissed: a handler can both dismiss
+            // itself AND push a new overlay in the same call (e.g. CloseUpOverlay's C/T/J/R shortcuts --
+            // IsDismissed=true, then the action pushes Transfer's own ObjectPickerOverlay/PickGround
+            // picker on top), which leaves the dismissed one buried under the new top rather than
+            // sitting there as the top itself. A top-only pop loop never reaches a dismissed entry that
+            // isn't on top, and the same underlying scenario (a confirm overlay's callback dismissing the
+            // overlay underneath it too, e.g. CloseUpOverlay.TryCommitOrders's discard path) needs a
+            // sweep either way, not just a cascade from the top down.
+            _overlays.RemoveAll(o => o.IsDismissed);
 
             return;
         }
@@ -341,7 +339,7 @@ internal sealed class GalaxyMapScreen : IScreen
                 OpenExamine(objects[0], "Close Up");
                 break;
             default:
-                _overlays.Add(new ObjectPickerOverlay(objects, _player, obj => OpenExamine(obj, "Close Up")));
+                _overlays.Add(new ObjectPickerOverlay(objects, _player, obj => OpenExamine(obj, "Close Up"), ResolveFleetContextAction));
                 break;
         }
     }
@@ -358,7 +356,7 @@ internal sealed class GalaxyMapScreen : IScreen
             return;
         }
 
-        _overlays.Add(new CloseUpOverlay(obj, _player, _game, ShowInfo, _overlays.Add));
+        _overlays.Add(new CloseUpOverlay(obj, _player, _game, ShowInfo, _overlays.Add, ResolveFleetContextAction));
     }
 
     // GameShell.Designate/Issp/Production: all three (and Close Up) route through the one
@@ -580,10 +578,32 @@ internal sealed class GalaxyMapScreen : IScreen
     // Fleet menu > Transfer (FLTCOMM.PAS: TransferFleetCommand) -- the same Resource Distribution
     // Editor Deploy uses, between one of the player's own fleets and whatever PickGround picks as the
     // other side (any owner).
-    private void TransferFleet() => PickOwnFleetAtCursor("Transfer Fleet", fleet =>
+    // GameShell.ResolveFleetContextAction: C/T/J/R, the four Fleet/Ministry-of-War commands reachable
+    // directly off an already-selected owned fleet in CloseUpOverlay and the sector object picker. D
+    // (Deploy) isn't here -- CloseUpOverlay/the sector picker never carry a source object Tui2's own
+    // Deploy flow can consume directly (it only launches from a world picked via the map cursor, not an
+    // existing fleet), so wiring D would mean building that fleet-source deploy path first, not just
+    // pointing at an existing method. A (Attack) isn't here either -- Attack itself (tui1's
+    // GameShell.Attack/FindAttackTarget/BeginAttack) was never ported to Tui2 at all. Both are their own
+    // follow-on slice, not a wiring gap.
+    private Action<Fleet>? ResolveFleetContextAction(char letter) => letter switch
+    {
+        'C' => ChangeDestination,
+        'T' => TransferFleet,
+        'J' => AbortJoinFleet,
+        'R' => RefuelFleet,
+        _ => null,
+    };
+
+    private void TransferFleet() => PickOwnFleetAtCursor("Transfer Fleet", TransferFleet);
+
+    // Split out from the cursor-driven wrapper above so the Close Up/sector-picker T shortcut can call
+    // it directly on an already-known fleet, instead of routing back through PickOwnFleetAtCursor (which
+    // re-resolves from the map cursor and would re-prompt a picker even when the fleet is already given).
+    private void TransferFleet(Fleet fleet) =>
         PickGround(fleet, playerOnly: false, includeFleet: false, "Transfer Fleet",
             "There is nothing here to transfer with.",
-            ground => BeginTransferDistribution(fleet, ground)));
+            ground => BeginTransferDistribution(fleet, ground));
 
     private void BeginTransferDistribution(Fleet fleet, ISectorObject ground)
     {
@@ -614,10 +634,12 @@ internal sealed class GalaxyMapScreen : IScreen
     /// exceeding <see cref="ResourceDistribution.MaxResources"/> ("some will be lost"). Declining the
     /// first skips the second -- both just decline the same operation either way.
     /// </summary>
-    private void AbortJoinFleet() => PickOwnFleetAtCursor("Abort/Join Fleet", fleet =>
+    private void AbortJoinFleet() => PickOwnFleetAtCursor("Abort/Join Fleet", AbortJoinFleet);
+
+    private void AbortJoinFleet(Fleet fleet) =>
         PickGround(fleet, playerOnly: false, includeFleet: false, "Abort/Join Fleet",
             "There is nothing here to abort the fleet to.",
-            ground => ConfirmAbortJoin(fleet, ground)));
+            ground => ConfirmAbortJoin(fleet, ground));
 
     private void ConfirmAbortJoin(Fleet fleet, ISectorObject ground)
     {
@@ -666,23 +688,27 @@ internal sealed class GalaxyMapScreen : IScreen
     // same map-cursor destination pick Deploy's own XYParm step uses. FleetLifecycle.SetFleetDestination
     // is unconditional -- no legality check beyond "a coordinate" -- works whether the fleet is Ready
     // or already InTransit.
-    private void ChangeDestination() => PickOwnFleetAtCursor("Change Destination", fleet =>
+    private void ChangeDestination() => PickOwnFleetAtCursor("Change Destination", ChangeDestination);
+
+    private void ChangeDestination(Fleet fleet) =>
         BeginPick("Change Destination -- move cursor to new destination, Enter: select, Esc: cancel",
             destination =>
             {
                 FleetLifecycle.SetFleetDestination(fleet, destination);
                 Refresh();
-            }));
+            });
 
     // Fleet menu > Refuel (FLTCOMM.PAS: RefuelFleetCommand): PickGround restricted to the player's own
     // (IncludeFleet lets the fleet refuel from trillum already in its own cargo), excluding any
     // candidate with nothing to actually refuel from, then a numeric prompt for tons of trillum.
-    private void RefuelFleet() => PickOwnFleetAtCursor("Refuel Fleet", fleet =>
+    private void RefuelFleet() => PickOwnFleetAtCursor("Refuel Fleet", RefuelFleet);
+
+    private void RefuelFleet(Fleet fleet) =>
         PickGround(fleet, playerOnly: true, includeFleet: true, "Refuel Fleet",
             "There is no world or fleet of yours here to refuel from.",
             ground => PromptForTrillum(fleet, (IShipCargoHolder)ground),
             exclude: ground => FleetLifecycle.MaxTrillumToRefuel(fleet, (IShipCargoHolder)ground) <= 0,
-            excludedEmptyMessage: "There is no trillum available to refuel with."));
+            excludedEmptyMessage: "There is no trillum available to refuel with.");
 
     // GetTrillumToUse (FLTCOMM.PAS:692-724): 0 (or a blank field) defaults to the max; out-of-range
     // re-prompts with an error instead of closing -- reopened as a fresh TextPromptOverlay with the
