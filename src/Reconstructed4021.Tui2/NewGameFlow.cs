@@ -38,7 +38,16 @@ internal sealed class NewGameFlow
         var setup = new GalaxySetup(Context.Random);
         var loader = new ScenarioLoader(setup, Context.Random, Context.NpeProvider);
         var game = loader.Load(ScenarioText, players);
-        var player = game.CurrentEmpire ?? throw new InvalidOperationException("ScenarioLoader.Load must set Game.CurrentEmpire.");
-        return new GalaxyMapScreen(game, player, Context);
+        if (game.CurrentEmpire is null)
+        {
+            throw new InvalidOperationException("ScenarioLoader.Load must set Game.CurrentEmpire.");
+        }
+
+        // TurnLoop.Start, not a direct GalaxyMapScreen: matches Reconstructed4021.Tui's own RunGame,
+        // which runs this same loop from turn 1 onward -- the starting empire could in principle be an
+        // NPE needing a silent advance first, and even when it's a human (the only case this port's
+        // single-human focus actually exercises), that human still gets the turn-start greeting and
+        // status report before ever seeing the map, same as every subsequent turn.
+        return TurnLoop.Start(game, Context);
     }
 }

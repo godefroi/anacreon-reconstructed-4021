@@ -1,3 +1,4 @@
+using Reconstructed4021.Core.Turns;
 using Reconstructed4021.LegacyNpe;
 using Reconstructed4021.Panemonde;
 
@@ -23,4 +24,5 @@ public sealed record NewGameContext(
     string RepoRoot,
     Func<IScreen> MakeTitleScreen,
     Func<IReadOnlyList<ScenarioPickerScreen.ScenarioChoice>> LoadScenarios,
-    Func<IReadOnlyList<SaveGamePickerScreen.SaveChoice>> LoadSaves);
+    Func<IReadOnlyList<SaveGamePickerScreen.SaveChoice>> LoadSaves,
+    TurnEngine TurnEngine);

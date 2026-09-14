@@ -193,7 +193,7 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("_Pause", () => ShowInfo("Paused", "Time has stopped. Press any key to continue.")),
             new MenuBar.Item("_Status Hardcopy", Stub),
             new MenuBar.Item("Sa_ve", () => _savePrompt = new TextInputField($"{_player.Name}-{_game.Year}", maxLength: 60)),
-            new MenuBar.Item("_Next Turn", Stub), // needs the whole per-empire turn loop -- its own slice.
+            new MenuBar.Item("_Next Turn", EndTurn),
             new MenuBar.Item("_Quit", ConfirmQuit),
             new MenuBar.Item("E_xit to OS", ConfirmExitToOs),
         ]),
@@ -887,6 +887,58 @@ internal sealed class GalaxyMapScreen : IScreen
     {
         _infoTitle = title;
         _infoMessage = message;
+    }
+
+    // GameShell.EndTurn: PLAYTURN.PAS's own command loop runs entirely before UpdateTurn is called --
+    // TurnEngine.BeginTurn (fog-of-war refresh) already ran before this screen was even shown, so
+    // ending a turn here only needs TurnEngine.EndTurn's own half: erase news, move fleets, and hand
+    // the game off to the next empire. TurnLoop.Start then decides what (if anything) runs next.
+    private void EndTurn()
+    {
+        _context.TurnEngine.EndTurn(_game);
+        AutoSave();
+        NextScreen = TurnLoop.Start(_game, _context);
+    }
+
+    private const int MaxAutoSaves = 10;
+
+    // GameShell.AutoSave: best-effort and silent on failure, unlike a *manual* save's own error popup --
+    // an autosave failing mid-turn shouldn't interrupt play. Overwrites this same turn's own file if
+    // called twice (no AvoidCollision): the suggested name is deterministic ({player}-{year}), and
+    // AutoSave only ever runs once per this empire's own turn anyway, so there's nothing to collide
+    // with -- collision-avoiding it would just accumulate a new file per turn instead of ever replacing
+    // the prior one, which is what actually happened when this was first written with AvoidCollision.
+    private void AutoSave()
+    {
+        var autoDir = Path.Combine(_context.RepoRoot, "saves", "auto");
+        Directory.CreateDirectory(autoDir);
+
+        var path = Path.Combine(autoDir, $"{_player.Name}-{_game.Year}.json");
+        var tempPath = path + ".tmp";
+        try
+        {
+            File.WriteAllText(tempPath, GameJson.Serialize(_game, _context.NpeProvider));
+            File.Move(tempPath, path, overwrite: true);
+        }
+        catch (IOException)
+        {
+            // Best-effort -- don't interrupt play over this.
+        }
+
+        var stale = new DirectoryInfo(autoDir).GetFiles("*.json")
+            .OrderByDescending(f => f.LastWriteTimeUtc)
+            .Skip(MaxAutoSaves);
+        foreach (var file in stale)
+        {
+            try
+            {
+                file.Delete();
+            }
+            catch (IOException)
+            {
+                // Best-effort pruning -- same "don't interrupt play over this" reasoning as the save itself.
+            }
+        }
     }
 
     /// <summary>

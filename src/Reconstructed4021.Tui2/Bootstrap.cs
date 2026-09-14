@@ -1,5 +1,6 @@
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.NewGame;
+using Reconstructed4021.Core.Turns;
 using Reconstructed4021.LegacyNpe;
 using Reconstructed4021.Panemonde;
 
@@ -70,9 +71,15 @@ public static class Bootstrap
                 .ToList();
         }
 
+        // One TurnEngine for the whole process -- stateless itself, just wraps three handlers that all
+        // share this same random, matching Reconstructed4021.Tui's own Program.cs. No tech-debug log
+        // file (AnnualTickHandler's techDebugLog param is optional): that's a debug tool tui1 built for
+        // its own tech-balance investigation, not something this port's turn loop needs to duplicate.
+        var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random, useLegacyOrderResolution: false), new AnnualTickHandler(random));
+
         NewGameContext? context = null;
         IScreen MakeTitleScreen() => new TitleScreen(context!);
-        context = new NewGameContext(random, npeProvider, repoRoot, MakeTitleScreen, LoadScenarios, LoadSaves);
+        context = new NewGameContext(random, npeProvider, repoRoot, MakeTitleScreen, LoadScenarios, LoadSaves, turnEngine);
         return context;
     }
 }
