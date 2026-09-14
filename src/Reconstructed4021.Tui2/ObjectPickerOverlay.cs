@@ -33,7 +33,7 @@ internal sealed class ObjectPickerOverlay : IOverlay
 
     private string Format(ISectorObject obj)
     {
-        var name = obj.Names.GetValueOrDefault(_viewer) ?? CloseUpOverlay.DescribeLocation(obj, _viewer);
+        var name = CloseUpOverlay.DisplayName(obj, _viewer);
         return $"{name}  ({obj.Owner.Name})";
     }
 

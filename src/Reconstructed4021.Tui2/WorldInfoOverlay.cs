@@ -153,7 +153,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         var x = Math.Max(0, (fb.Width - width) / 2);
         var y = Math.Max(0, (fb.Height - height) / 2);
 
-        var name = _world.Names.GetValueOrDefault(_viewer) ?? CloseUpOverlay.DescribeLocation(_world, _viewer);
+        var name = CloseUpOverlay.DisplayName(_world, _viewer);
         _frame.Draw(fb, x, y, width, height, name, BorderFg, BorderBg, ConsoleColor.White, BorderBg);
 
         var cx = x + 1;
@@ -573,7 +573,7 @@ internal sealed class WorldInfoOverlay : IOverlay
             $"All industries are being re-distributed.  New efficiency: {_world.Efficiency}%");
     }
 
-    private string DisplayName(ISectorObject obj) => obj.Names.GetValueOrDefault(_viewer) ?? CloseUpOverlay.DescribeLocation(obj, _viewer);
+    private string DisplayName(ISectorObject obj) => CloseUpOverlay.DisplayName(obj, _viewer);
 
     private static string DesignationArticleName(WorldType type) => type switch
     {

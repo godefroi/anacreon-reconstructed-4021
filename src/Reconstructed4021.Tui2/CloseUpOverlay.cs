@@ -173,7 +173,7 @@ internal sealed class CloseUpOverlay : IOverlay
         var x = Math.Max(0, (fb.Width - width) / 2);
         var y = Math.Max(0, (fb.Height - height) / 2);
 
-        var name = _obj.Names.GetValueOrDefault(_viewer) ?? DescribeLocation(_obj, _viewer);
+        var name = DisplayName(_obj, _viewer);
         _frame.Draw(fb, x, y, width, height, name, BorderFg, BorderBg, ConsoleColor.White, BorderBg);
 
         var contentX = x + 1;
@@ -198,7 +198,7 @@ internal sealed class CloseUpOverlay : IOverlay
     private void DrawOrders(FrameBuffer fb, int cx, int cy, int cw, int ch)
     {
         var fleet = (Fleet)_obj;
-        var name = fleet.Names.GetValueOrDefault(_viewer) ?? DescribeLocation(fleet, _viewer);
+        var name = DisplayName(fleet, _viewer);
         fb.DrawText(cx, cy, $"Orders: {name}", ContentFg, ContentBg);
 
         const int hintLines = 2;
@@ -239,7 +239,7 @@ internal sealed class CloseUpOverlay : IOverlay
             headerOwner = _obj.Owner.Name;
         }
 
-        var name = _obj.Names.GetValueOrDefault(_viewer) ?? DescribeLocation(_obj, _viewer);
+        var name = DisplayName(_obj, _viewer);
         At(0, 0, $"Close Up: {name}");
         At(35, 0, headerKind);
         At(59, 0, headerOwner);
@@ -350,4 +350,7 @@ internal sealed class CloseUpOverlay : IOverlay
         Fleet => "Fleet",
         _ => RelativeCoordinate.Format(obj.Location, viewer.Capital?.Location ?? new Coordinate(0, 0)),
     };
+
+    /// <summary>A viewer's own name for <paramref name="obj"/> if they've named it, else <see cref="DescribeLocation"/> -- the same fallback every screen in this project independently needed at least three times over (GalaxyMapScreen, TacticalBattleScreen, and this class's own several inline uses) before it was worth sharing.</summary>
+    internal static string DisplayName(ISectorObject obj, Empire viewer) => obj.Names.GetValueOrDefault(viewer) ?? DescribeLocation(obj, viewer);
 }
