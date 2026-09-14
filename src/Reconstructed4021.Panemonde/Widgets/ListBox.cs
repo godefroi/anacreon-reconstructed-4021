@@ -22,6 +22,11 @@ public sealed class ListBox<T>
         _format = format;
     }
 
+    // For a caller that needs its own navigation rule instead of HandleKey's own plain wrap-around
+    // Up/Down (e.g. skipping non-selectable header rows, or resetting state when the selection crosses
+    // a boundary) -- SelectedIndex has no public setter otherwise, so driving it from outside needs this.
+    public void MoveTo(int index) => SelectedIndex = Items.Count == 0 ? 0 : Math.Clamp(index, 0, Items.Count - 1);
+
     // Returns true if this key was consumed (Up/Down) -- false for anything else, which the caller
     // handles itself (Enter to select, Esc to cancel, ...).
     public bool HandleKey(ConsoleKeyInfo key)
