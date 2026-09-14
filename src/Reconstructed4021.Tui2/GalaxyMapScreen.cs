@@ -232,7 +232,7 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("_Abort", Stub),
         ]),
         new MenuBar.TopItem("_Ministry of War", [
-            new MenuBar.Item("_Attack", Stub), // needs Fleet Group Configuration + Tactical Battle Display -- its own follow-on slice.
+            new MenuBar.Item("_Attack", Attack),
             new MenuBar.Item("Auto A_ttack", AutoAttack),
             new MenuBar.Item("Launch _LAMs", Stub),
             new MenuBar.Item("_Defenses", Stub),
@@ -602,9 +602,9 @@ internal sealed class GalaxyMapScreen : IScreen
     // (Deploy) isn't here -- CloseUpOverlay/the sector picker never carry a source object Tui2's own
     // Deploy flow can consume directly (it only launches from a world picked via the map cursor, not an
     // existing fleet), so wiring D would mean building that fleet-source deploy path first, not just
-    // pointing at an existing method. A (Attack) isn't here either -- Attack itself (tui1's
-    // GameShell.Attack/FindAttackTarget/BeginAttack) was never ported to Tui2 at all. Both are their own
-    // follow-on slice, not a wiring gap.
+    // pointing at an existing method. A (Attack) isn't here either -- Attack lives on the Ministry of
+    // War menu instead (same as tui1's own BuildMenus), and wiring a same-sector shortcut here as well
+    // isn't something the user has asked for.
     private Action<Fleet>? ResolveFleetContextAction(char letter) => letter switch
     {
         'C' => ChangeDestination,
@@ -817,6 +817,60 @@ internal sealed class GalaxyMapScreen : IScreen
         }
 
         onTargetFound(target);
+    }
+
+    private void Attack() => PickOwnFleetAtCursor("Attack", Attack);
+
+    private void Attack(Fleet attacker) => FindAttackTarget(attacker, target => BeginAttack(attacker, target));
+
+    // AttackCommand's own "Standard battle configuration (Y/n)?" fork (ATTCOMM.PAS:1608-1616): Y skips
+    // Fleet Group Configuration and uses CombatEngine.DefaultDistribution; N opens the real
+    // FleetGroupConfigurationOverlay. Esc abandons the attack entirely. A is a port-only addition (per
+    // the user's own explicit request, carried over from tui1) that jumps straight to the same Auto
+    // Attack confirmation Ministry of War's own menu item shows.
+    private void BeginAttack(Fleet attacker, ISectorObject target)
+    {
+        _overlays.Add(new AttackConfigPromptOverlay(choice =>
+        {
+            switch (choice)
+            {
+                case 'Y':
+                    StartEngagement(attacker, target, CombatEngine.DefaultDistribution(attacker));
+                    return;
+                case 'A':
+                    BeginAutoAttack(attacker, target);
+                    return;
+                case 'N':
+                    _overlays.Add(new FleetGroupConfigurationOverlay(attacker.Ships, attacker.Cargo,
+                        groups => StartEngagement(attacker, target, groups)));
+                    return;
+            }
+        }));
+    }
+
+    // AttackCommand's own IF NoOfGroups>0 (ATTCOMM.PAS:1619) -- zero groups skips the battle entirely,
+    // matching real Pascal exactly rather than fighting an empty engagement.
+    //
+    // Real Pascal (and tui1) take the configured groups straight into InteractiveCombat.BeginEngagement
+    // and a round-by-round Tactical Battle Display -- that display doesn't exist in Tui2 yet (its own
+    // follow-on slice, the two battle scenarios the user asked for next). Until then this reports what
+    // was configured rather than pretending to resolve a battle it can't actually run.
+    private void StartEngagement(Fleet attacker, ISectorObject target, IReadOnlyList<GroupRecord> groups)
+    {
+        if (groups.Count == 0)
+        {
+            return;
+        }
+
+        var lines = groups.Select(g =>
+        {
+            var line = $"Group: {g.Num} {g.Typ.ToResourceKind().DisplayName}";
+            return g.Gat > 0 ? $"{line} ({g.Gat} {g.GatTyp!.Value.ToResourceKind().DisplayName})" : line;
+        });
+
+        ShowInfo("Attack", $"{groups.Count} group{(groups.Count == 1 ? "" : "s")} ready to attack {DisplayName(target)}.\n" +
+            "(Tactical Battle Display is not wired up yet -- the battle itself has not been fought.)\n\n" +
+            string.Join('\n', lines));
     }
 
     private void AutoAttack() => PickOwnFleetAtCursor("Auto Attack", AutoAttack);
