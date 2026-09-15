@@ -194,7 +194,7 @@ internal sealed class GalaxyMapScreen : IScreen
     private IReadOnlyList<MenuBar.TopItem> BuildMenus() =>
     [
         new MenuBar.TopItem("⌂", [
-            new MenuBar.Item("_About Anacreon", Stub),
+            new MenuBar.Item("_About Anacreon", () => _overlays.Add(new AboutOverlay())),
         ]),
         new MenuBar.TopItem("_Game", [
             new MenuBar.Item("_Pause", () => ShowInfo("Paused", "Time has stopped. Press any key to continue.")),
