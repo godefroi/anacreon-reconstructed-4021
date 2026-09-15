@@ -205,8 +205,8 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("E_xit to OS", ConfirmExitToOs),
         ]),
         new MenuBar.TopItem("_Empire", [
-            new MenuBar.Item("_Send Message", Stub),
-            new MenuBar.Item("_Read Messages", Stub),
+            new MenuBar.Item("_Send Message", SendMessageCommand),
+            new MenuBar.Item("_Read Messages", ReadMessagesCommand),
             new MenuBar.Item("_Trade Technology", Stub),
             new MenuBar.Item("Te_ch Tree", () => _overlays.Add(new TechTreeOverlay(_player))),
         ]),
@@ -1163,6 +1163,41 @@ internal sealed class GalaxyMapScreen : IScreen
         }
 
         ShowInfo("Launch LAMs", string.Join('\n', lines));
+    }
+
+    /// <summary>Empire menu &gt; Send Message (DESIGN.PAS's SendMessageCommand).</summary>
+    private void SendMessageCommand()
+    {
+        _overlays.Add(new EmpireMultiSelectOverlay(_game.Empires, chosen =>
+            _overlays.Add(new MessageBodyOverlay(lines =>
+                _overlays.Add(new ConfirmOverlay("Send Message", SendMessageConfirmText(chosen), yes =>
+                {
+                    if (!yes)
+                    {
+                        ShowInfo("Send Message", $"Message aborted, {MyLord()}.");
+                        return;
+                    }
+
+                    MessageLifecycle.SendMessage(_game, _player, chosen, lines, _context.Random);
+                    ShowInfo("Send Message", $"Message sent, {MyLord()}.");
+                }))))));
+    }
+
+    private static string SendMessageConfirmText(IReadOnlySet<Empire> recipients) => recipients.Count == 1
+        ? $"Ready to send message to {recipients.Single().Name}."
+        : $"Ready to send messages to:\n{string.Join('\n', recipients.Select(e => e.Name))}";
+
+    /// <summary>Empire menu &gt; Read Messages (DESIGN.PAS's ReadMessageCommand).</summary>
+    private void ReadMessagesCommand()
+    {
+        var messages = _game.MessagesFor(_player).ToList();
+        if (messages.Count == 0)
+        {
+            ShowInfo("Read Messages", $"You have not received any messages this year, {MyLord()}.");
+            return;
+        }
+
+        _overlays.Add(new ReadMessagesOverlay(messages, _player, message => MessageLifecycle.MarkRead(_game, message, _player)));
     }
 
     // ResultMessage (ATTCOMM.PAS:1652-1686) -- only these three cases are ever reached (DefCapturedART
