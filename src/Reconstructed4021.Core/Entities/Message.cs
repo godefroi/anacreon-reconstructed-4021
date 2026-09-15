@@ -1,23 +1,30 @@
 namespace Reconstructed4021.Core.Entities;
 
 /// <summary>
-/// `MessageRecord` (`MESS.PAS:23-33`) -- a player-to-player in-game message. `ReadBy` is
-/// deliberately absent: real Pascal's own `LoadMessageData` never reads it back from disk
-/// (`MESS.PAS:288-291` copies `Sender`/`Recipient`/`Read`/`Intercepted` from the loaded record but
-/// never assigns `ReadBy`), so a message's per-recipient read-tracking bitset is genuine, confirmed
-/// -in-source Pascal data loss across every real save/load boundary -- not a gap in this port to
-/// fix, a real Pascal quirk to reproduce by not inventing state real Pascal itself never restores.
-/// This has a real downstream consequence in the original game, not just a cosmetic gap: `ReadBy`
-/// comes back as uninitialized heap garbage after a load, and `SetMessageRead`'s own completion
-/// check (`ReadBy:=ReadBy+[Emp]; IF Recipient&lt;=ReadBy THEN Read:=True`) then operates on that
-/// garbage the moment any recipient reads any message post-load -- `Read` itself round-trips
-/// correctly as of the instant a file is loaded (it's a plain field, not derived), it's only later,
-/// in-session `SetMessageRead` calls that can spuriously flip it. This port models `Read` as of
-/// load time, same as real Pascal's own on-disk value.
+/// `MessageRecord` (`MESS.PAS:23-33`) -- a player-to-player in-game message. `Read` is the one field
+/// real Pascal actually persists (`MESS.PAS:288-291`'s `LoadMessageData` copies
+/// `Sender`/`Recipient`/`Read`/`Intercepted` from the loaded record) -- it's true once every empire in
+/// `Recipients` has read the message (`SetMessageRead`'s own `IF Recipient&lt;=ReadBy THEN Read:=True`),
+/// so <see cref="Turns.AnnualTickHandler"/>'s end-of-year `DeleteReadMessages` never removes a message
+/// a later multi-recipient reader hasn't gotten to yet.
+///
+/// `ReadBy` (the live per-recipient tracking set that `Read` is computed from) is deliberately
+/// runtime-only, not a positional/serialized member: real Pascal's own `LoadMessageData` never reads
+/// it back from disk at all (only `Read` itself round-trips), so on-disk `ReadBy` state is discarded at
+/// every real save/load boundary -- a confirmed-in-source Pascal quirk, not a gap in this port to fix.
+/// A freshly loaded message therefore starts with an empty `ReadBy` regardless of its `Read` value,
+/// same as real Pascal's own post-load garbage-`ReadBy`-but-correct-`Read` split, just without the
+/// "garbage" part: nothing here reads `ReadBy` before some recipient in the new session actually opens
+/// the message, so an empty set is observably identical to real Pascal's own uninitialized one for
+/// every case that matters (a message already `Read=true` from a prior session never needs its `ReadBy`
+/// consulted again).
 /// </summary>
 public sealed record Message(
     Empire Sender,
     IReadOnlySet<Empire> Recipients,
     bool Read,
     bool Intercepted,
-    IReadOnlyList<string> Lines);
+    IReadOnlyList<string> Lines)
+{
+    public HashSet<Empire> ReadBy { get; } = [];
+}

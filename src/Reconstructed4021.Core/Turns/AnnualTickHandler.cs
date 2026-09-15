@@ -67,6 +67,11 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
             empire.TotalRevolutionIndex = newTotalRevIndex.GetValueOrDefault(empire, 0);
             NewTechLevel(empire, game);
         }
+
+        // UPDATE.PAS:1485: once per year, after every empire's own UpdateEmpire above -- not per-turn,
+        // so a message with several recipients stays around for whichever one hasn't read it yet even
+        // after another one has (Message.MarkRead's own doc comment).
+        MessageLifecycle.DeleteReadMessages(game);
     }
 
     /// <summary>
