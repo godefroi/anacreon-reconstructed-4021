@@ -243,8 +243,8 @@ internal sealed class GalaxyMapScreen : IScreen
         new MenuBar.TopItem("_Ministry of War", [
             new MenuBar.Item("_Attack", Attack),
             new MenuBar.Item("Auto A_ttack", AutoAttack),
-            new MenuBar.Item("Launch _LAMs", Stub),
-            new MenuBar.Item("_Defenses", Stub),
+            new MenuBar.Item("Launch _LAMs", LaunchLams),
+            new MenuBar.Item("_Defenses", () => _overlays.Add(new DefensesOverlay(_player.DefenseSettings.Fleets))),
         ]),
     ];
 
@@ -1074,6 +1074,95 @@ internal sealed class GalaxyMapScreen : IScreen
             var report = $"{AutoAttackResultText(engagement.Result, target)}\n\nCasualties:\n{string.Join('\n', casualties)}";
             ShowInfo("Auto Attack", report);
         }));
+    }
+
+    /// <summary>
+    /// Ministry of War > Launch LAMs (DESIGN.PAS: LaunchLAM, :48-261). The launching world (BaseID)
+    /// must be the player's own and actually have LAMs; targets are every fleet/planet/starbase the
+    /// player knows about (<see cref="Game.Known"/>), isn't their own, and is within range 5 of the
+    /// launching world -- same order/filter as <see cref="Reconstructed4021.Tui"/>'s own GameShell.
+    /// </summary>
+    private void LaunchLams()
+    {
+        var source = FindWorldAt(_cursor);
+        if (source is null || !ReferenceEquals(source.Owner, _player) || source.Defenses[DefenseType.Lam] <= 0)
+        {
+            ShowInfo("Launch LAMs", "Move the cursor onto one of your own worlds with LAMs first.");
+            return;
+        }
+
+        var baseLocation = source.Location;
+        var targets = _game.Galaxy.Fleets.Cast<ISectorObject>()
+            .Concat(_game.Galaxy.Planets.Cast<ISectorObject>())
+            .Concat(_game.Galaxy.Starbases.Cast<ISectorObject>())
+            .Where(o => Game.Known(_player, o) && !ReferenceEquals(o.Owner, _player) && baseLocation.DistanceTo(o.Location) <= 5)
+            .ToList();
+
+        if (targets.Count == 0)
+        {
+            ShowInfo("Launch LAMs", $"No targets can be reached from {DisplayName(source)}.");
+            return;
+        }
+
+        _overlays.Add(new ObjectPickerOverlay(targets, _player, target => PromptForLamCount(source, target)));
+    }
+
+    // GetTarget's own InputIntegerDisplayScreen prompt (DESIGN.PAS:201-209): a positive number no
+    // greater than the base's own LAM count, re-prompting (not closing) on an out-of-range answer --
+    // same TextPromptOverlay-with-error-folded-into-the-label idiom as PromptForTrillum above.
+    private void PromptForLamCount(IEconomicWorld source, ISectorObject target, string? error = null)
+    {
+        var maxLams = source.Defenses[DefenseType.Lam];
+        var targetName = DisplayName(target);
+        targetName = targetName.Length > 20 ? targetName[..20] : targetName;
+        var label = error ?? $"LAMs to launch at {targetName} (max {maxLams}):";
+
+        _overlays.Add(new TextPromptOverlay("Launch LAMs", label, string.Empty, text =>
+        {
+            if (!int.TryParse(text, out var amount) || amount < 0)
+            {
+                PromptForLamCount(source, target, $"You must use a positive number, {MyLord()}!");
+                return;
+            }
+
+            if (amount > maxLams)
+            {
+                PromptForLamCount(source, target, $"There aren't that many LAMs at {DisplayName(source)}, {MyLord()}.");
+                return;
+            }
+
+            FinishLaunchLams(source, target, amount);
+        }));
+    }
+
+    // LaunchLAM's own tail (DESIGN.PAS:211-247): CombatStandalone.LAMAttack already applies the outcome
+    // (news, fleet destruction, defense reduction) the same way NpeToolkit's own LAM strikes do -- only
+    // the base's own LAM count and the casualty report are this command's responsibility.
+    private void FinishLaunchLams(IEconomicWorld source, ISectorObject target, int lamsToUse)
+    {
+        var lines = new List<string>();
+        if (lamsToUse > 0)
+        {
+            var (shipsDestroyed, defensesDestroyed) = CombatStandalone.LAMAttack(_player, lamsToUse, (IShipCargoHolder)target, _game);
+            source.Defenses[DefenseType.Lam] -= lamsToUse;
+            Refresh();
+
+            if (target is Fleet)
+            {
+                lines.AddRange(Enum.GetValues<ShipType>().Where(t => shipsDestroyed[t] > 0).Select(t => $"{shipsDestroyed[t]} {new ResourceKind.Ship(t).DisplayName} were destroyed."));
+            }
+            else
+            {
+                lines.AddRange(Enum.GetValues<DefenseType>().Where(t => defensesDestroyed[t] > 0).Select(t => $"{defensesDestroyed[t]} {new ResourceKind.Defense(t).DisplayName} were destroyed."));
+            }
+        }
+
+        if (lines.Count == 0)
+        {
+            lines.Add(target is Fleet ? "No ships were destroyed." : "No defenses were destroyed.");
+        }
+
+        ShowInfo("Launch LAMs", string.Join('\n', lines));
     }
 
     // ResultMessage (ATTCOMM.PAS:1652-1686) -- only these three cases are ever reached (DefCapturedART
