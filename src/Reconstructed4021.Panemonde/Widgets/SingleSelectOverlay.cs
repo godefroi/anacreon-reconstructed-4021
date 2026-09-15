@@ -1,26 +1,24 @@
-using Reconstructed4021.Core.Entities;
-using Reconstructed4021.Core.Types;
-using Reconstructed4021.Panemonde;
-using Reconstructed4021.Panemonde.Widgets;
+namespace Reconstructed4021.Panemonde.Widgets;
 
-
-namespace Reconstructed4021.Tui2.Overlays;
-
-
-// Build menu > New's own type picker (CONSTR.PAS: ConstructCommand's own menu of everything the
-// empire currently has the technology for). Plain pick-one-and-close list, same Enter/Esc shape as
-// HelpListOverlay/ObjectPickerOverlay.
-internal sealed class ConstructionTypePickerOverlay : IOverlay
+// Plain pick-one-and-close list, generalized off Build > New's own construction-type picker
+// (Reconstructed4021.Tui2) once Trade Technology needed the exact same shape twice more (an empire to
+// trade with, then which technology to hand over). Fully generic -- no game-specific type baked in,
+// same reason TextPromptOverlay lives here rather than in Tui2's own Overlays folder -- same Enter/Esc
+// convention as that widget and ListBox<T> itself.
+public sealed class SingleSelectOverlay<T> : IOverlay
 {
     private const int Width = 40;
-    private readonly ListBox<ConstructionType> _list;
-    private readonly Action<ConstructionType> _onChosen;
+
+    private readonly string _title;
+    private readonly ListBox<T> _list;
+    private readonly Action<T> _onChosen;
 
     public bool IsDismissed { get; private set; }
 
-    public ConstructionTypePickerOverlay(IReadOnlyList<ConstructionType> types, Action<ConstructionType> onChosen)
+    public SingleSelectOverlay(string title, IReadOnlyList<T> items, Func<T, string> format, Action<T> onChosen)
     {
-        _list = new ListBox<ConstructionType>(types, ConstructionCatalog.DisplayName);
+        _title = title;
+        _list = new ListBox<T>(items, format);
         _onChosen = onChosen;
     }
 
@@ -55,7 +53,8 @@ internal sealed class ConstructionTypePickerOverlay : IOverlay
         var y = Math.Max(0, (fb.Height - height) / 2);
 
         BoxDrawing.DrawSingleLine(fb, x, y, width, height, ConsoleColor.Gray, ConsoleColor.Black);
-        fb.DrawText(x + Math.Max(1, (width - 13) / 2), y, " Construction ", ConsoleColor.White, ConsoleColor.Black);
+        var titleText = $" {_title} ";
+        fb.DrawText(x + Math.Max(1, (width - titleText.Length) / 2), y, titleText, ConsoleColor.White, ConsoleColor.Black);
         _list.Draw(fb, x + 1, y + 1, width - 2, height - 2, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
     }
 }

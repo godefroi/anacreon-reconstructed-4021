@@ -165,6 +165,7 @@ internal sealed class NewsOverlay : IOverlay
             NewsType.EnemyConqueredCapitalGlobal => $"{emp} has attacked and conquered the {item.Defender?.Name} capital.",
             NewsType.EmpireLamStrikeGlobal => $"{emp} has hit {loc} ({item.Defender?.Name}) with LAMs.",
             NewsType.WorldRevoltedGlobal => $"{loc} has declared independence from {emp}.",
+            NewsType.EmpireSoldTechnology => $"{emp} has given the empire {(item.TechGrant is { } grant ? TechCatalog.DisplayName(grant) : "some")} technology.",
             NewsType.MessageReceived => $"Message received from {emp}.",
             NewsType.MessageIntercepted => $"{loc} has intercepted a message from {emp}.",
             _ => $"({item.Headline})",

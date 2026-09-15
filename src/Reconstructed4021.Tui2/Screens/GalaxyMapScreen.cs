@@ -207,7 +207,7 @@ internal sealed class GalaxyMapScreen : IScreen
         new MenuBar.TopItem("_Empire", [
             new MenuBar.Item("_Send Message", SendMessageCommand),
             new MenuBar.Item("_Read Messages", ReadMessagesCommand),
-            new MenuBar.Item("_Trade Technology", Stub),
+            new MenuBar.Item("_Trade Technology", TradeTechnologyCommand),
             new MenuBar.Item("Te_ch Tree", () => _overlays.Add(new TechTreeOverlay(_player))),
         ]),
         new MenuBar.TopItem("_Worlds", [
@@ -1165,6 +1165,53 @@ internal sealed class GalaxyMapScreen : IScreen
         ShowInfo("Launch LAMs", string.Join('\n', lines));
     }
 
+    /// <summary>
+    /// Empire menu &gt; Trade Technology (DESIGN.PAS's SellTechnology). A candidate recipient is any
+    /// other empire whose own current tech level would soon grant them something the player already
+    /// has -- <c>PlyTechSet * (TechDev[Tech]-TechDev[Pred(Tech)])</c>, the recipient's own level-only
+    /// bracket intersected with the player's owned set; whether the recipient already independently
+    /// owns that item too is not checked (Pascal's own TechSet+[NewTechnology] union tolerates handing
+    /// over something they already have as a harmless no-op, so this doesn't filter for it either).
+    /// </summary>
+    private void TradeTechnologyCommand()
+    {
+        var candidates = _game.Empires
+            .Where(e => !ReferenceEquals(e, _player) && HasTradeableTech(e))
+            .ToList();
+
+        if (candidates.Count == 0)
+        {
+            ShowInfo("Trade Technology", $"Unfortunately, {MyLord()}, you have nothing that others would want.");
+            return;
+        }
+
+        _overlays.Add(new SingleSelectOverlay<Empire>("Trade Technology", candidates, e => e.Name, PickTechnologyToTrade));
+    }
+
+    private bool HasTradeableTech(Empire recipient) =>
+        TechCatalog.AllEntries(_player.Technology).Any(e => e.MinTech == recipient.TechnologyLevel && e.Owned);
+
+    private void PickTechnologyToTrade(Empire recipient)
+    {
+        var options = TechCatalog.AllEntries(_player.Technology)
+            .Where(e => e.MinTech == recipient.TechnologyLevel && e.Owned)
+            .Select(e => e.Identity)
+            .ToList();
+
+        _overlays.Add(new SingleSelectOverlay<TechCatalog.TechGrantIdentity>("Trade Technology", options,
+            id => Capitalize($"{TechCatalog.DisplayName(id)} technology"),
+            identity =>
+            {
+                TechCatalog.Grant(recipient.Technology, identity);
+                recipient.AddNews(NewsType.EmpireSoldTechnology, otherEmpire: _player, techGrant: identity);
+                ShowInfo("Trade Technology", $"Transfer of {TechCatalog.DisplayName(identity)} technology to {recipient.Name} completed.");
+            }));
+    }
+
+    // AddNameCommand's own NameVar[1]:=UpCase(NameVar[1]) convention, reused here for
+    // SellTechnology's own Line[1]:=UpCase(Line[1]).
+    private static string Capitalize(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
+
     /// <summary>Empire menu &gt; Send Message (DESIGN.PAS's SendMessageCommand).</summary>
     private void SendMessageCommand()
     {
@@ -1346,7 +1393,7 @@ internal sealed class GalaxyMapScreen : IScreen
             return;
         }
 
-        _overlays.Add(new ConstructionTypePickerOverlay(available, PickConstructionCoordinate));
+        _overlays.Add(new SingleSelectOverlay<ConstructionType>("Construction", available, ConstructionCatalog.DisplayName, PickConstructionCoordinate));
     }
 
     private void PickConstructionCoordinate(ConstructionType type) =>
