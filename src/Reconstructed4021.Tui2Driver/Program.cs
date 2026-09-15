@@ -2,6 +2,7 @@ using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.LegacyNpe;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Tui2;
+using Reconstructed4021.Tui2.NewGame;
 
 // Headless functional driver for Reconstructed4021.Tui2 screens, same purpose as
 // Reconstructed4021.TuiDriver serves for the Terminal.Gui-based Tui project: a script of key presses

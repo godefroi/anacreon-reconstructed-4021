@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Reconstructed4021.Panemonde;
-using Reconstructed4021.Tui2;
+using Reconstructed4021.Tui2.NewGame;
 
 // Run this in a real Windows Terminal window -- not through a tool-captured shell, which has
 // redirected stdio and no real VT-processing terminal on the other end.
