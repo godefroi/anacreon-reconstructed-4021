@@ -52,13 +52,14 @@ internal sealed class CloseUpOverlay : IOverlay
     private readonly Action<string, string> _showInfo;
     private readonly Action<IOverlay> _push;
     private readonly Func<char, Fleet, Action<Fleet>?> _resolveFleetAction;
+    private readonly Action<ISectorObject> _onGoToMap;
     private readonly TabKind[] _tabKinds;
     private readonly TabFrame _frame;
     private readonly TextEditor? _ordersEditor;
 
     public bool IsDismissed { get; private set; }
 
-    public CloseUpOverlay(ISectorObject obj, Empire viewer, Game game, Action<string, string> showInfo, Action<IOverlay> push, Func<char, Fleet, Action<Fleet>?> resolveFleetAction, string initialTab = "Close Up")
+    public CloseUpOverlay(ISectorObject obj, Empire viewer, Game game, Action<string, string> showInfo, Action<IOverlay> push, Func<char, Fleet, Action<Fleet>?> resolveFleetAction, Action<ISectorObject> onGoToMap, string initialTab = "Close Up")
     {
         _obj = obj;
         _viewer = viewer;
@@ -66,6 +67,7 @@ internal sealed class CloseUpOverlay : IOverlay
         _showInfo = showInfo;
         _push = push;
         _resolveFleetAction = resolveFleetAction;
+        _onGoToMap = onGoToMap;
 
         if (obj is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, viewer))
         {
@@ -112,6 +114,17 @@ internal sealed class CloseUpOverlay : IOverlay
         // be ignored, not close the overlay).
         if (key.Modifiers.HasFlag(ConsoleModifiers.Control))
         {
+            return;
+        }
+
+        // F10: dismiss straight back to the map with the cursor moved onto whatever this Close Up was
+        // showing -- no Pascal equivalent (CloseUpCom is non-modal, so real Pascal's own cursor never
+        // left the object in the first place), added per the user's own explicit request. Checked ahead
+        // of the fleet-action shortcuts below so it can never be shadowed by one.
+        if (key.Key == ConsoleKey.F10)
+        {
+            IsDismissed = true;
+            _onGoToMap(_obj);
             return;
         }
 
@@ -266,15 +279,14 @@ internal sealed class CloseUpOverlay : IOverlay
             LayoutWorld(world, At);
         }
 
+        // No worldOwned branch: OpenExamine already routes any world the viewer owns to WorldInfoOverlay
+        // instead of this class, so CloseUpOverlay only ever sees a fleet or someone else's world.
         var fleetOwned = fleet is not null && ReferenceEquals(fleet.Owner, _viewer);
-        var worldOwned = _obj is IEconomicWorld ownedWorld && ReferenceEquals(ownedWorld.Owner, _viewer);
         At(1, 17, fleetOwned
             // D (Deploy) is deliberately absent: Deploy has no path here from an existing fleet (it
             // only launches from a world picked via the map cursor) -- its own follow-on slice.
-            ? $"Ctrl+PgUp/PgDn: Orders tab   {GalaxyMapScreen.FleetActionHint(fleet!, _resolveFleetAction)}"
-            : worldOwned
-                ? "(world actions not wired up yet -- any key closes)"
-                : "(any key closes)");
+            ? $"F10: go to map   Ctrl+PgUp/PgDn: Orders tab   {GalaxyMapScreen.FleetActionHint(fleet!, _resolveFleetAction)}"
+            : "F10: go to map   (any other key closes)");
     }
 
     private void LayoutWorld(IEconomicWorld world, Action<int, int, string> at)

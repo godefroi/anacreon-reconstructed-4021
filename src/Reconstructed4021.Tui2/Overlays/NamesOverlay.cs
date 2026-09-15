@@ -18,7 +18,11 @@ namespace Reconstructed4021.Tui2.Overlays;
 internal sealed class NamesOverlay : IOverlay
 {
     private const int NoOfLines = 17; // NMSWIND.PAS: NoOfLines:=InitHeight-2, InitHeight=19.
-    private const int Width = 44;
+
+    // Real Pascal's own name column is 8 wide, but that clips most real names -- widened by 3 (and the
+    // panel along with it), per the user's own explicit request.
+    private const int NameColumnWidth = 11;
+    private const int Width = 47;
 
     private readonly Game _game;
     private readonly Empire _viewer;
@@ -65,8 +69,9 @@ internal sealed class NamesOverlay : IOverlay
         ? CloseUpOverlay.DescribeLocation(obj, _viewer)
         : RelativeCoordinate.Format(entry.Bookmark!.Location, _viewer.Capital?.Location ?? new Coordinate(0, 0));
 
-    // GetNameLine (NMSWIND.PAS:93-113): name padded to 8, then 5 spaces, then location padded to 12.
-    private string FormatRow(NameEntry entry) => $"{DisplayNameOf(entry).PadRight(8)[..8]}     {LocationOf(entry).PadRight(12)[..12]}";
+    // GetNameLine (NMSWIND.PAS:93-113): name padded to 8, then 5 spaces, then location padded to 12 --
+    // widened to NameColumnWidth here (see its own doc comment).
+    private string FormatRow(NameEntry entry) => $"{DisplayNameOf(entry).PadRight(NameColumnWidth)[..NameColumnWidth]}     {LocationOf(entry).PadRight(12)[..12]}";
 
     private void Choose(NameEntry entry)
     {

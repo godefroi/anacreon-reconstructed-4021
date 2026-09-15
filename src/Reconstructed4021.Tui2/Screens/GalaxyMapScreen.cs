@@ -397,7 +397,16 @@ internal sealed class GalaxyMapScreen : IScreen
             return;
         }
 
-        _overlays.Add(new CloseUpOverlay(obj, _player, _game, ShowInfo, _overlays.Add, ResolveFleetContextAction, initialTab));
+        _overlays.Add(new CloseUpOverlay(obj, _player, _game, ShowInfo, _overlays.Add, ResolveFleetContextAction, GoToMapFromCloseUp, initialTab));
+    }
+
+    // CloseUpOverlay's own F10: drop every overlay (Close Up itself, and whatever report/picker window
+    // it was drilled into from) and land the cursor right on the object that was up, rather than back
+    // wherever the cursor happened to be left.
+    private void GoToMapFromCloseUp(ISectorObject obj)
+    {
+        _cursor = obj.Location;
+        _overlays.Clear();
     }
 
     // GameShell.ShowNamesWindow: F2/F8 mutate in place and just refresh, but F3 (add a bookmark)
