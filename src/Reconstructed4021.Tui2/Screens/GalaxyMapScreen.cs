@@ -208,7 +208,7 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("_Send Message", Stub),
             new MenuBar.Item("_Read Messages", Stub),
             new MenuBar.Item("_Trade Technology", Stub),
-            new MenuBar.Item("Te_ch Tree", Stub),
+            new MenuBar.Item("Te_ch Tree", () => _overlays.Add(new TechTreeOverlay(_player))),
         ]),
         new MenuBar.TopItem("_Worlds", [
             new MenuBar.Item("_Close Up", ExamineCursor),
