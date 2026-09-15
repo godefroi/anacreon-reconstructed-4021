@@ -35,8 +35,13 @@ public static class CombatResolution
     /// matching real Pascal's own <c>Target.ObjTyp=Flt</c> check. <c>Capture</c> is real Pascal's own
     /// <c>IF Intent=DestTrnAIT THEN Capture:=False ELSE Capture:=True</c> — every intent except
     /// DestroyTransports captures a conquered fleet's remains rather than letting them scatter.
+    ///
+    /// <paramref name="smartRetreat"/> defaults false so every existing call site (every NPE combat
+    /// call in <c>Reconstructed4021.LegacyNpe</c>, plus the pre-existing player Attack path) is
+    /// untouched byte-for-byte; only <c>Reconstructed4021.Tui2</c>'s own Auto Attack command passes
+    /// true, opt-in per its own settings file. See <see cref="WorldEngage"/> for what it actually does.
     /// </summary>
-    public static CombatEngagementResult NPEAttack(Empire attacker, Fleet attackerFleet, object target, AttackIntentionType intent, Game game, Random random)
+    public static CombatEngagementResult NPEAttack(Empire attacker, Fleet attackerFleet, object target, AttackIntentionType intent, Game game, Random random, bool smartRetreat = false)
     {
         var targetOwner = target switch {
             IEconomicWorld w => w.Owner,
@@ -62,7 +67,7 @@ public static class CombatResolution
 
         var engagement = target is Fleet
             ? FleetEngage(groups, enemy, combatData, intent, random)
-            : WorldEngage(groups, enemy, combatData, intent, random);
+            : WorldEngage(groups, enemy, combatData, intent, random, smartRetreat);
 
         CombatOutcome.RestoreCombatant(attackerFleet, engagement.Casualties);
         CombatOutcome.RestoreCombatant(target, engagement.Killed);
@@ -91,17 +96,37 @@ public static class CombatResolution
         return new CombatEngagementResult(result, casualties, killed);
     }
 
-    /// <summary>WorldEngage (ATTNPE.PAS:288-384): the round-robin loop for a fleet-vs-world engagement.</summary>
-    public static CombatEngagementResult WorldEngage(List<GroupRecord> groups, EnemyForces enemy, CombatDataRecord combatData, AttackIntentionType intent, Random random)
+    /// <summary>
+    /// WorldEngage (ATTNPE.PAS:288-384): the round-robin loop for a fleet-vs-world engagement.
+    ///
+    /// <paramref name="smartRetreat"/> is this port's own addition, no Pascal precedent (see the class
+    /// remarks on <c>RetrIndex</c> — real Pascal never had a working "retreat if losing" rule at all).
+    /// Once every escort combat ship the attacker started with (Fighter/HunterKiller/Jumpship/
+    /// Penetrator/Starship) is gone and only transports remain in the air, <see cref="TrnAdvance"/>
+    /// (called from <see cref="WorldEngageTargetting"/>, below) sends them down to Ground into whatever
+    /// the defender still has — losing every legion aboard for nothing once the escort can no longer
+    /// suppress the defense. With the flag on, the loop retreats one round earlier instead: right after
+    /// this round's <see cref="FleetRetreats"/> check and before targetting/advancing runs, so the
+    /// transports never move this round. False by default: it changes a tactical outcome a player may
+    /// be relying on, so it's opt-in, never silently on for existing saves.
+    /// </summary>
+    public static CombatEngagementResult WorldEngage(List<GroupRecord> groups, EnemyForces enemy, CombatDataRecord combatData, AttackIntentionType intent, Random random, bool smartRetreat = false)
     {
         var casualties = new AttackTally();
         var killed = new AttackTally();
         var result = AttackResultType.None;
         var engageRound = 0;
+        var hadEscort = groups.Any(g => g.Typ is AttackType.Fighter or AttackType.HunterKiller or AttackType.Jumpship or AttackType.Penetrator or AttackType.Starship);
 
         do {
             engageRound++;
             FleetRetreats(engageRound, groups, ref result);
+
+            if (smartRetreat && result == AttackResultType.None && hadEscort && TransportsLeft(groups)) {
+                result = AttackResultType.AttackerRetreats;
+                break;
+            }
+
             WorldEngageTargetting(groups, enemy, intent);
             GroupEngage(groups, enemy, combatData, casualties, killed, random, ref result);
         } while (result == AttackResultType.None);

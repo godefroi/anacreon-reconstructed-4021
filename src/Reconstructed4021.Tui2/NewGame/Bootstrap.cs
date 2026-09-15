@@ -36,6 +36,7 @@ public static class Bootstrap
     {
         var random = new Random();
         var npeProvider = new LegacyNpeProvider();
+        var settings = Tui2Settings.Load(repoRoot);
 
         // NEWGAME.PAS's own ScenarioIntroduction just prompts for a hardcoded filename -- no directory
         // scan or title list. ReadHeader reads only the same header tokens Load() itself would, so
@@ -78,11 +79,11 @@ public static class Bootstrap
         // share this same random, matching Reconstructed4021.Tui's own Program.cs. No tech-debug log
         // file (AnnualTickHandler's techDebugLog param is optional): that's a debug tool tui1 built for
         // its own tech-balance investigation, not something this port's turn loop needs to duplicate.
-        var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random, useLegacyOrderResolution: false), new AnnualTickHandler(random));
+        var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random, settings.UseLegacyOrderResolution), new AnnualTickHandler(random));
 
         NewGameContext? context = null;
         IScreen MakeTitleScreen() => new TitleScreen(context!);
-        context = new NewGameContext(random, npeProvider, repoRoot, MakeTitleScreen, LoadScenarios, LoadSaves, turnEngine);
+        context = new NewGameContext(random, npeProvider, repoRoot, MakeTitleScreen, LoadScenarios, LoadSaves, turnEngine, settings);
         return context;
     }
 }

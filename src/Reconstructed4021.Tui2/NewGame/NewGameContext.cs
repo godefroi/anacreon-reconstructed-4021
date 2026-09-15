@@ -28,4 +28,5 @@ public sealed record NewGameContext(
     Func<IScreen> MakeTitleScreen,
     Func<IReadOnlyList<ScenarioPickerScreen.ScenarioChoice>> LoadScenarios,
     Func<IReadOnlyList<SaveGamePickerScreen.SaveChoice>> LoadSaves,
-    TurnEngine TurnEngine);
+    TurnEngine TurnEngine,
+    Tui2Settings Settings);

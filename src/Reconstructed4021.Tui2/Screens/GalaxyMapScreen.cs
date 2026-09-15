@@ -1067,7 +1067,7 @@ internal sealed class GalaxyMapScreen : IScreen
                 before[shipType] = attacker.Ships[shipType];
             }
 
-            var engagement = CombatResolution.NPEAttack(_player, attacker, target, AttackIntentionType.Conquer, _game, _context.Random);
+            var engagement = CombatResolution.NPEAttack(_player, attacker, target, AttackIntentionType.Conquer, _game, _context.Random, _context.Settings.SmartAutoAttackRetreat);
             Refresh();
 
             var casualties = Enum.GetValues<ShipType>().Select(t => $"{new ResourceKind.Ship(t).DisplayName}: {Math.Max(0, before[t] - attacker.Ships[t])}");

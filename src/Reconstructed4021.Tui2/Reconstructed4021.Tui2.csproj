@@ -13,4 +13,13 @@
     <ProjectReference Include="..\Reconstructed4021.LegacyNpe\Reconstructed4021.LegacyNpe.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- .NET's own options-loading pipeline for appsettings.json (Tui2Settings), same packages
+         Reconstructed4021.Tui's own TuiSettings uses. -->
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.7" />
+  </ItemGroup>
+
 </Project>
