@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Reconstructed4021.Core\Reconstructed4021.Core.csproj" />
     <ProjectReference Include="..\Reconstructed4021.LegacyNpe\Reconstructed4021.LegacyNpe.csproj" />
+    <ProjectReference Include="..\Reconstructed4021.Panemonde\Reconstructed4021.Panemonde.csproj" />
   </ItemGroup>
 
 </Project>
