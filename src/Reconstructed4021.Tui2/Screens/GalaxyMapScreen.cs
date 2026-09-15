@@ -215,8 +215,8 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("_Designate", () => OpenOwnWorldTab("Designate")),
             new MenuBar.Item("P_roduction", () => OpenOwnWorldTab("Production")),
             new MenuBar.Item("_ISSP", () => OpenOwnWorldTab("ISSP")),
-            new MenuBar.Item("_Add Name", Stub),
-            new MenuBar.Item("Delete _Name", Stub),
+            new MenuBar.Item("_Add Name", AddNameCommand),
+            new MenuBar.Item("Delete _Name", DeleteNameCommand),
             new MenuBar.Item("_Liberate", Stub),
             new MenuBar.Item("_Self-Destruct", Stub),
         ]),
@@ -1211,6 +1211,53 @@ internal sealed class GalaxyMapScreen : IScreen
         _infoTitle = title;
         _infoMessage = message;
     }
+
+    // NAMES.PAS: AddNameCommand/DeleteNameCommand, generalized to whatever's at the cursor rather than
+    // a world specifically -- real Pascal lets a player name anything they can see, not just their own
+    // worlds, so this resolves via ObjectsAt (the same Game.Visible gate Close Up itself uses) rather
+    // than an own-worlds-only lookup, with the same picker-on-2+ ExamineCursor already uses.
+    private void ResolveNameTarget(string title, Action<ISectorObject> onResolved)
+    {
+        var objects = ObjectsAt(_cursor);
+        switch (objects.Count)
+        {
+            case 0:
+                ShowInfo(title, "Move the cursor onto something you can see first.");
+                break;
+            case 1:
+                onResolved(objects[0]);
+                break;
+            default:
+                _overlays.Add(new ObjectPickerOverlay(objects, _player, onResolved));
+                break;
+        }
+    }
+
+    private void AddNameCommand() => ResolveNameTarget("Add Name", obj =>
+        _overlays.Add(new TextPromptOverlay("Name", "New name (blank to clear):", obj.Names.GetValueOrDefault(_player, string.Empty), newName =>
+        {
+            if (newName.Length == 0)
+            {
+                obj.Names.Remove(_player);
+            }
+            else
+            {
+                obj.Names[_player] = newName;
+            }
+
+            Refresh();
+        })));
+
+    private void DeleteNameCommand() => ResolveNameTarget("Delete Name", obj =>
+    {
+        if (!obj.Names.Remove(_player))
+        {
+            ShowInfo("Delete Name", "That hasn't been named.");
+            return;
+        }
+
+        Refresh();
+    });
 
     // GameShell.EndTurn: PLAYTURN.PAS's own command loop runs entirely before UpdateTurn is called --
     // TurnEngine.BeginTurn (fog-of-war refresh) already ran before this screen was even shown, so
