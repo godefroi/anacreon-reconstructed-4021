@@ -54,7 +54,7 @@ internal sealed class CloseUpOverlay : IOverlay
 
     public bool IsDismissed { get; private set; }
 
-    public CloseUpOverlay(ISectorObject obj, Empire viewer, Game game, Action<string, string> showInfo, Action<IOverlay> push, Func<char, Fleet, Action<Fleet>?> resolveFleetAction)
+    public CloseUpOverlay(ISectorObject obj, Empire viewer, Game game, Action<string, string> showInfo, Action<IOverlay> push, Func<char, Fleet, Action<Fleet>?> resolveFleetAction, string initialTab = "Close Up")
     {
         _obj = obj;
         _viewer = viewer;
@@ -66,7 +66,7 @@ internal sealed class CloseUpOverlay : IOverlay
         if (obj is Fleet ownFleet && ReferenceEquals(ownFleet.Owner, viewer))
         {
             _tabKinds = [TabKind.CloseUp, TabKind.Orders];
-            var lines = FleetOrderCompiler.Decompile(viewer, ownFleet.Orders);
+            var lines = FleetOrderCompiler.Decompile(game, viewer, ownFleet.Orders);
             _ordersEditor = new TextEditor(string.Join('\n', lines))
             {
                 MarkedLine = ownFleet.NextOrder > 0 ? ownFleet.NextOrder : lines.Count > 0 ? 1 : 0,
@@ -78,6 +78,15 @@ internal sealed class CloseUpOverlay : IOverlay
         }
 
         _frame = new TabFrame(_tabKinds.Select(k => k == TabKind.CloseUp ? "Close Up" : "Orders").ToArray());
+
+        // Fleet menu > Orders' own entry point (GalaxyMapScreen.FleetOrders): opens straight onto the
+        // Orders tab rather than always defaulting to Close Up, matching WorldInfoOverlay's own
+        // initialTab convention.
+        var initialIndex = Array.IndexOf(_tabKinds, initialTab == "Orders" ? TabKind.Orders : TabKind.CloseUp);
+        if (initialIndex >= 0)
+        {
+            _frame.SelectIndex(initialIndex);
+        }
     }
 
     public void HandleKey(ConsoleKeyInfo key)

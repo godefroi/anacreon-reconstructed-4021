@@ -393,7 +393,7 @@ internal sealed class GalaxyMapScreen : IScreen
             return;
         }
 
-        _overlays.Add(new CloseUpOverlay(obj, _player, _game, ShowInfo, _overlays.Add, ResolveFleetContextAction));
+        _overlays.Add(new CloseUpOverlay(obj, _player, _game, ShowInfo, _overlays.Add, ResolveFleetContextAction, initialTab));
     }
 
     // GameShell.ShowNamesWindow: F2/F8 mutate in place and just refresh, but F3 (add a bookmark)

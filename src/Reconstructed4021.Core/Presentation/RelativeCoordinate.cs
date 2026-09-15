@@ -12,4 +12,7 @@ namespace Reconstructed4021.Core.Presentation;
 public static class RelativeCoordinate
 {
     public static string Format(Coordinate point, Coordinate origin) => $"{point.X - origin.X},{origin.Y - point.Y}";
+
+    /// <summary>AbsoluteX/AbsoluteY (PRIMINTR.PAS:1118-1138) -- Format's own inverse, for a caller that needs to turn a player-typed relative coordinate back into a real galaxy position (FleetOrderCompiler's own Name2Coord port).</summary>
+    public static Coordinate ToAbsolute(int relativeX, int relativeY, Coordinate origin) => new(origin.X + relativeX, origin.Y - relativeY);
 }

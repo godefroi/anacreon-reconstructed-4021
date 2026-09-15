@@ -1,4 +1,5 @@
 using Reconstructed4021.Core.Galaxy;
+using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Types;
 
 namespace Reconstructed4021.Core.Entities;
@@ -170,9 +171,13 @@ public static class FleetOrderCompiler
     /// per-empire <see cref="ISectorObject.Names"/> dictionary this port already populates from
     /// `.SAV` load and starbase/stargate construction naming), then a bounded `"x,y"` coordinate
     /// (`Name2Coord`) -- landing on whatever object already occupies that cell, if any, otherwise a
-    /// bare position. No galaxy-wrap: confirmed this port's <see cref="Galaxy.Galaxy"/> has no
-    /// torus/wraparound anywhere, so a plain bounds check is the whole job (real Pascal's own
-    /// `AbsoluteX`/`AbsoluteY` wrap has no equivalent need here).
+    /// bare position. The typed x,y is <paramref name="owner"/>-relative, not a raw galaxy coordinate
+    /// (`Name2Coord`'s own `AbsoluteX`/`AbsoluteY` calls, `PRIMINTR.PAS:1118-1138` -- the same
+    /// capital-relative convention every other screen already shows a player, ported here via
+    /// <see cref="RelativeCoordinate.ToAbsolute"/> rather than the raw value this port's own
+    /// <see cref="Decompile"/> used to print). No galaxy-wrap beyond that: confirmed this port's
+    /// <see cref="Galaxy.Galaxy"/> has no torus/wraparound anywhere, so a plain bounds check on the
+    /// resulting absolute coordinate is the rest of the job.
     /// </summary>
     private static bool ResolveDestination(Game game, Empire owner, string text, out ISectorObject? destinationObject, out Coordinate? destinationPosition)
     {
@@ -186,19 +191,23 @@ public static class FleetOrderCompiler
 
         var comma = text.IndexOf(',');
         if (comma > 0
-            && int.TryParse(text[..comma], out var x)
-            && int.TryParse(text[(comma + 1)..], out var y)
-            && x >= 1 && x <= game.Galaxy.Size && y >= 1 && y <= game.Galaxy.Size) {
-            var coordinate = new Coordinate(x, y);
-            destinationObject = game.Galaxy.GetObjectAt(coordinate);
-            destinationPosition = destinationObject is null ? coordinate : null;
-            return true;
+            && int.TryParse(text[..comma], out var relativeX)
+            && int.TryParse(text[(comma + 1)..], out var relativeY)) {
+            var coordinate = RelativeCoordinate.ToAbsolute(relativeX, relativeY, Origin(game, owner));
+            if (coordinate.X >= 1 && coordinate.X <= game.Galaxy.Size && coordinate.Y >= 1 && coordinate.Y <= game.Galaxy.Size) {
+                destinationObject = game.Galaxy.GetObjectAt(coordinate);
+                destinationPosition = destinationObject is null ? coordinate : null;
+                return true;
+            }
         }
 
         destinationObject = null;
         destinationPosition = null;
         return false;
     }
+
+    /// <summary>GetCoord(Universe^.EmpireData[Player].Capital,CapXY) (PRIMINTR.PAS:1125/1136) -- the origin every relative coordinate in the Orders language is measured from. Same capital-or-galaxy-center fallback every other screen already uses for a capital-less empire.</summary>
+    private static Coordinate Origin(Game game, Empire empire) => empire.Capital?.Location ?? new Coordinate(game.Galaxy.Size / 2, game.Galaxy.Size / 2);
 
     private static IEnumerable<ISectorObject> NamedObjects(Galaxy.Galaxy galaxy)
     {
@@ -214,17 +223,20 @@ public static class FleetOrderCompiler
     /// `"TRANsfer "`, `"REPEat"`, `"WAIT"`) so the result round-trips straight back through
     /// <see cref="Compile"/> unchanged. A destination's name uses <paramref name="viewer"/>'s own
     /// <see cref="ISectorObject.Names"/> entry when the object has one; otherwise (or for a bare
-    /// position) falls back to its plain `"X,Y"` coordinate -- <b>not</b>
-    /// <see cref="Tui.CloseUpWindow.DescribeLocation"/>'s relative-to-capital display format, which
-    /// <see cref="ResolveDestination"/> can't parse back.
+    /// position) falls back to its coordinate -- <see cref="viewer"/>-relative
+    /// (<see cref="RelativeCoordinate.Format"/>), matching real Pascal's own <c>GetCoordName</c>
+    /// (`PRIMINTR.PAS:1380-1398`, called from this same routine's own `GetName`) and
+    /// <see cref="ResolveDestination"/>'s matching <see cref="RelativeCoordinate.ToAbsolute"/> on the
+    /// way back in -- not a raw galaxy coordinate, which is what this port originally printed here.
     /// </summary>
-    public static IReadOnlyList<string> Decompile(Empire viewer, IReadOnlyList<FleetOrder> orders)
+    public static IReadOnlyList<string> Decompile(Game game, Empire viewer, IReadOnlyList<FleetOrder> orders)
     {
+        var origin = Origin(game, viewer);
         var lines = new List<string>(orders.Count);
 
         foreach (var order in orders) {
             lines.Add(order.Type switch {
-                CommandType.Destination => $"DESTination {DestinationText(viewer, order)}",
+                CommandType.Destination => $"DESTination {DestinationText(viewer, origin, order)}",
                 CommandType.Transfer => $"TRANsfer {order.TransferAmount} {TransferResourceText(order)}",
                 CommandType.Repeat => "REPEat",
                 CommandType.Wait => "WAIT",
@@ -237,16 +249,15 @@ public static class FleetOrderCompiler
         return lines;
     }
 
-    private static string DestinationText(Empire viewer, FleetOrder order)
+    private static string DestinationText(Empire viewer, Coordinate origin, FleetOrder order)
     {
         if (order.DestinationObject is { } destinationObject) {
             return destinationObject.Names.TryGetValue(viewer, out var name)
                 ? name
-                : $"{destinationObject.Location.X},{destinationObject.Location.Y}";
+                : RelativeCoordinate.Format(destinationObject.Location, origin);
         }
 
-        var position = order.DestinationPosition!.Value;
-        return $"{position.X},{position.Y}";
+        return RelativeCoordinate.Format(order.DestinationPosition!.Value, origin);
     }
 
     private static string TransferResourceText(FleetOrder order) => order switch {
