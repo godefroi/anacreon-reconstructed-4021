@@ -24,9 +24,9 @@ namespace Reconstructed4021.Tui2.Overlays;
 //
 // A second tab, Orders (FLTCOMM.PAS's own FleetOrdersCommand mini scripting language), now exists for
 // one of the player's own fleets -- see FleetOrdersTabView's own doc comment (Reconstructed4021.Tui)
-// for the compile/commit flow this ports. F2 rename and the D/C/T/J/A/R fleet-action shortcuts are
-// still not wired here (this slice is examine-and-order-edit only); folding them in is cheap once
-// ExamineCursor's own callers need them.
+// for the compile/commit flow this ports. F2 (rename), F10 (go to map), and the fleet-action shortcuts
+// (C/T/J/A/R, resolved externally via _resolveFleetAction) are all wired on the Close Up tab; none of
+// them apply while editing Orders.
 internal sealed class CloseUpOverlay : IOverlay
 {
     private const int FrameWidth = 80;
@@ -125,6 +125,25 @@ internal sealed class CloseUpOverlay : IOverlay
         {
             IsDismissed = true;
             _onGoToMap(_obj);
+            return;
+        }
+
+        // F2: rename this object for the viewer -- NamesOverlay's own Rename, now reachable directly
+        // from whatever's already up on screen instead of only through the Names list. Names is
+        // per-viewer (obj.Names[_viewer]), so this works the same whether or not _obj is actually owned.
+        if (key.Key == ConsoleKey.F2)
+        {
+            _push(new TextPromptOverlay("Name", "New name (blank to clear):", _obj.Names.GetValueOrDefault(_viewer, string.Empty), newName =>
+            {
+                if (newName.Length == 0)
+                {
+                    _obj.Names.Remove(_viewer);
+                }
+                else
+                {
+                    _obj.Names[_viewer] = newName;
+                }
+            }));
             return;
         }
 
@@ -285,8 +304,8 @@ internal sealed class CloseUpOverlay : IOverlay
         At(1, 17, fleetOwned
             // D (Deploy) is deliberately absent: Deploy has no path here from an existing fleet (it
             // only launches from a world picked via the map cursor) -- its own follow-on slice.
-            ? $"F10: go to map   Ctrl+PgUp/PgDn: Orders tab   {GalaxyMapScreen.FleetActionHint(fleet!, _resolveFleetAction)}"
-            : "F10: go to map   (any other key closes)");
+            ? $"F2:rename  F10:map   Ctrl+PgUp/PgDn: Orders tab   {GalaxyMapScreen.FleetActionHint(fleet!, _resolveFleetAction)}"
+            : "F2:rename  F10:map   (any other key closes)");
     }
 
     private void LayoutWorld(IEconomicWorld world, Action<int, int, string> at)

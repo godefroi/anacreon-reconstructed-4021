@@ -20,7 +20,7 @@ namespace Reconstructed4021.Tui2.Overlays;
 // other key belongs to whichever tab is showing (arrows/Enter for its own editing).
 //
 // Deliberately deferred: Redirect's destination pick (a new cross-screen map-cursor input mode, not a
-// port of anything -- its own slice) and F2:Rename (same scope cut CloseUpOverlay made).
+// port of anything -- its own slice).
 internal sealed class WorldInfoOverlay : IOverlay
 {
     private const int FrameWidth = 88;
@@ -43,6 +43,7 @@ internal sealed class WorldInfoOverlay : IOverlay
     private readonly Action<string, string> _showInfo;
     private readonly Action<IOverlay> _push;
     private readonly Action<IEconomicWorld> _deployFleet;
+    private readonly Action<ISectorObject> _onGoToMap;
 
     private readonly TabKind[] _tabKinds;
     private readonly TabFrame _frame;
@@ -57,7 +58,7 @@ internal sealed class WorldInfoOverlay : IOverlay
     public bool IsDismissed { get; private set; }
 
     public WorldInfoOverlay(IEconomicWorld world, Empire viewer, Game game, Random random,
-        Action refresh, Action<string, string> showInfo, Action<IOverlay> push, Action<IEconomicWorld> deployFleet, string initialTab = "Close Up")
+        Action refresh, Action<string, string> showInfo, Action<IOverlay> push, Action<IEconomicWorld> deployFleet, Action<ISectorObject> onGoToMap, string initialTab = "Close Up")
     {
         _world = world;
         _viewer = viewer;
@@ -67,6 +68,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         _showInfo = showInfo;
         _push = push;
         _deployFleet = deployFleet;
+        _onGoToMap = onGoToMap;
 
         var isPlanet = world is Planet;
         List<TabKind> kinds = [TabKind.CloseUp, TabKind.Production];
@@ -131,6 +133,31 @@ internal sealed class WorldInfoOverlay : IOverlay
         {
             IsDismissed = true;
             _deployFleet(_world);
+            return;
+        }
+
+        // F2/F10 are global here too, same as D above -- matching GameShell.ShowWorldInfo's own
+        // window.KeyDown handler running ahead of any tab-specific key handling.
+        if (key.Key == ConsoleKey.F2)
+        {
+            _push(new TextPromptOverlay("Name", "New name (blank to clear):", _world.Names.GetValueOrDefault(_viewer, string.Empty), newName =>
+            {
+                if (newName.Length == 0)
+                {
+                    _world.Names.Remove(_viewer);
+                }
+                else
+                {
+                    _world.Names[_viewer] = newName;
+                }
+            }));
+            return;
+        }
+
+        if (key.Key == ConsoleKey.F10)
+        {
+            IsDismissed = true;
+            _onGoToMap(_world);
             return;
         }
 
@@ -245,7 +272,7 @@ internal sealed class WorldInfoOverlay : IOverlay
             }
         }
 
-        At(1, ch - 1, "D: deploy   Esc: close");
+        At(1, ch - 1, "D: deploy   F2:rename  F10:map   Esc: close");
     }
 
     // ProductionWindow.Rebuild -- recomputed only when the Production tab becomes active or a value

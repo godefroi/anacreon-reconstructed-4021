@@ -393,17 +393,17 @@ internal sealed class GalaxyMapScreen : IScreen
     {
         if (obj is IEconomicWorld ownWorld && ReferenceEquals(ownWorld.Owner, _player))
         {
-            _overlays.Add(new WorldInfoOverlay(ownWorld, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, initialTab));
+            _overlays.Add(new WorldInfoOverlay(ownWorld, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, GoToMapFromExamine, initialTab));
             return;
         }
 
-        _overlays.Add(new CloseUpOverlay(obj, _player, _game, ShowInfo, _overlays.Add, ResolveFleetContextAction, GoToMapFromCloseUp, initialTab));
+        _overlays.Add(new CloseUpOverlay(obj, _player, _game, ShowInfo, _overlays.Add, ResolveFleetContextAction, GoToMapFromExamine, initialTab));
     }
 
-    // CloseUpOverlay's own F10: drop every overlay (Close Up itself, and whatever report/picker window
-    // it was drilled into from) and land the cursor right on the object that was up, rather than back
-    // wherever the cursor happened to be left.
-    private void GoToMapFromCloseUp(ISectorObject obj)
+    // CloseUpOverlay and WorldInfoOverlay's own F10: drop every overlay (Close Up/World Info itself,
+    // and whatever report/picker window it was drilled into from) and land the cursor right on the
+    // object that was up, rather than back wherever the cursor happened to be left.
+    private void GoToMapFromExamine(ISectorObject obj)
     {
         _cursor = obj.Location;
         _overlays.Clear();
@@ -462,7 +462,7 @@ internal sealed class GalaxyMapScreen : IScreen
     {
         if (_objectsByLocation.TryGetValue(_cursor, out var obj) && obj is IEconomicWorld world && ReferenceEquals(world.Owner, _player))
         {
-            _overlays.Add(new WorldInfoOverlay(world, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, tab));
+            _overlays.Add(new WorldInfoOverlay(world, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, GoToMapFromExamine, tab));
             return;
         }
 
