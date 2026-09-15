@@ -236,7 +236,7 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("_Probe", LaunchProbe),
         ]),
         new MenuBar.TopItem("_Build", [
-            new MenuBar.Item("_Site Status", Stub),
+            new MenuBar.Item("_Site Status", () => _overlays.Add(new ConstructionSiteStatusOverlay(_game, _player, obj => OpenExamine(obj, "Close Up")))),
             new MenuBar.Item("_New", Stub),
             new MenuBar.Item("_Abort", Stub),
         ]),
