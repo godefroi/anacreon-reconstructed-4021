@@ -237,8 +237,8 @@ internal sealed class GalaxyMapScreen : IScreen
         ]),
         new MenuBar.TopItem("_Build", [
             new MenuBar.Item("_Site Status", () => _overlays.Add(new ConstructionSiteStatusOverlay(_game, _player, obj => OpenExamine(obj, "Close Up")))),
-            new MenuBar.Item("_New", Stub),
-            new MenuBar.Item("_Abort", Stub),
+            new MenuBar.Item("_New", NewConstruction),
+            new MenuBar.Item("_Abort", AbortConstruction),
         ]),
         new MenuBar.TopItem("_Ministry of War", [
             new MenuBar.Item("_Attack", Attack),
@@ -1210,6 +1210,72 @@ internal sealed class GalaxyMapScreen : IScreen
     {
         _infoTitle = title;
         _infoMessage = message;
+    }
+
+    /// <summary>Build menu &gt; New (CONSTR.PAS: ConstructCommand).</summary>
+    private void NewConstruction()
+    {
+        var available = Enum.GetValues<ConstructionType>().Where(t => _player.Technology.Constructions.Contains(t)).ToList();
+        if (available.Count == 0)
+        {
+            ShowInfo("Construction", $"{MyLord()}, you don't have the technology to build anything!");
+            return;
+        }
+
+        _overlays.Add(new ConstructionTypePickerOverlay(available, PickConstructionCoordinate));
+    }
+
+    private void PickConstructionCoordinate(ConstructionType type) =>
+        BeginPick("Construction -- move cursor to begin construction, Enter: select, Esc: cancel", coordinate =>
+        {
+            if (_game.Galaxy.GetObjectAt(coordinate) is not null)
+            {
+                ShowInfo("Construction", $"{MyLord()}, that sector is already occupied.");
+                PickConstructionCoordinate(type);
+                return;
+            }
+
+            var site = ConstructionLifecycle.StartConstruction(_game, _player, type, coordinate);
+            Refresh();
+
+            var years = ConstructionCatalog.YearsToBuild[type];
+            var cost = ConstructionCatalog.RawMaterialPerYear[type]
+                .Where(kv => kv.Value > 0)
+                .Select(kv => $"{kv.Value} {new ResourceKind.Cargo(kv.Key).DisplayName} per year.");
+
+            ShowInfo("Construction",
+                $"Starting construction of {Noun(ConstructionCatalog.DisplayName(type))} at {DisplayName(site)}.\n\n" +
+                $"Construction will take approximately {years} years to finish and will\n" +
+                "require the following quantities of raw material:\n" +
+                string.Join('\n', cost));
+        });
+
+    // Noun (STRG.PAS:86-92) -- 'a'/'an' by leading letter, Y counted as a vowel like Pascal's own does.
+    private static string Noun(string word) => "AEIOUY".Contains(char.ToUpperInvariant(word[0])) ? $"an {word}" : $"a {word}";
+
+    /// <summary>Build menu &gt; Abort (CONSTR.PAS: AbortConstructionCommand).</summary>
+    private void AbortConstruction()
+    {
+        var site = _game.Galaxy.ConstructionSites.FirstOrDefault(c => c.Location == _cursor && ReferenceEquals(c.Owner, _player));
+        if (site is null)
+        {
+            ShowInfo("Abort Construction", "Move the cursor onto one of your own construction sites first.");
+            return;
+        }
+
+        var name = DisplayName(site);
+        _overlays.Add(new ConfirmOverlay("Abort Construction", $"Are you sure you want to abort {name}?", yes =>
+        {
+            if (!yes)
+            {
+                return;
+            }
+
+            _game.Galaxy.ConstructionSites.Remove(site);
+            Refresh();
+            var capitalized = char.ToUpperInvariant(name[0]) + name[1..];
+            ShowInfo("Abort Construction", $"{capitalized} aborted, {MyLord()}.");
+        }));
     }
 
     // NAMES.PAS: AddNameCommand/DeleteNameCommand, generalized to whatever's at the cursor rather than
