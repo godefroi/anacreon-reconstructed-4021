@@ -12,6 +12,10 @@ public static class ScreenHost
 {
     private const int TargetFps = 60;
 
+    // An order of magnitude past the ~16.7ms budget -- worth a trace line without spamming the log
+    // over ordinary jitter (a GC blip, a big redraw).
+    private static readonly TimeSpan SlowFrameThreshold = TimeSpan.FromMilliseconds(250);
+
     public static void Run(IScreen initial)
     {
         if (OperatingSystem.IsWindows())
@@ -54,6 +58,8 @@ public static class ScreenHost
 
             while (!runner.Quit)
             {
+                var frameStart = Stopwatch.GetTimestamp();
+
                 // Real terminal windows resize live -- redirected output (the driver, a piped/logged
                 // run) never does, and Console.WindowWidth/Height either throw or return meaningless
                 // values there, so this only ever runs against a real console. Cheap enough (two
@@ -101,6 +107,13 @@ public static class ScreenHost
 
                 runner.Draw();
                 runner.FrameBuffer.Present();
+
+                var frameTime = Stopwatch.GetElapsedTime(frameStart);
+                FrameMetrics.Record(frameTime.TotalMilliseconds);
+                if (frameTime > SlowFrameThreshold)
+                {
+                    Trace.TraceWarning($"Panemonde: slow frame took {frameTime.TotalMilliseconds:F1}ms (threshold {SlowFrameThreshold.TotalMilliseconds:F0}ms).");
+                }
 
                 var toSleep = frameInterval - Stopwatch.GetElapsedTime(now);
                 if (toSleep > TimeSpan.Zero)

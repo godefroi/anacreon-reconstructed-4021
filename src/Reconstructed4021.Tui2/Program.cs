@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Tui2;
 
@@ -6,7 +7,17 @@ using Reconstructed4021.Tui2;
 // --no-intro: skip the TMA logo splash, straight to the title menu -- same flag Reconstructed4021.Tui's
 // own Program.cs supports.
 var noIntro = args.Contains("--no-intro");
-ScreenHost.Run(Bootstrap.CreateInitialScreen(FindRepoRoot(AppContext.BaseDirectory), skipIntro: noIntro));
+var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
+
+// ScreenHost logs slow frames via Trace -- writing straight to the console would corrupt the
+// alternate screen buffer the TUI is drawing into, so route it to a file instead, same "logs/"
+// convention Reconstructed4021.Tui2Driver already uses.
+var logDir = Path.Combine(repoRoot, "logs");
+Directory.CreateDirectory(logDir);
+Trace.Listeners.Add(new TextWriterTraceListener(Path.Combine(logDir, "panemonde-frames.log")) { TraceOutputOptions = TraceOptions.DateTime });
+Trace.AutoFlush = true;
+
+ScreenHost.Run(Bootstrap.CreateInitialScreen(repoRoot, skipIntro: noIntro));
 
 static string FindRepoRoot(string start)
 {
