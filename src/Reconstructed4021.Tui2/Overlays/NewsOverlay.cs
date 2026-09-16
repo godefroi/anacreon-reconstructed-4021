@@ -126,6 +126,7 @@ internal sealed class NewsOverlay : IOverlay
             NewsType.IndustryDestroyed => $"   {item.Parm1} {IndustryNames[item.Parm2]} have been destroyed on {loc}.",
             NewsType.WorldDeclaredIndependence => $"{loc} has declared independence.",
             NewsType.WorldJoinedOtherEmpire => $"{loc} has joined the empire of {emp}.",
+            NewsType.WorldGivenToYou => $"{emp} has granted this empire the rights to {loc}.",
             NewsType.WorldIsNowCapital => $"{loc} has become the temporary capital of the empire.",
             NewsType.FleetOutOfFuel => $"{loc} is out of fuel.",
             NewsType.FleetDamagedByMines => $"{loc} suffered damage from {emp} SRM field.",

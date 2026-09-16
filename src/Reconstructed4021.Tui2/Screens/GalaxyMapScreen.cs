@@ -217,8 +217,8 @@ internal sealed class GalaxyMapScreen : IScreen
             new MenuBar.Item("_ISSP", () => OpenOwnWorldTab("ISSP")),
             new MenuBar.Item("_Add Name", AddNameCommand),
             new MenuBar.Item("Delete _Name", DeleteNameCommand),
-            new MenuBar.Item("_Liberate", Stub),
-            new MenuBar.Item("_Self-Destruct", Stub),
+            new MenuBar.Item("_Liberate", LiberateCommand),
+            new MenuBar.Item("_Self-Destruct", SelfDestructCommand),
         ]),
         new MenuBar.TopItem("_Fleet", [
             new MenuBar.Item("_Deploy", DeployFleet),
@@ -1211,6 +1211,109 @@ internal sealed class GalaxyMapScreen : IScreen
     // AddNameCommand's own NameVar[1]:=UpCase(NameVar[1]) convention, reused here for
     // SellTechnology's own Line[1]:=UpCase(Line[1]).
     private static string Capitalize(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
+
+    /// <summary>
+    /// Worlds menu &gt; Liberate (DESIGN.PAS's GrantIndependenceCommand): give the world under the
+    /// cursor to Independent or to another empire with a scouted fleet in the same sector -- blocked
+    /// on the player's own capital, matching real Pascal's own IsACap error.
+    /// </summary>
+    private void LiberateCommand()
+    {
+        var world = FindWorldAt(_cursor);
+        if (world is null || !ReferenceEquals(world.Owner, _player))
+        {
+            ShowInfo("Liberate", "Move the cursor onto one of your own worlds first.");
+            return;
+        }
+
+        // GetType(Obj)=CapTyp is the real Pascal check; ReferenceEquals(world, _player.Capital) is this
+        // port's own added belt in case those two ever disagree (Redesignate's own capital-swap branch
+        // mutates Type and Empire.Capital in the same call, but nothing guarantees every path keeps
+        // them in lockstep) -- giving away the empire's actual capital reference would be a real bug,
+        // not just a wrong error message.
+        if (world.Type == WorldType.Capital || ReferenceEquals(world, _player.Capital))
+        {
+            ShowInfo("Liberate", $"Not your capital, {MyLord()}. If you wish for a coup d'grace, try abdicating.");
+            return;
+        }
+
+        var fleetOwners = _game.Galaxy.Fleets
+            .Where(f => f.Location == world.Location && !ReferenceEquals(f.Owner, _player) && Game.Scouted(_player, f))
+            .Select(f => f.Owner)
+            .Distinct()
+            .ToList();
+
+        var candidates = new List<Empire> { Empire.Independent };
+        candidates.AddRange(fleetOwners);
+
+        _overlays.Add(new SingleSelectOverlay<Empire>("Liberate", candidates, e => e.Name, recipient => ConfirmLiberate(world, recipient)));
+    }
+
+    private void ConfirmLiberate(IEconomicWorld world, Empire recipient)
+    {
+        var worldName = DisplayName(world);
+        var prompt = recipient.IsIndependent
+            ? $"Do you really want to grant independence to {worldName}, {MyLord()}?"
+            : $"Do you really want to give {worldName} to {recipient.Name}, {MyLord()}?";
+
+        _overlays.Add(new ConfirmOverlay("Liberate", prompt, yes =>
+        {
+            if (!yes)
+            {
+                return;
+            }
+
+            WorldOwnership.Liberate(world, recipient, _context.Random);
+            Refresh();
+            ShowInfo("Liberate", recipient.IsIndependent
+                ? $"{worldName} is now independent."
+                : $"{worldName} is now part of the empire of {recipient.Name}.");
+        }));
+    }
+
+    /// <summary>
+    /// Worlds menu &gt; Self-Destruct (MSCCOMM.PAS's SelfDestructCommand): destroy one of the player's
+    /// own Stargates or non-Industrial-Complex Starbases at the cursor, taking every fleet in the
+    /// sector down with it (see <see cref="CombatStandalone.SelfDestructObject"/>) -- matching real
+    /// Pascal's own "only bases and stargates can be destroyed" restriction, industrial complexes
+    /// excluded.
+    /// </summary>
+    private void SelfDestructCommand()
+    {
+        // Only one non-fleet object ever occupies a sector (Galaxy.GetObjectAt's own doc comment), so
+        // there's never a choice to offer -- unlike Add Name/Delete Name's ObjectsAt-plus-picker, which
+        // exists because a fleet can share the sector with that one object.
+        if (!_objectsByLocation.TryGetValue(_cursor, out var target)
+            || !ReferenceEquals(target.Owner, _player)
+            || target is not (Stargate or Starbase { Kind: not StarbaseKind.IndustrialComplex }))
+        {
+            ShowInfo("Self-Destruct", $"{MyLord()}, only bases and stargates can be destroyed.");
+            return;
+        }
+
+        ConfirmSelfDestruct(target);
+    }
+
+    private void ConfirmSelfDestruct(ISectorObject target)
+    {
+        var name = DisplayName(target);
+        var warning = target is Starbase
+            ? $"{name} reports: Destruct sequence activated...\nAre you sure about this, {MyLord()}? Destruction of the base will destroy all ships in the sector."
+            : $"Atomic charges set on {name}...\nAre you sure about this, {MyLord()}? It took us many years to build this structure.";
+
+        _overlays.Add(new ConfirmOverlay("Self-Destruct", warning, yes =>
+        {
+            if (!yes)
+            {
+                ShowInfo("Self-Destruct", $"Self-destruct aborted, {MyLord()}.");
+                return;
+            }
+
+            CombatStandalone.SelfDestructObject(target, _game);
+            Refresh();
+            ShowInfo("Self-Destruct", $"{name} has been destroyed, {MyLord()}.");
+        }));
+    }
 
     /// <summary>Empire menu &gt; Send Message (DESIGN.PAS's SendMessageCommand).</summary>
     private void SendMessageCommand()
