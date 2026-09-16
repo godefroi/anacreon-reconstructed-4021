@@ -76,7 +76,10 @@ internal sealed class EmpireOverlay : IOverlay
 
         BoxDrawing.DrawSingleLine(fb, x, y, width, height, ConsoleColor.Gray, ConsoleColor.Black);
         fb.DrawText(x + Math.Max(1, (width - 8) / 2), y, " Empire ", ConsoleColor.White, ConsoleColor.Black);
-        fb.DrawText(x + 1, y + 1, Header, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
+        // Dotted underline, no overline -- single panel below, same treatment as FleetOverlay's own
+        // position header.
+        fb.DrawText(x + 1, y + 1, Header.PadRight(width - 2), ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2,
+            underline: UnderlineStyle.Dotted);
         _list.Draw(fb, x + 1, y + 2, width - 2, height - 3, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
     }
 }

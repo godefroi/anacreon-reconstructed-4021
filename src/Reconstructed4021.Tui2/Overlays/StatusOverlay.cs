@@ -141,11 +141,17 @@ internal sealed class StatusOverlay : IOverlay
         BoxDrawing.DrawSingleLine(fb, x, y, width, height, ConsoleColor.Gray, ConsoleColor.Black);
         fb.DrawText(x + Math.Max(1, (width - 8) / 2), y, " Status ", ConsoleColor.White, ConsoleColor.Black);
 
-        fb.DrawText(x + 1, y + 1, WorldHeader, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
+        // Dotted underline on both headers, same reasoning as FleetOverlay's own two headers: this
+        // window has the identical two-synchronized-panels shape (FLTWIND.PAS/STAWIND.PAS share the
+        // same DividingBar precedent), so the military header -- the actual divider between the two
+        // panels -- also gets an overline, framing it top and bottom the same way.
+        fb.DrawText(x + 1, y + 1, WorldHeader.PadRight(width - 2), ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2,
+            underline: UnderlineStyle.Dotted);
         _list.Draw(fb, x + 1, y + 2, width - 2, NoOfLines, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
 
         var militaryHeaderRow = y + 2 + NoOfLines;
-        fb.DrawText(x + 1, militaryHeaderRow, MilitaryHeader, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
+        fb.DrawText(x + 1, militaryHeaderRow, MilitaryHeader.PadRight(width - 2), ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2,
+            underline: UnderlineStyle.Dotted, overline: true);
 
         var offset = _list.ScrollOffset;
         for (var row = 0; row < NoOfLines; row++)
