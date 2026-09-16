@@ -283,7 +283,7 @@ internal sealed class GalaxyMapScreen : IScreen
                     SwitchFKeyOverlay(new HelpOverlay(_overlays.Add));
                     return;
                 case ConsoleKey.F3:
-                    SwitchFKeyOverlay(new StatusOverlay(_game, _player, obj => OpenExamine(obj, "Close Up")));
+                    SwitchFKeyOverlay(new StatusOverlay(_game, _player, OwnerColor, obj => OpenExamine(obj, "Close Up")));
                     return;
                 case ConsoleKey.F5:
                     SwitchFKeyOverlay(new FleetOverlay(_game, _player, _origin, OwnerColor, obj => OpenExamine(obj, "Close Up")));
@@ -292,7 +292,7 @@ internal sealed class GalaxyMapScreen : IScreen
                     SwitchFKeyOverlay(new NewsOverlay(_player, _origin, obj => OpenExamine(obj, "Close Up")));
                     return;
                 case ConsoleKey.F8:
-                    SwitchFKeyOverlay(new EmpireOverlay(_game, _player, obj => OpenExamine(obj, "Close Up")));
+                    SwitchFKeyOverlay(new EmpireOverlay(_game, _player, OwnerColor, obj => OpenExamine(obj, "Close Up")));
                     return;
                 case ConsoleKey.F9:
                     OpenNames();

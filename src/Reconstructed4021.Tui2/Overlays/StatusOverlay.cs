@@ -14,6 +14,9 @@ namespace Reconstructed4021.Tui2.Overlays;
 // dividing line -- exactly WriteStatus's own y/y+NoOfLines+1 pairing, not two independently-scrollable
 // lists. Uses ListBox<T> for the top pane's own navigation/scrolling, then reads its ScrollOffset back
 // to draw the bottom pane in lockstep rather than duplicating the scroll-clamp logic a second time.
+// Each row's own text is colored by its owner (see _ownerColor) -- same port-only addition FleetOverlay
+// already carries, and the same reason: this window lists other empires' worlds too (any scouted one),
+// not just the viewer's own.
 internal sealed class StatusOverlay : IOverlay
 {
     private const int NoOfLines = 9; // STAWIND.PAS: NoOfLines:=(InitHeight DIV 2)-1, InitHeight=21.
@@ -29,14 +32,18 @@ internal sealed class StatusOverlay : IOverlay
     private static readonly string[] TechCodes = ["pt", " p", "pa", " a", "pw", " w", " j", " b", " s", "pg", " g"];
 
     private readonly Empire _viewer;
+    private readonly Func<Empire, ConsoleColor> _ownerColor;
     private readonly ListBox<IEconomicWorld> _list;
     private readonly Action<ISectorObject> _onSelectWorld;
 
     public bool IsDismissed { get; private set; }
 
-    public StatusOverlay(Game game, Empire viewer, Action<ISectorObject> onSelectWorld)
+    // ownerColor: GalaxyMapScreen's own OwnerColor, passed in rather than recomputed here -- see
+    // FleetOverlay's own doc comment on its identical constructor parameter.
+    public StatusOverlay(Game game, Empire viewer, Func<Empire, ConsoleColor> ownerColor, Action<ISectorObject> onSelectWorld)
     {
         _viewer = viewer;
+        _ownerColor = ownerColor;
         _onSelectWorld = onSelectWorld;
         _list = new ListBox<IEconomicWorld>(WorldStatusReport.BuildRows(game.Galaxy, viewer), FormatWorldStatus);
     }
@@ -147,7 +154,7 @@ internal sealed class StatusOverlay : IOverlay
         // panels -- also gets an overline, framing it top and bottom the same way.
         fb.DrawText(x + 1, y + 1, WorldHeader.PadRight(width - 2), ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2,
             underline: UnderlineStyle.Dotted);
-        _list.Draw(fb, x + 1, y + 2, width - 2, NoOfLines, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
+        _list.Draw(fb, x + 1, y + 2, width - 2, NoOfLines, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray, world => _ownerColor(world.Owner));
 
         var militaryHeaderRow = y + 2 + NoOfLines;
         fb.DrawText(x + 1, militaryHeaderRow, MilitaryHeader.PadRight(width - 2), ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2,
@@ -160,7 +167,8 @@ internal sealed class StatusOverlay : IOverlay
             var selected = index == _list.SelectedIndex;
             var text = index < _list.Items.Count ? FormatMilitaryStatus(_list.Items[index]) : string.Empty;
             var visible = text.Length > width - 2 ? text[..(width - 2)] : text.PadRight(width - 2);
-            fb.DrawText(x + 1, militaryHeaderRow + 1 + row, visible, selected ? ConsoleColor.Black : ConsoleColor.Gray, selected ? ConsoleColor.Gray : ConsoleColor.Black);
+            var rowFg = !selected && index < _list.Items.Count ? _ownerColor(_list.Items[index].Owner) : ConsoleColor.Gray;
+            fb.DrawText(x + 1, militaryHeaderRow + 1 + row, visible, selected ? ConsoleColor.Black : rowFg, selected ? ConsoleColor.Gray : ConsoleColor.Black);
         }
     }
 }

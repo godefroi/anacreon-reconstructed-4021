@@ -9,7 +9,10 @@ namespace Reconstructed4021.Tui2.Overlays;
 
 
 // F8 (EMPWIND.PAS: EmpireWindow). Single-pane, at most 8 rows (one viewer plus up to 7 other
-// active empires) -- never scrolls, matching real Pascal's own fixed 8-slot roster.
+// active empires) -- never scrolls, matching real Pascal's own fixed 8-slot roster. Each row's own
+// text is colored by its empire (see _ownerColor), same port-only addition FleetOverlay/StatusOverlay
+// already carry -- every row here is another empire's own roster entry, so it's the single overlay
+// where owner coloring is most directly "the whole point."
 internal sealed class EmpireOverlay : IOverlay
 {
     private const int Width = 82;
@@ -21,14 +24,18 @@ internal sealed class EmpireOverlay : IOverlay
     private const string Header = "Empire       Tl Pln SInd   Pop    fgt    hkr    jmp    jtn    pen    str    trn ";
 
     private readonly Game _game;
+    private readonly Func<Empire, ConsoleColor> _ownerColor;
     private readonly Action<ISectorObject> _onSelectCapital;
     private readonly ListBox<EmpireWindowReport.Row> _list;
 
     public bool IsDismissed { get; private set; }
 
-    public EmpireOverlay(Game game, Empire viewer, Action<ISectorObject> onSelectCapital)
+    // ownerColor: GalaxyMapScreen's own OwnerColor, passed in rather than recomputed here -- see
+    // FleetOverlay's own doc comment on its identical constructor parameter.
+    public EmpireOverlay(Game game, Empire viewer, Func<Empire, ConsoleColor> ownerColor, Action<ISectorObject> onSelectCapital)
     {
         _game = game;
+        _ownerColor = ownerColor;
         _onSelectCapital = onSelectCapital;
         _list = new ListBox<EmpireWindowReport.Row>(EmpireWindowReport.BuildRows(game, viewer), FormatRow);
     }
@@ -80,6 +87,6 @@ internal sealed class EmpireOverlay : IOverlay
         // position header.
         fb.DrawText(x + 1, y + 1, Header.PadRight(width - 2), ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2,
             underline: UnderlineStyle.Dotted);
-        _list.Draw(fb, x + 1, y + 2, width - 2, height - 3, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
+        _list.Draw(fb, x + 1, y + 2, width - 2, height - 3, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray, row => _ownerColor(row.Empire));
     }
 }
