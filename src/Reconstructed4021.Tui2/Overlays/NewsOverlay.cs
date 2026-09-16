@@ -37,12 +37,6 @@ internal sealed class NewsOverlay : IOverlay
         "starship yards", "transport yards", "food factories", "trillum mines",
     ];
 
-    // DATACNST.PAS's TechN (:152-163) -- full tech-level names, ordinal-aligned with TechLevel.
-    private static readonly string[] TechLevelNames = [
-        "pre-tech", "primitive", "pre-atomic", "atomic", "pre-warp", "warp", "jump", "bio-tech",
-        "starship", "pre-gate", "gate",
-    ];
-
     private readonly Empire _viewer;
     private readonly Coordinate _origin;
     private readonly ListBox<NewsItem> _list;
@@ -102,8 +96,8 @@ internal sealed class NewsOverlay : IOverlay
             NewsType.DefensesLackResources => $"{loc} needs {item.Resource!.DisplayName} to build defenses.",
             NewsType.IndustryLacksMetals => $"{loc} cannot build up its industry due to a lack of metals.",
             NewsType.PeopleStarving => $"{death} people have died of starvation on {loc}.",
-            NewsType.TechLevelIncreased => $"{loc} has advanced to {TechLevelNames[item.Parm1]} level technology.",
-            NewsType.TechLevelRegressed => $"{loc} has regressed to {TechLevelNames[item.Parm1]} level technology.",
+            NewsType.TechLevelIncreased => $"{loc} has advanced to {CloseUpWindowText.TechLevelNames[(TechLevel)item.Parm1]} level technology.",
+            NewsType.TechLevelRegressed => $"{loc} has regressed to {CloseUpWindowText.TechLevelNames[(TechLevel)item.Parm1]} level technology.",
             NewsType.ConstructionCompleted => $"Construction at {loc} has been completed.",
             NewsType.RebellionWarning1 => $"The people of {loc} are dissatisfied with the empire.",
             NewsType.RebellionWarning2 => $"Riots and demonstrations are widespread on {loc}.",
@@ -115,7 +109,7 @@ internal sealed class NewsOverlay : IOverlay
             NewsType.EmpireGainedTechnology => item.TechGrant is { } grant
                 ? $"{loc} has developed {TechCatalog.DisplayName(grant)} technology."
                 : $"{loc} has developed new technology.",
-            NewsType.EmpireGainedTechLevel => $"{loc} has developed {TechLevelNames[item.Parm1]} level technology.",
+            NewsType.EmpireGainedTechLevel => $"{loc} has developed {CloseUpWindowText.TechLevelNames[(TechLevel)item.Parm1]} level technology.",
             NewsType.EnemyEmpireDestroyed => $"{loc} was attacked by {emp}.  Attack force destroyed.",
             NewsType.EnemyEmpireRetreated => $"{loc} was attacked by {emp}.  Attack force retreated.",
             NewsType.WorldConqueredByEnemy => $"{loc} has been conquered by the empire of {emp}.",

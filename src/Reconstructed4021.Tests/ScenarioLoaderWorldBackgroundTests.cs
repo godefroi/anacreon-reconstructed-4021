@@ -2,6 +2,7 @@ using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.NewGame;
+using Reconstructed4021.Core.Presentation;
 
 namespace Reconstructed4021.Tests;
 
@@ -103,7 +104,7 @@ public class ScenarioLoaderWorldBackgroundTests
         var expectedCoord = $"{world2.Location.X - origin},{origin - world2.Location.Y}";
         await Assert.That(lines).IsNotNull();
         await Assert.That(lines![0]).IsEqualTo($"Location: {expectedCoord}");
-        await Assert.That(lines![1]).IsEqualTo($"Name: {world2.Type}");
+        await Assert.That(lines![1]).IsEqualTo($"Name: {CloseUpWindowText.DescribeKind(world2)}");
     }
 
     /// <summary>SCENA.PAS's ParseLine handles at most one marker per line -- a second bracket pair on the same line is left untouched, matching real Pascal's own OpenB/CloseB single Pos() lookup.</summary>
@@ -125,7 +126,7 @@ public class ScenarioLoaderWorldBackgroundTests
 
         var lines = Game.FindWorldBackgroundText(game, world1, game.Empires[0], conquer: false);
 
-        await Assert.That(lines![0]).IsEqualTo($"Hello {world2.Type} at [C:2:2].");
+        await Assert.That(lines![0]).IsEqualTo($"Hello {CloseUpWindowText.DescribeKind(world2)} at [C:2:2].");
     }
 
     [Test]

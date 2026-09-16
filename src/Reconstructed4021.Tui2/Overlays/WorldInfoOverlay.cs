@@ -239,8 +239,8 @@ internal sealed class WorldInfoOverlay : IOverlay
 
         At(1, 0, " Cls:"); At(1, 1, "Tech:"); At(1, 2, " Pop:");
         At(23, 0, "Eff:"); At(23, 1, "Amb:"); At(23, 2, "Rev:");
-        At(7, 0, world.EffectiveClass.ToString());
-        At(7, 1, world.TechLevel.ToString());
+        At(7, 0, CloseUpWindowText.WorldClassNames[world.EffectiveClass]);
+        At(7, 1, CloseUpWindowText.TechLevelNames[world.TechLevel]);
         At(7, 2, world.Population.ToString());
         At(28, 0, $"{world.Efficiency}%");
         At(28, 1, world.IsAddictedToAmbrosia ? "yes" : "no");
@@ -302,8 +302,8 @@ internal sealed class WorldInfoOverlay : IOverlay
         var columns = (IReadOnlyList<(string Label, IndustryType Type)>)
             [.. ProductionColumnsTemplate[..3], ("SY-", ActiveShipyardIndustry(_world.Type)), .. ProductionColumnsTemplate[4..]];
 
-        At(1, 0, " Cls:"); At(7, 0, _world.EffectiveClass.ToString());
-        At(23, 0, "Tech:"); At(29, 0, _world.TechLevel.ToString());
+        At(1, 0, " Cls:"); At(7, 0, CloseUpWindowText.WorldClassNames[_world.EffectiveClass]);
+        At(23, 0, "Tech:"); At(29, 0, CloseUpWindowText.TechLevelNames[_world.TechLevel]);
         At(45, 0, "Pop:"); At(50, 0, _world.Population.ToString());
         At(62, 0, "Eff:"); At(67, 0, $"{_world.Efficiency}%");
 

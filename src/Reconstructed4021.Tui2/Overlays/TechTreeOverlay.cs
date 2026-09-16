@@ -1,4 +1,5 @@
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Types;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
@@ -15,12 +16,6 @@ internal sealed class TechTreeOverlay : IOverlay
     private const int Width = 40;
     private const int Height = 22;
 
-    // DATACNST.PAS's TechN (:152-163) -- full tech-level names, ordinal-aligned with TechLevel.
-    private static readonly string[] TechLevelNames = [
-        "pre-tech", "primitive", "pre-atomic", "atomic", "pre-warp", "warp", "jump", "bio-tech",
-        "starship", "pre-gate", "gate",
-    ];
-
     private readonly ListBox<string> _list;
 
     public bool IsDismissed { get; private set; }
@@ -36,7 +31,7 @@ internal sealed class TechTreeOverlay : IOverlay
         foreach (var group in TechTreeReport.BuildRows(viewer).GroupBy(r => r.Level))
         {
             var current = group.Key == viewer.TechnologyLevel ? "  (current)" : "";
-            lines.Add($"{TechLevelNames[(int)group.Key]}{current}");
+            lines.Add($"{CloseUpWindowText.TechLevelNames[group.Key]}{current}");
             foreach (var row in group)
             {
                 var mark = row.Owned ? 'x' : ' ';

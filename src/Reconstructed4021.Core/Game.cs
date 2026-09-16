@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
 
@@ -316,7 +317,7 @@ public sealed class Game(Galaxy.Galaxy galaxy)
 
         var replacement = kind == 'C'
             ? CoordinateName(game, viewer, target.Location)
-            : target.Names.GetValueOrDefault(viewer) ?? DescribeBackgroundKind(target);
+            : target.Names.GetValueOrDefault(viewer) ?? CloseUpWindowText.DescribeKind(target);
 
         return line.Remove(open, marker.Length).Insert(open, replacement);
     }
@@ -334,22 +335,6 @@ public sealed class Game(Galaxy.Galaxy galaxy)
         var origin = viewer.Capital?.Location ?? new Galaxy.Coordinate(game.Galaxy.Size / 2, game.Galaxy.Size / 2);
         return $"{location.X - origin.X},{origin.Y - location.Y}";
     }
-
-    /// <summary>
-    /// <c>ObjectName</c>'s fallback when nothing has named this object — mirrors the TUI's own
-    /// <c>CloseUpWindow.DescribeKind</c>/<c>GameShell.ObjectListItem</c> convention, kept as a
-    /// separate small copy here rather than shared (Core can't reference the Tui project, and
-    /// <c>[N:id]</c> is never actually exercised by any committed scenario — confirmed, no real .SCN
-    /// uses it — so this exists for file-format completeness, not to serve real content).
-    /// </summary>
-    private static string DescribeBackgroundKind(ISectorObject obj) => obj switch {
-        Planet p => p.Type.ToString(),
-        Starbase s => s.Kind.ToString(),
-        Stargate g => g.Kind.ToString(),
-        ConstructionSite c => $"{c.Building} site",
-        Fleet => "Fleet",
-        _ => "Unknown",
-    };
 
     /// <summary>"type:index" (SCENA.PAS's own colon-packed token) split into its two integers, or false if it isn't one.</summary>
     internal static bool TryParseTypeIndex(string text, out int objType, out int index)

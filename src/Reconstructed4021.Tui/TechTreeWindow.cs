@@ -3,6 +3,7 @@ using Terminal.Gui.Drivers;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Presentation;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
 
 namespace Reconstructed4021.Tui;
@@ -21,12 +22,6 @@ internal sealed class TechTreeWindow : Window
     private static readonly TgAttribute DispWindAttribute = new(StandardColor.LightGray, StandardColor.Blue);
     private static readonly TgAttribute BorderAttribute = new(StandardColor.LightGray, StandardColor.Black);
     private static readonly TgAttribute HeaderAttribute = new(StandardColor.White, StandardColor.Blue);
-
-    // DATACNST.PAS's TechN (:152-163) -- full tech-level names, ordinal-aligned with TechLevel.
-    private static readonly string[] TechLevelNames = [
-        "pre-tech", "primitive", "pre-atomic", "atomic", "pre-warp", "warp", "jump", "bio-tech",
-        "starship", "pre-gate", "gate",
-    ];
 
     private readonly record struct Line(bool IsHeader, string Text);
 
@@ -74,7 +69,7 @@ internal sealed class TechTreeWindow : Window
 
         foreach (var group in rows.GroupBy(r => r.Level)) {
             var current = group.Key == viewer.TechnologyLevel ? "  (current)" : "";
-            lines.Add(new Line(true, $"{TechLevelNames[(int)group.Key]}{current}"));
+            lines.Add(new Line(true, $"{CloseUpWindowText.TechLevelNames[group.Key]}{current}"));
             foreach (var row in group) {
                 var mark = row.Owned ? 'x' : ' ';
                 lines.Add(new Line(false, $"  [{mark}] {TechCatalog.DisplayName(row.Identity)}"));

@@ -107,17 +107,6 @@ internal sealed class CloseUpWindow : Window
         return $"Anacreon: {game.Year} ({age}{DisplayText.OrdinalSuffix(age)} year of your reign.)";
     }
 
-    /// <summary>"Kind" label shown alongside a name (this window's own header "type" column) -- not a
-    /// name-fallback itself. See <see cref="DescribeLocation"/> for that job.</summary>
-    public static string DescribeKind(ISectorObject obj) => obj switch {
-        Planet p => p.Type.ToString(),
-        Starbase s => s.Kind.ToString(),
-        Fleet => "Fleet",
-        Stargate g => g.Kind.ToString(),
-        ConstructionSite c => $"{c.Building} site",
-        _ => "Unknown",
-    };
-
     /// <summary>
     /// GetName's own ShortFormat fallback (PRIMINTR.PAS:1467-1528) for an object with no player-given
     /// name: a plain relative coordinate, never the object's own type/designation -- confirmed by

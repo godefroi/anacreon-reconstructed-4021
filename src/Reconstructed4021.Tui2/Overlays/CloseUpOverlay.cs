@@ -279,7 +279,7 @@ internal sealed class CloseUpOverlay : IOverlay
         }
         else
         {
-            headerKind = DescribeKind(_obj);
+            headerKind = CloseUpWindowText.DescribeKind(_obj);
             headerOwner = _obj.Owner.Name;
         }
 
@@ -316,8 +316,8 @@ internal sealed class CloseUpOverlay : IOverlay
         at(23, 2, "Eff:"); at(23, 3, "Amb:"); at(23, 4, "Rev:");
         if (scouted)
         {
-            at(7, 2, world.EffectiveClass.ToString());
-            at(7, 3, world.TechLevel.ToString());
+            at(7, 2, CloseUpWindowText.WorldClassNames[world.EffectiveClass]);
+            at(7, 3, CloseUpWindowText.TechLevelNames[world.TechLevel]);
             at(7, 4, world.Population.ToString());
             at(28, 2, $"{world.Efficiency}%");
             at(28, 3, world.IsAddictedToAmbrosia ? "yes" : "no");
@@ -375,16 +375,6 @@ internal sealed class CloseUpOverlay : IOverlay
             $"{ShipLevel(s.Fighters),5}{ShipLevel(s.HunterKillers),5}{ShipLevel(s.Jumpships),5}{ShipLevel(s.Jumptransports),5}{ShipLevel(s.Penetrators),5}{ShipLevel(s.Starships),5}{ShipLevel(s.Transports),5}" +
             $"{CargoLevel(c.Legions),5}{CargoLevel(c.NinjaLegions),5}{CargoLevel(c.Ambrosia),5}{CargoLevel(c.Chemicals),5}{CargoLevel(c.Metals),5}{CargoLevel(c.Supplies),5}{CargoLevel(c.Trillum),5}");
     }
-
-    internal static string DescribeKind(ISectorObject obj) => obj switch
-    {
-        Planet p => p.Type.ToString(),
-        Starbase s => s.Kind.ToString(),
-        Fleet => "Fleet",
-        Stargate g => g.Kind.ToString(),
-        ConstructionSite c => $"{c.Building} site",
-        _ => "Unknown",
-    };
 
     internal static string DescribeLocation(ISectorObject obj, Empire viewer) => obj switch
     {

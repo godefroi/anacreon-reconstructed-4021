@@ -41,7 +41,7 @@ internal sealed class CloseUpContentView : View
             headerKind = fleetScouted ? CloseUpWindow.FleetTypeNames[(int)fleet.Type] : "";
             headerOwner = fleetScouted ? obj.Owner.Name : "";
         } else {
-            headerKind = CloseUpWindow.DescribeKind(obj);
+            headerKind = CloseUpWindowText.DescribeKind(obj);
             headerOwner = obj.Owner.Name;
         }
 
@@ -108,8 +108,8 @@ internal sealed class CloseUpContentView : View
         AddAt(1, 2, " Cls:"); AddAt(1, 3, "Tech:"); AddAt(1, 4, " Pop:");
         AddAt(23, 2, "Eff:"); AddAt(23, 3, "Amb:"); AddAt(23, 4, "Rev:");
         if (scouted) {
-            AddAt(7, 2, world.EffectiveClass.ToString());
-            AddAt(7, 3, world.TechLevel.ToString());
+            AddAt(7, 2, CloseUpWindowText.WorldClassNames[world.EffectiveClass]);
+            AddAt(7, 3, CloseUpWindowText.TechLevelNames[world.TechLevel]);
             AddAt(7, 4, world.Population.ToString());
             AddAt(28, 2, $"{world.Efficiency}%");
             AddAt(28, 3, world.IsAddictedToAmbrosia ? "yes" : "no");
