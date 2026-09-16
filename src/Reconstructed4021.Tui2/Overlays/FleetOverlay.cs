@@ -36,7 +36,16 @@ internal sealed class FleetOverlay : IOverlay
     // and rare enough (most real fleet names are short) not to be worth the added state.
     private const int NameColumnWidth = 20;
 
-    private static readonly string PositionHeader = $"{"Fleet",-NameColumnWidth} {"Pos",-8} {"Des",-8} {"Status",-16} {"Range",5}";
+    private const int PosWidth = 8;
+    private const int DesWidth = 8;
+    private const int StatusWidth = 16;
+    private const int RangeWidth = 5;
+
+    // Where the Range field starts within FormatPositionStatus's own row string -- everything before
+    // it (name, a separating space, then each of Pos/Des/Status plus its own separating space).
+    private const int RangeColumnStart = NameColumnWidth + 1 + PosWidth + 1 + DesWidth + 1 + StatusWidth + 1;
+
+    private static readonly string PositionHeader = $"{"Fleet",-NameColumnWidth} {"Pos",-PosWidth} {"Des",-DesWidth} {"Status",-StatusWidth} {"Range",RangeWidth}";
 
     // Ship and cargo metrics (7 columns each, matching ShipType/CargoType's own real counts) no longer
     // share one row -- 14 side by side needed 70 columns on top of the name, more than an 80-wide box
@@ -102,7 +111,34 @@ internal sealed class FleetOverlay : IOverlay
         var owned = ReferenceEquals(obj.Owner, _viewer);
         var range = owned ? FleetLifecycle.EstimatedRange(obj).ToString() : "(unknown)";
 
-        return $"{name} {pos,-8} {des,-8} {status,-16} {range,5}";
+        return $"{name} {pos,-PosWidth} {des,-DesWidth} {status,-StatusWidth} {range,RangeWidth}";
+    }
+
+    // Whether obj's own remaining range (INTRFACE.PAS's EstimatedRange -- years of fuel/trillum left)
+    // falls short of what its own current journey needs (EstimatedDateOfArrival). Real Pascal never
+    // flagged this in the Fleet window itself -- a fleet just ran dry mid-flight and a FleetOutOfFuel
+    // news item showed up after the fact -- but catching it here, before the news does, is the whole
+    // point of a status column at all.
+    private bool RangeInsufficient(ISectorObject obj)
+    {
+        if (!ReferenceEquals(obj.Owner, _viewer))
+        {
+            return false;
+        }
+
+        var destination = obj switch
+        {
+            Fleet fleet => fleet.Destination,
+            Starbase starbase => starbase.Destination,
+            _ => null,
+        };
+
+        if (destination is null || destination == obj.Location)
+        {
+            return false;
+        }
+
+        return FleetLifecycle.EstimatedRange(obj) < FleetLifecycle.EstimatedDateOfArrival(obj, _game);
     }
 
     private string FormatDestination(ISectorObject obj) => obj switch
@@ -171,6 +207,25 @@ internal sealed class FleetOverlay : IOverlay
             underline: UnderlineStyle.Dotted);
         _list.Draw(fb, x + 1, y + 2, width - 2, NoOfLines, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray, obj => _ownerColor(obj.Owner));
 
+        var offset = _list.ScrollOffset;
+
+        // Range field redrawn in red, right over the same cells _list.Draw just wrote, wherever a
+        // fleet/starbase's own remaining range falls short of its current journey -- see
+        // RangeInsufficient's own doc comment for why. Selection's own black-on-gray still shows
+        // through as the background; only the digits themselves turn red.
+        for (var row = 0; row < NoOfLines; row++)
+        {
+            var index = offset + row;
+            if (index >= _list.Items.Count || !RangeInsufficient(_list.Items[index]))
+            {
+                continue;
+            }
+
+            var range = FleetLifecycle.EstimatedRange(_list.Items[index]).ToString().PadLeft(RangeWidth);
+            var selected = index == _list.SelectedIndex;
+            fb.DrawText(x + 1 + RangeColumnStart, y + 2 + row, range, ConsoleColor.Red, selected ? ConsoleColor.Gray : ConsoleColor.Black, maxWidth: RangeWidth);
+        }
+
         // FLTWIND.PAS's own DividingBar (:58,161) is drawn inverted (C.SYSTBorder) to separate the two
         // synchronized panels -- not blank whitespace. An inverted Black-on-Gray bar here would be
         // indistinguishable from this same overlay's own selected-row highlight (identical colors), so
@@ -182,7 +237,6 @@ internal sealed class FleetOverlay : IOverlay
         fb.DrawText(x + 1, metricsHeaderRow, metricsHeaderText, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2,
             underline: UnderlineStyle.Dotted, overline: true);
 
-        var offset = _list.ScrollOffset;
         for (var row = 0; row < NoOfLines; row++)
         {
             var index = offset + row;
