@@ -22,17 +22,56 @@ quirk findings these questions are drawn from, with more detail on how each was 
   within its own unit. Its name suggests merging groups (maybe collapsing multiple surviving groups
   of the same `AttackType`/target after a round?) — was that the intent, and if so why was it never
   wired into `GroupEngage`'s round loop?
-- **`HolocaustCommand`/`HolocaustWorld`/`HolocaustEffectiveness` (`MSCCOMM.PAS`/`ATTACK.PAS`).** A
-  full nuclear-bombardment mechanic — surrender chance, population deaths, industry destruction, tech
-  regression — with no way to reach it in a shipped build: `HolocaustCommand`'s own forward interface
-  declaration in `MSCCOMM.PAS` is wrapped in a Pascal comment, its body sits in a separate
-  `(*ARTIFACTS ... *)` commented block alongside `TransactionCommand`/`ArtifactCommand`, and
-  `PLAYTURN.PAS`'s dispatch entry for it is inside that same disabled block — identical in both the
-  1.31 and 2.0 source trees. `SelfDestructCommand`/`SelfDestructObject` and `LAMCom`/`LaunchLAM` sit
-  right next to it in the same command table but *outside* the `(*ARTIFACTS*)` wrapper, so they're
-  real, reachable commands in the shipped game — only Holocaust (and Transaction/Artifact) were cut.
-  Was Holocaust part of the same "artifacts" feature as those two, or a separate casualty that just
-  happened to get bundled into the same disabled block?
+- **A full scenario-scripting VM, backing Artifacts, Transactions, and Victory Conditions, built and
+  then cut at every layer simultaneously.** `CDETYPES.PAS`/`ARTIFACT.PAS`/`TRANSACT.PAS`/`CODE.PAS`
+  implement a real little interpreted language: a `VariableRecord` tagged union, 10 general plus 10
+  "global" registers, structured `IF`/`ELSE`/`WHILE`/`SWITCH`/`CASE`/`END` control flow, comparisons,
+  and a 16-instruction set including `CREATE`/`DESTRUCT` (spawn/remove an artifact) and **`WINGAME`**,
+  whose own inline comment in `CdeTypes.PAS` reads `{ p1 player wins the game }`: the only concrete
+  evidence anywhere in the source that a victory condition was ever designed. `CodeInterpreter`/
+  `ExecuteAction` (`CODE.PAS`) genuinely execute this, a real recursive nested-block interpreter, not
+  a stub, and `Artifact.PAS`'s `DefineArtifact`/`CreateArtifact`/`ActiveSituation`/`CloseUpSituation`
+  plus `Transact.PAS`'s `DefineTransaction`/`Transaction` (with its own per-empire register bank, so a
+  world remembers state separately per empire) are fully implemented on top of it.
+  Three things confirm this was abandoned wholesale, not left mid-build:
+  1. **The interpreter itself is missing 3 of its 16 actions.** `CODE.PAS`'s `ExecuteAction` dispatch
+     has no case for `CreateACT`, `DestructACT`, or `WinGameACT`, a silent no-op in Pascal, so even a
+     hand-written `WINGAME` instruction would compile and do nothing. Nothing anywhere in either
+     source tree ends the game or names a winner.
+  2. **The scenario-file authoring side is entirely commented out.** `NEWGAME.PAS`'s
+     `ActionKeyword`/`ActionParms`/`SituationKeyword` tables (text-to-enum for the compiler),
+     `CodeCompiler` itself, and `DefineNewArtifact`/`CreateNewArtifact`/`Artifacts`/
+     `DefineNewTransaction`/`Transactions` (the `BEGINARTIFACTS`/`BEGINTRANSACTIONS` `.SCN` parsers)
+     are all wrapped in one comment block (`NEWGAME.PAS:423-695` in 1.31). No shipped `.SCN` file
+     could ever have declared an artifact, a transaction, or, had it existed, a victory condition.
+  3. **The player-facing commands exist but are cut too.** `MSCCOMM.PAS`'s `ArtifactCommand` (browse,
+     examine, and activate known artifacts) and `TransactionCommand` (pick a world, pick a fleet,
+     transact) are fully written, real menus and all, but wrapped in `(*ARTIFACT ... *)`/
+     `(*ARIFACT ... *)` (note the typo in the artifact one's own disable-marker), and `PLAYTURN.PAS`'s
+     dispatch entries for both sit inside that same disabled block. Every `USES Artifact`/
+     `USES Transact` outside those four units themselves, in `MSCCOMM.PAS`, `CLSCOMM.PAS` (Close Up's
+     own artifact-situation hook), and `LOADSAVE.PAS` (so the `v1.3` save format never persists
+     artifact/transaction state either), is disabled too. The four VM units compile and are internally
+     consistent, but nothing else in either the 1.31 or 2.0 tree calls into them at all, identical in
+     both versions, so whatever happened, happened before 1.31 shipped and nobody ever revisited it.
+
+  `HolocaustCommand`/`HolocaustWorld`/`HolocaustEffectiveness` (`MSCCOMM.PAS`/`ATTACK.PAS`), a full
+  nuclear-bombardment mechanic with surrender chance, population deaths, industry destruction, and
+  tech regression, sits physically adjacent to `ArtifactCommand`/`TransactionCommand` in both
+  `MSCCOMM.PAS` and `PLAYTURN.PAS`'s dispatch table, but under its own separate
+  `(* PROCEDURE HolocaustCommand; *)` comment marker (`MSCCOMM.PAS:21-23`), not the `(*ARTIFACT*)`
+  one, so it reads like a second, independently-cut casualty that happened to land in the same
+  disabled region, not part of the same feature. `SelfDestructCommand`/`SelfDestructObject` and
+  `LAMCom`/`LaunchLAM` sit right next to all of this in the same command table but *outside* every
+  disabled wrapper, so they're real, reachable commands in the shipped game: only Holocaust,
+  Artifacts, Transactions, and Victory Conditions were cut.
+
+  Given how deliberate and total the removal looks (every layer, both versions, one instruction short
+  even at the VM level), was this ever functional in an earlier internal build, and what happened?
+  Was it cut for time, for a design reason (victory conditions and artifacts not fitting the "no fixed
+  win state, play until you're the last one standing or not" shape the shipped game settled on), or
+  for a technical one (the overlay/memory-constrained DOS build running out of room)? And was
+  Holocaust swept out in the same pass for unrelated reasons, or as a deliberate bundle?
 - **`ProbeStatus`'s unused `PAtDest`/`PLost` states** (`TYPES.PAS:125`, `INTRFACE.PAS:1346-1370`) —
   see "An earlier, simpler combat-resolution design" in `PASCAL_ARCHITECTURE_NOTES.md` for the combat
   analog; this is the same shape of question for probes. Was multi-turn probe travel (arrive, sit at
