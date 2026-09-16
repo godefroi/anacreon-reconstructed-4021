@@ -1,4 +1,6 @@
-﻿using Reconstructed4021.Core.Entities;
+﻿using Reconstructed4021.Core;
+using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Types;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
 using Reconstructed4021.Tui2.Screens;
@@ -10,7 +12,11 @@ namespace Reconstructed4021.Tui2.Overlays;
 // MAPWIND.PAS's GetMapObject/DISPLAY.PAS's DisplayMenu: 2+ objects at one cursor sector need a pick
 // first (ExamineCursor's own 2+ branch) before Close Up can open on any one of them -- the first real
 // second overlay-stack consumer (GalaxyMapScreen pushes this on top of itself, then this pushes a
-// CloseUpOverlay on top of itself in turn once something's chosen).
+// CloseUpOverlay on top of itself in turn once something's chosen). Also the picker every
+// PickOwnFleetAtCursor call site uses (Resupply, Refuel, SRM Sweep, Transfer, Abort/Join) when 2+ of
+// the player's own fleets share a sector -- FleetStatusTag below exists for exactly that case: telling
+// an idle fleet apart from one already busy at a glance, ported from Reconstructed4021.Tui's own
+// GameShell.ObjectListItem (same status tag, same reasoning).
 internal sealed class ObjectPickerOverlay : IOverlay
 {
     private const int Width = 45;
@@ -36,7 +42,36 @@ internal sealed class ObjectPickerOverlay : IOverlay
     private string Format(ISectorObject obj)
     {
         var name = CloseUpOverlay.DisplayName(obj, _viewer);
-        return $"{name}  ({obj.Owner.Name})";
+        var status = obj is Fleet fleet ? FleetStatusTag(fleet) : "";
+        return $"{name}  ({obj.Owner.Name}){status}";
+    }
+
+    /// <summary>
+    /// Same redaction rule as <see cref="CloseUpWindowText.DescribeFleetStatus"/>: Ready/InTransit/
+    /// Inactive is real Pascal status info (CLSCOMM.PAS's own FltStatusName), visible for any fleet
+    /// the viewer owns or has scouted. Whether a fleet has orders queued at all is not -- Pascal never
+    /// exposes another empire's order queue, so "orders pending" only ever shows for the viewer's own
+    /// fleets, not a scouted enemy's. "Orders pending" matters as much as "in transit" here: a Ready
+    /// fleet with a full queue looks idle but isn't, it'll act the moment
+    /// <see cref="Core.Turns.FleetMovementHandler.ResolveOrders"/> next runs -- exactly the distinction
+    /// that matters when scanning several of the player's own fleets at one sector for one that's
+    /// actually free to hand a new Resupply mission to.
+    /// </summary>
+    private string FleetStatusTag(Fleet fleet)
+    {
+        var owned = ReferenceEquals(fleet.Owner, _viewer);
+        if (!owned && !Game.Scouted(_viewer, fleet))
+        {
+            return "";
+        }
+
+        return fleet.Status switch
+        {
+            FleetStatus.InTransit => " [in transit]",
+            FleetStatus.Inactive => " [out of fuel]",
+            _ when owned && fleet.NextOrder > 0 => " [orders pending]",
+            _ => "",
+        };
     }
 
     public void HandleKey(ConsoleKeyInfo key)

@@ -286,7 +286,7 @@ internal sealed class GalaxyMapScreen : IScreen
                     SwitchFKeyOverlay(new StatusOverlay(_game, _player, obj => OpenExamine(obj, "Close Up")));
                     return;
                 case ConsoleKey.F5:
-                    SwitchFKeyOverlay(new FleetOverlay(_game, _player, _origin, obj => OpenExamine(obj, "Close Up")));
+                    SwitchFKeyOverlay(new FleetOverlay(_game, _player, _origin, OwnerColor, obj => OpenExamine(obj, "Close Up")));
                     return;
                 case ConsoleKey.F7:
                     SwitchFKeyOverlay(new NewsOverlay(_player, _origin, obj => OpenExamine(obj, "Close Up")));
@@ -925,7 +925,7 @@ internal sealed class GalaxyMapScreen : IScreen
     private void PickResupplyDestination(Fleet fleet, Planet source) =>
         BeginPick("Resupply -- move cursor to destination world, Enter: select, Esc: cancel",
             location => PickOwnPlanetOrRetry(location, "Resupply", () => PickResupplyDestination(fleet, source),
-                destination => _overlays.Add(new ResupplyCargoOverlay(source, fleet, DisplayName(source), (cargo, amount) =>
+                destination => _overlays.Add(new ResupplyCargoOverlay(source, destination, fleet, DisplayName(source), (cargo, amount) =>
                 {
                     FleetMovementHandler.CommitOrders(fleet, FleetOrderTemplates.Resupply(source, destination, cargo, amount), startAt: 1, _game);
                     var resource = new ResourceKind.Cargo(cargo).DisplayName;
@@ -1910,9 +1910,12 @@ internal sealed class GalaxyMapScreen : IScreen
 
     private (char Glyph, ConsoleColor Color) SideGlyphAt(Coordinate coordinate, NebulaType nebula, bool wantPlayerOwned)
     {
-        if (FleetPresent(coordinate, wantPlayerOwned))
+        if (FirstFleetAt(coordinate, wantPlayerOwned) is { } fleet)
         {
-            return wantPlayerOwned ? (PlayerFleetGlyph, PlayerColor) : (EnemyFleetGlyph, OtherColor);
+            // Per-empire colored, matching WorldGlyphAt's own OwnerColor -- a Kingdom fleet and a
+            // Kingdom world now read as the same color, previously fleets were a flat OtherColor
+            // regardless of which empire owned them, an inconsistency worlds never had.
+            return wantPlayerOwned ? (PlayerFleetGlyph, PlayerColor) : (EnemyFleetGlyph, OwnerColor(fleet.Owner));
         }
 
         return nebula != NebulaType.None ? (NebulaGlyphs[(int)nebula], NebulaColor) : (' ', ConsoleColor.Black);
@@ -1928,17 +1931,17 @@ internal sealed class GalaxyMapScreen : IScreen
         return owner.IsIndependent ? UnownedColor : _empireColors.GetValueOrDefault(owner, OtherColor);
     }
 
-    private bool FleetPresent(Coordinate coordinate, bool wantPlayerOwned)
+    private Fleet? FirstFleetAt(Coordinate coordinate, bool wantPlayerOwned)
     {
         foreach (var fleet in _fleetsByLocation[coordinate])
         {
             if (ReferenceEquals(fleet.Owner, _player) == wantPlayerOwned && Game.Visible(_player, fleet))
             {
-                return true;
+                return fleet;
             }
         }
 
-        return false;
+        return null;
     }
 
     private void DrawCursorOverlay(FrameBuffer fb, int mapTop, int mapHeight)

@@ -1,43 +1,69 @@
-﻿using Reconstructed4021.Core;
+using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Types;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
-using Reconstructed4021.Tui2.Shared;
 
 
 namespace Reconstructed4021.Tui2.Overlays;
 
 
 // F5 (FLTWIND.PAS: FleetWindow). Same two-pane-per-row shape as StatusOverlay (see its own doc
-// comment) over FleetStatusReport's own fleet/starbase list instead.
+// comment) over FleetStatusReport's own fleet/starbase list instead. Each row's own text is colored
+// by its owner (see _ownerColor) -- port-only addition, no Pascal precedent (real Pascal's own DOS
+// display never colored fleet-window rows by owner at all), matching the same per-empire palette
+// GalaxyMapScreen's own map glyphs already use, so a Kingdom fleet reads as the same color here as
+// it does on the map.
 internal sealed class FleetOverlay : IOverlay
 {
     private const int NoOfLines = 9; // FLTWIND.PAS: NoOfLines:=(InitHeight DIV 2)-1, InitHeight=21.
-    private const int Width = 86;
+    private const int Width = 80; // Must fit a classic 80x24 terminal -- see Height below.
 
-    // Fixed at the window's own size at 80x25 (see StatusOverlay's identical Height comment), not
-    // shrink-wrapped to whatever terminal this happens to run in.
-    private const int Height = NoOfLines * 2 + 4;
+    // Fixed at the window's own size, not shrink-wrapped to whatever terminal this happens to run in.
+    // +1 over StatusOverlay's own Height for the ships/cargo toggle hint line; still 23 rows, one
+    // short of the 24-row ceiling a classic terminal has to offer.
+    private const int Height = NoOfLines * 2 + 5;
 
-    private static readonly string PositionHeader = $"{"Fleet",-8} {"Pos",-8} {"Des",-8} {"Status",-16} {"Range",5}";
-    private const string ShipCargoHeader = "Fleet     fgt  hkr  jmp  jtn  pen  str  trn  men  nnj  amb  che  met  sup  tri ";
+    // Real Pascal's own FLTWIND.PAS field was a fixed 8 characters. Fleets are nameable up to 40
+    // characters (GalaxyMapScreen's own Deploy/Rename TextPromptOverlay, maxLength: 40), and 8 cut
+    // nearly every real name down to an unreadable stub -- but this port's own box still has to fit
+    // an actual 80-column terminal (the user's own explicit constraint), and there isn't room for both
+    // a much wider name column and all 14 ship+cargo metrics side by side. Showing 7 at a time instead
+    // of 14 (see _showCargo) frees enough width to widen this to 20 without growing the box past 80
+    // columns; a name past that still gets a plain truncation, not a scrolling marquee -- simple,
+    // and rare enough (most real fleet names are short) not to be worth the added state.
+    private const int NameColumnWidth = 20;
+
+    private static readonly string PositionHeader = $"{"Fleet",-NameColumnWidth} {"Pos",-8} {"Des",-8} {"Status",-16} {"Range",5}";
+
+    // Ship and cargo metrics (7 columns each, matching ShipType/CargoType's own real counts) no longer
+    // share one row -- 14 side by side needed 70 columns on top of the name, more than an 80-wide box
+    // has room for. Left/Right toggles which 7 are showing (see _showCargo); both header/value column
+    // sets share the metrics' own 5-char field width.
+    private static readonly string ShipMetricsHeader = $"{"Fleet",-NameColumnWidth} fgt  hkr  jmp  jtn  pen  str  trn ";
+    private static readonly string CargoMetricsHeader = $"{"Fleet",-NameColumnWidth} men  nnj  amb  che  met  sup  tri ";
 
     private readonly Game _game;
     private readonly Empire _viewer;
     private readonly Coordinate _origin;
+    private readonly Func<Empire, ConsoleColor> _ownerColor;
     private readonly ListBox<ISectorObject> _list;
     private readonly Action<ISectorObject> _onSelectRow;
+    private bool _showCargo;
 
     public bool IsDismissed { get; private set; }
 
-    public FleetOverlay(Game game, Empire viewer, Coordinate origin, Action<ISectorObject> onSelectRow)
+    // ownerColor: GalaxyMapScreen's own OwnerColor, passed in rather than recomputed here, so a
+    // Kingdom fleet reads as exactly the same color in this window as its glyph does on the map --
+    // not just a similar palette independently derived.
+    public FleetOverlay(Game game, Empire viewer, Coordinate origin, Func<Empire, ConsoleColor> ownerColor, Action<ISectorObject> onSelectRow)
     {
         _game = game;
         _viewer = viewer;
         _origin = origin;
+        _ownerColor = ownerColor;
         _onSelectRow = onSelectRow;
         _list = new ListBox<ISectorObject>(FleetStatusReport.BuildRows(game.Galaxy, viewer), FormatPositionStatus);
     }
@@ -51,6 +77,9 @@ internal sealed class FleetOverlay : IOverlay
 
         switch (key.Key)
         {
+            case ConsoleKey.LeftArrow or ConsoleKey.RightArrow:
+                _showCargo = !_showCargo;
+                break;
             case ConsoleKey.Enter when _list.SelectedItem is { } row:
                 // Stacks Close Up on top instead of dismissing -- see StatusOverlay's own comment.
                 _onSelectRow(row);
@@ -61,9 +90,12 @@ internal sealed class FleetOverlay : IOverlay
         }
     }
 
+    private static string FormatName(ISectorObject obj, Empire viewer) =>
+        CloseUpOverlay.DisplayName(obj, viewer).PadRight(NameColumnWidth)[..NameColumnWidth];
+
     private string FormatPositionStatus(ISectorObject obj)
     {
-        var name = CloseUpOverlay.DisplayName(obj, _viewer).PadRight(8)[..8];
+        var name = FormatName(obj, _viewer);
         var pos = RelativeCoordinate.Format(obj.Location, _origin);
         var des = FormatDestination(obj);
         var status = FormatStatus(obj);
@@ -89,9 +121,9 @@ internal sealed class FleetOverlay : IOverlay
         _ => "",
     };
 
-    private string FormatShipCargo(ISectorObject obj)
+    private string FormatMetrics(ISectorObject obj)
     {
-        var name = CloseUpOverlay.DisplayName(obj, _viewer).PadRight(8)[..8];
+        var name = FormatName(obj, _viewer);
         var owned = ReferenceEquals(obj.Owner, _viewer);
         var scouted = obj is Fleet fleet && Game.Scouted(_viewer, fleet);
 
@@ -101,14 +133,17 @@ internal sealed class FleetOverlay : IOverlay
         }
 
         var holder = (IShipCargoHolder)obj;
-        var s = holder.Ships;
-        var c = holder.Cargo;
-        string ShipLevel(int value) => owned ? $"{value,5}" : $"{CloseUpWindowText.YesNo(value),5}";
-        string CargoLevel(int value) => owned ? $"{value,5}" : "   --";
 
-        return $"{name} " +
-               $"{ShipLevel(s.Fighters)}{ShipLevel(s.HunterKillers)}{ShipLevel(s.Jumpships)}{ShipLevel(s.Jumptransports)}{ShipLevel(s.Penetrators)}{ShipLevel(s.Starships)}{ShipLevel(s.Transports)}" +
-               $"{CargoLevel(c.Legions)}{CargoLevel(c.NinjaLegions)}{CargoLevel(c.Ambrosia)}{CargoLevel(c.Chemicals)}{CargoLevel(c.Metals)}{CargoLevel(c.Supplies)}{CargoLevel(c.Trillum)}";
+        if (_showCargo)
+        {
+            var c = holder.Cargo;
+            string CargoLevel(int value) => owned ? $"{value,5}" : "   --";
+            return $"{name} {CargoLevel(c.Legions)}{CargoLevel(c.NinjaLegions)}{CargoLevel(c.Ambrosia)}{CargoLevel(c.Chemicals)}{CargoLevel(c.Metals)}{CargoLevel(c.Supplies)}{CargoLevel(c.Trillum)}";
+        }
+
+        var s = holder.Ships;
+        string ShipLevel(int value) => owned ? $"{value,5}" : $"{CloseUpWindowText.YesNo(value),5}";
+        return $"{name} {ShipLevel(s.Fighters)}{ShipLevel(s.HunterKillers)}{ShipLevel(s.Jumpships)}{ShipLevel(s.Jumptransports)}{ShipLevel(s.Penetrators)}{ShipLevel(s.Starships)}{ShipLevel(s.Transports)}";
     }
 
     public void Draw(FrameBuffer fb)
@@ -128,19 +163,22 @@ internal sealed class FleetOverlay : IOverlay
         }
 
         fb.DrawText(x + 1, y + 1, PositionHeader, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
-        _list.Draw(fb, x + 1, y + 2, width - 2, NoOfLines, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
+        _list.Draw(fb, x + 1, y + 2, width - 2, NoOfLines, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray, obj => _ownerColor(obj.Owner));
 
-        var cargoHeaderRow = y + 2 + NoOfLines;
-        fb.DrawText(x + 1, cargoHeaderRow, ShipCargoHeader, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
+        var metricsHeaderRow = y + 2 + NoOfLines;
+        fb.DrawText(x + 1, metricsHeaderRow, _showCargo ? CargoMetricsHeader : ShipMetricsHeader, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
 
         var offset = _list.ScrollOffset;
         for (var row = 0; row < NoOfLines; row++)
         {
             var index = offset + row;
             var selected = index == _list.SelectedIndex;
-            var text = index < _list.Items.Count ? FormatShipCargo(_list.Items[index]) : string.Empty;
+            var text = index < _list.Items.Count ? FormatMetrics(_list.Items[index]) : string.Empty;
             var visible = text.Length > width - 2 ? text[..(width - 2)] : text.PadRight(width - 2);
-            fb.DrawText(x + 1, cargoHeaderRow + 1 + row, visible, selected ? ConsoleColor.Black : ConsoleColor.Gray, selected ? ConsoleColor.Gray : ConsoleColor.Black);
+            var rowFg = !selected && index < _list.Items.Count ? _ownerColor(_list.Items[index].Owner) : ConsoleColor.Gray;
+            fb.DrawText(x + 1, metricsHeaderRow + 1 + row, visible, selected ? ConsoleColor.Black : rowFg, selected ? ConsoleColor.Gray : ConsoleColor.Black);
         }
+
+        fb.DrawText(x + 1, y + height - 2, "<-/-> ships/cargo   Enter: examine   Esc: close", ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
     }
 }

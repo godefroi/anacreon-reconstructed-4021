@@ -54,7 +54,11 @@ public sealed class ListBox<T>
         }
     }
 
-    public void Draw(FrameBuffer fb, int x, int y, int width, int height, ConsoleColor fg, ConsoleColor bg, ConsoleColor selectedFg, ConsoleColor selectedBg)
+    // fgSelector: optional per-item foreground override for an unselected row (e.g. FleetOverlay's own
+    // per-empire owner color) -- null keeps every other caller's existing flat-fg behavior unchanged.
+    // Selection always wins over it: a selected row is still selectedFg/selectedBg regardless, so the
+    // "this is the highlighted row" cue never gets ambiguous next to a row-specific color.
+    public void Draw(FrameBuffer fb, int x, int y, int width, int height, ConsoleColor fg, ConsoleColor bg, ConsoleColor selectedFg, ConsoleColor selectedBg, Func<T, ConsoleColor>? fgSelector = null)
     {
         if (SelectedIndex < _scrollOffset)
         {
@@ -72,7 +76,8 @@ public sealed class ListBox<T>
             var text = isRealItem ? _format(Items[itemIndex]) : string.Empty;
             var visible = text.Length > width ? text[..width] : text.PadRight(width);
             var selected = isRealItem && itemIndex == SelectedIndex;
-            fb.DrawText(x, y + row, visible, selected ? selectedFg : fg, selected ? selectedBg : bg);
+            var rowFg = !selected && isRealItem && fgSelector is not null ? fgSelector(Items[itemIndex]) : fg;
+            fb.DrawText(x, y + row, visible, selected ? selectedFg : rowFg, selected ? selectedBg : bg);
         }
     }
 }
