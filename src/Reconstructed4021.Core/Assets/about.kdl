@@ -1,0 +1,74 @@
+// Home menu > About Anacreon (TMA.PAS: AboutAnacreon, :82-143). Real Pascal's own version is two
+// screens (the 1.31 release blurb, then the BSD-style license) with an ASCII-art compass/globe logo
+// down the left column of the first -- the logo isn't reproduced here (decorative CP437 line-drawing
+// art, not project history worth preserving pixel-for-pixel), but every word of both screens' own text
+// is kept, verbatim, as pages 1 and 2 below. Page 3, with no Pascal equivalent, covers this port
+// itself -- added, not substituted, so the original two pages stay exactly what a player of the real
+// 1.31 release would have seen here.
+
+about {
+    page 1 {
+        text #"""
+ANACREON: Reconstruction 4021  ver 1.31
+Released September 24, 2003
+
+After thirteen years, Anacreon has finally been resurrected!  Thanks to George
+Moromisato for releasing the source code, and for his genius in creating the
+game in the first place.
+
+In version 1.31, the following long-standing bugs have been fixed:
+
+  - Any unnamed Fleet240 or Enemy240 was unviewable except through the F5
+    screen
+  - Advanced ships (eg. starships) were allowed to defend a planet, making
+    the planet unconquerable.
+
+Check out the Ardreil: Anacreon Reconstruction project at
+sourceforge.net/projects/ardreil/ for information on a network-aware Anacreon
+game.
+
+Report bugs to Adam Luker (zot@aapc.com)
+"""#
+    }
+
+    page 2 {
+        text #"""
+Legal stuff:
+
+Based in part on Anacreon: Reconstruction 4021
+copyright (c) 1988-2003 George Moromisato.
+All rights reserved.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+(Of course, this game isn't really just "based in part on" Anacreon. :)
+"""#
+    }
+
+    page 3 {
+        text #"""
+About this reconstruction (Reconstructed4021)
+
+This is a from-scratch C#/.NET port of the Turbo Pascal source above (the real
+1.31 release, not a behavioral reverse-engineering) -- ATTACK.PAS, UPDATE.PAS,
+MESS.PAS, and the rest of the original unit files are this port's own primary
+source of truth, cited by file and line throughout its own code comments.
+
+Two presentation layers sit on top of the same Core game engine:
+Reconstructed4021.Tui (built on Terminal.Gui) and this one,
+Reconstructed4021.Tui2 -- a from-scratch immediate-mode renderer, built once
+Terminal.Gui's own frame-time ceiling became the bottleneck a real game loop
+needed past.
+"""#
+    }
+}
