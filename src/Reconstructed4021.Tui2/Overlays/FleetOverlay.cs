@@ -162,11 +162,25 @@ internal sealed class FleetOverlay : IOverlay
             return;
         }
 
-        fb.DrawText(x + 1, y + 1, PositionHeader, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
+        // Dotted underline (no overline -- this one only separates the header from its own column
+        // data below, not two panels from each other) same reasoning as the metrics divider below:
+        // distinct from the selection highlight with no color collision, padded to the full interior
+        // width so the line reads as one continuous rule under the whole header, not just under
+        // however far the header text itself happens to reach.
+        fb.DrawText(x + 1, y + 1, PositionHeader.PadRight(width - 2), ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2,
+            underline: UnderlineStyle.Dotted);
         _list.Draw(fb, x + 1, y + 2, width - 2, NoOfLines, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray, obj => _ownerColor(obj.Owner));
 
+        // FLTWIND.PAS's own DividingBar (:58,161) is drawn inverted (C.SYSTBorder) to separate the two
+        // synchronized panels -- not blank whitespace. An inverted Black-on-Gray bar here would be
+        // indistinguishable from this same overlay's own selected-row highlight (identical colors), so
+        // the divider is framed with dotted underline+overline instead, in the ordinary Gray-on-Black
+        // every other header already uses -- distinct from both plain rows (no lines) and the
+        // selection highlight (a color swap, no lines), with no color collision either way.
         var metricsHeaderRow = y + 2 + NoOfLines;
-        fb.DrawText(x + 1, metricsHeaderRow, _showCargo ? CargoMetricsHeader : ShipMetricsHeader, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
+        var metricsHeaderText = (_showCargo ? CargoMetricsHeader : ShipMetricsHeader).PadRight(width - 2);
+        fb.DrawText(x + 1, metricsHeaderRow, metricsHeaderText, ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2,
+            underline: UnderlineStyle.Dotted, overline: true);
 
         var offset = _list.ScrollOffset;
         for (var row = 0; row < NoOfLines; row++)

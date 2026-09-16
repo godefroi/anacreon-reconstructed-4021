@@ -64,7 +64,8 @@ public sealed class FrameBuffer
     // the buffer's own absolute bounds -- without it, screens kept reinventing the same
     // "text.Length > w - x ? text[..(w - x)] : text" arithmetic themselves (WorldInfoOverlay,
     // CloseUpOverlay) to keep fixed-layout content from spilling past its own frame's border.
-    public void DrawText(int x, int y, ReadOnlySpan<char> text, ConsoleColor fg, ConsoleColor bg, int? maxWidth = null)
+    public void DrawText(int x, int y, ReadOnlySpan<char> text, ConsoleColor fg, ConsoleColor bg, int? maxWidth = null,
+        UnderlineStyle underline = UnderlineStyle.None, bool overline = false)
     {
         if (y < 0 || y >= _height)
         {
@@ -80,7 +81,7 @@ public sealed class FrameBuffer
                 continue;
             }
 
-            Set(col, y, new Cell(new Rune(text[i]), fg, bg));
+            Set(col, y, new Cell(new Rune(text[i]), fg, bg, underline, overline));
         }
     }
 
@@ -92,6 +93,8 @@ public sealed class FrameBuffer
         var sb = new StringBuilder();
         var lastFg = (ConsoleColor?)null;
         var lastBg = (ConsoleColor?)null;
+        var lastUnderline = (UnderlineStyle?)null;
+        var lastOverline = (bool?)null;
         var cursorRow = -1;
         var cursorCol = -1;
 
@@ -121,11 +124,13 @@ public sealed class FrameBuffer
                     }
 
                     var cell = _back[idx];
-                    if (cell.Fg != lastFg || cell.Bg != lastBg)
+                    if (cell.Fg != lastFg || cell.Bg != lastBg || cell.Underline != lastUnderline || cell.Overline != lastOverline)
                     {
-                        AppendSgr(sb, cell.Fg, cell.Bg);
+                        AppendSgr(sb, cell.Fg, cell.Bg, cell.Underline, cell.Overline);
                         lastFg = cell.Fg;
                         lastBg = cell.Bg;
+                        lastUnderline = cell.Underline;
+                        lastOverline = cell.Overline;
                     }
 
                     sb.Append(cell.Glyph);
@@ -157,14 +162,29 @@ public sealed class FrameBuffer
     // own DosColors.cs made the same fix, measured directly off a screenshot at r=154 g=0 b=0. Special
     // -cased here rather than widening Cell/DrawText to a general truecolor type, since DarkRed is the
     // only color this project needs corrected.
-    private static void AppendSgr(StringBuilder sb, ConsoleColor fg, ConsoleColor bg)
+    // Underline uses Kitty's own extended "CSI 4:n m" sub-parameter form (n: 0 none, 1 single, 4
+    // dotted -- see UnderlineStyle's own doc comment on why this isn't classic SGR), combined into the
+    // same escape as the plain ECMA-48 overline codes (53 on, 55 off) and the fg/bg color codes -- one
+    // sequence per state change rather than several, same batching reasoning as this whole class's own
+    // doc comment.
+    private static void AppendSgr(StringBuilder sb, ConsoleColor fg, ConsoleColor bg, UnderlineStyle underline, bool overline)
     {
         sb.Append("\x1b[");
         AppendColorCode(sb, fg, isBackground: false);
         sb.Append(';');
         AppendColorCode(sb, bg, isBackground: true);
+        sb.Append(";4:").Append(UnderlineSubParam(underline));
+        sb.Append(';').Append(overline ? "53" : "55");
         sb.Append('m');
     }
+
+    private static int UnderlineSubParam(UnderlineStyle style) => style switch
+    {
+        UnderlineStyle.None => 0,
+        UnderlineStyle.Single => 1,
+        UnderlineStyle.Dotted => 4,
+        _ => 0,
+    };
 
     private static void AppendColorCode(StringBuilder sb, ConsoleColor color, bool isBackground)
     {
