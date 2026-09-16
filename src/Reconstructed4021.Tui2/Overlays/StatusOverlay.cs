@@ -69,23 +69,40 @@ internal sealed class StatusOverlay : IOverlay
         }
     }
 
-    private string FormatWorldStatus(IEconomicWorld world)
+    private string FormatWorldStatus(IEconomicWorld world) => FormatWorldHead(world) + FormatWorldTail(world);
+
+    // Split from FormatWorldStatus so Draw can measure FormatWorldHead's own length at render time
+    // (pop's width isn't fixed -- {,4:0.0} only holds for Population<100000 -- so the cargo columns'
+    // own x-offset can't be a compile-time constant the way FleetOverlay's Range column's could) and
+    // know exactly where the cargo columns start, to redraw a shorted one in red.
+    private string FormatWorldHead(IEconomicWorld world)
     {
-        var owned = ReferenceEquals(world.Owner, _viewer);
         var name = CloseUpOverlay.DisplayName(world, _viewer).PadRight(8)[..8];
         var ownerName = world.Owner.Name.PadRight(3)[..3];
         var pop = world.Population > 9 ? $"{world.Population / 100.0,4:0.0}" : "<0.1";
+
+        return $"{name} {ownerName} {ClassCodes[(int)world.EffectiveClass]} {TypeCodes[(int)world.Type]} {TechCodes[(int)world.TechLevel]} " +
+               $"{pop} {world.Efficiency,3} {(world.IsAddictedToAmbrosia ? "y" : "-")} {ImportExportCodes(world)} {HiLo(world.RevolutionIndex)}";
+    }
+
+    private string FormatWorldTail(IEconomicWorld world)
+    {
+        var owned = ReferenceEquals(world.Owner, _viewer);
         var s = world.Ships;
         var c = world.Cargo;
 
-        var tail = owned
+        return owned
             ? $"{s.Jumptransports,5}{s.Transports,5}{c.Ambrosia,5}{c.Chemicals,5}{c.Metals,5}{c.Supplies,5}{c.Trillum,5}"
             : $"{CloseUpWindowText.YesNo(s.Jumptransports),5}{CloseUpWindowText.YesNo(s.Transports),5}  --   --   --   --   --  ";
-
-        return $"{name} {ownerName} {ClassCodes[(int)world.EffectiveClass]} {TypeCodes[(int)world.Type]} {TechCodes[(int)world.TechLevel]} " +
-               $"{pop} {world.Efficiency,3} {(world.IsAddictedToAmbrosia ? "y" : "-")} {ImportExportCodes(world)} {HiLo(world.RevolutionIndex)}" +
-               $"{tail}";
     }
+
+    // Order and slot index (within the tail, each field 5 chars wide) of the cargo columns a
+    // shortfall can actually land on -- jtn/trn are ship counts, not cargo, so they're never in
+    // ShortfallsLastTick and never checked here.
+    private static readonly (CargoType Type, int Slot)[] CargoColumns =
+    [
+        (CargoType.Ambrosia, 2), (CargoType.Chemicals, 3), (CargoType.Metals, 4), (CargoType.Supplies, 5), (CargoType.Trillum, 6),
+    ];
 
     private string FormatMilitaryStatus(IEconomicWorld world)
     {
@@ -156,11 +173,44 @@ internal sealed class StatusOverlay : IOverlay
             underline: UnderlineStyle.Dotted);
         _list.Draw(fb, x + 1, y + 2, width - 2, NoOfLines, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray, world => _ownerColor(world.Owner));
 
+        // Cargo columns redrawn in red, right over the same cells _list.Draw just wrote, wherever
+        // this world's own production/defenses pipeline reported that cargo short last tick (see
+        // IEconomicWorld.ShortfallsLastTick's own doc comment). Unowned rows show "--" for cargo, not
+        // a real value, so there's nothing to highlight there -- CargoColumns is only ever checked
+        // once a row's own head/tail split confirms it's the viewer's own world.
+        var offset = _list.ScrollOffset;
+        for (var row = 0; row < NoOfLines; row++)
+        {
+            var index = offset + row;
+            if (index >= _list.Items.Count)
+            {
+                continue;
+            }
+
+            var world = _list.Items[index];
+            if (!ReferenceEquals(world.Owner, _viewer) || world.ShortfallsLastTick.Count == 0)
+            {
+                continue;
+            }
+
+            var headLength = FormatWorldHead(world).Length;
+            var selected = index == _list.SelectedIndex;
+            foreach (var (type, slot) in CargoColumns)
+            {
+                if (!world.ShortfallsLastTick.Contains(type))
+                {
+                    continue;
+                }
+
+                var text = $"{world.Cargo[type],5}";
+                fb.DrawText(x + 1 + headLength + slot * 5, y + 2 + row, text, ConsoleColor.Red, selected ? ConsoleColor.Gray : ConsoleColor.Black, maxWidth: 5);
+            }
+        }
+
         var militaryHeaderRow = y + 2 + NoOfLines;
         fb.DrawText(x + 1, militaryHeaderRow, MilitaryHeader.PadRight(width - 2), ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2,
             underline: UnderlineStyle.Dotted, overline: true);
 
-        var offset = _list.ScrollOffset;
         for (var row = 0; row < NoOfLines; row++)
         {
             var index = offset + row;
