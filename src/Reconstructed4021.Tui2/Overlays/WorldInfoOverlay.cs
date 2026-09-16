@@ -219,14 +219,14 @@ internal sealed class WorldInfoOverlay : IOverlay
     // clamped in Draw), a row past the bottom border would otherwise draw straight over it instead of
     // just being omitted. Real Pascal never needed this (its screen could never be smaller than the
     // layout it drew); this port's own equivalent, not a restoration.
-    private static void DrawClipped(FrameBuffer fb, int cx, int cy, int cw, int ch, int x, int y, string text)
+    private static void DrawClipped(FrameBuffer fb, int cx, int cy, int cw, int ch, int x, int y, string text, ConsoleColor fg = ContentFg)
     {
         if (x >= cw || y >= ch)
         {
             return;
         }
 
-        fb.DrawText(cx + x, cy + y, text, ContentFg, ContentBg, maxWidth: cw - x);
+        fb.DrawText(cx + x, cy + y, text, fg, ContentBg, maxWidth: cw - x);
     }
 
     // WorldCloseUpTabView: CLSCOMM.PAS's own DisplayBasicInfo/DisplayCargoInfo/DisplayMilitaryInfo/
@@ -328,6 +328,19 @@ internal sealed class WorldInfoOverlay : IOverlay
         At(0, 14, Row("", cargoTypes.Select(ResourceAbbreviation.Of)));
         At(0, 15, Row("Current:", cargoTypes.Select(ct => $"{_world.Cargo[ct]}")));
         At(0, 16, Row("Next Tick:", cargoTypes.Select(ct => $"{preview.ProjectedCargo[ct]}")));
+
+        // Redraws whichever Current cell(s) the real tick just run actually came up short on, in red
+        // -- IEconomicWorld.ShortfallsLastTick, distinct from ShortThisTick above (that's a forward
+        // simulation of what next tick would need, this is what last tick actually got).
+        for (var i = 0; i < cargoTypes.Length; i++)
+        {
+            if (!_world.ShortfallsLastTick.Contains(cargoTypes[i]))
+            {
+                continue;
+            }
+
+            DrawClipped(fb, cx, cy, cw, ch, labelWidth + i * 5, 15, $"{_world.Cargo[cargoTypes[i]]}".PadLeft(5), ConsoleColor.Red);
+        }
 
         At(0, 17, $"Trillum reserves: {_world.TrillumReserve}  ->  {preview.ProjectedTrillumReserve}");
         At(0, 18, preview.ShortThisTick.Count == 0
