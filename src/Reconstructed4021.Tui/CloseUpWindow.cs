@@ -47,12 +47,6 @@ internal sealed class CloseUpWindow : Window
     internal static readonly string[] FleetTypeNames =
         ["Warpfleet", "Jumpfleet", "Hunter-Killer Fleet", "Stealth Fleet", "Fast-Warp Fleet"];
 
-    // DisplayFleetInfo's FltStatusName (CLSCOMM.PAS:664-668) -- ordinal-aligned with FleetStatus.
-    // InTransit's real text is built specially below (EDA for your own fleet, "(?)" otherwise), so
-    // this entry is never read as-is. Internal: FleetWindow reuses this for its own starbase rows
-    // (Command Center/Fortress), which have no separate redaction path of their own to go through.
-    internal static readonly string[] FleetStatusNames = ["at destination", "In transit", "out of trillum", "lost"];
-
     // COLORS.INC's ColorScrColor: SYSWBorder = 7 (LightGray on Black) -- the border/title color; the
     // content area's own SYSDispWind background now lives on CloseUpContentView/FleetOrdersTabView.
     private static readonly TgAttribute BorderAttribute = new(StandardColor.LightGray, StandardColor.Black);
@@ -156,63 +150,4 @@ internal sealed class CloseUpWindow : Window
         _ => "object",
     };
 
-    /// <summary>MISC.PAS's YesNo (:78-96) -- a coarse magnitude bucket for a Scouted-but-not-owned count, not a real number. Width padding comes from each call site's own <c>{,5}</c> format, matching Pascal's own pre-padded 5-char literals. Internal: <see cref="StatusWindow"/>/<see cref="CloseUpContentView"/> reuse this same bucket table rather than duplicating it.</summary>
-    internal static string YesNo(int level) => level switch {
-        0 => "no",
-        >= 1 and <= 500 => "yes-",
-        >= 501 and <= 1500 => "yes1",
-        >= 1501 and <= 2500 => "yes2",
-        >= 2501 and <= 3500 => "yes3",
-        >= 3501 and <= 4500 => "yes4",
-        >= 4501 and <= 5500 => "yes5",
-        >= 5501 and <= 6500 => "yes6",
-        >= 6501 and <= 7500 => "yes7",
-        >= 7501 and <= 8500 => "yes8",
-        >= 8501 and <= 9500 => "yes9",
-        >= 9501 and <= 9999 => "yes+",
-        _ => "----",
-    };
-
-    /// <summary>
-    /// DisplayFleetInfo's own destination gate (CLSCOMM.PAS:720-732): even Scouted, a non-owned
-    /// fleet's destination only shows while that fleet is <see cref="FleetStatus.Ready"/> -- while
-    /// it's still in transit, where it's headed stays hidden regardless. Internal: <see cref="FleetWindow"/>
-    /// reuses this rather than re-deriving the same redaction rule.
-    /// </summary>
-    internal static string DescribeFleetDestination(Fleet fleet, Empire viewer, Coordinate origin)
-    {
-        var visible = ReferenceEquals(fleet.Owner, viewer) ||
-            (fleet.Status == FleetStatus.Ready && Game.Scouted(viewer, fleet));
-
-        if (!visible) {
-            return "(unknown)";
-        }
-
-        return fleet.Destination is { } dest ? RelativeCoordinate.Format(dest, origin) : "(none)";
-    }
-
-    /// <summary>
-    /// DisplayFleetInfo's own Emp=Player branch (CLSCOMM.PAS:700-716): an in-transit fleet you own
-    /// shows its real ETA (EstimatedDateOfArrival); a Scouted-but-not-owned one shows the literal
-    /// "(?)" placeholder baked into Pascal's own <c>FltStatusName[FInTrans]</c> ('In transit (?)'),
-    /// since nothing here computes another empire's ETA; anything less than Scouted is "(unknown)".
-    /// Internal: <see cref="FleetWindow"/> reuses this rather than re-deriving the same redaction
-    /// rule (and the same EstimatedDateOfArrival-needs-a-real-Destination guard this method already
-    /// gets right by only calling it inside the InTransit branch).
-    /// </summary>
-    internal static string DescribeFleetStatus(Fleet fleet, Empire viewer, Game game)
-    {
-        var owned = ReferenceEquals(fleet.Owner, viewer);
-        if (!owned && !Game.Scouted(viewer, fleet)) {
-            return "(unknown)";
-        }
-
-        if (fleet.Status != FleetStatus.InTransit) {
-            return FleetStatusNames[(int)fleet.Status];
-        }
-
-        return owned
-            ? $"In transit ({FleetLifecycle.EstimatedDateOfArrival(fleet, game)})"
-            : "In transit (?)";
-    }
 }

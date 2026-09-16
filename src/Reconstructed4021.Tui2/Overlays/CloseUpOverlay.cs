@@ -6,7 +6,6 @@ using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
 using Reconstructed4021.Tui2.Screens;
-using Reconstructed4021.Tui2.Shared;
 
 
 namespace Reconstructed4021.Tui2.Overlays;

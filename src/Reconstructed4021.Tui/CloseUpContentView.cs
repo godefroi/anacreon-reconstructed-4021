@@ -94,7 +94,7 @@ internal sealed class CloseUpContentView : View
     /// <see cref="Game.ScoutedOrOwned"/> or it's left blank (labels only); the amb/che/met/sup/tri
     /// cargo line is gated on ownership alone, never shown for anyone else's world no matter how well
     /// scouted (DisplayCargoInfo has no Scouted branch at all); the ships/legions/defenses line falls
-    /// back to <see cref="CloseUpWindow.YesNo"/>'s coarse magnitude bucket when Scouted-but-not-owned,
+    /// back to <see cref="CloseUpWindowText.YesNo"/>'s coarse magnitude bucket when Scouted-but-not-owned,
     /// or "????" when not even that; the scenario's own flavor text (<see cref="Game.FindWorldBackgroundText"/>)
     /// needs the same Scouted gate as the basic-info block, matching CloseUpCommand's own <c>IF
     /// Scouted(Player,Obj) THEN DisplayBackground(...)</c> — not shown at all for an owned-but-not-
@@ -125,7 +125,7 @@ internal sealed class CloseUpContentView : View
         var s = world.Ships;
         var c = world.Cargo;
         var d = world.Defenses;
-        string Level(int value) => owned ? value.ToString() : scouted ? CloseUpWindow.YesNo(value) : "????";
+        string Level(int value) => owned ? value.ToString() : scouted ? CloseUpWindowText.YesNo(value) : "????";
         AddAt(0, 7,
             $"{Level(s.Fighters),5}{Level(s.HunterKillers),5}{Level(s.Jumpships),5}{Level(s.Jumptransports),5}{Level(s.Penetrators),5}{Level(s.Starships),5}{Level(s.Transports),5}" +
             $"  {Level(c.Legions),5}{Level(c.NinjaLegions),5}" +
@@ -141,7 +141,7 @@ internal sealed class CloseUpContentView : View
     /// DisplayFleetInfo (col 1-2/14-15) + DisplayFleetComplement (col 2-3), CLSCOMM.PAS:654-768.
     /// Position is unconditional (real Pascal computes it the same way regardless of ownership); Range
     /// is the opposite -- always "(unknown)" for anyone but the owner, not even upgraded by Scouted.
-    /// The complement line's ship types (fgt..trn) get <see cref="CloseUpWindow.YesNo"/> when
+    /// The complement line's ship types (fgt..trn) get <see cref="CloseUpWindowText.YesNo"/> when
     /// Scouted-but-not-owned; everything else in that line (legions, amb/che/met/sup/tri) only ever
     /// shows for the owner, exactly like <see cref="LayoutWorld"/>'s own cargo line --
     /// DisplayFleetComplement's own <c>ResI IN [fgt..trn]</c> guard on its Scouted branch, not a
@@ -157,10 +157,10 @@ internal sealed class CloseUpContentView : View
         AddAt(14, 2, RelativeCoordinate.Format(fleet.Location, origin));
 
         AddAt(1, 3, "     Status:");
-        AddAt(14, 3, CloseUpWindow.DescribeFleetStatus(fleet, viewer, game));
+        AddAt(14, 3, CloseUpWindowText.DescribeFleetStatus(fleet, viewer, game));
 
         AddAt(1, 4, "Destination:");
-        AddAt(14, 4, CloseUpWindow.DescribeFleetDestination(fleet, viewer, origin));
+        AddAt(14, 4, CloseUpWindowText.DescribeFleetDestination(fleet, viewer, origin));
 
         AddAt(1, 5, "      Range:");
         AddAt(14, 5, owned ? FleetLifecycle.EstimatedRange(fleet).ToString() : "(unknown)");
@@ -168,7 +168,7 @@ internal sealed class CloseUpContentView : View
         AddAt(2, 7, "fgt  hkr  jmp  jtn  pen  str  trn  men  nnj  amb  che  met  sup  tri");
         var s = fleet.Ships;
         var c = fleet.Cargo;
-        string ShipLevel(int value) => owned ? value.ToString() : scouted ? CloseUpWindow.YesNo(value) : "????";
+        string ShipLevel(int value) => owned ? value.ToString() : scouted ? CloseUpWindowText.YesNo(value) : "????";
         string CargoLevel(int value) => owned ? value.ToString() : "????";
         AddAt(0, 8,
             $"{ShipLevel(s.Fighters),5}{ShipLevel(s.HunterKillers),5}{ShipLevel(s.Jumpships),5}{ShipLevel(s.Jumptransports),5}{ShipLevel(s.Penetrators),5}{ShipLevel(s.Starships),5}{ShipLevel(s.Transports),5}" +

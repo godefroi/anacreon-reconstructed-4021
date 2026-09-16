@@ -22,7 +22,7 @@ namespace Reconstructed4021.Tui;
 /// not real Pascal's own resolved place name (<c>GetName</c>) -- the same simplification
 /// <see cref="CloseUpWindow"/>'s own fleet layout already made, reused here rather than building a
 /// second, different redaction convention for the same two fields. Status/Destination redaction for
-/// fleet rows reuses <see cref="CloseUpWindow.DescribeFleetStatus"/>/<see cref="CloseUpWindow.DescribeFleetDestination"/>
+/// fleet rows reuses <see cref="CloseUpWindowText.DescribeFleetStatus"/>/<see cref="CloseUpWindowText.DescribeFleetDestination"/>
 /// verbatim; starbase rows (Command Base/Fortress only, always the viewer's own here) need no
 /// redaction at all, just the same InTransit-only EstimatedDateOfArrival guard those two methods
 /// already get right (calling it unconditionally, the way real Pascal's own GetFleetPositionStatus
@@ -171,16 +171,16 @@ internal sealed class FleetWindow : Window
     }
 
     private string FormatDestination(ISectorObject obj) => obj switch {
-        Fleet fleet => CloseUpWindow.DescribeFleetDestination(fleet, _viewer, _origin),
+        Fleet fleet => CloseUpWindowText.DescribeFleetDestination(fleet, _viewer, _origin),
         Starbase { Destination: { } dest } => RelativeCoordinate.Format(dest, _origin),
         Starbase => "(none)",
         _ => "",
     };
 
     private string FormatStatus(ISectorObject obj) => obj switch {
-        Fleet fleet => CloseUpWindow.DescribeFleetStatus(fleet, _viewer, _game),
+        Fleet fleet => CloseUpWindowText.DescribeFleetStatus(fleet, _viewer, _game),
         Starbase { Status: FleetStatus.InTransit } starbase => $"In transit ({FleetLifecycle.EstimatedDateOfArrival(starbase, _game)})",
-        Starbase starbase => CloseUpWindow.FleetStatusNames[(int)starbase.Status],
+        Starbase starbase => CloseUpWindowText.FleetStatusNames[(int)starbase.Status],
         _ => "",
     };
 
@@ -197,7 +197,7 @@ internal sealed class FleetWindow : Window
         var holder = (IShipCargoHolder)obj;
         var s = holder.Ships;
         var c = holder.Cargo;
-        string ShipLevel(int value) => owned ? $"{value,5}" : $"{CloseUpWindow.YesNo(value),5}";
+        string ShipLevel(int value) => owned ? $"{value,5}" : $"{CloseUpWindowText.YesNo(value),5}";
         string CargoLevel(int value) => owned ? $"{value,5}" : "   --";
 
         return $"{name} " +
