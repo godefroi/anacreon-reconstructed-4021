@@ -163,4 +163,96 @@ public class NpeAttackTests
 
         await Assert.That(outcome.Result).IsEqualTo(AttackResultType.AttackerDestroyed);
     }
+
+    // Smart-retreat scenario shared by the three tests below: a weak escort (20 fighters, no
+    // HunterKillers) that a defending world's 40 HunterKillers reliably grinds down, carrying 50
+    // Jumptransports each with a legion aboard (DefaultGroup's own cargo-space cap on 50 Jumptransports
+    // works out to 50 NinjaLegions embarked -- any more would just sit in Cargo, never at risk) --
+    // losing all of them once the escort dies is the exact "peeve" this feature addresses, verified
+    // empirically (a throwaway sweep, not committed) that this matchup reliably wipes the escort well
+    // before Round 30 across many seeds.
+    private static (List<GroupRecord> Groups, EnemyForces Enemy, CombatDataRecord CombatData) BuildSmartRetreatScenario()
+    {
+        var attacker = new Empire { Name = "Attacker" };
+        attacker.Capital = new Planet { Location = new Coordinate(0, 0), Owner = attacker, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = attacker };
+        fleet.Ships.Fighters = 20;
+        fleet.Ships.Jumptransports = 50;
+        fleet.Cargo.NinjaLegions = 50;
+
+        var defender = EmpireFactory.CreateEmpire("Defender", null, isEmpress: false, TechLevel.PreTech, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var target = new Planet { Location = new Coordinate(0, 0), Owner = defender, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        target.Ships.HunterKillers = 40;
+        target.Cargo.Legions = 200;
+        defender.Capital = target;
+
+        return (CombatEngine.DefaultDistribution(fleet), CombatEngine.GetEnemy(target), CombatEngine.CalculateCombatData(attacker, target));
+    }
+
+    // Baseline: smartRetreat defaults false, so once the escort is wiped, TrnAdvance (WorldEngageTargetting)
+    // sends the surviving transports on to Ground anyway -- every embarked legion is lost, matching the
+    // user's own "auto-attack destroys the defenders but has no legions left to land" observation. Ends
+    // via the existing 30-round FleetRetreats timeout (NoMenLeft), not the new check -- asserting the
+    // casualty counts here, not just the shared AttackerRetreats enum value, is what actually
+    // distinguishes this from the smart-retreat case below (both end via AttackerRetreats, for two
+    // entirely different reasons -- the timeout here, the new check there).
+    [Test]
+    public async Task WorldEngage_EscortWipedWithoutSmartRetreat_LosesEveryLegion()
+    {
+        var (groups, enemy, combatData) = BuildSmartRetreatScenario();
+        var outcome = CombatResolution.WorldEngage(groups, enemy, combatData, AttackIntentionType.Conquer, new Random(1));
+
+        await Assert.That(outcome.Result).IsEqualTo(AttackResultType.AttackerRetreats);
+        await Assert.That(outcome.Casualties[AttackType.NinjaLegion]).IsEqualTo(50);
+        await Assert.That(groups.Any(g => g.Gat != 0)).IsFalse();
+    }
+
+    // Same scenario and seed, smartRetreat true: the loop retreats the round the escort is wiped, before
+    // that round's WorldEngageTargetting can send transports toward Ground -- fewer legions/transports
+    // lost than the flag-off baseline above (not zero: transports parked alongside the escort still take
+    // fire during the rounds the escort was still alive and fighting), and unlike the baseline, at least
+    // one transport group survives still carrying its legions, never having reached Ground (AdvanceGroups
+    // only swaps Gat/Num and clears the troop cargo once Pos reaches Ground) -- direct evidence the
+    // retreat fired before TrnAdvance, not just a coincidentally equal AttackResultType.
+    [Test]
+    public async Task WorldEngage_EscortWipedWithSmartRetreat_SavesSomeLegions()
+    {
+        var (groups, enemy, combatData) = BuildSmartRetreatScenario();
+        var outcome = CombatResolution.WorldEngage(groups, enemy, combatData, AttackIntentionType.Conquer, new Random(1), smartRetreat: true);
+
+        await Assert.That(outcome.Result).IsEqualTo(AttackResultType.AttackerRetreats);
+        await Assert.That(outcome.Casualties[AttackType.NinjaLegion]).IsEqualTo(36);
+        await Assert.That(outcome.Casualties[AttackType.Jumptransport]).IsEqualTo(28);
+        await Assert.That(groups.Any(g => g.Sta != GroupStatus.Destroyed && g.Gat != 0 && g.Pos < ShellPosition.Ground)).IsTrue();
+    }
+
+    // smartRetreat must never change the outcome of a fight the escort was always going to win outright
+    // -- a strong escort (200 Fighters/200 HunterKillers) against a defender too weak to ever wipe it
+    // never makes TransportsLeft true, so the new check never fires. Pins the actual measured values at
+    // seed 1 (not a self-comparison of two runs against each other, which would also pass if a future
+    // change reintroduced DefaultDistribution mutating the live fleet -- see its own doc comment on that
+    // exact prior bug -- since both sides would then drift identically instead of failing).
+    [Test]
+    public async Task WorldEngage_SmartRetreat_DoesNotAffectAWinningFight()
+    {
+        var attacker = new Empire { Name = "Attacker" };
+        attacker.Capital = new Planet { Location = new Coordinate(0, 0), Owner = attacker, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = attacker };
+        fleet.Ships.Fighters = 200;
+        fleet.Ships.HunterKillers = 200;
+        fleet.Ships.Jumptransports = 20;
+        fleet.Cargo.NinjaLegions = 1000;
+
+        var defender = EmpireFactory.CreateEmpire("Defender", null, isEmpress: false, TechLevel.PreTech, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var target = new Planet { Location = new Coordinate(0, 0), Owner = defender, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        target.Ships.HunterKillers = 5;
+        target.Cargo.Legions = 50;
+        defender.Capital = target;
+
+        var outcome = CombatResolution.WorldEngage(CombatEngine.DefaultDistribution(fleet), CombatEngine.GetEnemy(target), CombatEngine.CalculateCombatData(attacker, target), AttackIntentionType.Conquer, new Random(1), smartRetreat: true);
+
+        await Assert.That(outcome.Result).IsEqualTo(AttackResultType.DefenderConquered);
+        await Assert.That(outcome.Casualties[AttackType.Fighter]).IsEqualTo(7);
+        await Assert.That(outcome.Casualties[AttackType.NinjaLegion]).IsEqualTo(0);
+    }
 }

@@ -44,7 +44,6 @@ public static class EmpireFactory
         };
 
         SeedTechnology(empire.Technology, techLevel, extraTechs);
-        SeedDefenseSettings(empire.DefenseSettings);
 
         return empire;
     }
@@ -80,29 +79,4 @@ public static class EmpireFactory
         technology.Constructions.IntersectWith(allowedAtTech.Constructions);
     }
 
-    /// <summary>
-    /// DATACNST.PAS:373-379 (InitDefenseRecord) — only ShellDefDist (Fleets) is given explicit
-    /// per-shell/per-ship-type percentages; StarbaseDefDist (Starbases) is left at the typed
-    /// constant's default of all zeros. Not a port gap: Pascal's own InitDefenseRecord omits that
-    /// field too (DATASTRC.PAS:165-168 declares both fields, but the constant only sets one).
-    /// </summary>
-    private static void SeedDefenseSettings(DefenseSettings settings)
-    {
-        SetShell(settings.Fleets.DeepSpace, fighters: 5, hunterKillers: 50, jumpships: 10, jumptransports: 0, penetrators: 15, starships: 0, transports: 0);
-        SetShell(settings.Fleets.HighOrbit, fighters: 10, hunterKillers: 10, jumpships: 20, jumptransports: 0, penetrators: 30, starships: 50, transports: 0);
-        SetShell(settings.Fleets.Orbit, fighters: 10, hunterKillers: 10, jumpships: 30, jumptransports: 0, penetrators: 30, starships: 30, transports: 0);
-        SetShell(settings.Fleets.SubOrbit, fighters: 55, hunterKillers: 30, jumpships: 40, jumptransports: 0, penetrators: 25, starships: 20, transports: 0);
-        SetShell(settings.Fleets.Ground, fighters: 20, hunterKillers: 0, jumpships: 0, jumptransports: 100, penetrators: 0, starships: 0, transports: 100);
-    }
-
-    private static void SetShell(ShipDistribution shell, int fighters, int hunterKillers, int jumpships, int jumptransports, int penetrators, int starships, int transports)
-    {
-        shell.Fighters = fighters;
-        shell.HunterKillers = hunterKillers;
-        shell.Jumpships = jumpships;
-        shell.Jumptransports = jumptransports;
-        shell.Penetrators = penetrators;
-        shell.Starships = starships;
-        shell.Transports = transports;
-    }
 }

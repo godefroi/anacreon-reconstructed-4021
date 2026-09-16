@@ -7,6 +7,7 @@ using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Turns;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
 
@@ -68,7 +69,7 @@ internal sealed class FleetOrdersTabView : View
         var name = fleet.Names.GetValueOrDefault(viewer) ?? CloseUpWindow.DescribeLocation(fleet, viewer);
         Add(new Label { X = 0, Y = 0, Text = $"Orders: {name}" });
 
-        var lines = FleetOrderCompiler.Decompile(viewer, fleet.Orders);
+        var lines = FleetOrderCompiler.Decompile(game, viewer, fleet.Orders);
         highlighter = new NextOrderLineHighlighter {
             MarkedLineNumber = fleet.NextOrder > 0 ? fleet.NextOrder : lines.Count > 0 ? 1 : 0,
         };

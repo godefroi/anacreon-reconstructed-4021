@@ -43,6 +43,9 @@ public sealed class Starbase : IMovable, IEconomicWorld
     public Coordinate? Destination { get; set; }
     public FleetStatus Status { get; set; } = FleetStatus.Ready;
 
+    /// <summary>See <see cref="IEconomicWorld.ShortfallsLastTick"/>.</summary>
+    public HashSet<CargoType> ShortfallsLastTick { get; set; } = [];
+
     // Explicit IEconomicWorld implementation, same rationale as Planet's: these exist only for
     // AnnualTickHandler's shared pipeline, not as part of Starbase's own public API. Each one encodes
     // a specific PRIMINTR.PAS accessor's Base-case behavior — see IEconomicWorld's own doc comment.

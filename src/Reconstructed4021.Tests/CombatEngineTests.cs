@@ -127,6 +127,31 @@ public class CombatEngineTests
         await Assert.That(groups.Sum(g => g.Num)).IsEqualTo(130);
     }
 
+    // Real bug, found from an actual playtest report: attacking a Warp-tech independent world with 680
+    // fighters in inventory showed 0 fighters in the tactical battle. Empire.Independent never round-
+    // trips through EmpireFactory.CreateEmpire or save/load (GameJson.Empire(-1) always returns the
+    // same static instance rather than deserializing one), so its DefenseSettings sat at ShipDistribution's
+    // bare all-zero default forever -- GetEnemy's `(owner.DefenseSettings.Fleets[pos][ship] / 100.0) *
+    // world.Ships[ship]` came out to 0 for every independent world's ships regardless of inventory or
+    // tech level. Fixed by making ShellDefensePlan.CreateDefault (DATACNST.PAS's InitDefenseRecord
+    // distribution) the actual default for DefenseSettings.Fleets, not something only applied after the
+    // fact by EmpireFactory -- matching LOADSAVE.PAS's InitializeIndependentRecord seeding the same
+    // table for the independent faction, universe-wide, every game.
+    [Test]
+    public async Task GetEnemy_IndependentWorld_UsesTheRealDefaultDistribution_NotZero()
+    {
+        var target = new Planet {
+            Location = new Coordinate(0, 0), Owner = Empire.Independent, Class = WorldClass.Arid,
+            Type = WorldType.Independent, TechLevel = TechLevel.Warp,
+        };
+        target.Ships.Fighters = 680;
+
+        var enemy = CombatEngine.GetEnemy(target);
+
+        // SubOrbit gets 55% of fighters in the default distribution: round(680 * 0.55) = 374.
+        await Assert.That(enemy[ShellPosition.SubOrbit, AttackType.Fighter]).IsEqualTo(374);
+    }
+
     // ShipsDestroyed(100,Fighter,HunterKiller,100): temp=100*(15/100)=15.0 exactly (CombatTable's
     // Fighter-vs-HunterKiller entry is 15) -- an integral result, so the Rnd(1,100)<temp2 remainder
     // roll never fires (temp2=0) regardless of which value Random supplies.

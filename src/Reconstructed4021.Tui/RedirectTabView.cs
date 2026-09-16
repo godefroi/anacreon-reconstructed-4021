@@ -4,6 +4,7 @@ using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.Types;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;

@@ -1,0 +1,12 @@
+# Confirms the growing-suffix reveal: characters enter at a fixed left column and appear to march
+# rightward as more become visible, rather than a static left-to-right wipe of the final image.
+SLEEP 90
+DUMP
+
+SLEEP 500
+DUMP
+
+# Logo is 53 columns wide -- 2 per 30ms tick means full reveal by ~795ms. Long past that plus the
+# 5s hold, this should have auto-advanced to the title screen already.
+SLEEP 6000
+DUMP

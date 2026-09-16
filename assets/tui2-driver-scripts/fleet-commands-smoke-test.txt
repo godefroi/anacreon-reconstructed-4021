@@ -1,0 +1,61 @@
+# Deploy a fleet off the capital, then exercise Change Destination, Refuel, SRM Sweep, and Probe.
+Alt+F
+D
+Enter
+Enter
+Right
+Right
+Down
+Down
+Enter
+Up
+Escape
+Left
+Left
+Up
+Up
+DUMP
+
+# Change Destination -- pick the fleet (only one here), move cursor, confirm.
+Alt+F
+C
+DUMP
+
+Right
+Right
+Enter
+DUMP
+
+# Move the cursor back onto the fleet -- Change Destination's own pick left it at the destination (2,0).
+Left
+Left
+
+# Refuel -- ground picker should show only the capital (the fleet-as-ground candidate has 0 trillum
+# of its own, so PickGround's own exclude drops it); blank amount defaults to max.
+Alt+F
+R
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
+
+# SRM Sweep -- no mine at this sector, so this exercises the "No SRMs found" branch.
+Alt+F
+S
+DUMP
+
+Enter
+DUMP
+
+# Probe -- no fleet needed at all.
+Alt+F
+P
+DUMP
+
+Right
+Right
+Enter
+DUMP

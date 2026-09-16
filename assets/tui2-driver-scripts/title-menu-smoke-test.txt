@@ -1,0 +1,22 @@
+# TMA splash dismisses on any keypress, straight to the title screen. Enter is as good as any key.
+Enter
+DUMP
+
+# Fly-in + band-sweep phases finish well within 3s; give it a comfortable 4s to reach steady Orbit.
+SLEEP 4000
+DUMP
+
+# Left from the first button wraps to the last (Quit).
+Left
+DUMP
+
+# Back to New Game, then step through the other three via Right.
+Right
+Right
+Right
+Right
+DUMP
+
+# Bare hotkey Q activates Quit regardless of current focus.
+q
+DUMP

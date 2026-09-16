@@ -2,6 +2,7 @@ using Terminal.Gui.Drawing;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Types;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
 
@@ -74,8 +75,8 @@ internal sealed class ProductionWindow : View
 
         var preview = WorldProductionPreview.Compute(world, new Random(0));
 
-        AddAt(1, 0, " Cls:"); AddAt(7, 0, world.EffectiveClass.ToString());
-        AddAt(23, 0, "Tech:"); AddAt(29, 0, world.TechLevel.ToString());
+        AddAt(1, 0, " Cls:"); AddAt(7, 0, CloseUpWindowText.WorldClassNames[world.EffectiveClass]);
+        AddAt(23, 0, "Tech:"); AddAt(29, 0, CloseUpWindowText.TechLevelNames[world.TechLevel]);
         AddAt(45, 0, "Pop:"); AddAt(50, 0, world.Population.ToString());
         AddAt(62, 0, "Eff:"); AddAt(67, 0, $"{world.Efficiency}%");
 

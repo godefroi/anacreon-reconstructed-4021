@@ -127,6 +127,7 @@ public class AnnualTickHandlerTests
 
         await Assert.That(planet.Population).IsEqualTo(966);
         await Assert.That(planet.RevolutionIndex).IsEqualTo(41);
+        await Assert.That(planet.ShortfallsLastTick).Contains(CargoType.Metals);
     }
 
 }

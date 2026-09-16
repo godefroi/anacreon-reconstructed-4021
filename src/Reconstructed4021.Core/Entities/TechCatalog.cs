@@ -209,4 +209,22 @@ public static class TechCatalog
 
     /// <summary>See <see cref="Grant(DefenseType)"/>.</summary>
     public static Action<UnlockedTechnology> Grant(ConstructionType type) => t => t.Constructions.Add(type);
+
+    /// <summary>
+    /// Grants by <see cref="TechGrantIdentity"/> rather than a concrete enum -- for a caller (Empire
+    /// menu's Trade Technology) that only has the identity a <see cref="TechGrantIdentity"/>-keyed
+    /// picker (e.g. <see cref="AllEntries"/>'s own results) handed back, not the specific enum type.
+    /// </summary>
+    public static void Grant(UnlockedTechnology technology, TechGrantIdentity identity)
+    {
+        Action<UnlockedTechnology> grant = identity.Category switch {
+            TechCategory.Defense => Grant((DefenseType)identity.Ordinal),
+            TechCategory.Ship => Grant((ShipType)identity.Ordinal),
+            TechCategory.Cargo => Grant((CargoType)identity.Ordinal),
+            TechCategory.Construction => Grant((ConstructionType)identity.Ordinal),
+            _ => throw new ArgumentOutOfRangeException(nameof(identity)),
+        };
+
+        grant(technology);
+    }
 }

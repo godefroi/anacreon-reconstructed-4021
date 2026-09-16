@@ -1,0 +1,35 @@
+# Game menu: Pause (info popup, dismiss-on-any-key), Save (name prompt -> write -> info popup), and
+# Exit to OS (ends the run loop outright, unlike Quit which returns to the title screen).
+Escape
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
+
+Escape
+Down
+Down
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
+
+Escape
+Down
+Down
+Down
+Down
+Down
+DUMP
+
+Enter
+DUMP

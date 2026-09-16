@@ -1,0 +1,34 @@
+# Exercises the whole New Game chain end to end: TMA -> title -> scenario picker -> (intro pages, if
+# any) -> (player count, if the scenario allows a range) -> per-player name+gender -> Game created.
+# Enter is deliberately reused throughout (advance intro page / confirm default player count / confirm
+# suggested name / confirm default gender) since every one of those defaults is valid on its own.
+Enter
+n
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP

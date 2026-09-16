@@ -1,0 +1,22 @@
+# Verifies the full 7-menu bar (including the icon-only home menu and Ministry of War), hotkey letters
+# both opening a menu from the map and jumping straight to a different menu while one's already open,
+# and bare-letter leaf selection within an open menu.
+DUMP
+
+# Alt+F opens Fleet directly from the map.
+Alt+F
+DUMP
+
+# Bare 'm' jumps straight to Ministry of War (a different top-level menu) while Fleet is open.
+m
+DUMP
+
+# Bare 'd' selects Defenses (a leaf hotkey) and activates it (a stub, so nothing visible changes).
+d
+DUMP
+
+# Esc opens Game (index 1); 'v' selects "Sa_ve" (hotkey V, not S).
+Escape
+DUMP
+v
+DUMP

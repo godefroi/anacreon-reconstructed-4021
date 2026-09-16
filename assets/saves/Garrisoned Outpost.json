@@ -66,7 +66,8 @@
           "supply": 79,
           "trillumMining": 47
         },
-        "trillumReserve": 904
+        "trillumReserve": 904,
+        "shortfallsLastTick": []
       },
       {
         "location": {
@@ -132,7 +133,8 @@
           "supply": 26,
           "trillumMining": 6
         },
-        "trillumReserve": 907
+        "trillumReserve": 907,
+        "shortfallsLastTick": []
       },
       {
         "location": {
@@ -198,7 +200,8 @@
           "supply": 20,
           "trillumMining": 0
         },
-        "trillumReserve": 933
+        "trillumReserve": 933,
+        "shortfallsLastTick": []
       }
     ],
     "starbases": [],

@@ -1,0 +1,41 @@
+# Deploy a fleet off the capital (0,0), move the cursor back onto it, then Fleet > Transfer: picks
+# the fleet (only one at the cursor), picks the ground (only candidate: the capital itself, still
+# opens the picker even for one candidate, matching real Pascal's own GetGround), opens the Resource
+# Distribution Editor between them, then commits.
+Alt+F
+D
+Enter
+Enter
+Right
+Right
+Down
+Down
+Enter
+Up
+Escape
+DUMP
+
+Left
+Left
+Up
+Up
+DUMP
+
+Alt+F
+T
+DUMP
+
+Enter
+DUMP
+
+Right
+Right
+Right
+Right
+Right
+Right
+Up
+DUMP
+
+Escape
+DUMP

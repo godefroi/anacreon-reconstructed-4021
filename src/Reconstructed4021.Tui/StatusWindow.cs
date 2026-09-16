@@ -4,6 +4,7 @@ using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Types;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
 
@@ -29,7 +30,7 @@ namespace Reconstructed4021.Tui;
 ///
 /// Redaction matches <c>GetWorldStatus</c>/<c>GetMilitaryStatus</c> field-by-field, not a blanket
 /// owned/foreign switch: a foreign scouted world's jtn/trn ship counts (world-status pane) and all
-/// 13 military-status fields (men/ninja/7 ships/4 defenses) fall back to <see cref="CloseUpWindow.YesNo"/>'s
+/// 13 military-status fields (men/ninja/7 ships/4 defenses) fall back to <see cref="CloseUpWindowText.YesNo"/>'s
 /// coarse magnitude bucket, but the world-status pane's 5 cargo columns are always literal dashes for
 /// a foreign world -- real Pascal never even approximates cargo there, confirmed from
 /// <c>GetWorldStatus</c>'s own literal <c>'  --   --   --   --   --  '</c>.
@@ -180,7 +181,7 @@ internal sealed class StatusWindow : Window
 
         var tail = owned
             ? $"{s.Jumptransports,5}{s.Transports,5}{c.Ambrosia,5}{c.Chemicals,5}{c.Metals,5}{c.Supplies,5}{c.Trillum,5}"
-            : $"{CloseUpWindow.YesNo(s.Jumptransports),5}{CloseUpWindow.YesNo(s.Transports),5}  --   --   --   --   --  ";
+            : $"{CloseUpWindowText.YesNo(s.Jumptransports),5}{CloseUpWindowText.YesNo(s.Transports),5}  --   --   --   --   --  ";
 
         return $"{name} {ownerName} {ClassCodes[(int)world.EffectiveClass]} {TypeCodes[(int)world.Type]} {TechCodes[(int)world.TechLevel]} " +
                $"{pop} {world.Efficiency,3} {(world.IsAddictedToAmbrosia ? "y" : "-")} {ImportExportCodes(world)} {HiLo(world.RevolutionIndex)}" +
@@ -196,7 +197,7 @@ internal sealed class StatusWindow : Window
         var c = world.Cargo;
         var d = world.Defenses;
 
-        string Level(int value) => owned ? $"{value,5}" : $"{CloseUpWindow.YesNo(value),5}";
+        string Level(int value) => owned ? $"{value,5}" : $"{CloseUpWindowText.YesNo(value),5}";
 
         return $"{name} {ownerName} " +
                $"{Level(c.Legions)}{Level(c.NinjaLegions)}" +

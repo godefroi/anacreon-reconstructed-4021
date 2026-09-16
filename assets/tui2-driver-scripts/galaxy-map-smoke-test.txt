@@ -1,0 +1,25 @@
+# Loaded straight into the map (--load), no pre-game flow. Checks: initial map render, cursor
+# movement (arrows, shift-jump, ctrl-jump-to-object), and the menu bar opening/navigating/closing.
+DUMP
+
+Right
+Right
+DUMP
+
+Left
+DUMP
+
+Escape
+DUMP
+
+Right
+Right
+DUMP
+
+Down
+Down
+Enter
+DUMP
+
+Escape
+DUMP

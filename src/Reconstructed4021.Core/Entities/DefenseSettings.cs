@@ -7,6 +7,10 @@ namespace Reconstructed4021.Core.Entities;
 /// </summary>
 public sealed class DefenseSettings
 {
-    public ShellDefensePlan Fleets { get; } = new();
+    // Starbases is left at the typed constant's own all-zero default -- not a port gap: Pascal's own
+    // InitDefenseRecord (DATACNST.PAS:373-379) only sets ShellDefDist (Fleets), never StarbaseDefDist,
+    // even though DATASTRC.PAS:165-168 declares both fields. See ShellDefensePlan.CreateDefault's own
+    // doc comment for why Fleets can't default the same bare way.
+    public ShellDefensePlan Fleets { get; } = ShellDefensePlan.CreateDefault();
     public ShellDefensePlan Starbases { get; } = new();
 }

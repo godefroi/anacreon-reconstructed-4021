@@ -18,6 +18,9 @@ public class FleetOrderCompilerTests
     [Test]
     public async Task Compile_Destination_ByCoordinate()
     {
+        // owner has no capital, so the origin falls back to the galaxy center (10,10) -- "5,7" is
+        // relative to that, not a raw galaxy coordinate (PRIMINTR.PAS's own Name2Coord/AbsoluteX/
+        // AbsoluteY: AbsoluteX=X+CapX, AbsoluteY=CapY-Y), so it resolves to (10+5,10-7)=(15,3).
         var (game, owner) = NewGame();
 
         var result = FleetOrderCompiler.Compile(game, owner, ["DESTINATION 5,7"]);
@@ -26,14 +29,30 @@ public class FleetOrderCompilerTests
         await Assert.That(result.Orders).Count().IsEqualTo(1);
         await Assert.That(result.Orders[0].Type).IsEqualTo(CommandType.Destination);
         await Assert.That(result.Orders[0].DestinationObject).IsNull();
-        await Assert.That(result.Orders[0].DestinationPosition).IsEqualTo(new Coordinate(5, 7));
+        await Assert.That(result.Orders[0].DestinationPosition).IsEqualTo(new Coordinate(15, 3));
+    }
+
+    [Test]
+    public async Task Compile_Destination_ByCoordinate_IsRelativeToTheCapitalNotAbsolute()
+    {
+        var (game, owner) = NewGame();
+        var capital = new Planet { Location = new Coordinate(3, 12), Owner = owner, Class = WorldClass.EarthLike, Type = WorldType.Capital };
+        game.Galaxy.Planets.Add(capital);
+        owner.Capital = capital;
+
+        // "-2,5" relative to the capital (3,12): AbsoluteX=3+(-2)=1, AbsoluteY=12-5=7.
+        var result = FleetOrderCompiler.Compile(game, owner, ["DEST -2,5"]);
+
+        await Assert.That(result.Orders[0].DestinationPosition).IsEqualTo(new Coordinate(1, 7));
     }
 
     [Test]
     public async Task Compile_Destination_ByCoordinate_OccupiedByAnObject_ResolvesTheObjectNotTheBarePosition()
     {
         var (game, owner) = NewGame();
-        var planet = new Planet { Location = new Coordinate(5, 7), Owner = owner, Class = WorldClass.EarthLike, Type = WorldType.Base };
+        // "5,7" relative to the galaxy-center fallback origin (10,10) resolves to (15,3) -- see
+        // Compile_Destination_ByCoordinate's own comment.
+        var planet = new Planet { Location = new Coordinate(15, 3), Owner = owner, Class = WorldClass.EarthLike, Type = WorldType.Base };
         game.Galaxy.Planets.Add(planet);
 
         var result = FleetOrderCompiler.Compile(game, owner, ["DEST 5,7"]);
@@ -271,7 +290,7 @@ public class FleetOrderCompilerTests
             new FleetOrder(CommandType.Join, PreserveOverflow: true),
         ];
 
-        var lines = FleetOrderCompiler.Decompile(owner, original);
+        var lines = FleetOrderCompiler.Decompile(game, owner, original);
         var recompiled = FleetOrderCompiler.Compile(game, owner, lines);
 
         await Assert.That(recompiled.ErrorMessage).IsNull();
@@ -292,23 +311,28 @@ public class FleetOrderCompilerTests
     [Test]
     public async Task Decompile_NamedDestination_UsesTheViewersOwnName()
     {
-        var owner = new Empire { Name = "Owner" };
+        var (game, owner) = NewGame();
         var target = new Starbase { Location = new Coordinate(6, 6), Owner = owner, Kind = StarbaseKind.Outpost };
         target.Names[owner] = "Rally Point";
 
-        var lines = FleetOrderCompiler.Decompile(owner, [new FleetOrder(CommandType.Destination, DestinationObject: target)]);
+        var lines = FleetOrderCompiler.Decompile(game, owner, [new FleetOrder(CommandType.Destination, DestinationObject: target)]);
 
         await Assert.That(lines[0]).IsEqualTo("DESTination Rally Point");
     }
 
     [Test]
-    public async Task Decompile_UnnamedDestination_FallsBackToItsPlainCoordinate()
+    public async Task Decompile_UnnamedDestination_FallsBackToItsCapitalRelativeCoordinate()
     {
-        var owner = new Empire { Name = "Owner" };
+        var (game, owner) = NewGame();
+        var capital = new Planet { Location = new Coordinate(5, 4), Owner = owner, Class = WorldClass.EarthLike, Type = WorldType.Capital };
+        game.Galaxy.Planets.Add(capital);
+        owner.Capital = capital;
         var target = new Starbase { Location = new Coordinate(9, 4), Owner = owner, Kind = StarbaseKind.Outpost };
 
-        var lines = FleetOrderCompiler.Decompile(owner, [new FleetOrder(CommandType.Destination, DestinationObject: target)]);
+        var lines = FleetOrderCompiler.Decompile(game, owner, [new FleetOrder(CommandType.Destination, DestinationObject: target)]);
 
-        await Assert.That(lines[0]).IsEqualTo("DESTination 9,4");
+        // Relative to the capital (5,4): X is 9-5=4, Y is 4-4=0 -- not the raw galaxy coordinate "9,4"
+        // this used to print (RelativeCoordinate.Format's own X-origin.X, origin.Y-Y convention).
+        await Assert.That(lines[0]).IsEqualTo("DESTination 4,0");
     }
 }

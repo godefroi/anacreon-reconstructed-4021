@@ -51,6 +51,9 @@ public sealed class Planet : IEconomicWorld
     public IndustryLevels Industry { get; init; } = new();
     public int TrillumReserve { get; set; }
 
+    /// <summary>See <see cref="IEconomicWorld.ShortfallsLastTick"/>.</summary>
+    public HashSet<CargoType> ShortfallsLastTick { get; set; } = [];
+
     // Explicit IEconomicWorld implementation, deliberately: these three exist only for
     // AnnualTickHandler's shared planet/starbase pipeline to call through the interface, not as part
     // of Planet's own public API — a caller working with a Planet directly wants Class/

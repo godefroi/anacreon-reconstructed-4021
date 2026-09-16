@@ -3,6 +3,7 @@ using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Galaxy;
 using TgAttribute = Terminal.Gui.Drawing.Attribute;
 
@@ -31,8 +32,8 @@ internal sealed class WorldCloseUpTabView : View
 
         AddAt(1, 0, " Cls:"); AddAt(1, 1, "Tech:"); AddAt(1, 2, " Pop:");
         AddAt(23, 0, "Eff:"); AddAt(23, 1, "Amb:"); AddAt(23, 2, "Rev:");
-        AddAt(7, 0, world.EffectiveClass.ToString());
-        AddAt(7, 1, world.TechLevel.ToString());
+        AddAt(7, 0, CloseUpWindowText.WorldClassNames[world.EffectiveClass]);
+        AddAt(7, 1, CloseUpWindowText.TechLevelNames[world.TechLevel]);
         AddAt(7, 2, world.Population.ToString());
         AddAt(28, 0, $"{world.Efficiency}%");
         AddAt(28, 1, world.IsAddictedToAmbrosia ? "yes" : "no");

@@ -7,6 +7,7 @@ using Terminal.Gui.Views;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Combat;
 using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Core.Turns;
@@ -1334,7 +1335,7 @@ public sealed class GameShell : Window
         }
 
         /// <summary>
-        /// Same redaction rule as <see cref="CloseUpWindow.DescribeFleetStatus"/>: Ready/InTransit/
+        /// Same redaction rule as <see cref="CloseUpWindowText.DescribeFleetStatus"/>: Ready/InTransit/
         /// Inactive is real Pascal status info (CLSCOMM.PAS's own FltStatusName), visible for any
         /// fleet the viewer owns or has scouted. Whether a fleet has orders queued at all is not --
         /// Pascal never exposes another empire's order queue, so "orders pending" only ever shows for

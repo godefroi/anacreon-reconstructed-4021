@@ -67,6 +67,11 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
             empire.TotalRevolutionIndex = newTotalRevIndex.GetValueOrDefault(empire, 0);
             NewTechLevel(empire, game);
         }
+
+        // UPDATE.PAS:1485: once per year, after every empire's own UpdateEmpire above -- not per-turn,
+        // so a message with several recipients stays around for whichever one hasn't read it yet even
+        // after another one has (Message.MarkRead's own doc comment).
+        MessageLifecycle.DeleteReadMessages(game);
     }
 
     /// <summary>
@@ -112,6 +117,7 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
         UseUpAmbrosia(planet);
         UpdateMilitary(planet);
         UpdateDefenses(planet, reportedShortfalls);
+        planet.ShortfallsLastTick = reportedShortfalls;
         UpdateRevolution(planet, game, newTotalRevIndex);
 
         if (planet.Class == WorldClass.Hostile) {
@@ -150,6 +156,7 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
         // UpdateDefenses runs unconditionally for every starbase (UPDATE.PAS:1429), unlike the rest of
         // the economy pipeline above, which only runs for industrial complexes.
         UpdateDefenses(starbase, reportedShortfalls);
+        starbase.ShortfallsLastTick = reportedShortfalls;
     }
 
     /// <summary>

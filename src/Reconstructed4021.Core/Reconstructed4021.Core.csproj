@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\help.kdl" LogicalName="help.kdl" />
+    <EmbeddedResource Include="Assets\about.kdl" LogicalName="about.kdl" />
   </ItemGroup>
 
 </Project>

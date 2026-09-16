@@ -1,0 +1,9 @@
+# Galaxy map -> Enter on the cursor's starting sector (the player's own capital) opens Close Up
+# directly (single object there); a second Enter (any key) dismisses it back to the map.
+DUMP
+
+Enter
+DUMP
+
+Enter
+DUMP
