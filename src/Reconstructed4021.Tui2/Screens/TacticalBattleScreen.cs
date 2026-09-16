@@ -111,9 +111,11 @@ internal sealed class TacticalBattleScreen : IScreen
     private int? _highlightedGroupIndex;
 
     // Move/Target's own list mode (see this class's own doc comment): non-null in place of
-    // _commandLines while either flow is open. _listHint is a pinned first line above the scrolling
-    // list itself (unlike every other flow's hint, which is just _commandLines' own first line) --
-    // Move/Target's hint needs to stay visible while the list beneath it scrolls.
+    // _commandLines while either flow is open. _listHint is pinned above the scrolling list itself
+    // (unlike every other flow's hint, which is just _commandLines' own first line) -- Move/Target's
+    // hint needs to stay visible while the list beneath it scrolls. May carry its own embedded '\n'
+    // (DrawCommandBox splits on it): the command box is only ~33 columns wide, too narrow for either
+    // hint on one line without truncating it mid-word.
     private ListBox<GroupActionItem>? _activeList;
     private string _listHint = "";
 
@@ -613,7 +615,7 @@ internal sealed class TacticalBattleScreen : IScreen
             }
         };
 
-        ShowGroupActionList(items, "<-/-> choose  up/down group  Enter:confirm  Esc:cancel");
+        ShowGroupActionList(items, "<-/-> choose  up/down group\nEnter:confirm  Esc:cancel");
     }
 
     private void FinishMove(bool anyQueued)
@@ -712,7 +714,7 @@ internal sealed class TacticalBattleScreen : IScreen
             }
         };
 
-        ShowGroupActionList(items, "Pick a new target per group, -:clear  Enter/Esc:done");
+        ShowGroupActionList(items, "Pick a new target per group,\n-:clear  Enter/Esc:done");
     }
 
     // GroupStatus (ATTCOMM.PAS:548-574): any keypress at all dismisses back to the menu.
@@ -1090,10 +1092,19 @@ internal sealed class TacticalBattleScreen : IScreen
 
         if (_activeList is not null)
         {
-            fb.DrawText(cx, cy, _listHint, GroupFg, GroupBg, maxWidth: cw);
-            if (ch > 1)
+            // The command box is only Math.Min(35, cw) wide (see Draw's own DrawCommandBox call --
+            // sized for MoveGroupItem/MoveAllItem's own fixed-width Retreat/Stay/Advance rows), too
+            // narrow for either hint on one line -- _listHint carries its own '\n' break so both stay
+            // fully readable instead of being cut off mid-word.
+            var hintLines = _listHint.Split('\n');
+            for (var i = 0; i < hintLines.Length && i < ch; i++)
             {
-                _activeList.Draw(fb, cx, cy + 1, cw, ch - 1, GroupFg, GroupBg, ListSelectedFg, ListSelectedBg);
+                fb.DrawText(cx, cy + i, hintLines[i], GroupFg, GroupBg, maxWidth: cw);
+            }
+
+            if (ch > hintLines.Length)
+            {
+                _activeList.Draw(fb, cx, cy + hintLines.Length, cw, ch - hintLines.Length, GroupFg, GroupBg, ListSelectedFg, ListSelectedBg);
             }
             return;
         }
