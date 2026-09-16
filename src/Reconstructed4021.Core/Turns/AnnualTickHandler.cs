@@ -117,6 +117,7 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
         UseUpAmbrosia(planet);
         UpdateMilitary(planet);
         UpdateDefenses(planet, reportedShortfalls);
+        planet.ShortfallsLastTick = reportedShortfalls;
         UpdateRevolution(planet, game, newTotalRevIndex);
 
         if (planet.Class == WorldClass.Hostile) {
@@ -155,6 +156,7 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
         // UpdateDefenses runs unconditionally for every starbase (UPDATE.PAS:1429), unlike the rest of
         // the economy pipeline above, which only runs for industrial complexes.
         UpdateDefenses(starbase, reportedShortfalls);
+        starbase.ShortfallsLastTick = reportedShortfalls;
     }
 
     /// <summary>

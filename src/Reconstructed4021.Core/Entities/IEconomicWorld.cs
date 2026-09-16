@@ -61,4 +61,14 @@ public interface IEconomicWorld : ISectorObject, IShipCargoHolder
     /// ID.ObjTyp&lt;&gt;Base THEN") only bumps RevolutionIndex for a planet. UpdateIndustry's own
     /// ReportPlanetLack call (UPDATE.PAS:971) has no such guard — it fires for both.</summary>
     bool IsPlanet { get; }
+
+    /// <summary>
+    /// Which cargo types this world's own production/defenses pipeline reported as short during the
+    /// tick just run (<c>AnnualTickHandler.ReportResourceShortfall</c>'s own <c>reportedShortfalls</c>,
+    /// kept past the end of the tick instead of discarded) -- port-only addition, no Pascal field of
+    /// its own (Pascal's OtherReports is pure per-tick scratch). Lets the Status window flag a
+    /// shortage the moment it happens instead of the player having to notice a news item, then go
+    /// looking for which resource and which world it was about.
+    /// </summary>
+    HashSet<CargoType> ShortfallsLastTick { get; set; }
 }
