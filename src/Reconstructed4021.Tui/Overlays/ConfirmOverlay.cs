@@ -1,8 +1,8 @@
-﻿using Reconstructed4021.Panemonde;
+using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
 
 
-namespace Reconstructed4021.Tui2.Overlays;
+namespace Reconstructed4021.Tui.Overlays;
 
 
 // GameShell.ShowConfirm/DosDialogWindow's own Yes/No shape -- real Pascal's own AttentionWindow

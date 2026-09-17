@@ -1,9 +1,9 @@
-﻿using Reconstructed4021.Core.NewGame;
+using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Panemonde;
-using Reconstructed4021.Tui2.Screens;
+using Reconstructed4021.Tui.Screens;
 
 
-namespace Reconstructed4021.Tui2.NewGame;
+namespace Reconstructed4021.Tui.NewGame;
 
 
 // Everything after a scenario is chosen shares this: the header/scenario text, the context threaded

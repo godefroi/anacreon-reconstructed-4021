@@ -1,11 +1,11 @@
-﻿using Reconstructed4021.Core.SaveFormat;
+using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
-using Reconstructed4021.Tui2.NewGame;
-using Reconstructed4021.Tui2.Shared;
+using Reconstructed4021.Tui.NewGame;
+using Reconstructed4021.Tui.Shared;
 
 
-namespace Reconstructed4021.Tui2.Screens;
+namespace Reconstructed4021.Tui.Screens;
 
 
 // Main menu > Load Game: lists the *.json saves under saves/ (and saves/auto/, GameShell's own

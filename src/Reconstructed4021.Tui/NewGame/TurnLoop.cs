@@ -1,13 +1,13 @@
-﻿using System.Text;
+using System.Text;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Types;
 using Reconstructed4021.Panemonde;
-using Reconstructed4021.Tui2.Screens;
+using Reconstructed4021.Tui.Screens;
 
 
-namespace Reconstructed4021.Tui2.NewGame;
+namespace Reconstructed4021.Tui.NewGame;
 
 
 // ANACREON.PAS's own main loop, ported from Reconstructed4021.Tui's Program.cs (RunGame): play the

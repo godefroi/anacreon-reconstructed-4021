@@ -1,8 +1,8 @@
-﻿using System.Text;
+using System.Text;
 using Reconstructed4021.Panemonde;
 
 
-namespace Reconstructed4021.Tui2.Shared;
+namespace Reconstructed4021.Tui.Shared;
 
 
 // NewGameWindow's own twinkling backdrop (no Pascal equivalent -- DOS never had empty space around

@@ -2,7 +2,7 @@ using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
 
-namespace Reconstructed4021.Tui2.Overlays;
+namespace Reconstructed4021.Tui.Overlays;
 
 // SendMessageCommand's own GetEmpires (DESIGN.PAS:873-934): a checklist of every empire in the game,
 // Space toggles the highlighted row, Enter confirms -- with nothing toggled, that falls back to

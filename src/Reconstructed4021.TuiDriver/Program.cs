@@ -1,10 +1,10 @@
 using Reconstructed4021.Core.SaveFormat;
 using Reconstructed4021.LegacyNpe;
 using Reconstructed4021.Panemonde;
-using Reconstructed4021.Tui2;
-using Reconstructed4021.Tui2.NewGame;
+using Reconstructed4021.Tui;
+using Reconstructed4021.Tui.NewGame;
 
-// Headless functional driver for Reconstructed4021.Tui2 screens, same purpose as
+// Headless functional driver for Reconstructed4021.Tui screens, same purpose as
 // Reconstructed4021.TuiDriver serves for the Terminal.Gui-based Tui project: a script of key presses
 // and DUMPs, run without a real terminal attached, so a screen's behavior can be checked by re-running
 // a script instead of a human eyeballing a live session every time.
@@ -18,7 +18,7 @@ using Reconstructed4021.Tui2.NewGame;
 // screens' own simulated clock rather than actually blocking, so a script covering minutes of
 // animation still runs instantly.
 //
-// Usage: dotnet run --project src/Reconstructed4021.Tui2Driver -- --script path/to/script.txt
+// Usage: dotnet run --project src/Reconstructed4021.TuiDriver -- --script path/to/script.txt
 //          [--cols 100] [--rows 40] [--output path/to/output.log]
 //          [--load path/to/save.json]  -- skip the whole pre-game flow (splash/title/picker/player
 //          setup) and drop straight into the galaxy map from a save fixture, same purpose as

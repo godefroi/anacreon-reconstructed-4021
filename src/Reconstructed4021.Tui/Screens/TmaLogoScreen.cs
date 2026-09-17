@@ -1,7 +1,7 @@
-﻿using Reconstructed4021.Panemonde;
+using Reconstructed4021.Panemonde;
 
 
-namespace Reconstructed4021.Tui2.Screens;
+namespace Reconstructed4021.Tui.Screens;
 
 
 // TMA.PAS's TMALogo: the one-time "presents" splash shown before the main menu. Reproduces the real

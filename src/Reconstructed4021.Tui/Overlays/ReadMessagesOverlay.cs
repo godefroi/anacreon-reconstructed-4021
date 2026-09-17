@@ -2,7 +2,7 @@ using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
 
-namespace Reconstructed4021.Tui2.Overlays;
+namespace Reconstructed4021.Tui.Overlays;
 
 // Empire menu > Read Messages (DESIGN.PAS's ReadMessageCommand, :992-1055): PgUp/PgDn cycle when
 // there's more than one, Esc closes. Only PgDn (or the initial display of the first message) marks a

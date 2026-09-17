@@ -1,14 +1,14 @@
-﻿using Reconstructed4021.Core;
+using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
 using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
-using Reconstructed4021.Tui2.Screens;
+using Reconstructed4021.Tui.Screens;
 
 
-namespace Reconstructed4021.Tui2.Overlays;
+namespace Reconstructed4021.Tui.Overlays;
 
 
 // CLSCOMM.PAS's CloseUpCom, ported from Reconstructed4021.Tui's CloseUpWindow/CloseUpContentView --

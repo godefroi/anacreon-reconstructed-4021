@@ -1,11 +1,11 @@
-﻿using Reconstructed4021.Core.Combat;
+using Reconstructed4021.Core.Combat;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Types;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
 
 
-namespace Reconstructed4021.Tui2.Overlays;
+namespace Reconstructed4021.Tui.Overlays;
 
 
 // GetGroups (ATTCOMM.PAS:777-1070) -- Fleet Group Configuration: splits an attacking fleet's ships

@@ -1,9 +1,9 @@
-﻿using Reconstructed4021.Core.Entities;
+using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
 
 
-namespace Reconstructed4021.Tui2.Overlays;
+namespace Reconstructed4021.Tui.Overlays;
 
 
 // F1 (HLPWIND.PAS: HelpWindow). Content is HelpPages (loaded from the embedded help.kdl resource --

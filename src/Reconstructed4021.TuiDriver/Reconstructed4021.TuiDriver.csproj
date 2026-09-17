@@ -8,11 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- A separate project, not a mode flag on Reconstructed4021.Tui2 itself, so a future Tui2 test
+    <!-- A separate project, not a mode flag on Reconstructed4021.Tui itself, so a future Tui test
          project can reference this same driver without pulling in Program.cs's own interactive
          bootstrap (same precedent as Reconstructed4021.TuiDriver). -->
-    <ProjectReference Include="..\Reconstructed4021.Tui2\Reconstructed4021.Tui2.csproj" />
-    <!-- Tui2's own reference to this doesn't flow through to a compile-time reference here (same
+    <ProjectReference Include="..\Reconstructed4021.Tui\Reconstructed4021.Tui.csproj" />
+    <!-- Tui's own reference to this doesn't flow through to a compile-time reference here (same
          non-transitive behavior TuiDriver's own csproj comment documents), so this driver's own
          direct use of ScreenRunner/FrameBuffer needs its own reference. -->
     <ProjectReference Include="..\Reconstructed4021.Panemonde\Reconstructed4021.Panemonde.csproj" />

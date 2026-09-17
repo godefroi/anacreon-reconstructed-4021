@@ -1,10 +1,10 @@
-﻿using Reconstructed4021.Core.Turns;
+using Reconstructed4021.Core.Turns;
 using Reconstructed4021.LegacyNpe;
 using Reconstructed4021.Panemonde;
-using Reconstructed4021.Tui2.Screens;
+using Reconstructed4021.Tui.Screens;
 
 
-namespace Reconstructed4021.Tui2.NewGame;
+namespace Reconstructed4021.Tui.NewGame;
 
 
 // Shared app-level state threaded through every screen from TitleScreen onward: the random/NPE-
@@ -29,4 +29,4 @@ public sealed record NewGameContext(
     Func<IReadOnlyList<ScenarioPickerScreen.ScenarioChoice>> LoadScenarios,
     Func<IReadOnlyList<SaveGamePickerScreen.SaveChoice>> LoadSaves,
     TurnEngine TurnEngine,
-    Tui2Settings Settings);
+    TuiSettings Settings);

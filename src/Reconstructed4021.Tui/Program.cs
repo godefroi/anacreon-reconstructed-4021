@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Reconstructed4021.Panemonde;
-using Reconstructed4021.Tui2.NewGame;
+using Reconstructed4021.Tui.NewGame;
 
 // Run this in a real Windows Terminal window -- not through a tool-captured shell, which has
 // redirected stdio and no real VT-processing terminal on the other end.
@@ -11,7 +11,7 @@ var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
 
 // ScreenHost logs slow frames via Trace -- writing straight to the console would corrupt the
 // alternate screen buffer the TUI is drawing into, so route it to a file instead, same "logs/"
-// convention Reconstructed4021.Tui2Driver already uses.
+// convention Reconstructed4021.TuiDriver already uses.
 var logDir = Path.Combine(repoRoot, "logs");
 Directory.CreateDirectory(logDir);
 Trace.Listeners.Add(new TextWriterTraceListener(Path.Combine(logDir, "panemonde-frames.log")) { TraceOutputOptions = TraceOptions.DateTime });

@@ -1,15 +1,15 @@
-﻿using Reconstructed4021.Core;
+using Reconstructed4021.Core;
 using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.Turns;
 using Reconstructed4021.LegacyNpe;
 using Reconstructed4021.Panemonde;
-using Reconstructed4021.Tui2.Screens;
+using Reconstructed4021.Tui.Screens;
 
 
-namespace Reconstructed4021.Tui2.NewGame;
+namespace Reconstructed4021.Tui.NewGame;
 
 
-// Shared by Program.cs (the real console entry point) and Reconstructed4021.Tui2Driver (the headless
+// Shared by Program.cs (the real console entry point) and Reconstructed4021.TuiDriver (the headless
 // scripted entry point), so the scenario-directory scan and New Game dependencies can't drift between
 // the two -- a driver that reconstructs its own copy of this setup silently stops matching the real
 // app the moment one of them changes (same precedent as Reconstructed4021.TuiDriver referencing
@@ -36,7 +36,7 @@ public static class Bootstrap
     {
         var random = new Random();
         var npeProvider = new LegacyNpeProvider();
-        var settings = Tui2Settings.Load(repoRoot);
+        var settings = TuiSettings.Load(repoRoot);
 
         // NEWGAME.PAS's own ScenarioIntroduction just prompts for a hardcoded filename -- no directory
         // scan or title list. ReadHeader reads only the same header tokens Load() itself would, so

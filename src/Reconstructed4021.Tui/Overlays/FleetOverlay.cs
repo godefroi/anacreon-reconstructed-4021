@@ -7,7 +7,7 @@ using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
 
 
-namespace Reconstructed4021.Tui2.Overlays;
+namespace Reconstructed4021.Tui.Overlays;
 
 
 // F5 (FLTWIND.PAS: FleetWindow). Same two-pane-per-row shape as StatusOverlay (see its own doc

@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Combat;
 using Reconstructed4021.Core.Entities;
@@ -6,11 +6,11 @@ using Reconstructed4021.Core.Presentation;
 using Reconstructed4021.Core.Types;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
-using Reconstructed4021.Tui2.NewGame;
-using Reconstructed4021.Tui2.Overlays;
+using Reconstructed4021.Tui.NewGame;
+using Reconstructed4021.Tui.Overlays;
 
 
-namespace Reconstructed4021.Tui2.Screens;
+namespace Reconstructed4021.Tui.Screens;
 
 
 // Engage (ATTCOMM.PAS:220-635) -- the Tactical Battle Display: a full IScreen (not an overlay --

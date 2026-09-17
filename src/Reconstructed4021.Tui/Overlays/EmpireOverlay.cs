@@ -1,11 +1,11 @@
-﻿using Reconstructed4021.Core;
+using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Types;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
 
 
-namespace Reconstructed4021.Tui2.Overlays;
+namespace Reconstructed4021.Tui.Overlays;
 
 
 // F8 (EMPWIND.PAS: EmpireWindow). Single-pane, at most 8 rows (one viewer plus up to 7 other

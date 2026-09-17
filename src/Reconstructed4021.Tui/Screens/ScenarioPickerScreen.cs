@@ -1,11 +1,11 @@
-﻿using Reconstructed4021.Core.NewGame;
+using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
-using Reconstructed4021.Tui2.NewGame;
-using Reconstructed4021.Tui2.Shared;
+using Reconstructed4021.Tui.NewGame;
+using Reconstructed4021.Tui.Shared;
 
 
-namespace Reconstructed4021.Tui2.Screens;
+namespace Reconstructed4021.Tui.Screens;
 
 
 // New Game's scenario picker. Real Pascal has no equivalent -- NEWGAME.PAS's own ScenarioIntroduction

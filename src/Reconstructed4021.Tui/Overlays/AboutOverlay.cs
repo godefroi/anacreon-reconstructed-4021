@@ -2,7 +2,7 @@ using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
 
-namespace Reconstructed4021.Tui2.Overlays;
+namespace Reconstructed4021.Tui.Overlays;
 
 // Home menu > About Anacreon (TMA.PAS: AboutAnacreon, :82-143). Content is AboutPages (loaded from
 // the embedded about.kdl resource -- see that class's own doc comment, and about.kdl's own header

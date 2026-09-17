@@ -1,7 +1,7 @@
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
 
-namespace Reconstructed4021.Tui2.Overlays;
+namespace Reconstructed4021.Tui.Overlays;
 
 // SendMessageCommand's own message-body editor (DESIGN.PAS:948-954: InitializeEdit/EditText loop,
 // Esc ends it) -- a thin host around TextEditor's own word-wrap mode (RMargin=77, TEXTSTRC.PAS:14)

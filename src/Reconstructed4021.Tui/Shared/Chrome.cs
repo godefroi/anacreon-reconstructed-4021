@@ -1,9 +1,9 @@
-﻿using System.Text;
+using System.Text;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
 
 
-namespace Reconstructed4021.Tui2.Shared;
+namespace Reconstructed4021.Tui.Shared;
 
 
 // Shared look for every New Game screen: a starfield backdrop behind a centered, single-line-bordered

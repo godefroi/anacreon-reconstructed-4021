@@ -1,8 +1,8 @@
-﻿using Reconstructed4021.Panemonde;
-using Reconstructed4021.Tui2.Shared;
+using Reconstructed4021.Panemonde;
+using Reconstructed4021.Tui.Shared;
 
 
-namespace Reconstructed4021.Tui2.Screens;
+namespace Reconstructed4021.Tui.Screens;
 
 
 // Generic "read this, press any key" screen for every turn-loop transition (TurnStartGreetingWindow,

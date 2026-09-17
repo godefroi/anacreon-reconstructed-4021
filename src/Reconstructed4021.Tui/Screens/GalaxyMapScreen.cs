@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Combat;
 using Reconstructed4021.Core.Entities;
@@ -9,11 +9,11 @@ using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
-using Reconstructed4021.Tui2.NewGame;
-using Reconstructed4021.Tui2.Overlays;
+using Reconstructed4021.Tui.NewGame;
+using Reconstructed4021.Tui.Overlays;
 
 
-namespace Reconstructed4021.Tui2.Screens;
+namespace Reconstructed4021.Tui.Screens;
 
 
 // The permanent shell: unlike the original DOS game, where the galaxy map was just one of several
@@ -156,7 +156,7 @@ internal sealed class GalaxyMapScreen : IScreen
     // non-independent empire below Empire's hard cap of 8, avoiding every color already meaningful
     // elsewhere on this map (White=player, Gray=other-empire fallback/grid, DarkGray=independent,
     // DarkMagenta=nebula, DarkRed=unscouted -- Red/DarkRed and DarkMagenta/Magenta are too close to
-    // tell apart at a glance). Reconstructed4021.Tui2 has no dependency on that project, so the
+    // tell apart at a glance). Reconstructed4021.Tui has no dependency on that project, so the
     // palette is restated directly in this project's own ConsoleColor terms rather than shared.
     private static readonly ConsoleColor[] EmpirePalette =
     [
@@ -703,7 +703,7 @@ internal sealed class GalaxyMapScreen : IScreen
     // other side (any owner).
     // GameShell.ResolveFleetContextAction: C/T/J/A/R, the five Fleet/Ministry-of-War commands reachable
     // directly off an already-selected owned fleet in CloseUpOverlay and the sector object picker. D
-    // (Deploy) isn't here -- CloseUpOverlay/the sector picker never carry a source object Tui2's own
+    // (Deploy) isn't here -- CloseUpOverlay/the sector picker never carry a source object Tui's own
     // Deploy flow can consume directly (it only launches from a world picked via the map cursor, not an
     // existing fleet), so wiring D would mean building that fleet-source deploy path first, not just
     // pointing at an existing method. A (Attack) is gated on HasAttackTarget -- a port-only refinement
@@ -1036,7 +1036,7 @@ internal sealed class GalaxyMapScreen : IScreen
     // matching real Pascal exactly rather than fighting an empty engagement.
     //
     // Real Pascal (and tui1) take the configured groups straight into InteractiveCombat.BeginEngagement
-    // and a round-by-round Tactical Battle Display -- that display doesn't exist in Tui2 yet (its own
+    // and a round-by-round Tactical Battle Display -- that display doesn't exist in Tui yet (its own
     // follow-on slice, the two battle scenarios the user asked for next). Until then this reports what
     // was configured rather than pretending to resolve a battle it can't actually run.
     private void StartEngagement(Fleet attacker, ISectorObject target, IReadOnlyList<GroupRecord> groups)
