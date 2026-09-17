@@ -50,14 +50,23 @@ public static class CombatStandalone
 
         if (target is Fleet fleet) {
             var ships = fleet.Ships;
-            var totalShipSpace = Enum.GetValues<ShipType>().Sum(t => ships[t] * (CombatConstants.ProtecNeeded[t] / 100.0));
+
+            // Math.Max(0, ...) here isn't Pascal (ShipArray is an unsigned Word, so this case can't
+            // arise there) -- it's a guard against a ship count that's already negative from an
+            // unrelated bug (see #42/#44) reaching this proportional-distribution math. Without it, a
+            // negative ships[t] makes shipsDestroyed[t] negative too (Math.Min below just returns
+            // ships[t] unchanged), which then satisfies "ships[t]-shipsDestroyed[t]==0" for that type
+            // and can misreport the whole fleet as fully destroyed while never actually reporting any
+            // ships lost.
+            var totalShipSpace = Enum.GetValues<ShipType>().Sum(t => Math.Max(0, ships[t]) * (CombatConstants.ProtecNeeded[t] / 100.0));
             if (totalShipSpace == 0) {
                 totalShipSpace = 1;
             }
 
             foreach (var t in Enum.GetValues<ShipType>()) {
-                var lamsPerType = PascalRound(lamToUse * ((ships[t] * (CombatConstants.ProtecNeeded[t] / 100.0)) / totalShipSpace));
-                shipsDestroyed[t] = Math.Min((int)(lamsPerType / 100.0 * CombatConstants.CombatTable[(AttackType.Lam, t.ToAttackType())]), ships[t]);
+                var availableShips = Math.Max(0, ships[t]);
+                var lamsPerType = PascalRound(lamToUse * ((availableShips * (CombatConstants.ProtecNeeded[t] / 100.0)) / totalShipSpace));
+                shipsDestroyed[t] = Math.Min((int)(lamsPerType / 100.0 * CombatConstants.CombatTable[(AttackType.Lam, t.ToAttackType())]), availableShips);
             }
 
             if (Enum.GetValues<ShipType>().All(t => ships[t] - shipsDestroyed[t] == 0)) {
