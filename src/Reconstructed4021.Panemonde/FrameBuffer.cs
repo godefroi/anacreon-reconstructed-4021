@@ -4,9 +4,9 @@ namespace Reconstructed4021.Panemonde;
 
 // The one thing this prototype exists to test: diff back-against-front, batch the whole frame's
 // escape sequences into a single string, and issue exactly one write syscall to the raw stdout
-// stream. Terminal.Gui's own OutputBase.Write does a separate write per dirty row instead (see the
-// SingleFlushAnsiOutput comment in Reconstructed4021.Tui.csproj) -- that's the specific mechanism
-// under test here, not output correctness in general.
+// stream. Terminal.Gui's own OutputBase.Write does a separate write per dirty row instead -- a
+// confirmed bottleneck, see docs/TUI_LIBRARY_RECOMMENDATION.md and docs/PORT_DESIGN.md -- that's
+// the specific mechanism under test here, not output correctness in general.
 public sealed class FrameBuffer
 {
     private int _width;

@@ -408,3 +408,13 @@ Full breakdown and reachability data: see `docs/ROADMAP.md`'s Kingdom NPE AI ent
   every `Rnd(min,max)` call returns exactly `min`. Hand-trace which branch that drives *before*
   picking case parameters, the same way `ConquerEmpire`'s own combat cases were designed against the
   exact `AND`-short-circuit/`Rnd` operand order in `ATTACK.PAS`, not just the intended outcome.
+
+## Presentation layer: Panemonde, not Terminal.Gui
+
+`Reconstructed4021.Tui` renders through `Reconstructed4021.Panemonde`, a from-scratch immediate-mode
+console renderer — see `src/Reconstructed4021.Panemonde/README.md` for how it works. Terminal.Gui v2
+was the original choice, and a full interface was built on it, but its per-dirty-row output writes
+and polling input loop turned out to be a real, measured performance ceiling a real-time game loop
+couldn't get past; a driver-level fix underneath the existing `View`/`Toplevel` tree was investigated
+and ruled out as infeasible in that version. Full investigation and measurements:
+`docs/TUI_LIBRARY_RECOMMENDATION.md` sections 5-6.

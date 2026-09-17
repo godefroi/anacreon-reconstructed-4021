@@ -64,11 +64,10 @@ This is a from-scratch C#/.NET port of the Turbo Pascal source above (the real
 MESS.PAS, and the rest of the original unit files are this port's own primary
 source of truth, cited by file and line throughout its own code comments.
 
-Two presentation layers sit on top of the same Core game engine:
-Reconstructed4021.Tui (built on Terminal.Gui) and this one,
-Reconstructed4021.Tui2 -- a from-scratch immediate-mode renderer, built once
-Terminal.Gui's own frame-time ceiling became the bottleneck a real game loop
-needed past.
+Reconstructed4021.Tui, this presentation layer, is a from-scratch
+immediate-mode renderer sitting on top of the same Core game engine -- built
+once an earlier Terminal.Gui-based interface's own frame-time ceiling became
+the bottleneck a real game loop needed past.
 """#
     }
 }

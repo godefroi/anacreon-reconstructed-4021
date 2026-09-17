@@ -38,7 +38,7 @@ public static class CombatResolution
     ///
     /// <paramref name="smartRetreat"/> defaults false so every existing call site (every NPE combat
     /// call in <c>Reconstructed4021.LegacyNpe</c>, plus the pre-existing player Attack path) is
-    /// untouched byte-for-byte; only <c>Reconstructed4021.Tui2</c>'s own Auto Attack command passes
+    /// untouched byte-for-byte; only <c>Reconstructed4021.Tui</c>'s own Auto Attack command passes
     /// true, opt-in per its own settings file. See <see cref="WorldEngage"/> for what it actually does.
     /// </summary>
     public static CombatEngagementResult NPEAttack(Empire attacker, Fleet attackerFleet, object target, AttackIntentionType intent, Game game, Random random, bool smartRetreat = false)

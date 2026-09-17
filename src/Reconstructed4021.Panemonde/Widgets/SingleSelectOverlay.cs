@@ -1,9 +1,9 @@
 namespace Reconstructed4021.Panemonde.Widgets;
 
 // Plain pick-one-and-close list, generalized off Build > New's own construction-type picker
-// (Reconstructed4021.Tui2) once Trade Technology needed the exact same shape twice more (an empire to
+// (Reconstructed4021.Tui) once Trade Technology needed the exact same shape twice more (an empire to
 // trade with, then which technology to hand over). Fully generic -- no game-specific type baked in,
-// same reason TextPromptOverlay lives here rather than in Tui2's own Overlays folder -- same Enter/Esc
+// same reason TextPromptOverlay lives here rather than in Tui's own Overlays folder -- same Enter/Esc
 // convention as that widget and ListBox<T> itself.
 public sealed class SingleSelectOverlay<T> : IOverlay
 {

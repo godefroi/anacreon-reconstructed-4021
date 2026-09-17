@@ -648,8 +648,9 @@ feature.
 
 The last `ITurnHandler` implementation, plus the actual windowed interface (map view, fleet orders,
 construction, etc.), built on Terminal.Gui v2 per `TUI_LIBRARY_RECOMMENDATION.md`. `TUI_SURFACES_
-MAPPING.md` surveys every player-facing window/menu/dialog/editor in the real Pascal and maps each
-to a Terminal.Gui primitive; this section narrates the build against that map, in the pre-map
+MAPPING.md` (removed once this UI was retired, see the end of this section) surveyed every
+player-facing window/menu/dialog/editor in the real Pascal and mapped each to a Terminal.Gui
+primitive; this section narrates the build against that map, in the pre-map
 screens' own real order (`ANACREON.PAS`'s `Introduction`, then `PROLOG.PAS`'s `MainTitle`/
 `SetUpPlayer`) before the map itself.
 
@@ -1497,6 +1498,11 @@ Direct2D) surfaced; see the README's Known Issues section.
   first needed two extra explicit `Enter`s added to its own script, now that Move/Target no longer
   auto-close the instant the last group's answered) — full battles still resolve correctly through
   capture/destruction/retreat with no regressions.
+
+**Retired.** The Terminal.Gui interface documented above was later replaced by a from-scratch
+renderer (`Reconstructed4021.Panemonde`) and a rebuilt UI on top of it, promoted to
+`Reconstructed4021.Tui` once it reached feature parity — see `docs/PORT_DESIGN.md` for why
+Terminal.Gui was dropped.
 
 ## 9. Async/hotseat turn mode
 
