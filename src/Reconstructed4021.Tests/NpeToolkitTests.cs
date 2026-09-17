@@ -134,6 +134,36 @@ public class NpeToolkitTests
         await Assert.That(withHostileNeighbor).IsEqualTo(baseline * 6);
     }
 
+    /// <summary>
+    /// GitHub #44: enough close hostile Base/Capital neighbors compounds MinimumDefense's x6-per-
+    /// neighbor multiplier past even a 64-bit long (confirmed live via an instrumented replay from a
+    /// real save -- see the issue). 40 neighbors is nowhere near a real game's density, but the point
+    /// is the clamp holds regardless of how many there are, not that this exact count is realistic.
+    /// </summary>
+    [Test]
+    public async Task MinimumDefense_ManyHostileNeighborsClampsInsteadOfOverflowing()
+    {
+        var galaxy = new Galaxy(size: 100);
+        var game = new Game(galaxy);
+        var owner = NewEmpire("Owner");
+        var enemy = NewEmpire("Enemy");
+        game.Empires.Add(owner);
+        game.Empires.Add(enemy);
+
+        var persona = new NpeCharacter { Defensive = 100 };
+        var world = new Planet { Location = new Coordinate(50, 50), Owner = owner, Type = WorldType.Capital, Population = 50_000 };
+        galaxy.Planets.Add(world);
+
+        for (var i = 0; i < 40; i++) {
+            galaxy.Planets.Add(new Planet { Location = new Coordinate(50 + i % 5, 50 + i % 5), Owner = enemy, Type = WorldType.Base });
+        }
+
+        var result = NpeToolkit.MinimumDefense(world, persona, game);
+
+        await Assert.That(result).IsPositive();
+        await Assert.That(result).IsLessThanOrEqualTo(1_000_000_000L);
+    }
+
     [Test]
     public async Task AverageMilitaryPower_EmptyRegionsReturnsZero()
     {
