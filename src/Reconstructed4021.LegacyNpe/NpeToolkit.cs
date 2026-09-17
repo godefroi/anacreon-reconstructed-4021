@@ -167,18 +167,38 @@ public static class NpeToolkit
     }
 
     /// <summary>
+    /// The one guard real Pascal never needed and this port's own widening to <see langword="long"/>
+    /// (below) didn't finish: <see cref="MinimumDefense"/>'s per-neighbor x3/x6 multiplier is
+    /// unbounded, so with enough hostile worlds within 5 sectors it compounds past even 64 bits and
+    /// silently wraps (confirmed live: GitHub #44 — a real scenario overflows this within the first
+    /// empire-turn ever played from a clean save, and the wrapped garbage becomes <c>power</c> in
+    /// <see cref="GetFleetComposition"/>, whose own <c>PascalRound((double)power/mPower)</c> then
+    /// saturates to <see cref="int.MinValue"/> once cast back down -- landing as a literal negative
+    /// ship count on a live fleet). Comfortably above any realistic pre-loop value (a fully-populous,
+    /// maximally Defensive world tops out around 10-15 million before any neighbor is even counted)
+    /// and comfortably below where <c>power/mPower</c> can push <c>PascalRound</c>'s own <c>(int)</c>
+    /// cast into that same saturation for the smallest real <c>mPower</c> (1) -- so it only ever
+    /// engages once the loop has already compounded several real neighbors deep into "far more
+    /// defense than the entire galaxy could field" territory, never for a single ordinary threat
+    /// assessment.
+    /// </summary>
+    private const long MaxMinimumDefense = 1_000_000_000;
+
+    /// <summary>
     /// MinimumDefense (NPEINTR.PAS:378-425) — how much MilitaryPower this empire thinks is enough to
     /// defend a world, no threat estimate. <c>persona.Defensive*50</c> is verbatim, not a typo: with
     /// Defensive up to 100 that's up to a x5000 multiplier on top of the population adjustment, before
     /// a further x3 (and possibly x6) per hostile world within 5 sectors — real Pascal, kept as-is
     /// rather than "fixed," using <see langword="long"/> so it doesn't overflow the way it would in
-    /// Pascal's own LongInt for a populous world with several close neighbors.
+    /// Pascal's own LongInt for a populous world with several close neighbors, and clamped to
+    /// <see cref="MaxMinimumDefense"/> (see that constant's own remarks) so enough close neighbors
+    /// can't overflow even that.
     /// </summary>
     public static long MinimumDefense(IEconomicWorld world, NpeCharacter persona, Game game)
     {
         long baseValue = NpeConstants.TypeValue[world.Type];
         baseValue = PascalRound(baseValue * (0.5 + world.Population / 2500.0));
-        baseValue *= persona.Defensive * 50L;
+        baseValue = Math.Min(baseValue * (persona.Defensive * 50L), MaxMinimumDefense);
 
         var owner = world.Owner;
         foreach (var planet in game.Galaxy.Planets) {
@@ -189,9 +209,9 @@ public static class NpeToolkit
                 continue;
             }
 
-            baseValue *= 3;
+            baseValue = Math.Min(baseValue * 3, MaxMinimumDefense);
             if (planet.Type is WorldType.Base or WorldType.Capital) {
-                baseValue *= 2;
+                baseValue = Math.Min(baseValue * 2, MaxMinimumDefense);
             }
         }
 
