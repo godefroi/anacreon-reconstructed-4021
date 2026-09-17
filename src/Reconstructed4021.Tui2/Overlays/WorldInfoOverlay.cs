@@ -261,14 +261,14 @@ internal sealed class WorldInfoOverlay : IOverlay
         if (world is Planet { Redirection.Destination: { } redirectDestination })
         {
             var origin = _viewer.Capital?.Location ?? new Coordinate(0, 0);
-            At(1, 6, $"Redirecting new production -> ({RelativeCoordinate.Format(redirectDestination, origin)})");
+            At(1, 7, $"Redirecting new production -> ({RelativeCoordinate.Format(redirectDestination, origin)})");
         }
 
         if (Game.FindWorldBackgroundText(_game, world, _viewer, conquer: false) is { } background)
         {
             for (var i = 0; i < background.Count; i++)
             {
-                At(1, 7 + i, background[i]);
+                At(1, 8 + i, background[i]);
             }
         }
 
