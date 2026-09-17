@@ -53,12 +53,12 @@ internal sealed class WorldCloseUpTabView : View
 
         if (world is Planet { Redirection.Destination: { } redirectDestination }) {
             var origin = viewer.Capital?.Location ?? new Coordinate(0, 0);
-            AddAt(1, 6, $"Redirecting new production -> ({RelativeCoordinate.Format(redirectDestination, origin)})");
+            AddAt(1, 7, $"Redirecting new production -> ({RelativeCoordinate.Format(redirectDestination, origin)})");
         }
 
         if (Game.FindWorldBackgroundText(game, world, viewer, conquer: false) is { } background) {
             for (var i = 0; i < background.Count; i++) {
-                AddAt(1, 7 + i, background[i]);
+                AddAt(1, 8 + i, background[i]);
             }
         }
 
