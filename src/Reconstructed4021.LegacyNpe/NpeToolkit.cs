@@ -1103,7 +1103,17 @@ public static class NpeToolkit
                 continue;
             }
 
-            var trans = fleetShips[t] + guardShips[t] < 9999 ? fleetShips[t] : 9999 - guardShips[t];
+            // Math.Max(0, ...)/Math.Min(..., fleetShips[t]) aren't Pascal (ShipArray is an unsigned
+            // Word there, so "guard already over 9999" can only wrap to a bogus large positive count,
+            // never drive Trans negative) -- they're a guard against a count that's already invalid
+            // from an unrelated bug (see #44) reaching this transfer. Without them, a guard stack
+            // already above 9999 (or a negative fleetShips[t]) makes "9999-guardShips[t]" negative,
+            // and the unclamped Dec/Inc below would then hand ships from the guard back to the fleet
+            // and drive the guard's own count down, same shape as ImplementGuardMSN's own ClampResource
+            // guard just below.
+            var trans = Math.Max(0, Math.Min(
+                fleetShips[t] + guardShips[t] < 9999 ? fleetShips[t] : 9999 - guardShips[t],
+                fleetShips[t]));
             fleetShips[t] -= trans;
             guardShips[t] += trans;
 

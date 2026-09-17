@@ -506,6 +506,35 @@ public class NpeToolkitDeployImplementTests
         await Assert.That(galaxy.Fleets).DoesNotContain(fleet); // donated everything -> self-destructs, never reaches the become-guard branch
     }
 
+    /// <summary>
+    /// GitHub #42: an already-invalid guard stack (above the 9999-per-type cap -- can't happen through
+    /// legitimate play post-#44, but DumpStuff must not make things worse if it ever does) used to make
+    /// "9999-guardShips[t]" negative, which handed ships from the guard back onto the incoming fleet
+    /// and drained the guard below its own starting count. Neither may happen now.
+    /// </summary>
+    [Test]
+    public async Task ImplementStackMSN_GuardAlreadyOverCap_NeverHandsShipsBackOrDrainsGuard()
+    {
+        var (game, galaxy) = NewGame();
+        var owner = NewEmpire("Owner");
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = owner };
+        fleet.Ships.Jumptransports = 800;
+        var guard = new Fleet { Location = new Coordinate(0, 0), Owner = owner };
+        guard.Ships.Jumptransports = 22153; // already over the 9999 cap -- invalid, but must be handled safely
+        galaxy.Fleets.Add(fleet);
+        galaxy.Fleets.Add(guard);
+
+        var fleetStates = new Dictionary<Fleet, KingdomFleetState> {
+            [fleet] = new KingdomFleetState { Mission = NpeMissionType.Stack },
+            [guard] = new KingdomFleetState { Mission = NpeMissionType.Guard },
+        };
+
+        NpeToolkit.ImplementStackMSN(fleet, fleetStates, game);
+
+        await Assert.That(guard.Ships.Jumptransports).IsGreaterThanOrEqualTo(22153); // never drained below its starting count
+        await Assert.That(fleet.Ships.Jumptransports).IsLessThanOrEqualTo(800); // never grows -- no ships handed back
+    }
+
     [Test]
     public async Task ImplementStackMSN_NoGuardsAndUnderCap_BecomesGuard()
     {
