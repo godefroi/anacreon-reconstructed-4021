@@ -116,7 +116,10 @@ internal sealed class CloseUpWindow : Window
     /// shown *alongside* a name); it was being reused here too, which was the bug.
     /// </summary>
     public static string DescribeLocation(ISectorObject obj, Empire viewer) => obj switch {
-        Fleet => "Fleet", // GetFleetName's own "Fleet<N>"/"Enemy<N>" -- no slot index in this port to mirror exactly
+        // GetFleetName's own "Fleet<N>"/"Enemy<N>" -- no slot index in this port to mirror exactly, so
+        // an unnamed fleet's own coordinate stands in for it instead; otherwise 2+ unnamed fleets in
+        // the same picker (Launch LAMs' own target list, e.g.) would show as identical rows.
+        Fleet => $"Fleet ({RelativeCoordinate.Format(obj.Location, viewer.Capital?.Location ?? new Coordinate(0, 0))})",
         _ => RelativeCoordinate.Format(obj.Location, viewer.Capital?.Location ?? new Coordinate(0, 0)),
     };
 
