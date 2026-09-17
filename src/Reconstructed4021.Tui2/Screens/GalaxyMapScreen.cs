@@ -393,7 +393,7 @@ internal sealed class GalaxyMapScreen : IScreen
     {
         if (obj is IEconomicWorld ownWorld && ReferenceEquals(ownWorld.Owner, _player))
         {
-            _overlays.Add(new WorldInfoOverlay(ownWorld, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, GoToMapFromExamine, initialTab));
+            _overlays.Add(new WorldInfoOverlay(ownWorld, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, GoToMapFromExamine, PickRedirectDestination, initialTab));
             return;
         }
 
@@ -462,7 +462,7 @@ internal sealed class GalaxyMapScreen : IScreen
     {
         if (_objectsByLocation.TryGetValue(_cursor, out var obj) && obj is IEconomicWorld world && ReferenceEquals(world.Owner, _player))
         {
-            _overlays.Add(new WorldInfoOverlay(world, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, GoToMapFromExamine, tab));
+            _overlays.Add(new WorldInfoOverlay(world, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, GoToMapFromExamine, PickRedirectDestination, tab));
             return;
         }
 
@@ -506,6 +506,17 @@ internal sealed class GalaxyMapScreen : IScreen
             ValidateDeploySource(source, name),
             maxLength: 40, borderFg: ConsoleColor.Gray, borderBg: ConsoleColor.Black));
     }
+
+    // WorldInfoOverlay's Redirect tab (its own Enter key): reuses BeginPick exactly as Deploy Fleet's
+    // own destination pick does -- any coordinate is a valid destination (a world, a starbase, or
+    // empty space, same as Deploy Fleet's), not just one of the player's own worlds -- then reopens
+    // OpenExamine back on the Redirect tab so the player sees the result immediately.
+    private void PickRedirectDestination(Planet planet) =>
+        BeginPick("Redirect -- move cursor to destination, Enter: select, Esc: cancel", destination =>
+        {
+            planet.Redirection.Destination = destination;
+            OpenExamine(planet, "Redirect");
+        });
 
     // IDParm2 (Question 8, "Where shall we deploy the fleet from?").
     private void PickDeploySource(Coordinate location, string fleetName)
