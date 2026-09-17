@@ -18,9 +18,6 @@ namespace Reconstructed4021.Tui2.Overlays;
 // globally regardless of which tab is showing (matching GameShell.ShowWorldInfo's own external
 // window.KeyDown handler, which runs the same way ahead of any tab-specific key handling) -- every
 // other key belongs to whichever tab is showing (arrows/Enter for its own editing).
-//
-// Deliberately deferred: Redirect's destination pick (a new cross-screen map-cursor input mode, not a
-// port of anything -- its own slice).
 internal sealed class WorldInfoOverlay : IOverlay
 {
     private const int FrameWidth = 88;
@@ -44,6 +41,7 @@ internal sealed class WorldInfoOverlay : IOverlay
     private readonly Action<IOverlay> _push;
     private readonly Action<IEconomicWorld> _deployFleet;
     private readonly Action<ISectorObject> _onGoToMap;
+    private readonly Action<Planet> _pickRedirectDestination;
 
     private readonly TabKind[] _tabKinds;
     private readonly TabFrame _frame;
@@ -58,7 +56,7 @@ internal sealed class WorldInfoOverlay : IOverlay
     public bool IsDismissed { get; private set; }
 
     public WorldInfoOverlay(IEconomicWorld world, Empire viewer, Game game, Random random,
-        Action refresh, Action<string, string> showInfo, Action<IOverlay> push, Action<IEconomicWorld> deployFleet, Action<ISectorObject> onGoToMap, string initialTab = "Close Up")
+        Action refresh, Action<string, string> showInfo, Action<IOverlay> push, Action<IEconomicWorld> deployFleet, Action<ISectorObject> onGoToMap, Action<Planet> pickRedirectDestination, string initialTab = "Close Up")
     {
         _world = world;
         _viewer = viewer;
@@ -69,6 +67,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         _push = push;
         _deployFleet = deployFleet;
         _onGoToMap = onGoToMap;
+        _pickRedirectDestination = pickRedirectDestination;
 
         var isPlanet = world is Planet;
         List<TabKind> kinds = [TabKind.CloseUp, TabKind.Production];
@@ -643,9 +642,10 @@ internal sealed class WorldInfoOverlay : IOverlay
         _ => type.ToString(),
     };
 
-    // RedirectTabView -- planet-only. Destination picking isn't wired up yet (its own slice: a new
-    // cross-screen map-cursor input mode, not a port of anything already specified); Enter says so
-    // instead of silently doing nothing.
+    // RedirectTabView -- planet-only. Enter hands off to _pickRedirectDestination
+    // (GalaxyMapScreen.PickRedirectDestination), the same map-cursor BeginPick mode Deploy Fleet's own
+    // destination pick uses -- this overlay dismisses itself first (BeginPick's own doc comment
+    // requires an empty stack) and reopens back on this tab once a destination is confirmed.
     private sealed record RedirectRow(string Name, Func<RedirectionSettings, RedirectionMode> Get, Action<RedirectionSettings, RedirectionMode> Set, RedirectionMode[] Cycle);
 
     private static RedirectRow ShipRow(string name, ShipType type, RedirectionMode[] cycle) => new(
@@ -705,8 +705,7 @@ internal sealed class WorldInfoOverlay : IOverlay
             fb.DrawText(cx + 1, cy + 5 + i, visible, selected ? SelectedFg : ContentFg, selected ? SelectedBg : ContentBg);
         }
 
-        At(1, ch - 2, "Up/Down: select   Left/Right: change   X: clear dest.");
-        At(1, ch - 1, "(destination picking isn't wired up yet in this port)");
+        At(1, ch - 1, "Up/Down: select   Left/Right: change   Enter: pick dest.   X: clear dest.");
     }
 
     private void HandleRedirectKey(ConsoleKeyInfo key)
@@ -729,7 +728,8 @@ internal sealed class WorldInfoOverlay : IOverlay
                 _redirectRow = (_redirectRow + 1) % RedirectRows.Length;
                 return;
             case ConsoleKey.Enter:
-                _showInfo("Redirect", "Destination picking isn't wired up yet in this port.");
+                IsDismissed = true;
+                _pickRedirectDestination((Planet)_world);
                 return;
         }
 
