@@ -51,7 +51,7 @@ if (!File.Exists(resolvedScriptPath))
 var outputPathArg = OptionalArg("--output");
 var outputPath = outputPathArg is not null
     ? (Path.IsPathRooted(outputPathArg) ? outputPathArg : Path.Combine(repoRoot, outputPathArg))
-    : Path.Combine(repoRoot, "logs", $"tui2driver-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+    : Path.Combine(repoRoot, "logs", $"tuidriver-{DateTime.Now:yyyyMMdd-HHmmss}.log");
 Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 Console.WriteLine($"Output: {outputPath}");
 using var output = new StreamWriter(outputPath) { AutoFlush = true };

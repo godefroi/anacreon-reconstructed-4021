@@ -7,7 +7,7 @@ namespace Reconstructed4021.Tests;
 /// from scratch per edit rather than transliterating ForwardWordWrap/BackwardWordWrap's own
 /// incremental cascade -- see RewrapParagraphAt's own doc comment). A small margin keeps each case
 /// legible; the non-wrap (fleet orders) path is unchanged and has its own coverage via
-/// assets/tui2-driver-scripts/fleet-orders-smoke-test.txt.
+/// assets/tui-driver-scripts/fleet-orders-smoke-test.txt.
 /// </summary>
 public class TextEditorTests
 {

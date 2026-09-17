@@ -212,10 +212,18 @@ public sealed class TitleScreen : IScreen
             DrawButton(fb, i);
         }
 
-        const string version = "Reconstruction 4021";
-        const string copyright = "(c) Copyright 1990 by T M A   All Rights Reserved";
+        // "Reconstruction 4021" (PROLOG.PAS:386) is real Pascal's own name for the original 1990
+        // release, not this port's -- this port is "Reconstructed 4021" (see the repo/LICENSE's own
+        // name), so this line departs from a literal transcription. The 1990 T M A copyright below it
+        // is kept alongside a contributors line rather than replaced: it's not the legally-required
+        // attribution (that's the About screen's own page 2 and the root LICENSE, both verbatim from
+        // the original 1988-2003 license), but it's the real original credit and worth keeping visible.
+        const string version = "Reconstructed 4021";
+        const string contributorsCopyright = "(c) 2026 The Anacreon: Reconstructed 4021 contributors";
+        const string originalCopyright = "(c) Copyright 1990 by T M A   All Rights Reserved";
         fb.DrawText((fb.Width - version.Length) / 2, fb.Height - 3, version, TitleColor, Bg);
-        fb.DrawText((fb.Width - copyright.Length) / 2, fb.Height - 2, copyright, TitleColor, Bg);
+        fb.DrawText((fb.Width - contributorsCopyright.Length) / 2, fb.Height - 2, contributorsCopyright, TitleColor, Bg);
+        fb.DrawText((fb.Width - originalCopyright.Length) / 2, fb.Height - 1, originalCopyright, TitleColor, Bg);
     }
 
     private void DrawTitle(FrameBuffer fb, int titleX, int titleY)
