@@ -6,11 +6,12 @@ using Reconstructed4021.Core.Types;
 namespace Reconstructed4021.Core.Presentation;
 
 /// <summary>
-/// CLSCOMM.PAS's DisplayFleetInfo and MISC.PAS's YesNo, shared by both <c>Reconstructed4021.Tui</c>'s
-/// own Close Up/Fleet/Status windows and <c>Reconstructed4021.Tui2</c>'s own overlay equivalents --
-/// previously two independent copies (Tui2's own restated here since it doesn't reference the Tui
-/// project), moved here once that duplication risked the exact same "one right, one wrong" divergence
-/// <see cref="RelativeCoordinate"/>'s own doc comment records having actually happened once already.
+/// CLSCOMM.PAS's DisplayFleetInfo and MISC.PAS's YesNo, used by <c>Reconstructed4021.Tui</c>'s own
+/// Close Up/Fleet/Status overlays. Lives here in Core rather than in Tui because Tui's
+/// Terminal.Gui-based predecessor (retired, see docs/PORT_DESIGN.md) had its own independent copy
+/// that diverged from this one -- moved here once that duplication risked the exact same "one right,
+/// one wrong" divergence <see cref="RelativeCoordinate"/>'s own doc comment records having actually
+/// happened once already.
 /// </summary>
 public static class CloseUpWindowText
 {
@@ -107,8 +108,9 @@ public static class CloseUpWindowText
     /// <summary>
     /// "Kind" label shown alongside a name (CLSCOMM.PAS's DisplayBasicInfo, the "Type:" field) -- not a
     /// name-fallback itself, see <see cref="DescribeLocation"/> for that job. Previously two independent
-    /// copies (Reconstructed4021.Tui's own CloseUpWindow, Reconstructed4021.Tui2's own CloseUpOverlay),
-    /// each calling <c>.ToString()</c> on <see cref="WorldType"/>/<see cref="StarbaseKind"/> directly --
+    /// copies (one in each of Tui's Terminal.Gui-based predecessor and its Panemonde-based successor,
+    /// before the former was retired), each calling <c>.ToString()</c> on
+    /// <see cref="WorldType"/>/<see cref="StarbaseKind"/> directly --
     /// the raw C# identifier ("TransportBase"), not the real display string ("transport base"). Moved
     /// here and fixed the same way <see cref="FleetStatusNames"/>'s own duplication was.
     /// </summary>

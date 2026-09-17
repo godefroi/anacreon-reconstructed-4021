@@ -31,7 +31,7 @@ public class AboutPagesTests
     {
         var joined = string.Join('\n', AboutPages.Pages[2]);
 
-        await Assert.That(joined).Contains("Reconstructed4021.Tui2");
+        await Assert.That(joined).Contains("Reconstructed4021.Tui");
         await Assert.That(joined).DoesNotContain("Claude");
     }
 }

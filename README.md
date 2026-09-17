@@ -16,13 +16,12 @@ the original game actually did instead of a plausible-sounding guess.
 ## Status
 
 Core simulation (economy, galaxy/scenario setup, probes, news, combat), Kingdom NPE AI, and save/load
-(DOS `.SAV` import plus a native JSON format) are done. A Terminal.Gui interface
-(`src/Reconstructed4021.Tui`) is under construction — the galaxy map, navigation shell,
-startup/title screens, and New Game flow work; the human `ITurnHandler` and most in-game command
-screens (fleet orders, combat, construction, etc.) don't exist yet, and `dotnet run` on the
-placeholder `Reconstructed4021` entry point still isn't a playable game. See
-[`docs/ROADMAP.md`](docs/ROADMAP.md) for how this was built, and [`docs/OPEN_GAPS.md`](docs/OPEN_GAPS.md)
-for known limitations in what exists so far.
+(DOS `.SAV` import plus a native JSON format) are done. The interactive UI
+(`src/Reconstructed4021.Tui`, built on `src/Reconstructed4021.Panemonde`, a from-scratch renderer —
+see `docs/PORT_DESIGN.md`) covers every menu command, F-key report window, save/load path, combat
+flow, and the pregame sequence; Status Hardcopy (a physical-printer command with no TUI equivalent)
+is the one remaining stub. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for how this was built, and
+[`docs/OPEN_GAPS.md`](docs/OPEN_GAPS.md) for known limitations in what exists so far.
 
 ## Building and testing
 
@@ -30,7 +29,7 @@ Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download). There's no so
 or test a specific project directly from the repo root:
 
 ```
-dotnet build src/Reconstructed4021
+dotnet build src/Reconstructed4021.Tui
 dotnet test src/Reconstructed4021.Tests
 ```
 
@@ -40,35 +39,13 @@ themselves automatically (with a clear reason) when either tool isn't available,
 still runs cleanly without them. See [`reference/verify/README.md`](reference/verify/README.md)
 for how that comparison works and what it takes to add to it.
 
-## Known issues
-
-**TUI feels laggy on Windows (keystrokes/redraws take 100ms+ to show up):** this has been traced
-to Windows Terminal's own rendering pipeline, not the app -- Terminal.Gui tracks it upstream as
-[tui-cs/Terminal.Gui#4588](https://github.com/tui-cs/Terminal.Gui/issues/4588) (open; the one fix
-attempt, [#4589](https://github.com/tui-cs/Terminal.Gui/pull/4589), was closed unmerged). Switching
-Windows Terminal's text renderer from its default (DirectX 11/AtlasEngine) to Direct2D
-(Settings -> Rendering) has resolved it in practice. See also
-`src/Reconstructed4021.Tui/Program.cs`'s own notes on a related
-ConPTY tearing issue ([#5323](https://github.com/tui-cs/Terminal.Gui/issues/5323)).
-
-**TUI froze for several seconds after Windows Terminal was minimized/backgrounded, or after the PC
-woke from sleep (fixed):** reproduced under both the default renderer and Direct2D, and didn't
-reproduce under `conhost.exe` or on screens that redraw continuously while idle (e.g. the main
-menu's orbit animation) -- only ones that only redraw in response to input (e.g. the galaxy map),
-pointing at Windows Terminal/ConPTY deferring or throttling a backgrounded session's servicing
-rather than a bug in this app or Terminal.Gui (see issue #1). Giving every window the same kind
-of continuous-idle redraw the main menu already had -- a low-frequency `Application.AddTimeout`
-heartbeat on `app` itself in `Program.cs`, covering every window for the process's whole lifetime
-rather than just the galaxy map -- resolved it in testing.
-
 ## Repository layout
 
 - **`src/`** — the C# port. `Reconstructed4021.Core` is the simulation itself;
-  `Reconstructed4021.Tui` is the Terminal.Gui interface (in progress);
-  `Reconstructed4021` is the (currently placeholder) entry point; `*.Tests` is everything
-  else, including the Pascal ground-truth harness; `Reconstructed4021.TuiDriver` is a headless
-  driver for exercising the Tui end-to-end without a real terminal — see its own
-  [README](src/Reconstructed4021.TuiDriver/README.md).
+  `Reconstructed4021.Panemonde` is a from-scratch console rendering engine (see its own
+  [README](src/Reconstructed4021.Panemonde/README.md)); `Reconstructed4021.Tui` is the interactive
+  UI built on it; `Reconstructed4021.TuiDriver` is a headless driver for exercising Tui screens
+  without a real terminal; `*.Tests` is everything else, including the Pascal ground-truth harness.
 - **`reference/DOSAnacreonSource131/`** — the pristine, unmodified 1.31 Turbo Pascal source. Never
   edited directly — see `reference/verify/README.md` for how changes to it are made (as patches,
   not in place).
@@ -101,10 +78,8 @@ rather than just the galaxy map -- resolved it in testing.
 - **[`docs/PASCAL_V1_VS_V2_DIFF.md`](docs/PASCAL_V1_VS_V2_DIFF.md)** — what changed between the 1.31
   and 2.0 Pascal source trees (bugfixes vs. opt-in gameplay/feature changes).
 - **[`docs/TUI_LIBRARY_RECOMMENDATION.md`](docs/TUI_LIBRARY_RECOMMENDATION.md)** — why Terminal.Gui
-  v2 was chosen for the interactive UI.
-- **[`docs/TUI_SURFACES_MAPPING.md`](docs/TUI_SURFACES_MAPPING.md)** — every player-facing window,
-  menu, dialog, and editor in the original game, mapped to its Pascal source and the Terminal.Gui
-  primitive it's built (or to be built) from.
+  v2 was the initial choice for the interactive UI, and why it was later replaced (see
+  `docs/PORT_DESIGN.md`'s "Presentation layer" section for the short version).
 - **[`docs/AnacreonManual.md`](docs/AnacreonManual.md)** — the original player-facing manual.
-- **[`src/Reconstructed4021.TuiDriver/README.md`](src/Reconstructed4021.TuiDriver/README.md)** — how
-  to drive the Tui headlessly (no pty) to debug, diagnose, and regression-test screens and fixes.
+- **[`src/Reconstructed4021.Panemonde/README.md`](src/Reconstructed4021.Panemonde/README.md)** — how
+  the rendering engine underneath Tui works.

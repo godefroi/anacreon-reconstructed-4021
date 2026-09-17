@@ -2,21 +2,13 @@ using Microsoft.Extensions.Configuration;
 
 namespace Reconstructed4021.Tui;
 
-/// <summary>
-/// Optional repo-root appsettings.json (same repo-root convention Program.cs's own FindRepoRoot uses
-/// for scenarios/saves/logs, rather than a bin-output-relative file), loaded through .NET's own
-/// Microsoft.Extensions.Configuration pipeline rather than a hand-rolled JSON read. A missing file, or
-/// a missing key inside it, both default to false -- a normal checkout with no such file behaves
-/// exactly as if it read <c>{ "useLegacyEmpireColors": false, "useLegacyOrderResolution": false }</c>.
-/// Grouped into one record (rather than threading each toggle through as its own constructor parameter)
-/// so a future display toggle doesn't mean widening every constructor between here and Program.cs again.
-///
-/// <c>UseLegacyOrderResolution</c> reverts <see cref="Core.Turns.FleetMovementHandler.ResolveOrders"/>'s
-/// own two-phase, cross-fleet, compile-time-has-no-side-effects order resolution entirely, back to
-/// Pascal's exact once-per-round, single-fleet, always-halts-on-DEST cadence -- see that method's own
-/// doc comment.
-/// </summary>
-public sealed record TuiSettings(bool UseLegacyEmpireColors = false, bool UseLegacyOrderResolution = false)
+// Same appsettings.json-optional-file pattern as Reconstructed4021.Tui's own TuiSettings; a separate
+// type (not a shared one both projects reference) since neither project depends on the other. Both
+// can read the same repo-root appsettings.json file without clashing -- Configuration.Get<T>() only
+// binds the keys it recognizes. Doesn't mirror TuiSettings.UseLegacyEmpireColors: that flag gates a
+// Terminal.Gui-specific quirk in Tui's own GalaxyView (falling back to an empty ColorScheme attribute
+// map), and this project's BuildEmpireColors has no equivalent legacy path to gate.
+public sealed record TuiSettings(bool UseLegacyOrderResolution = false, bool SmartAutoAttackRetreat = true)
 {
     public static TuiSettings Load(string repoRoot)
     {
