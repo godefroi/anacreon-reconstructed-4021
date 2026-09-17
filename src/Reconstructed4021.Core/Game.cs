@@ -182,6 +182,14 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     /// own <see cref="EmpireStatus.Eliminated"/> guard — rather than by <see cref="Empires"/> list
     /// membership, since that's a permanent roster now (see <see cref="EmpireStatus"/>).
     /// </summary>
+    /// <param name="position">
+    /// Overrides what's actually stored as the news item's location when <paramref name="source"/>
+    /// won't survive this turn (e.g. a fleet a combat outcome is about to remove from
+    /// <see cref="Galaxy.Galaxy.Fleets"/>) -- <paramref name="source"/> itself is still required and
+    /// still used for the <see cref="Scouted"/> fan-out check below, since that only reads per-empire
+    /// visibility sets, never <see cref="Galaxy.Galaxy"/> containment. Default null keeps every
+    /// existing caller's behavior (store <paramref name="source"/> itself) unchanged.
+    /// </param>
     public void AddGlobalNews(
         IEnumerable<Empire> exclude,
         ISectorObject source,
@@ -190,7 +198,8 @@ public sealed class Game(Galaxy.Galaxy galaxy)
         int p1 = 0,
         int p2 = 0,
         int p3 = 0,
-        Empire? defender = null)
+        Empire? defender = null,
+        Galaxy.Coordinate? position = null)
     {
         var excluded = exclude as ICollection<Empire> ?? [.. exclude];
 
@@ -199,7 +208,7 @@ public sealed class Game(Galaxy.Galaxy galaxy)
                 continue;
             }
 
-            empire.AddNews(headline, source, otherEmpire: otherEmpire, p1: p1, p2: p2, p3: p3, defender: defender);
+            empire.AddNews(headline, position is null ? source : null, position, otherEmpire: otherEmpire, p1: p1, p2: p2, p3: p3, defender: defender);
         }
     }
 

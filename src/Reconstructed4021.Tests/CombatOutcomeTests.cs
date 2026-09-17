@@ -169,4 +169,68 @@ public class CombatOutcomeTests
         await Assert.That(attackerFleet.Fuel).IsEqualTo(55);
         await Assert.That(attackerFleet.Cargo.Trillum).IsEqualTo(0);
     }
+
+    /// <summary>
+    /// GitHub #43: a conquered Fleet is removed from Galaxy.Fleets (DestroyFleet) before
+    /// ResolveAttack's later AddNews calls fire. Those calls must report the fleet's last-known
+    /// location, not the fleet object itself -- otherwise the news survives this turn holding a
+    /// reference to something no longer in the galaxy, and renders as "(unknown location)" once
+    /// the object can no longer be resolved (e.g. after a save round-trip).
+    /// </summary>
+    [Test]
+    public async Task ResolveAttack_HkAttackFleetConquered_ReportsLastKnownLocationNotDanglingFleet()
+    {
+        var galaxy = new Galaxy(size: 100);
+        var game = new Core.Game(galaxy);
+
+        var attacker = EmpireFactory.CreateEmpire("Attacker", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var attackerFleet = new Fleet { Location = new Coordinate(3, 4), Owner = attacker };
+        galaxy.Fleets.Add(attackerFleet);
+
+        var defender = EmpireFactory.CreateEmpire("Defender", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var targetLocation = new Coordinate(3, 4);
+        var targetFleet = new Fleet { Location = targetLocation, Owner = defender };
+        targetFleet.Ships.Fighters = 5;
+        galaxy.Fleets.Add(targetFleet);
+
+        CombatOutcome.ResolveAttack(
+            AttackResultType.DefenderConquered, attackerFleet, targetFleet,
+            hkAttack: true, capture: false, new AttackTally(), new AttackTally(), game, new FixedRandom(0));
+
+        await Assert.That(game.Galaxy.Fleets).DoesNotContain(targetFleet);
+
+        var destroyedNews = defender.News.Single(n => n.Headline == NewsType.FleetDestroyedByUnknown);
+        await Assert.That(destroyedNews.Subject).IsNull();
+        await Assert.That(destroyedNews.Position).IsEqualTo(targetLocation);
+
+        var detailNews = defender.News.Single(n => n.Headline == NewsType.DestructionDetail);
+        await Assert.That(detailNews.Subject).IsNull();
+        await Assert.That(detailNews.Position).IsEqualTo(targetLocation);
+    }
+
+    /// <summary>Same GitHub #43 fix, the non-hkAttack branch (WorldConqueredByEnemy).</summary>
+    [Test]
+    public async Task ResolveAttack_PlainFleetConquered_ReportsLastKnownLocationNotDanglingFleet()
+    {
+        var galaxy = new Galaxy(size: 100);
+        var game = new Core.Game(galaxy);
+
+        var attacker = EmpireFactory.CreateEmpire("Attacker", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var attackerFleet = new Fleet { Location = new Coordinate(7, 8), Owner = attacker };
+        galaxy.Fleets.Add(attackerFleet);
+
+        var defender = EmpireFactory.CreateEmpire("Defender", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var targetLocation = new Coordinate(7, 8);
+        var targetFleet = new Fleet { Location = targetLocation, Owner = defender };
+        galaxy.Fleets.Add(targetFleet);
+
+        CombatOutcome.ResolveAttack(
+            AttackResultType.DefenderConquered, attackerFleet, targetFleet,
+            hkAttack: false, capture: false, new AttackTally(), new AttackTally(), game, new FixedRandom(0));
+
+        var conqueredNews = defender.News.Single(n => n.Headline == NewsType.WorldConqueredByEnemy);
+        await Assert.That(conqueredNews.Subject).IsNull();
+        await Assert.That(conqueredNews.Position).IsEqualTo(targetLocation);
+        await Assert.That(conqueredNews.OtherEmpire).IsEqualTo(attacker);
+    }
 }

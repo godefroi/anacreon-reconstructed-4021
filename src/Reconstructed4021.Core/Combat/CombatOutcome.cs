@@ -232,7 +232,16 @@ public static class CombatOutcome
                 }
                 break;
 
-            case AttackResultType.DefenderConquered:
+            case AttackResultType.DefenderConquered: {
+                // Stays subject/null for a conquered world (ConquerWorld never removes it, just
+                // reassigns ownership). A conquered fleet flips these to null/location right below,
+                // once DestroyFleet has removed it from Galaxy.Fleets -- every AddNews call after that
+                // point can only outlive this turn by carrying a position, not a reference to an
+                // object that's no longer reachable (same reasoning as
+                // CombatStandalone.DestroyConstructionOrGate's own doc comment; see GitHub #43).
+                ISectorObject? newsSubject = subject;
+                Coordinate? newsPosition = null;
+
                 if (target is IEconomicWorld world) {
                     ConquerWorld(world, attacker, game, random);
                     if (world.Type == WorldType.Capital) {
@@ -252,20 +261,28 @@ public static class CombatOutcome
                     if (capture) {
                         AbortFleet(targetFleet, attackerFleet, report: false);
                     }
+
+                    var location = targetFleet.Location;
                     DestroyFleet(targetFleet, game);
+                    newsSubject = null;
+                    newsPosition = location;
+
                     revChange = Rnd(random, 1, 5);
-                    game.AddGlobalNews([attacker, defender], subject, NewsType.EnemyConqueredWorldGlobal, otherEmpire: attacker, defender: defender);
+                    // subject (still a live reference, just no longer in Galaxy.Fleets) is passed
+                    // here only so AddGlobalNews' own Scouted(empire, source) fan-out check still
+                    // works -- position: overrides what actually gets stored on each recipient's news.
+                    game.AddGlobalNews([attacker, defender], subject, NewsType.EnemyConqueredWorldGlobal, otherEmpire: attacker, defender: defender, position: location);
                 }
 
                 if (defender.IsIndependent) {
                     ChangeTotalRevIndex(attacker, -Rnd(random, 2, 4));
                 } else {
                     if (hkAttack && target is Fleet) {
-                        defender.AddNews(NewsType.FleetDestroyedByUnknown, subject);
+                        defender.AddNews(NewsType.FleetDestroyedByUnknown, newsSubject, newsPosition);
                     } else {
-                        defender.AddNews(NewsType.WorldConqueredByEnemy, subject, otherEmpire: attacker);
+                        defender.AddNews(NewsType.WorldConqueredByEnemy, newsSubject, newsPosition, otherEmpire: attacker);
                     }
-                    ReportLosses(defender, subject, killed);
+                    ReportLosses(defender, newsSubject, killed, newsPosition);
                     ChangeTotalRevIndex(attacker, -Rnd(random, 3, 6));
                     ChangeTotalRevIndex(defender, revChange);
                 }
@@ -274,6 +291,7 @@ public static class CombatOutcome
                     ConquerEmpire(attacker, defender, game, random);
                 }
                 break;
+            }
 
             // DefenderCaptured: declared in Pascal's AttackResultTypes but never assigned anywhere in
             // ATTACK.PAS/ATTNPE.PAS, and ResolveAttack's own real CASE has no branch for it either —
@@ -282,11 +300,11 @@ public static class CombatOutcome
     }
 
     /// <summary>ResolveAttack's nested ReportLosses (ATTACK.PAS:1196-1204).</summary>
-    private static void ReportLosses(Empire emp, ISectorObject subject, AttackTally killed)
+    private static void ReportLosses(Empire emp, ISectorObject? subject, AttackTally killed, Coordinate? position = null)
     {
         foreach (var t in Enum.GetValues<AttackType>()) {
             if (killed[t] > 0) {
-                emp.AddNews(NewsType.DestructionDetail, subject, p1: killed[t], resource: t.ToResourceKind());
+                emp.AddNews(NewsType.DestructionDetail, subject, position, p1: killed[t], resource: t.ToResourceKind());
             }
         }
     }
