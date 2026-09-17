@@ -1,96 +1,49 @@
-using System.Drawing;
-using Terminal.Gui.App;
-using Terminal.Gui.Input;
-using Terminal.Gui.Testing;
-using Terminal.Gui.Views;
 using Reconstructed4021.Core.SaveFormat;
-using Reconstructed4021.Core.Turns;
 using Reconstructed4021.LegacyNpe;
-using Reconstructed4021.Tui;
+using Reconstructed4021.Panemonde;
+using Reconstructed4021.Tui2;
+using Reconstructed4021.Tui2.NewGame;
 
-// Headless functional-UI driver for Reconstructed4021.Tui, replacing the psmux (tmux-alike)-driven
-// playtests this session used before: Terminal.Gui's own Terminal.Gui.Testing namespace runs the real
-// app with no pty/terminal attached at all, and Driver.Contents gives back exact rendered text
-// instead of an ANSI-art screenshot that has to be eyeballed. A separate project (not a --headless
-// flag on Reconstructed4021.Tui itself) so a future Tui test project can reference this same driver
-// without dragging in Program.cs's own interactive splash/title/scenario-picker bootstrap.
+// Headless functional driver for Reconstructed4021.Tui2 screens, same purpose as
+// Reconstructed4021.TuiDriver serves for the Terminal.Gui-based Tui project: a script of key presses
+// and DUMPs, run without a real terminal attached, so a screen's behavior can be checked by re-running
+// a script instead of a human eyeballing a live session every time.
 //
-// Usage: dotnet run --project src/Reconstructed4021.TuiDriver --
-//          --load "assets/saves/Garrisoned Outpost.json" --script path/to/script.txt [--cols 100] [--rows 40]
-//        dotnet run --project src/Reconstructed4021.TuiDriver --
-//          --player-setup --script path/to/script.txt [--cols 100] [--rows 40]
-//          (drives a standalone PlayerSetupWindow instead of a loaded GameShell -- for New Game
-//          flow screens that don't need a real Game at all; PlayerSetupWindow/NewGameWindow made
-//          public for exactly this, same precedent as GameShell.)
-//        dotnet run --project src/Reconstructed4021.TuiDriver --
-//          --save-picker --script path/to/script.txt [--cols 100] [--rows 40]
-//          (drives a standalone SaveGamePickerWindow over assets/saves/*.json -- Main Menu > Load Game.)
+// Much simpler than TuiDriver, and deliberately: TuiDriver needs a whole synchronous-vs-pipeline
+// input-injection workaround and a second thread because Terminal.Gui's Application.Run blocks the
+// calling thread for the whole session and its AddTimeout callbacks only fire from inside that same
+// loop. Nothing here has that shape -- IScreen.Update takes real elapsed time as a plain parameter, so
+// this driver just calls ScreenRunner.HandleKey/Update/Draw directly, on one thread, with no timers,
+// no queues, and no real terminal at all (FrameBuffer writes to Stream.Null). SLEEP below advances the
+// screens' own simulated clock rather than actually blocking, so a script covering minutes of
+// animation still runs instantly.
 //
-// Two real bugs, found and fixed by decompiling Terminal.Gui itself (dotnet-inspect) rather than
-// guessing after the first two designs deadlocked:
-//
-// 1. IApplication.InjectKey (the InputInjectionExtensions convenience method) defaults to
-//    InputInjectionMode.Direct -- ResolveMode(Auto) resolves to Direct -- which calls
-//    IInputProcessor.RaiseKeyDownEvent synchronously, i.e. it runs the key's entire handler chain
-//    on the calling thread before returning. GameShell opens MessageBox.Query in several places
-//    (e.g. "Standard battle configuration?"), and MessageBox.Query is itself a *nested* Run() call
-//    that only returns once its own answer has been injected -- so a script that (correctly) tries
-//    to answer that dialog on a later line can never get the chance: the call that opened it hasn't
-//    returned yet. This is true even from a second thread via IApplication.Invoke: the callback
-//    Invoke runs still calls InjectKey's Direct-mode synchronous dispatch on the UI thread, so the
-//    UI thread is what ends up stuck.
-//
-//    The fix is InputInjectionMode.Pipeline via IApplication.GetInputInjector().InjectKey(key, ...)
-//    instead of the IApplication.InjectKey extension method: Pipeline mode calls
-//    IInputProcessor.InjectKeyDownEvent, which just enqueues onto the processor's own InputQueue
-//    (confirmed by decompiling InputProcessorImpl<T>.InjectKeyDownEvent) -- a real, thread-safe queue,
-//    not a direct call. ProcessQueue() (called once per iteration by whichever Run() loop is
-//    currently live, nested or not -- same mechanism the framework's own real keyboard-reading thread
-//    uses) drains it in order, so a key queued while a MessageBox is open gets processed by *that*
-//    modal's own next iteration, exactly like a real keypress would.
-//
-// 2. Given (1), driving the whole script from the same thread that calls app.Run(gameShell, null) is
-//    impossible -- that call doesn't return until the whole session ends. So app.Run stays on the
-//    main thread (it needs to be a real, continuously-iterating loop for Pipeline-mode queuing to
-//    ever get drained at all) while a second thread walks the script, queuing input with
-//    AutoProcess: false and a short real sleep between actions so the live loop's own iterations
-//    have time to actually drain and redraw before the next line runs or a DUMP reads the screen.
-//
-// --output <path>: writes DUMP/final-state output there instead of stdout (resolved relative to the
-// repo root, same as --load/--script). Omit it and a path under logs/ (gitignored, same convention as
-// Reconstructed4021.Tui's own crash/tech-debug logs) is generated and printed to stdout before the
-// script runs -- either way, the caller never has to shell-redirect this process's own stdout (which,
-// for a Claude Code caller specifically, means one less permission prompt per run) to get at a
-// multi-DUMP script's output.
+// Usage: dotnet run --project src/Reconstructed4021.Tui2Driver -- --script path/to/script.txt
+//          [--cols 100] [--rows 40] [--output path/to/output.log]
+//          [--load path/to/save.json]  -- skip the whole pre-game flow (splash/title/picker/player
+//          setup) and drop straight into the galaxy map from a save fixture, same purpose as
+//          Reconstructed4021.Tui's own Program.cs --load flag.
 //
 // Script format, one instruction per line:
 //   # comment                    -- ignored, as is a blank line
 //   DUMP                         -- prints the current screen as plain text
-//   SLEEP <ms>                   -- extra real Thread.Sleep on top of the per-action pacing below --
-//                                    for AddTimeout-driven UI (WarpIn's slide, FlashMessage's
-//                                    auto-clear) that needs more wall-clock time to elapse
-//   <key> [<key> ...]            -- one or more space-separated keys, each queued in order with a
-//                                    pacing sleep after every one. Parsed via Key.TryParse
-//                                    (Terminal.Gui's own KeyCode names: Enter, Esc, Tab, Space,
-//                                    F1..F24, CursorUp/CursorDown/CursorLeft/CursorRight, a single
-//                                    character like 'y' or 'G' -- case matters, it's a real Shift),
-//                                    plus Up/Down/Left/Right as friendlier aliases for the Cursor*
-//                                    names.
-// The final screen state is always printed at the end, labeled, whether or not the script itself
-// ends with an explicit DUMP.
+//   SLEEP <ms>                   -- advances the screens' simulated clock by <ms> (no real wait)
+//   <key> [<key> ...]            -- one or more space-separated keys, each fed to HandleKey in order.
+//                                    ConsoleKey names (Enter, Spacebar, LeftArrow, N, Q, ...), plus
+//                                    Up/Down/Left/Right/Space/Escape as friendlier aliases, plus a
+//                                    single letter/digit as itself (case matters for KeyChar, but every
+//                                    screen so far matches hotkeys case-insensitively).
+// The final screen state is always printed at the end, labeled, whether or not the script itself ends
+// with an explicit DUMP.
 
-const int ActionPacingMs = 60;
-
-var playerSetupMode = args.Contains("--player-setup");
-var savePickerMode = args.Contains("--save-picker");
 var scriptPath = RequireArg("--script");
 var cols = OptionalIntArg("--cols") ?? 100;
 var rows = OptionalIntArg("--rows") ?? 40;
 
 var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
 var resolvedScriptPath = Path.IsPathRooted(scriptPath) ? scriptPath : Path.Combine(repoRoot, scriptPath);
-
-if (!File.Exists(resolvedScriptPath)) {
+if (!File.Exists(resolvedScriptPath))
+{
     Console.Error.WriteLine($"Script file not found: {resolvedScriptPath}");
     return 1;
 }
@@ -98,144 +51,136 @@ if (!File.Exists(resolvedScriptPath)) {
 var outputPathArg = OptionalArg("--output");
 var outputPath = outputPathArg is not null
     ? (Path.IsPathRooted(outputPathArg) ? outputPathArg : Path.Combine(repoRoot, outputPathArg))
-    : Path.Combine(repoRoot, "logs", $"tuidriver-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+    : Path.Combine(repoRoot, "logs", $"tui2driver-{DateTime.Now:yyyyMMdd-HHmmss}.log");
 Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 Console.WriteLine($"Output: {outputPath}");
 using var output = new StreamWriter(outputPath) { AutoFlush = true };
 
-Window window;
-Func<string>? describeResult = null;
-
-if (playerSetupMode) {
-    var setup = new PlayerSetupWindow("Test Scenario", 1, "TestName");
-    window = setup;
-    describeResult = () => setup.PlayerInfo is { } info ? $"PlayerInfo: Name={info.Name} IsEmpress={info.IsEmpress}" : "PlayerInfo: null (cancelled)";
-} else if (savePickerMode) {
-    var saveDir = Path.Combine(repoRoot, "assets", "saves");
-    var saves = Directory.GetFiles(saveDir, "*.json")
-        .Select(path => new SaveGamePickerWindow.SaveChoice(path, Path.GetFileNameWithoutExtension(path)))
-        .ToList();
-    var picker = new SaveGamePickerWindow(saves);
-    window = picker;
-    describeResult = () => $"SelectedPath: {picker.SelectedPath ?? "null (cancelled)"}";
-} else {
-    var loadPath = RequireArg("--load");
-    var resolvedLoadPath = Path.IsPathRooted(loadPath) ? loadPath : Path.Combine(repoRoot, loadPath);
-    if (!File.Exists(resolvedLoadPath)) {
-        Console.Error.WriteLine($"Save file not found: {resolvedLoadPath}");
-        return 1;
-    }
-
-    var random = new Random(4021);
-    var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random));
-    var game = GameJson.Deserialize(File.ReadAllText(resolvedLoadPath), random, new LegacyNpeProvider());
-    var human = game.CurrentEmpire ?? throw new InvalidOperationException("Save has no CurrentEmpire set -- nothing to drive.");
-    turnEngine.BeginTurn(game);
-    window = new GameShell(game, turnEngine, human, random);
-}
-
-IApplication app = Application.Create().Init();
-Application.MaximumIterationsPerSecond = 240; // Program.cs's own setting -- shortens the queue-drain latency below.
-app.Driver!.SetScreenSize(cols, rows);
-app.Screen = new Rectangle(0, 0, cols, rows);
-
-var injector = app.GetInputInjector();
-var injectOptions = new InputInjectionOptions { Mode = InputInjectionMode.Pipeline, AutoProcess = false };
-
-var exitCode = 0;
-
-var scriptThread = new Thread(() => {
-    try {
-        RunScript();
-    } catch (Exception ex) {
-        Console.Error.WriteLine($"Script thread failed: {ex}");
-        exitCode = 1;
-    } finally {
-        Thread.Sleep(ActionPacingMs);
-        app.Invoke(() => app.RequestStop()); // Calling RequestStop directly from this thread didn't reliably unblock app.Run -- Invoke matches the same thread-marshaling this file already needed for GetInputInjector's own AutoProcess-less queuing to actually get drained.
-    }
-});
-scriptThread.IsBackground = true;
-scriptThread.Start();
-
-try {
-    app.Run(window, null);
-} finally {
-    app.Dispose();
-}
-
-if (describeResult is not null) {
-    Console.WriteLine(describeResult());
-}
-
-return exitCode;
-
-void RunScript()
+var loadPathArg = OptionalArg("--load");
+IScreen initialScreen;
+if (loadPathArg is not null)
 {
-    foreach (var (lineNumber, rawLine) in File.ReadLines(resolvedScriptPath).Select((line, i) => (i + 1, line))) {
-        var line = rawLine.Trim();
-        if (line.Length == 0 || line.StartsWith('#')) {
-            continue;
-        }
-
-        if (line == "DUMP") {
-            output.WriteLine(RenderScreen());
-            continue;
-        }
-
-        if (line.StartsWith("SLEEP ", StringComparison.Ordinal)) {
-            Thread.Sleep(int.Parse(line["SLEEP ".Length..].Trim()));
-            continue;
-        }
-
-        foreach (var token in line.Split(' ', StringSplitOptions.RemoveEmptyEntries)) {
-            if (!TryParseKey(token, out var key)) {
-                throw new FormatException($"Script line {lineNumber}: unrecognized key token '{token}'.");
-            }
-
-            injector.InjectKey(key, injectOptions);
-            Thread.Sleep(ActionPacingMs);
-        }
-    }
-
-    output.WriteLine("=== final state ===");
-    output.WriteLine(RenderScreen());
+    var resolvedLoadPath = Path.IsPathRooted(loadPathArg) ? loadPathArg : Path.Combine(repoRoot, loadPathArg);
+    var game = GameJson.Deserialize(File.ReadAllText(resolvedLoadPath), new Random(4021), new LegacyNpeProvider());
+    initialScreen = Bootstrap.CreateGalaxyMapScreen(repoRoot, game);
+}
+else
+{
+    initialScreen = Bootstrap.CreateInitialScreen(repoRoot);
 }
 
-string RenderScreen()
+var runner = new ScreenRunner(initialScreen, new FrameBuffer(cols, rows, Stream.Null));
+
+foreach (var (lineNumber, rawLine) in File.ReadLines(resolvedScriptPath).Select((line, i) => (i + 1, line)))
 {
-    var contents = app.Driver!.Contents!;
-    var lines = new List<string>();
-    for (var row = 0; row < contents.GetLength(0); row++) {
-        var text = "";
-        for (var col = 0; col < contents.GetLength(1); col++) {
-            text += contents[row, col].Grapheme;
-        }
-        lines.Add(text.TrimEnd());
+    var line = rawLine.Trim();
+    if (line.Length == 0 || line.StartsWith('#'))
+    {
+        continue;
     }
-    return string.Join('\n', lines);
+
+    if (line == "DUMP")
+    {
+        output.WriteLine(RenderCurrentFrame());
+        continue;
+    }
+
+    if (line.StartsWith("SLEEP ", StringComparison.Ordinal))
+    {
+        runner.Update(TimeSpan.FromMilliseconds(double.Parse(line["SLEEP ".Length..].Trim())));
+        continue;
+    }
+
+    foreach (var token in line.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+    {
+        if (!TryParseKey(token, out var key))
+        {
+            throw new FormatException($"Script line {lineNumber}: unrecognized key token '{token}'.");
+        }
+
+        runner.HandleKey(key);
+    }
 }
 
-// A few friendlier spellings on top of Key.TryParse's own KeyCode-name grammar, matching the arrow-key
-// vocabulary this session's own psmux transcripts already used.
-static bool TryParseKey(string token, out Key key)
+output.WriteLine("=== final state ===");
+output.WriteLine(RenderCurrentFrame());
+return 0;
+
+string RenderCurrentFrame()
 {
-    var alias = token switch {
-        "Up" => "CursorUp",
-        "Down" => "CursorDown",
-        "Left" => "CursorLeft",
-        "Right" => "CursorRight",
-        "Escape" => "Esc",
+    runner.Draw();
+    runner.FrameBuffer.Present();
+    return string.Join('\n', runner.FrameBuffer.RenderText());
+}
+
+// A few friendlier spellings on top of ConsoleKey's own names, matching TuiDriver's script vocabulary.
+static bool TryParseKey(string token, out ConsoleKeyInfo key)
+{
+    // General modifier prefix -- recurses on the remainder so "Ctrl+PageDown" (WorldInfoOverlay's own
+    // tab-switch chord) works the same way "Alt+<letter>" already did for the menu bar, without a
+    // separate single-letter-only special case like that one.
+    if (token.StartsWith("Ctrl+", StringComparison.OrdinalIgnoreCase))
+    {
+        if (TryParseKey(token[5..], out var inner))
+        {
+            key = new ConsoleKeyInfo(inner.KeyChar, inner.Key, inner.Modifiers.HasFlag(ConsoleModifiers.Shift), inner.Modifiers.HasFlag(ConsoleModifiers.Alt), control: true);
+            return true;
+        }
+
+        key = default;
+        return false;
+    }
+
+    if (token.StartsWith("Alt+", StringComparison.OrdinalIgnoreCase) && token.Length == 5)
+    {
+        var ch = token[4];
+        if (char.IsLetterOrDigit(ch) && Enum.TryParse<ConsoleKey>(char.ToUpperInvariant(ch).ToString(), out var altKey))
+        {
+            key = new ConsoleKeyInfo(ch, altKey, shift: false, alt: true, control: false);
+            return true;
+        }
+
+        key = default;
+        return false;
+    }
+
+    var alias = token switch
+    {
+        "Up" => "UpArrow",
+        "Down" => "DownArrow",
+        "Left" => "LeftArrow",
+        "Right" => "RightArrow",
+        "Space" => "Spacebar",
+        "Escape" => "Escape",
         _ => token,
     };
 
-    return Key.TryParse(alias, out key!);
+    if (alias.Length == 1)
+    {
+        var ch = alias[0];
+        var parsed = char.IsLetterOrDigit(ch) && Enum.TryParse<ConsoleKey>(char.ToUpperInvariant(ch).ToString(), out var letterKey)
+            ? letterKey
+            : ConsoleKey.NoName;
+        key = new ConsoleKeyInfo(ch, parsed, shift: false, alt: false, control: false);
+        return true;
+    }
+
+    if (!Enum.TryParse<ConsoleKey>(alias, out var namedKey))
+    {
+        key = default;
+        return false;
+    }
+
+    var keyChar = namedKey switch { ConsoleKey.Enter => '\r', ConsoleKey.Spacebar => ' ', _ => '\0' };
+    key = new ConsoleKeyInfo(keyChar, namedKey, shift: false, alt: false, control: false);
+    return true;
 }
 
 static string FindRepoRoot(string startDirectory)
 {
     var dir = new DirectoryInfo(startDirectory);
-    while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Reconstructed4021.slnx"))) {
+    while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Reconstructed4021.slnx")))
+    {
         dir = dir.Parent;
     }
 
@@ -245,7 +190,8 @@ static string FindRepoRoot(string startDirectory)
 string RequireArg(string name)
 {
     var index = Array.IndexOf(args, name);
-    if (index < 0 || index + 1 >= args.Length) {
+    if (index < 0 || index + 1 >= args.Length)
+    {
         throw new ArgumentException($"Missing required argument: {name} <value>");
     }
 
