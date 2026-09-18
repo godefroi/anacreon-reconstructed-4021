@@ -1,0 +1,18 @@
+--- a/FLEET.PAS
++++ b/FLEET.PAS
+@@ -231,6 +231,15 @@ PROCEDURE DestroyFleet(FltID: IDNumber);
+       	END;
+ 
+    	Dispose(Universe^.Fleet[FltID.Index]);
++	{ PATCH: fpc's heap can unmap a Dispose()'d block; real Turbo Pascal's cannot, so a later
++	  unconditional dereference (EnforceNPEDataLinks scans every 1..MaxNoOfFleets slot regardless
++	  of SetOfActiveFleets membership) safely read stale-but-present bytes under real TP but can
++	  fault under fpc. Re-allocating immediately reproduces "still readable" real-TP behavior
++	  without changing any observable game state -- GetNextFleet already New()s over whatever is
++	  here the moment this slot is reused, so this fresh, zeroed block is indistinguishable from
++	  "not yet reused" to every real caller. }
++	New(Universe^.Fleet[FltID.Index]);
++	FillChar(Universe^.Fleet[FltID.Index]^,SizeOf(FleetRecord),0);
+ 
+    	SetOfActiveFleets:=SetOfActiveFleets-[FltID.Index];
+    	SetOfFleetsOf[FltSta]:=SetOfFleetsOf[FltSta]-[FltID.Index];

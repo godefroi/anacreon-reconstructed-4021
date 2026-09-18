@@ -175,7 +175,7 @@ PROGRAM RunWorld;
   relaxation, not a behavior change. }
 {$V-}
 
-USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, AttNPE, Fleet, Intrface, DFA, Strg, NewGame, NPETypes, NPE01;
+USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, AttNPE, Fleet, Intrface, DFA, Strg, NewGame, NPETypes, NPE01, NPE00, NPEIntr, NPE02, SBase;
 
 function ParseLongInt(const s: String): LongInt;
    var
@@ -1612,6 +1612,197 @@ procedure RunScenarioCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunNpePlayoutCase(const arg: String);
+   { All-NPE multi-year playout: loads a real scenario via the same LoadScenario call
+     RunScenarioCase uses, then drives every InUse empire with the real Kingdom1/Kingdom2 AI
+     (NPE02.PAS's InitializeKingdom1NPE/InitializeKingdom2NPE + ImplementKingdom1NPE -- there is no
+     separate ImplementKingdom2NPE; the two personas differ only in their Initialize call, matching
+     this port's own KingdomTurnHandler persona split) for up to Years simulated years, replicating
+     ANACREON.PAS:260-290's own non-interactive per-turn sequence (the AsyncTurns branch: per active
+     empire ClearScoutSet/ScoutFleets/ScoutObjects/UpdateProbes/ImplementNPE/EraseNews, then per
+     active empire UpdateAllFleets/MovePlayerStarbases, then UpdateUniverse) but calling
+     ImplementKingdom1NPE directly instead of the generic ImplementNPE dispatcher -- same bypass
+     npepirate already uses for NPE01, avoids linking the full NPE unit (CRT/EIO/Wnd-heavy dispatcher
+     plus Berserker/NPE03/NPE04) for one procedure.
+
+     Every LoadScenario-created empire is treated uniformly as Kingdom-driven regardless of its
+     scenario-declared player/NPE-type distinction (EmpirePlayer is never consulted) -- this domain
+     ignores the human/NPE split entirely, matching the C# ScenarioPlayoutTests.cs harness's own
+     approach of overwriting every Game.TurnHandlers entry.
+
+     A freshly-loaded scenario does not pre-allocate every Universe^.Fleet[i] slot (only CreateFleet
+     ever New()s one, on demand) -- EnforceNPEDataLinks (called first inside ImplementKingdom1NPE)
+     reads Universe^.Fleet[i]^.NPEDataIndex unconditionally for i:=1 TO MaxNoOfFleets, so every
+     still-Nil slot is defensively New()'d and zeroed right after LoadScenario returns, same
+     landmine/fix already documented for npepirate/npeattack in this directory's README.
+
+     arg shape: ScenarioPath,Seed,NumPlayers,Persona(1=Kingdom1,2=Kingdom2),Years -- Path is
+     everything before the fourth-from-last comma (same "may itself contain no commas" concern
+     RunScenarioCase's own split handles, generalized from 2 trailing fields to 4).
+
+     Output: one line, comma-free key=value shape --
+       startempires=<InUse count right after load>;
+       endempires=<InUse count at the point the loop stopped>;
+       yearselapsed=<Year-StartYear when the loop stopped>;
+       eliminated=<startempires-endempires>;
+       firsteliminationyear=<Year of the first drop in InUse count, or -1 if none>;
+       e<N>_active=<0|1>;e<N>_planets=<v>;e<N>_pop=<v>;e<N>_ships=<v>;e<N>_indus=<v>; for N=1..8
+     (planets/pop/ships/indus are summed over that empire's own Planet[] entries only, not
+     starbases -- planets dominate every aggregate this domain cares about, and starbases would
+     need the same three-loop treatment RunScenarioCase's own comment already flags as "not worth
+     doubling for a checksum"). }
+   var
+      s: String;
+      YearsStr,PersonaStr,NumPlayersStr,SeedStr: String;
+      Path: LineStr;
+      Seed,NumPlayers,Persona,Years: LongInt;
+      Abort: Boolean;
+      i: Integer;
+      Emp: Empire;
+      StartYear,StartActive,CurActive,PrevActive,FirstElimYear: LongInt;
+      KData: array[Empire1..Empire8] of Pointer;
+      SumPop,SumShips,SumIndus,SumPlanets: array[Empire1..Empire8] of LongInt;
+      ShpI: ShipTypes;
+      IndI: IndusTypes;
+
+      function PopLastField(var t: String): String;
+         var
+            p: Integer;
+         begin
+         p:=Length(t);
+         while (p>0) and (t[p]<>',') do
+            Dec(p);
+         PopLastField:=Copy(t,p+1,Length(t)-p);
+         t:=Copy(t,1,p-1);
+         end;
+
+      function IntStr(v: LongInt): String;
+         var
+            Piece: String;
+         begin
+         Str(v,Piece);
+         IntStr:=Piece;
+         end;
+
+
+   begin
+   s:=arg;
+   YearsStr:=PopLastField(s);
+   PersonaStr:=PopLastField(s);
+   NumPlayersStr:=PopLastField(s);
+   SeedStr:=PopLastField(s);
+   Path:=s;
+
+   Seed:=ParseLongInt(SeedStr);
+   NumPlayers:=ParseLongInt(NumPlayersStr);
+   Persona:=ParseLongInt(PersonaStr);
+   Years:=ParseLongInt(YearsStr);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   GroundTruthSeed:=LongWord(Seed);
+   ForcedRandomValue:=-1;
+   TestNumPlayers:=NumPlayers;
+
+   LoadScenario(Path,Abort);
+
+   TestNumPlayers:=-1;
+
+   for i:=1 to MaxNoOfFleets do
+      if Universe^.Fleet[i]=Nil then
+         begin
+         New(Universe^.Fleet[i]);
+         FillChar(Universe^.Fleet[i]^,SizeOf(Universe^.Fleet[i]^),0);
+         end;
+
+   StartYear:=Year;
+   StartActive:=0;
+   for Emp:=Empire1 to Empire8 do
+      if EmpireActive(Emp) then
+         begin
+         Inc(StartActive);
+         if Persona=2 then
+            InitializeKingdom2NPE(Emp,KData[Emp])
+         else
+            InitializeKingdom1NPE(Emp,KData[Emp]);
+         end;
+
+   PrevActive:=StartActive;
+   FirstElimYear:=-1;
+   CurActive:=StartActive;
+
+   while (CurActive>1) and (Year-StartYear<Years) do
+      begin
+      for Emp:=Empire1 to Empire8 do
+         if EmpireActive(Emp) then
+            begin
+            ClearScoutSet(Emp);
+            ScoutFleets(Emp);
+            ScoutObjects(Emp);
+            UpdateProbes(Emp);
+            ImplementKingdom1NPE(Emp,KData[Emp]);
+            EraseNews(Emp);
+            end;
+
+      for Emp:=Empire1 to Empire8 do
+         if EmpireActive(Emp) then
+            begin
+            UpdateAllFleets(Emp,Emp);
+            MovePlayerStarbases(Emp);
+            end;
+
+      UpdateUniverse;
+
+      CurActive:=0;
+      for Emp:=Empire1 to Empire8 do
+         if EmpireActive(Emp) then
+            Inc(CurActive);
+
+      if (CurActive<PrevActive) and (FirstElimYear=-1) then
+         FirstElimYear:=Year;
+      PrevActive:=CurActive;
+      end;
+
+   for Emp:=Empire1 to Empire8 do
+      begin
+      SumPop[Emp]:=0;  SumShips[Emp]:=0;  SumIndus[Emp]:=0;  SumPlanets[Emp]:=0;
+      end;
+
+   for i:=1 to LastFirstWorld-1 do
+      with Universe^.Planet[i] do
+         if Emp in [Empire1..Empire8] then
+            begin
+            Inc(SumPlanets[Emp]);
+            Inc(SumPop[Emp],Pop);
+            for ShpI:=fgt to trn do
+               Inc(SumShips[Emp],Ships[ShpI]);
+            for IndI:=BioInd to TriInd do
+               Inc(SumIndus[Emp],Indus[IndI]);
+            end;
+
+   s:='startempires='+IntStr(StartActive)+
+      ';endempires='+IntStr(CurActive)+
+      ';yearselapsed='+IntStr(Year-StartYear)+
+      ';eliminated='+IntStr(StartActive-CurActive)+
+      ';firsteliminationyear='+IntStr(FirstElimYear);
+
+   for Emp:=Empire1 to Empire8 do
+      begin
+      s:=s+';e'+IntStr(Ord(Emp)-Ord(Empire1)+1)+'_active=';
+      if EmpireActive(Emp) then
+         s:=s+'1'
+      else
+         s:=s+'0';
+      s:=s+';e'+IntStr(Ord(Emp)-Ord(Empire1)+1)+'_planets='+IntStr(SumPlanets[Emp]);
+      s:=s+';e'+IntStr(Ord(Emp)-Ord(Empire1)+1)+'_pop='+IntStr(SumPop[Emp]);
+      s:=s+';e'+IntStr(Ord(Emp)-Ord(Empire1)+1)+'_ships='+IntStr(SumShips[Emp]);
+      s:=s+';e'+IntStr(Ord(Emp)-Ord(Empire1)+1)+'_indus='+IntStr(SumIndus[Emp]);
+      end;
+
+   WriteLn(s);
+
+   Dispose(Universe);
+   end;
 
 procedure RunFleetLogisticsCase(const arg: String);
    { FuelCapacity/FuelConsumption/FleetCargoSpace/BalanceFleet (MISC.PAS:168-222, INTRFACE.PAS:431-465
@@ -2177,6 +2368,8 @@ procedure RunCaseMode;
          RunGroundTruthRngCase(ParamStr(i))
       else if domain='scenario' then
          RunScenarioCase(ParamStr(i))
+      else if domain='npeplayout' then
+         RunNpePlayoutCase(ParamStr(i))
       else if domain='probescout' then
          RunProbeScoutCase(ParamStr(i))
       else if domain='npepirate' then
