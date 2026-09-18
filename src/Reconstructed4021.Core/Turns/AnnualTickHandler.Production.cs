@@ -408,8 +408,9 @@ public sealed partial class AnnualTickHandler
             return false;
 
         // Independent worlds have no empire research record to check against; owned worlds also need
-        // the empire to have individually unlocked this ship (nothing populates this yet — new-game
-        // setup, a later phase — so ship production is inert outside tests that seed it directly).
+        // the empire to have individually unlocked this ship. Populated at empire creation
+        // (EmpireFactory.SeedTechnology, NEWGAME.PAS:1203-1259's starting TechDev set) and grown
+        // incrementally by NewTechLevel's per-year research roll (UPDATE.PAS:388-401).
         return world.Owner.IsIndependent || world.Owner.Technology.Ships.Contains(ship);
     }
 
