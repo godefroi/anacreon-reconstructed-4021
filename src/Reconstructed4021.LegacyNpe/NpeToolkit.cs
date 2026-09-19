@@ -1919,21 +1919,28 @@ public static class NpeToolkit
                         }
                         break;
 
-                    case PolicyType.Conflict:
-                        if (Rnd(random, 1, 100) <= 75) {
+                    case PolicyType.Conflict: {
+                        // Not real Pascal: base split is 75/25 JumpAttack/SlowAttack; AttackSizeGene=0
+                        // reproduces that exactly.
+                        var jumpAttackChance = Math.Clamp(75 + persona.AttackSizeGene / 2, 0, 100);
+                        if (Rnd(random, 1, 100) <= jumpAttackChance) {
                             DeployJumpAttack(emp, enemyEmp, regionCapitals, persona, fleetStates, game, random);
                         } else {
                             DeploySlowAttack(emp, enemyEmp, regionCapitals, persona, fleetStates, game, random);
                         }
                         break;
+                    }
 
-                    case PolicyType.War:
-                        if (Rnd(random, 1, 100) <= 50) {
+                    case PolicyType.War: {
+                        // Not real Pascal: base split is 50/50; AttackSizeGene=0 reproduces that exactly.
+                        var jumpAttackChance = Math.Clamp(50 + persona.AttackSizeGene / 2, 0, 100);
+                        if (Rnd(random, 1, 100) <= jumpAttackChance) {
                             DeployJumpAttack(emp, enemyEmp, regionCapitals, persona, fleetStates, game, random);
                         } else {
                             DeploySlowAttack(emp, enemyEmp, regionCapitals, persona, fleetStates, game, random);
                         }
                         break;
+                    }
                 }
             }
 

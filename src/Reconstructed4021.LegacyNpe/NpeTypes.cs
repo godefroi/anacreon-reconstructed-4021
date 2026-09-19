@@ -118,6 +118,16 @@ public sealed class NpeCharacter
     /// </summary>
     public int HeavyRangeGene { get; set; }
 
+    /// <summary>
+    /// New, no Pascal precedent (signed, -100 to 100): shifts <see cref="NpeToolkit.WarCabinet"/>'s
+    /// fixed JumpAttack-vs-SlowAttack split at the Conflict/War policy tiers (75/25 and 50/50 in real
+    /// Pascal, identical for every persona today) toward JumpAttack (frequent, small fleets) at
+    /// positive values or toward SlowAttack (rare, large fleets) at negative values, by up to half of
+    /// this gene's magnitude. 0 reproduces the exact original fixed splits at both tiers. Defaults to
+    /// 0 everywhere except the genetic algorithm harness, which evolves it.
+    /// </summary>
+    public int AttackSizeGene { get; set; }
+
     public int Clock { get; set; }
     public int Offset { get; set; }
 }
