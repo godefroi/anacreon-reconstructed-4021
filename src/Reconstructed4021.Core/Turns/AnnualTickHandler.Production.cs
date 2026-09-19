@@ -309,8 +309,11 @@ public sealed partial class AnnualTickHandler
         if (ProductionDiagnostics.Enabled && ProductionDiagnostics.Tracks(world)) {
             foreach (var type in Enum.GetValues<CargoType>()) {
                 var value = world.Cargo[type];
-                if (value > PascalMath.MaxResources)
-                    ProductionDiagnostics.AddOverflow(type, value - PascalMath.MaxResources);
+                if (value > PascalMath.MaxResources) {
+                    var lost = value - PascalMath.MaxResources;
+                    ProductionDiagnostics.AddOverflow(type, lost);
+                    ProductionDiagnostics.AddOverflowByWorld(world.Type, world.Efficiency, world.Population, type, lost);
+                }
             }
         }
 
@@ -596,8 +599,11 @@ public sealed partial class AnnualTickHandler
                     consRate = (int)(100 * (world.Cargo.Metals / (double)metalCost));
                     rawNeeded = world.Cargo.Metals;
                     ReportResourceShortfall(world, CargoType.Metals, NewsType.IndustryLacksMetals, reportedShortfalls);
-                    if (ProductionDiagnostics.Enabled && ProductionDiagnostics.Tracks(world))
-                        ProductionDiagnostics.AddIndustryGrowthLost(industry, intendedConsRate - consRate);
+                    if (ProductionDiagnostics.Enabled && ProductionDiagnostics.Tracks(world)) {
+                        var lostGrowth = intendedConsRate - consRate;
+                        ProductionDiagnostics.AddIndustryGrowthLost(industry, lostGrowth);
+                        ProductionDiagnostics.AddShortageByWorld(world.Type, world.Efficiency, world.Population, lostGrowth);
+                    }
                 }
             } else if (current > optimumLevel) {
                 consRate = Math.Min(-1, -PascalRound(world.Efficiency / 2.0));

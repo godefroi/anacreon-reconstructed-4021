@@ -36,6 +36,17 @@ public static class ProductionDiagnostics
     public static readonly Dictionary<CargoType, long> GrossCargoProduced = new();
     public static readonly Dictionary<ShipType, long> GrossShipsProduced = new();
 
+    /// <summary>
+    /// Who's overflowing and who's shortage-throttled, added to characterize the two effects above
+    /// (a world-type/efficiency/population breakdown) rather than just their aggregate magnitude --
+    /// distinct dictionaries from the ones above so existing callers/reports are untouched.
+    /// </summary>
+    public static readonly Dictionary<(WorldType WorldType, CargoType Cargo), long> OverflowByWorldType = new();
+    public static readonly Dictionary<WorldType, long> IndustryGrowthLostByWorldType = new();
+    public static readonly Dictionary<int, long> IndustryGrowthLostByEfficiencyBucket = new();
+    public static readonly Dictionary<WorldType, (long EfficiencySum, long PopulationSum, int Count)> OverflowWorldStats = new();
+    public static readonly Dictionary<WorldType, (long EfficiencySum, long PopulationSum, int Count)> ShortageWorldStats = new();
+
     public static bool Tracks(IEconomicWorld world) => FilterEmpire is null || world.Owner == FilterEmpire;
 
     public static void Reset()
@@ -46,6 +57,11 @@ public static class ProductionDiagnostics
         CargoLostToShortage.Clear();
         GrossCargoProduced.Clear();
         GrossShipsProduced.Clear();
+        OverflowByWorldType.Clear();
+        IndustryGrowthLostByWorldType.Clear();
+        IndustryGrowthLostByEfficiencyBucket.Clear();
+        OverflowWorldStats.Clear();
+        ShortageWorldStats.Clear();
     }
 
     public static void AddOverflow(CargoType type, long amount) =>
@@ -65,4 +81,20 @@ public static class ProductionDiagnostics
 
     public static void AddGrossShips(ShipType type, long amount) =>
         GrossShipsProduced[type] = GrossShipsProduced.GetValueOrDefault(type) + amount;
+
+    public static void AddOverflowByWorld(WorldType worldType, int efficiency, int population, CargoType cargo, long amount)
+    {
+        OverflowByWorldType[(worldType, cargo)] = OverflowByWorldType.GetValueOrDefault((worldType, cargo)) + amount;
+        var stats = OverflowWorldStats.GetValueOrDefault(worldType);
+        OverflowWorldStats[worldType] = (stats.EfficiencySum + efficiency, stats.PopulationSum + population, stats.Count + 1);
+    }
+
+    public static void AddShortageByWorld(WorldType worldType, int efficiency, int population, long amount)
+    {
+        IndustryGrowthLostByWorldType[worldType] = IndustryGrowthLostByWorldType.GetValueOrDefault(worldType) + amount;
+        var bucket = (efficiency / 10) * 10;
+        IndustryGrowthLostByEfficiencyBucket[bucket] = IndustryGrowthLostByEfficiencyBucket.GetValueOrDefault(bucket) + amount;
+        var stats = ShortageWorldStats.GetValueOrDefault(worldType);
+        ShortageWorldStats[worldType] = (stats.EfficiencySum + efficiency, stats.PopulationSum + population, stats.Count + 1);
+    }
 }
