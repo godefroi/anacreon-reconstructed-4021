@@ -84,16 +84,48 @@ other ship type, including a cargo carrier, loses that exemption immediately, th
 mechanic as the speed cliff) rather than a free fix, and isn't needed now that the actual bug is
 fixed.
 
-**Two more real, confirmed gaps, not yet built, next up:**
+**Attack size and frequency (`AttackSizeGene`) was built and tested, and landed inconclusive.**
+`WarCabinet`'s JumpAttack/SlowAttack split (75/25 or 50/50 by policy tier, fixed in real Pascal) was
+made tunable; the search found a mild lean toward more-frequent-smaller attacks (+0.08 correlation
+with fitness) that isn't distinguishable from this scale's own noise floor. Not a confirmed effect
+in either direction.
 
-- Attack size and frequency (small fleets often vs. large fleets rarely) is currently a fixed
-  probability split ported straight from Pascal (`WarCabinet`'s 75/25 or 50/50 JumpAttack/SlowAttack
-  choice by policy tier), not tunable by any persona today.
-- Target selection is currently omniscient. `GetBestTarget` reads a candidate's `Ships`/`Defenses`
-  directly off the live world object, gated only by a one-time "have I ever discovered this world"
-  flag, no notion of stale or last-scouted intelligence distinct from ground truth. A human player
-  would only know what they last scouted. Worth fixing if the goal is a defensible opponent rather
-  than a cheating one.
+**Target selection is currently omniscient** (`GetBestTarget` reads a candidate's `Ships`/`Defenses`
+directly off the live world object, no stale/scouted-intel model distinct from ground truth), a real
+gap, deliberately not pursued: fixing it would only make the AI worse by construction, forcing it to
+act on less information than it has access to today. Not on the active list.
+
+## Production efficiency: is the economy leaking, and is that shaping our results?
+
+A real, separate question turned out to matter as much as any individual gene: is the game's
+production pipeline itself wasteful, and if so, are any of this session's own changes making that
+worse.
+
+**The baseline economy leaks a lot, independent of anything built this session.** Measured directly
+against real, unmodified `KingdomTurnHandler` playing Intro: 20.6% of all metal produced (and 14% of
+chemical) is lost outright to storage-cap overflow, while metal shortages simultaneously throttle
+industry growth more than any other resource, more than the next three industries combined. That's
+not a contradiction, it's the actual bug: some worlds accumulate metal they can't store while others
+are starved for the same resource, and nothing moves it between them. `SupplyLink`/`SurplusLink`
+only redistribute between a starbase and its immediately adjacent worlds, never empire-wide. This is
+a real, substantial inefficiency in the base game, not something this session's changes introduced,
+and it's now tracked in [issue #50](https://github.com/godefroi/anacreon-reconstructed-4021/issues/50)
+as a candidate player-facing report alongside other useful numbers (ships produced, ships per
+population, ship-transit-years).
+
+**One of this session's own genes measurably worsens this, and it's not the one that seemed most
+likely to.** A combined-genome comparison against a same-seat baseline found the evolved empire
+wasting 2.3x as much metal and 1.7x as much chemical to overflow, with ship output and
+shortage-driven losses unchanged, meaning it wasn't starving, it was accumulating more surplus than
+it could store. A factorial breakdown ruled out `CompositionGene` and `AttackSizeGene` (both
+contribute close to nothing) and isolated the actual cause with no ambiguity: `FocusGene` alone
+fully explains it, with zero contribution from `TrendWeightGene` or `CenterOfGravityGene` and no
+interaction effect between any of them. Mechanistically coherent with what Focus actually does,
+concentrating attacks onto one priority enemy changes production/dispatch rhythm enough that
+stockpiles build past storage caps in the gaps between commitments. This is the same gene that
+showed this session's only confirmed real *positive* correlation with win rate (+0.17 to +0.24) once
+seed count was scaled up enough to see past noise — a real side effect of doing the thing that
+helps, not evidence the underlying idea is bad.
 
 ## Training methodology, separate from persona capability
 
@@ -141,11 +173,30 @@ one.
 - `src/Reconstructed4021.Tests/Fixtures/OrionsBelt.scn`: a purpose-built 3-empire scenario with a
   guaranteed near/far opponent geometry and zero independent worlds, for isolating force-division
   and proximity questions from economic growth.
+- `src/Reconstructed4021.Core/Turns/ProductionDiagnostics.cs`: a static, opt-in accumulator tracking
+  production lost to storage-cap overflow and raw-material shortage, filterable to a single empire.
+  Used to find and isolate the `FocusGene` overflow effect above; also the natural data source for
+  [issue #50](https://github.com/godefroi/anacreon-reconstructed-4021/issues/50)'s proposed report.
 
 ## Open questions
 
-- Attack size/frequency and masked-intel target selection, both confirmed real gaps, neither built,
-  next up.
+- Whether reclaiming `FocusGene`'s own overflow (spending or redistributing the surplus it creates)
+  makes its already-positive effect on win rate stronger, now that the cause is confirmed and
+  isolated rather than hypothetical. The natural next build, and a better-understood one than the
+  trillum-logistics idea below.
+- Whether the general resource-redistribution gap behind both findings above (no empire-wide
+  mechanism moves surplus to shortage, only `SupplyLink`/`SurplusLink`'s adjacent-worlds-only
+  version) is worth fixing on its own, independent of any specific gene.
+- Trillum designation and logistics: since fuel/trillum turned out to be the dominant real cost of
+  heavy compositions, an NPE that recognizes its own preferred composition implies a trillum need,
+  designates a suitable world as `TrillumMine` to meet it, and moves the output to where a campaign
+  is actually launching from is a well-motivated next capability. `Orion's Belt` can't test this
+  fairly as it stands, though: at 3 worlds per empire, there's no room to dedicate one purely to
+  trillum mining without crippling something else. A prerequisite is a modest, still-controlled
+  expansion (a few more worlds per empire, symmetric across all three, still zero independent
+  worlds) that makes specialization a real choice rather than a forced sacrifice, without
+  reintroducing the "expand into empty space" economic-growth confound the current scenario was
+  built to remove.
 - Whether the force-division tax itself is addressable at all by tuning the existing decision
   structure, or whether it needs a genuinely different mechanism, such as an empire deliberately
   building up overwhelming economic strength before engaging more than one opponent.

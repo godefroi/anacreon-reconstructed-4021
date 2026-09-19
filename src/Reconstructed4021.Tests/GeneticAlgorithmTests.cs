@@ -100,7 +100,8 @@ public class GeneticAlgorithmTests
 
     private sealed record GeneVector(
         double Imperialist, double Defensive, double Offensive, double Factor, double Provoke, double SphereX,
-        double Proximity, double TrendWeight, double CenterOfGravity, double Focus, double Composition, double HeavyRange)
+        double Proximity, double TrendWeight, double CenterOfGravity, double Focus, double Composition, double HeavyRange,
+        double AttackSize = 0)
     {
         public NpeCharacter ToPersona()
         {
@@ -120,6 +121,7 @@ public class GeneticAlgorithmTests
                 FocusGene = (int)Math.Round(Focus),
                 CompositionGene = (int)Math.Round(Composition),
                 HeavyRangeGene = (int)Math.Round(HeavyRange),
+                AttackSizeGene = (int)Math.Round(AttackSize),
                 RandomGene = 50,
                 Techno = 50,
                 Honorable = 50,
@@ -154,6 +156,10 @@ public class GeneticAlgorithmTests
         // so the top of this range means "always fire regardless of target distance" -- paired with
         // the now-monotonic cutoff in NpeToolkit.DeployBattleFleet (0 = never, 30 = always).
         ["HeavyRange"] = new GeneBounds(0, 30),
+        // Signed: positive shifts WarCabinet's fixed JumpAttack/SlowAttack split toward JumpAttack
+        // (frequent, small), negative toward SlowAttack (rare, large). 0 reproduces the original fixed
+        // splits (75/25 Conflict, 50/50 War) exactly.
+        ["AttackSize"] = new GeneBounds(-100, 100),
     };
 
     [Test, Explicit]
@@ -187,7 +193,7 @@ public class GeneticAlgorithmTests
             var worst = scored[^1];
             Console.WriteLine($"gen {gen}: best={best.Fitness:0.#} (winrate={best.WinRate:P0}) worst={worst.Fitness:0.#} (winrate={worst.WinRate:P0}) mean={scored.Average(x => x.Fitness):0.#} meanWinRate={scored.Average(x => x.WinRate):P0} ({genStopwatch.Elapsed.TotalSeconds:0.#}s, {PopulationSize * SeedsPerCandidate} evals)");
             var b = best.Genome;
-            Console.WriteLine($"  best genes: Imp={b.Imperialist:0} Def={b.Defensive:0} Off={b.Offensive:0} Fac={b.Factor:0} Prv={b.Provoke:0} Sph={b.SphereX:0} Prx={b.Proximity:0} Trd={b.TrendWeight:0} Cog={b.CenterOfGravity:0} Foc={b.Focus:0}");
+            Console.WriteLine($"  best genes: Imp={b.Imperialist:0} Def={b.Defensive:0} Off={b.Offensive:0} Fac={b.Factor:0} Prv={b.Provoke:0} Sph={b.SphereX:0} Prx={b.Proximity:0} Trd={b.TrendWeight:0} Cog={b.CenterOfGravity:0} Foc={b.Focus:0} Atk={b.AttackSize:0}");
 
             if (best.Fitness > bestEverFitness) {
                 bestEverFitness = best.Fitness;
@@ -202,7 +208,7 @@ public class GeneticAlgorithmTests
         var totalEvals = totalWins + totalLosses + totalNeither;
         Console.WriteLine($"total wall clock: {overallStopwatch.Elapsed.TotalSeconds:0.#}s ({totalEvals} playouts, {overallStopwatch.Elapsed.TotalMilliseconds / totalEvals:0.#}ms/playout)");
         Console.WriteLine($"eliminations across entire search: evolved-wins={totalWins} baseline-wins={totalLosses} neither={totalNeither} (of {totalEvals} total playouts)");
-        Console.WriteLine($"best ever: fitness={bestEverFitness:0.#} genes: Imp={bestEver!.Imperialist:0} Def={bestEver.Defensive:0} Off={bestEver.Offensive:0} Fac={bestEver.Factor:0} Prv={bestEver.Provoke:0} Sph={bestEver.SphereX:0} Prx={bestEver.Proximity:0} Trd={bestEver.TrendWeight:0} Cog={bestEver.CenterOfGravity:0} Foc={bestEver.Focus:0}");
+        Console.WriteLine($"best ever: fitness={bestEverFitness:0.#} genes: Imp={bestEver!.Imperialist:0} Def={bestEver.Defensive:0} Off={bestEver.Offensive:0} Fac={bestEver.Factor:0} Prv={bestEver.Provoke:0} Sph={bestEver.SphereX:0} Prx={bestEver.Proximity:0} Trd={bestEver.TrendWeight:0} Cog={bestEver.CenterOfGravity:0} Foc={bestEver.Focus:0} Atk={bestEver.AttackSize:0}");
         Console.WriteLine("Kingdom1 baseline ranges: Imp=1-5 Def=50-75 Off=1-2 Fac=15 Prv=75 Sph=25-75 Prx=Trd=Cog=Foc=0 (fixed, real games never set these)");
         Console.WriteLine("Kingdom2 baseline ranges: Imp=50-100 Def=5-10 Off=50-100 Fac=25 Prv=50-100 Sph=25-100 Prx=Trd=Cog=Foc=0 (fixed, real games never set these)");
 
@@ -245,19 +251,20 @@ public class GeneticAlgorithmTests
             var focus = gaRandom.Next(0, 101);
             var composition = gaRandom.Next(0, 101);
             var heavyRange = gaRandom.Next(0, 101);
+            var attackSize = gaRandom.Next(-100, 101);
             population.Add(useKingdom2Style
                 ? new GeneVector(
                     Imperialist: gaRandom.Next(50, 101), Defensive: gaRandom.Next(5, 11),
                     Offensive: gaRandom.Next(50, 101), Factor: 25,
                     Provoke: gaRandom.Next(50, 101), SphereX: gaRandom.Next(25, 101),
                     Proximity: proximity, TrendWeight: trendWeight, CenterOfGravity: centerOfGravity, Focus: focus,
-                    Composition: composition, HeavyRange: heavyRange)
+                    Composition: composition, HeavyRange: heavyRange, AttackSize: attackSize)
                 : new GeneVector(
                     Imperialist: gaRandom.Next(1, 6), Defensive: gaRandom.Next(50, 76),
                     Offensive: gaRandom.Next(1, 3), Factor: 15,
                     Provoke: 75, SphereX: gaRandom.Next(25, 76),
                     Proximity: proximity, TrendWeight: trendWeight, CenterOfGravity: centerOfGravity, Focus: focus,
-                    Composition: composition, HeavyRange: heavyRange));
+                    Composition: composition, HeavyRange: heavyRange, AttackSize: attackSize));
         }
         return population;
     }
@@ -282,7 +289,7 @@ public class GeneticAlgorithmTests
         (a.Offensive + b.Offensive) / 2, (a.Factor + b.Factor) / 2,
         (a.Provoke + b.Provoke) / 2, (a.SphereX + b.SphereX) / 2, (a.Proximity + b.Proximity) / 2,
         (a.TrendWeight + b.TrendWeight) / 2, (a.CenterOfGravity + b.CenterOfGravity) / 2, (a.Focus + b.Focus) / 2,
-        (a.Composition + b.Composition) / 2, (a.HeavyRange + b.HeavyRange) / 2);
+        (a.Composition + b.Composition) / 2, (a.HeavyRange + b.HeavyRange) / 2, (a.AttackSize + b.AttackSize) / 2);
 
     private static GeneVector Mutate(GeneVector g, Random gaRandom) => new(
         Perturb(g.Imperialist, Bounds["Imperialist"], gaRandom),
@@ -296,7 +303,8 @@ public class GeneticAlgorithmTests
         Perturb(g.CenterOfGravity, Bounds["CenterOfGravity"], gaRandom),
         Perturb(g.Focus, Bounds["Focus"], gaRandom),
         Perturb(g.Composition, Bounds["Composition"], gaRandom),
-        Perturb(g.HeavyRange, Bounds["HeavyRange"], gaRandom));
+        Perturb(g.HeavyRange, Bounds["HeavyRange"], gaRandom),
+        Perturb(g.AttackSize, Bounds["AttackSize"], gaRandom));
 
     /// <summary>Box-Muller Gaussian step, sigma = 10% of the gene's real (union) range.</summary>
     private static double Perturb(double value, GeneBounds bounds, Random gaRandom)
@@ -494,7 +502,7 @@ public class GeneticAlgorithmTests
             var worst = scored[^1];
             Console.WriteLine($"gen {gen}: best={best.Fitness:0.#} (winRateAny={best.WinRateAny:P0} winRateAll={best.WinRateAll:P0}) worst={worst.Fitness:0.#} mean={scored.Average(x => x.Fitness):0.#} meanWinRateAny={scored.Average(x => x.WinRateAny):P0} ({genStopwatch.Elapsed.TotalSeconds:0.#}s, {IntroPopulationSize * IntroSeedsPerCandidate} evals)");
             var b = best.Genome;
-            Console.WriteLine($"  best genes: Imp={b.Imperialist:0} Def={b.Defensive:0} Off={b.Offensive:0} Fac={b.Factor:0} Prv={b.Provoke:0} Sph={b.SphereX:0} Prx={b.Proximity:0} Trd={b.TrendWeight:0} Cog={b.CenterOfGravity:0} Foc={b.Focus:0}");
+            Console.WriteLine($"  best genes: Imp={b.Imperialist:0} Def={b.Defensive:0} Off={b.Offensive:0} Fac={b.Factor:0} Prv={b.Provoke:0} Sph={b.SphereX:0} Prx={b.Proximity:0} Trd={b.TrendWeight:0} Cog={b.CenterOfGravity:0} Foc={b.Focus:0} Atk={b.AttackSize:0}");
 
             if (best.Fitness > bestEverFitness) {
                 bestEverFitness = best.Fitness;
@@ -508,7 +516,7 @@ public class GeneticAlgorithmTests
         overallStopwatch.Stop();
         Console.WriteLine($"total wall clock: {overallStopwatch.Elapsed.TotalSeconds:0.#}s ({totalSeeds} playouts, {overallStopwatch.Elapsed.TotalMilliseconds / totalSeeds:0.#}ms/playout)");
         Console.WriteLine($"across entire search: evolved-eliminated-at-least-one={totalAnyWins} evolved-eliminated-all-four={totalAllWins} evolved-itself-eliminated={totalLosses} (of {totalSeeds} total playouts)");
-        Console.WriteLine($"best ever: fitness={bestEverFitness:0.#} genes: Imp={bestEver!.Imperialist:0} Def={bestEver.Defensive:0} Off={bestEver.Offensive:0} Fac={bestEver.Factor:0} Prv={bestEver.Provoke:0} Sph={bestEver.SphereX:0} Prx={bestEver.Proximity:0} Trd={bestEver.TrendWeight:0} Cog={bestEver.CenterOfGravity:0} Foc={bestEver.Focus:0}");
+        Console.WriteLine($"best ever: fitness={bestEverFitness:0.#} genes: Imp={bestEver!.Imperialist:0} Def={bestEver.Defensive:0} Off={bestEver.Offensive:0} Fac={bestEver.Factor:0} Prv={bestEver.Provoke:0} Sph={bestEver.SphereX:0} Prx={bestEver.Proximity:0} Trd={bestEver.TrendWeight:0} Cog={bestEver.CenterOfGravity:0} Foc={bestEver.Focus:0} Atk={bestEver.AttackSize:0}");
 
         var heldOutStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var heldOutAnyWins = 0;
@@ -534,6 +542,7 @@ public class GeneticAlgorithmTests
         ReportGeneCorrelation("Focus", allEvaluated, c => c.Genome.Focus);
         ReportGeneCorrelation("TrendWeight", allEvaluated, c => c.Genome.TrendWeight);
         ReportGeneCorrelation("CenterOfGravity", allEvaluated, c => c.Genome.CenterOfGravity);
+        ReportGeneCorrelation("AttackSize", allEvaluated, c => c.Genome.AttackSize);
 
         await Task.CompletedTask;
     }
@@ -801,7 +810,7 @@ public class GeneticAlgorithmTests
             var worst = scored[^1];
             Console.WriteLine($"gen {gen}: best={best.Fitness:0.#} (winRateAny={best.WinRateAny:P0} winRateAll={best.WinRateAll:P0}) worst={worst.Fitness:0.#} mean={scored.Average(x => x.Fitness):0.#} meanWinRateAny={scored.Average(x => x.WinRateAny):P0} ({genStopwatch.Elapsed.TotalSeconds:0.#}s, {OrionsBeltPopulationSize * OrionsBeltSeedsPerCandidate} evals)");
             var b = best.Genome;
-            Console.WriteLine($"  best genes: Imp={b.Imperialist:0} Def={b.Defensive:0} Off={b.Offensive:0} Fac={b.Factor:0} Prv={b.Provoke:0} Sph={b.SphereX:0} Prx={b.Proximity:0} Trd={b.TrendWeight:0} Cog={b.CenterOfGravity:0} Foc={b.Focus:0} Cmp={b.Composition:0} Hrg={b.HeavyRange:0}");
+            Console.WriteLine($"  best genes: Imp={b.Imperialist:0} Def={b.Defensive:0} Off={b.Offensive:0} Fac={b.Factor:0} Prv={b.Provoke:0} Sph={b.SphereX:0} Prx={b.Proximity:0} Trd={b.TrendWeight:0} Cog={b.CenterOfGravity:0} Foc={b.Focus:0} Cmp={b.Composition:0} Hrg={b.HeavyRange:0} Atk={b.AttackSize:0}");
 
             if (best.Fitness > bestEverFitness) {
                 bestEverFitness = best.Fitness;
@@ -815,7 +824,7 @@ public class GeneticAlgorithmTests
         overallStopwatch.Stop();
         Console.WriteLine($"total wall clock: {overallStopwatch.Elapsed.TotalSeconds:0.#}s ({totalSeeds} playouts, {overallStopwatch.Elapsed.TotalMilliseconds / totalSeeds:0.#}ms/playout)");
         Console.WriteLine($"across entire search: evolved-eliminated-at-least-one={totalAnyWins} evolved-eliminated-both={totalAllWins} evolved-itself-eliminated={totalLosses} (of {totalSeeds} total playouts)");
-        Console.WriteLine($"best ever: fitness={bestEverFitness:0.#} genes: Imp={bestEver!.Imperialist:0} Def={bestEver.Defensive:0} Off={bestEver.Offensive:0} Fac={bestEver.Factor:0} Prv={bestEver.Provoke:0} Sph={bestEver.SphereX:0} Prx={bestEver.Proximity:0} Trd={bestEver.TrendWeight:0} Cog={bestEver.CenterOfGravity:0} Foc={bestEver.Focus:0} Cmp={bestEver.Composition:0} Hrg={bestEver.HeavyRange:0}");
+        Console.WriteLine($"best ever: fitness={bestEverFitness:0.#} genes: Imp={bestEver!.Imperialist:0} Def={bestEver.Defensive:0} Off={bestEver.Offensive:0} Fac={bestEver.Factor:0} Prv={bestEver.Provoke:0} Sph={bestEver.SphereX:0} Prx={bestEver.Proximity:0} Trd={bestEver.TrendWeight:0} Cog={bestEver.CenterOfGravity:0} Foc={bestEver.Focus:0} Cmp={bestEver.Composition:0} Hrg={bestEver.HeavyRange:0} Atk={bestEver.AttackSize:0}");
 
         var heldOutStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var heldOutAnyWins = 0;
@@ -840,6 +849,7 @@ public class GeneticAlgorithmTests
         ReportGeneCorrelation("CenterOfGravity", allEvaluated, c => c.Genome.CenterOfGravity);
         ReportGeneCorrelation("Composition", allEvaluated, c => c.Genome.Composition);
         ReportGeneCorrelation("HeavyRange", allEvaluated, c => c.Genome.HeavyRange);
+        ReportGeneCorrelation("AttackSize", allEvaluated, c => c.Genome.AttackSize);
 
         await Task.CompletedTask;
     }
@@ -934,6 +944,65 @@ public class GeneticAlgorithmTests
         await Task.CompletedTask;
     }
 
+    // ---- Diagnostic-only, temporary: verifies AttackSizeGene actually shifts real WarCabinet dispatch ----
+    // Calls WarCabinet directly (Conflict and War tiers) with AttackChance pinned to 100 and Balance to
+    // 0 so the attack always fires, over many trials per AttackSizeGene value, and tallies how many
+    // KingdomFleetState entries land as JumpAttack vs. SlowAttack. Not kept as a permanent regression
+    // test -- a one-off check that the gene's shift actually reaches real dispatch behavior, not just
+    // that the code compiles. Confirmed monotonic and matching the original fixed splits at 0 (within
+    // sampling noise over 200 trials): Conflict 0=78% jump (vs. the real 75% baseline), War 0=49.5%
+    // (vs. 50%); Conflict/War both hit 0% at AttackSize=-100 and 100% at AttackSize=100, the clamped
+    // ends of the +/-50-point shift. persona.WorldPower must be set to a nonzero value for GetBestTarget
+    // to ever pick a target at all (its own scoring factor multiplies by WorldPower/20) -- a real trap
+    // for any future direct WarCabinet/DeployJumpAttack call in a test, not obvious from either
+    // method's own signature.
+    [Test, Explicit]
+    public async Task DiagnoseAttackSizeGating()
+    {
+        const int trials = 200;
+        foreach (var tier in new[] { PolicyType.Conflict, PolicyType.War }) {
+            foreach (var attackSize in new[] { -100, 0, 100 }) {
+                int jumpCount = 0, slowCount = 0;
+                for (var trial = 0; trial < trials; trial++) {
+                    var attacker = new Empire { Name = "Attacker" };
+                    var defender = new Empire { Name = "Defender" };
+                    var fromWorld = new Planet {
+                        Location = new Core.Galaxy.Coordinate(0, 0),
+                        Owner = attacker,
+                        Class = WorldClass.EarthLike,
+                        TechLevel = TechLevel.Jump,
+                        Efficiency = 100,
+                        Type = WorldType.Capital,
+                        Ships = new ShipCounts { Starships = 2000, Penetrators = 2000, Jumpships = 2000, HunterKillers = 2000 },
+                    };
+                    fromWorld.Cargo.Trillum = 9999;
+                    var target = new Planet { Location = new Core.Galaxy.Coordinate(5, 0), Owner = defender, Class = WorldClass.EarthLike, TechLevel = TechLevel.Jump, Population = 1000 };
+
+                    var game = new Game(new Core.Galaxy.Galaxy(size: 21));
+                    game.Galaxy.Planets.AddRange([fromWorld, target]);
+                    game.Empires.AddRange([attacker, defender]);
+                    attacker.Planets.MarkKnown(target);
+                    var random = new Random(trial);
+                    var fleetStates = new Dictionary<Fleet, KingdomFleetState>();
+                    var state = new Dictionary<Empire, StateDeptRecord> {
+                        [defender] = new StateDeptRecord { Policy = tier, AttackChance = 100, Balance = 0 },
+                    };
+                    var persona = new NpeCharacter { AttackSizeGene = attackSize, WorldPower = 50 };
+
+                    NpeToolkit.WarCabinet(attacker, [fromWorld], fleetStates, persona, state, PolicyType.Neutral, game, random);
+
+                    jumpCount += fleetStates.Values.Count(s => s.Mission == NpeMissionType.JumpAttack);
+                    slowCount += fleetStates.Values.Count(s => s.Mission == NpeMissionType.SlowAttack);
+                }
+                var total = jumpCount + slowCount;
+                var jumpPct = total == 0 ? 0 : 100.0 * jumpCount / total;
+                Console.WriteLine($"tier={tier,-8} AttackSize={attackSize,4}: jump={jumpCount,3} slow={slowCount,3} (jump%={jumpPct:0.#})");
+            }
+        }
+
+        await Task.CompletedTask;
+    }
+
     // ---- Diagnostic-only, temporary: does fuel/trillum exhaustion actually happen in real runs? ----
     // Checks two things full playouts can reveal that the direct-call tests above can't: (1) real
     // pre-flight aborts (DeployBattleFleet's EDA>Range check) and mid-journey FleetOutOfFuel events,
@@ -992,6 +1061,265 @@ public class GeneticAlgorithmTests
         } finally {
             Environment.SetEnvironmentVariable("NPE_DIAG", null);
         }
+
+        await Task.CompletedTask;
+    }
+
+    // ---- Diagnostic-only: does our own gene work make production waste/shortage worse? ----
+    // Compares the slot-0 empire's own ProductionDiagnostics totals (storage-cap overflow, industry
+    // growth lost to metals shortage, ships lost to shortage) between two conditions on the same
+    // scenario/seeds: an ordinary Kingdom1 baseline in that seat, versus Kingdom2ModernTurnHandler
+    // with a representative aggressive+composition genome in that same seat. ProductionDiagnostics has
+    // no per-empire breakdown by default (a whole-game accumulator, fine for the earlier Intro-baseline
+    // round, which only needed a single empire's own scenario anyway) -- ProductionDiagnostics.Tracks
+    // was added specifically for this comparison, gated by a nullable FilterEmpire so the original
+    // whole-game behavior (FilterEmpire=null) is unchanged for every existing caller.
+    //
+    // No persisted "best-ever" genome vector exists on disk from the Composition/HeavyRange/AttackSize
+    // rounds (their console output wasn't saved) -- this reuses DiagnoseFleetDispatch's own
+    // representative-aggressive shape (Off high/Def low, the shape every round converged toward) and
+    // adds the two gene values those specific rounds' reports did record explicitly: Composition=44
+    // (HeavyRangeGene round's best-ever) and AttackSize=19 (AttackSizeGene round's best-ever).
+    // TrendWeight/CenterOfGravity/Focus/HeavyRange have no single recorded "best" value to replay (they
+    // showed weak or inconsistent signals across rounds) -- held at representative mid-range values
+    // rather than 0, so this genome exercises the same decision paths a real evolved candidate would,
+    // not just the two genes this round cares about in isolation.
+    [Test, Explicit]
+    public async Task CompareProductionWasteBaselineVsEvolved()
+    {
+        var obPath = Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "src", "Reconstructed4021.Tests", "Fixtures", "OrionsBelt.scn");
+        var obText = File.ReadAllText(obPath);
+
+        var evolvedGenome = new GeneVector(
+            Imperialist: 60, Defensive: 7, Offensive: 88, Factor: 25, Provoke: 70, SphereX: 60,
+            Proximity: 0, TrendWeight: 20, CenterOfGravity: 20, Focus: 30, Composition: 44, HeavyRange: 15, AttackSize: 19);
+
+        const int seedCount = 5;
+
+        void RunCondition(string label, bool evolvedSlotUsesGene)
+        {
+            ProductionDiagnostics.Reset();
+            ProductionDiagnostics.Enabled = true;
+            try {
+                for (var seed = 0; seed < seedCount; seed++) {
+                    var random = new Random(seed);
+                    var setup = new GalaxySetup(random);
+                    var loader = new ScenarioLoader(setup, random);
+                    var game = loader.Load(obText, OrionsBeltPlayers);
+                    var startYear = game.Year;
+                    var evolved = game.Empires.First(e => e.Name == "evolved");
+                    var opponents = game.Empires.Where(e => e != evolved).ToList();
+
+                    ProductionDiagnostics.FilterEmpire = evolved;
+
+                    if (evolvedSlotUsesGene) {
+                        NpeToolkit.SetEmpireDefenses(evolved, random);
+                        game.TurnHandlers[evolved] = new Kingdom2ModernTurnHandler(evolvedGenome.ToPersona(), PolicyType.Harass, random);
+                    } else {
+                        game.TurnHandlers[evolved] = new KingdomTurnHandler(evolved, NpeEmpireType.Kingdom1, random);
+                    }
+                    foreach (var opponent in opponents) {
+                        game.TurnHandlers[opponent] = new KingdomTurnHandler(opponent, NpeEmpireType.Kingdom1, random);
+                    }
+
+                    var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random));
+                    var maxCalls = OrionsBeltYearCap * game.Empires.Count * 2;
+                    for (var call = 0; call < maxCalls; call++) {
+                        turnEngine.AdvanceOneTurn(game);
+                        var evolvedAlive = evolved.Status != EmpireStatus.Eliminated;
+                        var opponentsRemaining = opponents.Count(o => o.Status != EmpireStatus.Eliminated);
+                        if (!evolvedAlive || opponentsRemaining == 0 || game.Year - startYear >= OrionsBeltYearCap) {
+                            break;
+                        }
+                    }
+                }
+
+                Console.WriteLine($"=== {label}: slot-0 ({(evolvedSlotUsesGene ? "Kingdom2Modern, evolved genome" : "Kingdom1 baseline")}) totals across {seedCount} seeds, {OrionsBeltYearCap}-year horizon ===");
+                Console.WriteLine($"  overflow lost (per cargo type): {string.Join(", ", ProductionDiagnostics.OverflowLost.OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key}={kv.Value}"))}");
+                Console.WriteLine($"  gross cargo produced (per cargo type): {string.Join(", ", ProductionDiagnostics.GrossCargoProduced.OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key}={kv.Value}"))}");
+                Console.WriteLine($"  industry growth lost to metals shortage (per industry): {string.Join(", ", ProductionDiagnostics.IndustryGrowthLostToMetalsShortage.OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key}={kv.Value}"))}");
+                Console.WriteLine($"  ships lost to shortage (per ship type): {string.Join(", ", ProductionDiagnostics.ShipsLostToShortage.OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key}={kv.Value}"))}");
+                Console.WriteLine($"  gross ships produced (per ship type): {string.Join(", ", ProductionDiagnostics.GrossShipsProduced.OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key}={kv.Value}"))}");
+                Console.WriteLine($"  cargo lost to shortage (per cargo type): {string.Join(", ", ProductionDiagnostics.CargoLostToShortage.OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key}={kv.Value}"))}");
+            } finally {
+                ProductionDiagnostics.Enabled = false;
+                ProductionDiagnostics.FilterEmpire = null;
+            }
+        }
+
+        RunCondition("BASELINE", evolvedSlotUsesGene: false);
+        RunCondition("EVOLVED", evolvedSlotUsesGene: true);
+
+        await Task.CompletedTask;
+    }
+
+    // ---- Diagnostic-only: 2x2 factorial isolating Composition vs. AttackSize's contribution to the
+    // extra overflow found in CompareProductionWasteBaselineVsEvolved. Every other new gene
+    // (Proximity/TrendWeight/CenterOfGravity/Focus) is held at its true no-op default (0) in every
+    // cell, so only Composition and AttackSize vary. The base six behavioral genes (Imperialist/
+    // Defensive/Offensive/Factor/Provoke/SphereX) are held fixed at the same aggressive shape used in
+    // the prior round's combined genome, in every cell -- they define "who this empire is" and
+    // changing them would be a third confound, not a no-op.
+    //
+    // HeavyRangeGene is the one gene NOT held at 0 despite not being one of the two under test: it
+    // gates whether a heavy wave fires at all (DeployBattleFleet's own `compositionGene > 0 &&
+    // withinHeavyRange` check, distance <= heavyRangeGene) -- at 0 it only permits distance-0 targets,
+    // which makes Composition inert regardless of its own value. Held at 30 (safely above Orion's
+    // Belt's 19-max Chebyshev distance, i.e. "permissive") in all four cells so Composition's own
+    // effect is actually testable; this is harmless in the Composition=0 cells since compositionGene>0
+    // already gates the whole branch off there.
+    [Test, Explicit]
+    public async Task CompareProductionWasteFactorial()
+    {
+        var obPath = Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "src", "Reconstructed4021.Tests", "Fixtures", "OrionsBelt.scn");
+        var obText = File.ReadAllText(obPath);
+
+        const int seedCount = 5;
+
+        GeneVector Genome(double composition, double attackSize) => new(
+            Imperialist: 60, Defensive: 7, Offensive: 88, Factor: 25, Provoke: 70, SphereX: 60,
+            Proximity: 0, TrendWeight: 0, CenterOfGravity: 0, Focus: 0, Composition: composition, HeavyRange: 30, AttackSize: attackSize);
+
+        void RunCell(string label, GeneVector genome)
+        {
+            ProductionDiagnostics.Reset();
+            ProductionDiagnostics.Enabled = true;
+            try {
+                for (var seed = 0; seed < seedCount; seed++) {
+                    var random = new Random(seed);
+                    var setup = new GalaxySetup(random);
+                    var loader = new ScenarioLoader(setup, random);
+                    var game = loader.Load(obText, OrionsBeltPlayers);
+                    var startYear = game.Year;
+                    var evolved = game.Empires.First(e => e.Name == "evolved");
+                    var opponents = game.Empires.Where(e => e != evolved).ToList();
+
+                    ProductionDiagnostics.FilterEmpire = evolved;
+
+                    NpeToolkit.SetEmpireDefenses(evolved, random);
+                    game.TurnHandlers[evolved] = new Kingdom2ModernTurnHandler(genome.ToPersona(), PolicyType.Harass, random);
+                    foreach (var opponent in opponents) {
+                        game.TurnHandlers[opponent] = new KingdomTurnHandler(opponent, NpeEmpireType.Kingdom1, random);
+                    }
+
+                    var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random));
+                    var maxCalls = OrionsBeltYearCap * game.Empires.Count * 2;
+                    for (var call = 0; call < maxCalls; call++) {
+                        turnEngine.AdvanceOneTurn(game);
+                        var evolvedAlive = evolved.Status != EmpireStatus.Eliminated;
+                        var opponentsRemaining = opponents.Count(o => o.Status != EmpireStatus.Eliminated);
+                        if (!evolvedAlive || opponentsRemaining == 0 || game.Year - startYear >= OrionsBeltYearCap) {
+                            break;
+                        }
+                    }
+                }
+
+                var metalOverflow = ProductionDiagnostics.OverflowLost.GetValueOrDefault(CargoType.Metals);
+                var metalGross = ProductionDiagnostics.GrossCargoProduced.GetValueOrDefault(CargoType.Metals);
+                var cheOverflow = ProductionDiagnostics.OverflowLost.GetValueOrDefault(CargoType.Chemicals);
+                var cheGross = ProductionDiagnostics.GrossCargoProduced.GetValueOrDefault(CargoType.Chemicals);
+                var metalShortage = ProductionDiagnostics.IndustryGrowthLostToMetalsShortage.Values.Sum();
+                var shipsLost = ProductionDiagnostics.ShipsLostToShortage.Values.Sum();
+                var shipsGross = ProductionDiagnostics.GrossShipsProduced.Values.Sum();
+
+                Console.WriteLine($"=== {label} (Composition={genome.Composition}, AttackSize={genome.AttackSize}) across {seedCount} seeds ===");
+                Console.WriteLine($"  metal overflow: {metalOverflow}/{metalGross} ({(metalGross == 0 ? 0 : 100.0 * metalOverflow / metalGross):0.0}%)");
+                Console.WriteLine($"  chemical overflow: {cheOverflow}/{cheGross} ({(cheGross == 0 ? 0 : 100.0 * cheOverflow / cheGross):0.0}%)");
+                Console.WriteLine($"  industry growth lost to metals shortage: {metalShortage}");
+                Console.WriteLine($"  ships lost to shortage: {shipsLost}/{shipsGross} ({(shipsGross == 0 ? 0 : 100.0 * shipsLost / shipsGross):0.00}%)");
+            } finally {
+                ProductionDiagnostics.Enabled = false;
+                ProductionDiagnostics.FilterEmpire = null;
+            }
+        }
+
+        RunCell("Composition=0,  AttackSize=0 ", Genome(0, 0));
+        RunCell("Composition=44, AttackSize=0 ", Genome(44, 0));
+        RunCell("Composition=0,  AttackSize=19", Genome(0, 19));
+        RunCell("Composition=44, AttackSize=19", Genome(44, 19));
+
+        await Task.CompletedTask;
+    }
+
+    // ---- Diagnostic-only: 2x2x2 factorial isolating TrendWeight/CenterOfGravity/Focus's contribution
+    // to the extra overflow found in CompareProductionWasteBaselineVsEvolved, now that
+    // CompareProductionWasteFactorial ruled out Composition/AttackSize (both held at 0 here, along
+    // with Proximity). HeavyRangeGene held at 30 for consistency with the prior factorial even though
+    // it's moot with Composition=0. Base six genes fixed at the same aggressive shape as every prior
+    // round in this file.
+    [Test, Explicit]
+    public async Task CompareProductionWasteFactorialTrend()
+    {
+        var obPath = Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "src", "Reconstructed4021.Tests", "Fixtures", "OrionsBelt.scn");
+        var obText = File.ReadAllText(obPath);
+
+        const int seedCount = 5;
+
+        GeneVector Genome(double trend, double cog, double focus) => new(
+            Imperialist: 60, Defensive: 7, Offensive: 88, Factor: 25, Provoke: 70, SphereX: 60,
+            Proximity: 0, TrendWeight: trend, CenterOfGravity: cog, Focus: focus, Composition: 0, HeavyRange: 30, AttackSize: 0);
+
+        void RunCell(string label, GeneVector genome)
+        {
+            ProductionDiagnostics.Reset();
+            ProductionDiagnostics.Enabled = true;
+            try {
+                for (var seed = 0; seed < seedCount; seed++) {
+                    var random = new Random(seed);
+                    var setup = new GalaxySetup(random);
+                    var loader = new ScenarioLoader(setup, random);
+                    var game = loader.Load(obText, OrionsBeltPlayers);
+                    var startYear = game.Year;
+                    var evolved = game.Empires.First(e => e.Name == "evolved");
+                    var opponents = game.Empires.Where(e => e != evolved).ToList();
+
+                    ProductionDiagnostics.FilterEmpire = evolved;
+
+                    NpeToolkit.SetEmpireDefenses(evolved, random);
+                    game.TurnHandlers[evolved] = new Kingdom2ModernTurnHandler(genome.ToPersona(), PolicyType.Harass, random);
+                    foreach (var opponent in opponents) {
+                        game.TurnHandlers[opponent] = new KingdomTurnHandler(opponent, NpeEmpireType.Kingdom1, random);
+                    }
+
+                    var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random));
+                    var maxCalls = OrionsBeltYearCap * game.Empires.Count * 2;
+                    for (var call = 0; call < maxCalls; call++) {
+                        turnEngine.AdvanceOneTurn(game);
+                        var evolvedAlive = evolved.Status != EmpireStatus.Eliminated;
+                        var opponentsRemaining = opponents.Count(o => o.Status != EmpireStatus.Eliminated);
+                        if (!evolvedAlive || opponentsRemaining == 0 || game.Year - startYear >= OrionsBeltYearCap) {
+                            break;
+                        }
+                    }
+                }
+
+                var metalOverflow = ProductionDiagnostics.OverflowLost.GetValueOrDefault(CargoType.Metals);
+                var metalGross = ProductionDiagnostics.GrossCargoProduced.GetValueOrDefault(CargoType.Metals);
+                var cheOverflow = ProductionDiagnostics.OverflowLost.GetValueOrDefault(CargoType.Chemicals);
+                var cheGross = ProductionDiagnostics.GrossCargoProduced.GetValueOrDefault(CargoType.Chemicals);
+                var metalShortage = ProductionDiagnostics.IndustryGrowthLostToMetalsShortage.Values.Sum();
+                var shipsLost = ProductionDiagnostics.ShipsLostToShortage.Values.Sum();
+                var shipsGross = ProductionDiagnostics.GrossShipsProduced.Values.Sum();
+
+                Console.WriteLine($"=== {label} (Trend={genome.TrendWeight}, CoG={genome.CenterOfGravity}, Focus={genome.Focus}) across {seedCount} seeds ===");
+                Console.WriteLine($"  metal overflow: {metalOverflow}/{metalGross} ({(metalGross == 0 ? 0 : 100.0 * metalOverflow / metalGross):0.0}%)");
+                Console.WriteLine($"  chemical overflow: {cheOverflow}/{cheGross} ({(cheGross == 0 ? 0 : 100.0 * cheOverflow / cheGross):0.0}%)");
+                Console.WriteLine($"  industry growth lost to metals shortage: {metalShortage}");
+                Console.WriteLine($"  ships lost to shortage: {shipsLost}/{shipsGross} ({(shipsGross == 0 ? 0 : 100.0 * shipsLost / shipsGross):0.00}%)");
+            } finally {
+                ProductionDiagnostics.Enabled = false;
+                ProductionDiagnostics.FilterEmpire = null;
+            }
+        }
+
+        RunCell("Trend=0,  CoG=0,  Focus=0 ", Genome(0, 0, 0));
+        RunCell("Trend=20, CoG=0,  Focus=0 ", Genome(20, 0, 0));
+        RunCell("Trend=0,  CoG=20, Focus=0 ", Genome(0, 20, 0));
+        RunCell("Trend=0,  CoG=0,  Focus=30", Genome(0, 0, 30));
+        RunCell("Trend=20, CoG=20, Focus=0 ", Genome(20, 20, 0));
+        RunCell("Trend=20, CoG=0,  Focus=30", Genome(20, 0, 30));
+        RunCell("Trend=0,  CoG=20, Focus=30", Genome(0, 20, 30));
+        RunCell("Trend=20, CoG=20, Focus=30", Genome(20, 20, 30));
 
         await Task.CompletedTask;
     }
