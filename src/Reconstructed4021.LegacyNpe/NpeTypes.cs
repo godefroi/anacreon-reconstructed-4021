@@ -56,6 +56,68 @@ public sealed class NpeCharacter
     public int Honorable { get; set; }
     public int SphereX { get; set; }
 
+    /// <summary>
+    /// Not real Pascal — no NPECharacterRecord field exists for this. How strongly
+    /// <see cref="NpeToolkit.GetBestTarget"/> discounts a candidate's value by its distance from the
+    /// attacker's nearest regional capital: 0 reproduces the original distance-blind scoring exactly
+    /// (real Pascal has no notion of "nearby" when picking an attack target, only when picking which
+    /// of the attacker's own bases launches from), higher values increasingly favor a nearby, merely
+    /// decent target over a farther, more valuable one. Defaults to 0 everywhere except the genetic
+    /// algorithm harness, which evolves it.
+    /// </summary>
+    public int ProximityGene { get; set; }
+
+    /// <summary>
+    /// Not real Pascal — no NPECharacterRecord field exists for this. How much weight
+    /// <see cref="NpeToolkit.EnemyPriority"/> gives a specific enemy's recent military-strength
+    /// decline (<see cref="StateDeptRecord.Trend"/>) when ranking who's worth focusing on: 0 means the
+    /// ranking ignores trend entirely (today's behavior — StateDepartment/WarCabinet only ever look at
+    /// an enemy's current strength, never its trajectory). Defaults to 0 everywhere except the genetic
+    /// algorithm harness, which evolves it.
+    /// </summary>
+    public int TrendWeightGene { get; set; }
+
+    /// <summary>
+    /// Not real Pascal — no NPECharacterRecord field exists for this. How much weight
+    /// <see cref="NpeToolkit.EnemyPriority"/> gives an enemy empire's overall distance (this empire's
+    /// capital to that empire's capital — the "center of gravity," distinct from
+    /// <see cref="ProximityGene"/>'s own per-world distance once a target is already chosen): 0 means
+    /// the ranking ignores it entirely. Defaults to 0 everywhere except the genetic algorithm harness,
+    /// which evolves it.
+    /// </summary>
+    public int CenterOfGravityGene { get; set; }
+
+    /// <summary>
+    /// Not real Pascal — no NPECharacterRecord field exists for this. How strongly
+    /// <see cref="NpeToolkit.WarCabinet"/> concentrates aggression on the single highest-<see
+    /// cref="NpeToolkit.EnemyPriority"/> active enemy instead of treating every enemy independently
+    /// (today's behavior, and what 0 reproduces exactly): raises the top-priority enemy's effective
+    /// attack chance and lowers everyone else's, by up to half of this gene's own value. Defaults to 0
+    /// everywhere except the genetic algorithm harness, which evolves it.
+    /// </summary>
+    public int FocusGene { get; set; }
+
+    /// <summary>
+    /// New, no Pascal precedent (0-100, arbitrary): reserves this fraction of a JumpAttack fleet's
+    /// power budget for Penetrator/Starship before falling back to the mission's own default
+    /// cheap-first sequence for the rest (<see cref="NpeToolkit.GetFleetComposition"/>) — JumpAttack
+    /// is the AI's dominant offensive mission and its default sequence can never include either ship
+    /// type today. Defaults to 0 everywhere except the genetic algorithm harness, which evolves it.
+    /// </summary>
+    public int CompositionGene { get; set; }
+
+    /// <summary>
+    /// New, no Pascal precedent (0-100, interpreted directly as a Chebyshev-sector distance cap):
+    /// gates <see cref="CompositionGene"/>'s heavy wave to targets within this many sectors of the
+    /// launching base, since a dedicated Starship/Penetrator fleet is still absolutely slow
+    /// (<see cref="NpeToolkit.GetHeavyFleetComposition"/>'s own doc comment) even once it's no
+    /// longer merged into the fast escort — the same fixed 1-sector-per-year tax costs far more
+    /// real time against a distant target than a nearby one. 0 means no gating at all (today's
+    /// behavior post-split, and what every real call site reproduces exactly). Defaults to 0
+    /// everywhere except the genetic algorithm harness, which evolves it.
+    /// </summary>
+    public int HeavyRangeGene { get; set; }
+
     public int Clock { get; set; }
     public int Offset { get; set; }
 }
@@ -90,6 +152,25 @@ public sealed class StateDeptRecord
     public int ThreatAssess { get; set; }
     public int Aggressiveness { get; set; }
     public int Balance { get; set; }
+
+    /// <summary>
+    /// Not real Pascal. An exponential moving average of this enemy's fractional TotalMilitary change
+    /// each time <see cref="NpeToolkit.StateDeptReport"/> runs (roughly every 7 turns, see
+    /// <see cref="Turns.KingdomTurnHandler.PlayTurn"/>) — positive means declining, negative means
+    /// growing. Smoothed rather than a raw single-report delta so one noisy report doesn't read as a
+    /// trend; only ever read by <see cref="NpeToolkit.EnemyPriority"/>, weighted by
+    /// <see cref="NpeCharacter.TrendWeightGene"/>.
+    /// </summary>
+    public double Trend { get; set; }
+
+    /// <summary>
+    /// Not real Pascal. Chebyshev distance between this enemy's capital and the reporting empire's own
+    /// capital, refreshed by <see cref="NpeToolkit.StateDeptReport"/> whenever both are known/alive —
+    /// stale (keeps its last real value) otherwise, since a missing capital isn't "far away," it's
+    /// "unknown," and overwriting with a sentinel would misrank it. Only ever read by
+    /// <see cref="NpeToolkit.EnemyPriority"/>, weighted by <see cref="NpeCharacter.CenterOfGravityGene"/>.
+    /// </summary>
+    public int Distance { get; set; }
 }
 
 /// <summary>

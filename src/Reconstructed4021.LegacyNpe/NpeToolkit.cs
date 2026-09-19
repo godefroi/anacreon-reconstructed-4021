@@ -31,6 +31,10 @@ public static class NpeToolkit
     private static readonly ShipType[] _conquerSequence = [ShipType.Jumpship, ShipType.HunterKiller, ShipType.Penetrator, ShipType.Starship, ShipType.Fighter];
     private static readonly ShipType[] _stackSequence = [ShipType.Penetrator, ShipType.HunterKiller, ShipType.Starship, ShipType.Fighter, ShipType.Jumpship];
     private static readonly ShipType[] _jumpAttackSequence = [ShipType.Jumpship, ShipType.HunterKiller, ShipType.HunterKiller, ShipType.HunterKiller, ShipType.HunterKiller];
+    // New, no Pascal precedent: disjoint from _jumpAttackSequence's ship types by design, so a
+    // CompositionGene-driven pre-pass (see GetFleetComposition) can never double-book the same
+    // ShipType against the same atBase figure the cheap-first pass also reads.
+    private static readonly ShipType[] _jumpAttackHeavySequence = [ShipType.Starship, ShipType.Penetrator];
     private static readonly ShipType[] _raidTransportsSequence = [ShipType.HunterKiller, ShipType.HunterKiller, ShipType.HunterKiller, ShipType.HunterKiller, ShipType.HunterKiller];
 
     /// <summary>MilitaryPower (MISC.PAS:40-63) — a composite strength score, ships and defenses both weighted by <see cref="CombatConstants.MPower"/> (not <see cref="CombatConstants.CombatPower"/> — see that field's own doc comment on why these are two distinct tables).</summary>
@@ -73,14 +77,7 @@ public static class NpeToolkit
         var atBase = source.Ships;
         var cargoAtBase = source.Cargo;
 
-        var i = 0;
-        while (power > 0 && i < 5) {
-            var shipType = sequence[i];
-            var mPower = CombatConstants.CombatPower[shipType.ToAttackType()];
-            ships[shipType] = Math.Min(atBase[shipType], PascalRound((double)power / mPower) + 1);
-            power -= (long)ships[shipType] * mPower;
-            i++;
-        }
+        AssembleShips(sequence, atBase, ships, ref power);
 
         if (gat > 0) {
             var nnjToTake = Math.Min(gat / 3, cargoAtBase[CargoType.NinjaLegion]);
@@ -133,6 +130,39 @@ public static class NpeToolkit
         }
 
         return (ships, cargo);
+    }
+
+    /// <summary>Shared assembly loop factored out of <see cref="GetFleetComposition"/> and <see cref="GetHeavyFleetComposition"/> — greedily fills <paramref name="ships"/> from <paramref name="seq"/> in priority order until <paramref name="budget"/> or on-hand stock runs out.</summary>
+    private static void AssembleShips(ShipType[] seq, ShipCounts atBase, ShipCounts ships, ref long budget)
+    {
+        var i = 0;
+        while (budget > 0 && i < seq.Length && i < 5) {
+            var shipType = seq[i];
+            var mPower = CombatConstants.CombatPower[shipType.ToAttackType()];
+            ships[shipType] = Math.Min(atBase[shipType], PascalRound((double)budget / mPower) + 1);
+            budget -= (long)ships[shipType] * mPower;
+            i++;
+        }
+    }
+
+    /// <summary>
+    /// New, no Pascal precedent: the Starship/Penetrator counterpart to <see cref="GetFleetComposition"/>'s
+    /// cheap-first <c>_jumpAttackSequence</c>, dispatched as its OWN separate fleet by
+    /// <see cref="DeployBattleFleet"/> rather than merged into the same ships bundle. That separation
+    /// matters mechanically: <see cref="Entities.Fleet.Type"/> (a faithful port of real Pascal's
+    /// TypeOfFleet, PRIMINTR.PAS:808-833) classifies ANY fleet containing a Starship as
+    /// <see cref="Types.FleetType.Standard"/> (1 sector/year) — even a Starship-only fleet, not just a
+    /// mixed one — so merging a heavy allocation into the fast <c>_jumpAttackSequence</c> fleet
+    /// (as an earlier version of <see cref="CompositionGene"/> support did) dragged the WHOLE fleet's
+    /// budget down to that speed, not just the heavy portion. Dispatching the heavy allocation as its
+    /// own fleet keeps the fast escort at full speed and confines the (real, Pascal-faithful) speed
+    /// penalty to only the ships that actually carry it.
+    /// </summary>
+    private static ShipCounts GetHeavyFleetComposition(IEconomicWorld source, ref long heavyBudget)
+    {
+        var ships = new ShipCounts();
+        AssembleShips(_jumpAttackHeavySequence, source.Ships, ships, ref heavyBudget);
+        return ships;
     }
 
     /// <summary>AlreadyTargetted (NPEINTR.PAS:324-344) — whether some fleet is already assigned this exact mission against this exact target. Reference equality: this port never duplicates entity objects, so it's exactly Pascal's SameID.</summary>
@@ -346,10 +376,16 @@ public static class NpeToolkit
     /// weaker than <paramref name="basePower"/>, scored by tech/class/population and discounted by
     /// defenses. <paramref name="candidates"/> is real Pascal's <c>SetOfPossibilities</c> parameter —
     /// callers pass the enemy's owned planets, not a port of Pascal's bitset type.
+    ///
+    /// <paramref name="regionCapitals"/> and the resulting proximity discount are not real Pascal —
+    /// see <see cref="NpeCharacter.ProximityGene"/>'s own doc comment. At <c>ProximityGene == 0</c>
+    /// (every seeded Kingdom1/Kingdom2 persona today) the discount divisor is exactly 1 for every
+    /// candidate regardless of distance or regionCapitals contents, so scoring is byte-identical to
+    /// the original distance-blind formula.
     /// </summary>
     public static (IEconomicWorld? Target, long Defense, long Men) GetBestTarget(
         Empire emp, IEnumerable<IEconomicWorld> candidates, long basePower, NpeCharacter persona,
-        IReadOnlyDictionary<Fleet, KingdomFleetState> fleetStates, Random random)
+        IReadOnlyDictionary<Fleet, KingdomFleetState> fleetStates, IReadOnlyList<IEconomicWorld> regionCapitals, Random random)
     {
         IEconomicWorld? target = null;
         long targetDefense = 0;
@@ -370,6 +406,11 @@ public static class NpeToolkit
             var troops = candidate.Cargo[CargoType.Legion] + 4L * candidate.Cargo[CargoType.NinjaLegion] + 10;
             var defValue = 100 + PascalRound((defense + troops) / 1000.0);
             calcValue /= defValue;
+
+            if (persona.ProximityGene != 0 && GetRegionalCapital(candidate, regionCapitals) is { } nearestBase) {
+                var distance = candidate.Location.DistanceTo(nearestBase.Location);
+                calcValue /= 1 + (persona.ProximityGene / 100.0) * (distance / 10.0);
+            }
 
             if (calcValue > targetValue && defense < basePower) {
                 targetValue = calcValue;
@@ -662,28 +703,98 @@ public static class NpeToolkit
     public static void DeployBattleFleet(
         Empire emp, Dictionary<Fleet, KingdomFleetState> fleetStates,
         IEconomicWorld fromWorld, long power, long gat, NpeMissionType newMission, ISectorObject toTarget,
-        Game game, Random random)
+        Game game, Random random, int compositionGene = 0, int heavyRangeGene = 0)
     {
-        var (ships, cargo) = GetFleetComposition(fromWorld, power, gat, newMission);
-        var fleet = FleetLifecycle.DeployFleet(emp, fromWorld, ships, cargo, toTarget.Location, game);
+        void Dispatch(ShipCounts ships, CargoHold cargo, string diagTag)
+        {
+            if (Environment.GetEnvironmentVariable("NPE_DIAG") == "1") {
+                var homeDefense = emp.Capital is { } cap ? MilitaryPower(cap.Ships, cap.Defenses) : -1;
+                Console.WriteLine($"DIAG year={game.Year} emp={emp.Name} mission={diagTag} power={power} " +
+                    $"ships=[fgt={ships.Fighters},hk={ships.HunterKillers},jmp={ships.Jumpships},pen={ships.Penetrators},str={ships.Starships},jtn={ships.Jumptransports},trn={ships.Transports}] " +
+                    $"targetOwner={toTarget.Owner.Name} homeCapDefense={homeDefense}");
+            }
+            var fleet = FleetLifecycle.DeployFleet(emp, fromWorld, ships, cargo, toTarget.Location, game);
 
-        if (FleetLifecycle.EstimatedDateOfArrival(fleet, game) > FleetLifecycle.EstimatedRange(fleet)) {
-            CombatOutcome.AbortFleet(fleet, fromWorld, report: true);
-            CombatOutcome.DestroyFleet(fleet, game);
-            return;
-        }
+            var eda = FleetLifecycle.EstimatedDateOfArrival(fleet, game);
+            var range = FleetLifecycle.EstimatedRange(fleet);
+            if (Environment.GetEnvironmentVariable("NPE_DIAG") == "1") {
+                var maxFuel = FleetLogistics.FuelCapacity(fleet.Ships);
+                Console.WriteLine($"DIAG-FUEL year={game.Year} emp={emp.Name} mission={diagTag} fuel={fleet.Fuel:0.#}/{maxFuel:0.#} eda={eda} range={range} abort={eda > range}");
+            }
 
-        fleetStates[fleet] = new KingdomFleetState { Mission = newMission, HomeBase = fromWorld, Target = toTarget, Waiting = 0 };
+            if (eda > range) {
+                CombatOutcome.AbortFleet(fleet, fromWorld, report: true);
+                CombatOutcome.DestroyFleet(fleet, game);
+                return;
+            }
 
-        if (toTarget.Owner != emp && !toTarget.Owner.IsIndependent) {
-            // Pascal's FOR i:=1 TO Rnd(1,4) DO draws the bound once, at loop entry — re-evaluating
-            // Rnd() on every iteration check (as a naive C# translation would) draws the RNG a
-            // different number of times and picks a different probe count.
-            var probesToLaunch = Rnd(random, 1, 4);
-            for (var i = 0; i < probesToLaunch; i++) {
-                emp.TryLaunchProbe(toTarget.Location);
+            fleetStates[fleet] = new KingdomFleetState { Mission = newMission, HomeBase = fromWorld, Target = toTarget, Waiting = 0 };
+
+            if (toTarget.Owner != emp && !toTarget.Owner.IsIndependent) {
+                // Pascal's FOR i:=1 TO Rnd(1,4) DO draws the bound once, at loop entry — re-evaluating
+                // Rnd() on every iteration check (as a naive C# translation would) draws the RNG a
+                // different number of times and picks a different probe count.
+                var probesToLaunch = Rnd(random, 1, 4);
+                for (var i = 0; i < probesToLaunch; i++) {
+                    emp.TryLaunchProbe(toTarget.Location);
+                }
             }
         }
+
+        // CompositionGene (new, no Pascal precedent, default 0 -- every real call site omits it,
+        // reproducing this method's original behavior exactly): reserves this fraction (0-100) of
+        // power for a Starship/Penetrator-favoring wave, dispatched as its OWN fleet rather than
+        // merged into the cheap sequence below -- see GetHeavyFleetComposition's own doc comment for
+        // why the separation is load-bearing (Fleet.Type/TypeOfFleet, a faithful port confirmed
+        // against real Pascal, PRIMINTR.PAS:808-833, classifies ANY Starship-containing fleet as
+        // Standard/1-sector-per-year, so merging would tax the whole budget's speed, not just the
+        // heavy portion). Budget the heavy pass can't actually spend (not enough Starships/Penetrators
+        // on hand) rolls back into the cheap pass, not lost.
+        // HeavyRangeGene (new, no Pascal precedent): a dedicated heavy wave is still absolutely
+        // slow even once split from the escort, so gate it to nearby targets when the gene asks.
+        // A plain, monotonic cutoff — no special-cased "0 means unlimited" escape hatch, since that
+        // made 0 (off) and a large value (always fire) both read as "permissive" with a restrictive
+        // dip in between, which a linear correlation against outcome can't represent. 0 now means
+        // "never fires", matching every real call site exactly (compositionGene is also 0 there, so
+        // the branch below is skipped before withinHeavyRange is ever consulted regardless).
+        var withinHeavyRange = fromWorld.Location.DistanceTo(toTarget.Location) <= heavyRangeGene;
+
+        var cheapPower = power;
+        if (newMission == NpeMissionType.JumpAttack && compositionGene > 0 && withinHeavyRange) {
+            var heavyBudget = power * compositionGene / 100;
+            var heavyRemaining = heavyBudget;
+            var heavyShips = GetHeavyFleetComposition(fromWorld, ref heavyRemaining);
+            var candidateCheapPower = power - (heavyBudget - heavyRemaining);
+
+            if (Enum.GetValues<ShipType>().Any(t => heavyShips[t] > 0)) {
+                // Trillum-contention guard (new, no Pascal precedent): DeployFleet fills a freshly
+                // launched fleet's tank from fromWorld.Cargo.Trillum (FleetLifecycle.DeployFleet),
+                // and a Starship-heavy composition's tank is far bigger than a cheap fleet's
+                // (FleetLogistics.FuelCapacity). Diagnosed live: dispatching the heavy wave first
+                // could drain the world's whole trillum stockpile, leaving the escort dispatched
+                // right after it to launch at the bare fuel floor and abort before it even leaves
+                // (EstimatedDateOfArrival>EstimatedRange) — collaterally disabling the same turn's
+                // ordinary offense, not just the heavy wave. Preview both compositions' fuel cost
+                // against what's actually on hand before committing to either dispatch, rather than
+                // spending first and discovering the shortfall on the next one.
+                var (candidateCheapShips, _) = GetFleetComposition(fromWorld, candidateCheapPower, gat, newMission);
+                var heavyFuelCost = PascalRound(FleetLogistics.FuelCapacity(heavyShips) / FleetLogistics.FuelPerTon);
+                var cheapFuelCost = PascalRound(FleetLogistics.FuelCapacity(candidateCheapShips) / FleetLogistics.FuelPerTon);
+
+                if (fromWorld.Cargo.Trillum >= heavyFuelCost + cheapFuelCost) {
+                    cheapPower = candidateCheapPower;
+                    Dispatch(heavyShips, new CargoHold(), $"{newMission}Heavy");
+                } else if (Environment.GetEnvironmentVariable("NPE_DIAG") == "1") {
+                    Console.WriteLine($"DIAG-TRILLUM-SKIP year={game.Year} emp={emp.Name} onHand={fromWorld.Cargo.Trillum} heavyCost={heavyFuelCost} cheapCost={cheapFuelCost}");
+                }
+                // else: not enough trillum for both dispatches — skip the heavy wave entirely and
+                // keep cheapPower at the full power budget, same as if CompositionGene had found no
+                // Starships/Penetrators on hand to spend it on.
+            }
+        }
+
+        var (ships, cargo) = GetFleetComposition(fromWorld, cheapPower, gat, newMission);
+        Dispatch(ships, cargo, newMission.ToString());
     }
 
     /// <summary>
@@ -749,7 +860,7 @@ public static class NpeToolkit
     {
         var basePower = AverageMilitaryPower(regionCapitals);
         var candidates = game.Galaxy.Planets.Where(p => p.Owner == enemyEmp);
-        var (target, targetDefense, targetMen) = GetBestTarget(emp, candidates, basePower, persona, fleetStates, random);
+        var (target, targetDefense, targetMen) = GetBestTarget(emp, candidates, basePower, persona, fleetStates, regionCapitals, random);
         if (target is null) {
             return;
         }
@@ -763,11 +874,11 @@ public static class NpeToolkit
         }
 
         if (MilitaryPower(homeBase.Ships, new DefenseCounts()) > fleetPower / 2) {
-            DeployBattleFleet(emp, fleetStates, homeBase, fleetPower, fleetGat, NpeMissionType.JumpAttack, target, game, random);
+            DeployBattleFleet(emp, fleetStates, homeBase, fleetPower, fleetGat, NpeMissionType.JumpAttack, target, game, random, persona.CompositionGene, persona.HeavyRangeGene);
         } else {
             var betterBase = GetBestBase(emp, target, fleetPower, fleetGat, game);
             if (betterBase is not null) {
-                DeployBattleFleet(emp, fleetStates, betterBase, fleetPower, fleetGat, NpeMissionType.JumpAttack, target, game, random);
+                DeployBattleFleet(emp, fleetStates, betterBase, fleetPower, fleetGat, NpeMissionType.JumpAttack, target, game, random, persona.CompositionGene, persona.HeavyRangeGene);
             }
         }
     }
@@ -804,7 +915,7 @@ public static class NpeToolkit
     {
         var basePower = AverageMilitaryPower(regionCapitals);
         var candidates = game.Galaxy.Planets.Where(p => p.Owner == enemyEmp);
-        var (target, targetDefense, targetMen) = GetBestTarget(emp, candidates, basePower, persona, fleetStates, random);
+        var (target, targetDefense, targetMen) = GetBestTarget(emp, candidates, basePower, persona, fleetStates, regionCapitals, random);
         if (target is null) {
             return;
         }
@@ -818,11 +929,11 @@ public static class NpeToolkit
         }
 
         if (MilitaryPower(homeBase.Ships, new DefenseCounts()) > fleetPower / 2) {
-            DeployBattleFleet(emp, fleetStates, homeBase, fleetPower, fleetGat, NpeMissionType.SlowAttack, target, game, random);
+            DeployBattleFleet(emp, fleetStates, homeBase, fleetPower, fleetGat, NpeMissionType.SlowAttack, target, game, random, persona.CompositionGene, persona.HeavyRangeGene);
         } else {
             var betterBase = GetBestBase(emp, target, fleetPower, fleetGat, game);
             if (betterBase is not null) {
-                DeployBattleFleet(emp, fleetStates, betterBase, fleetPower, fleetGat, NpeMissionType.JumpAttack, target, game, random); // verbatim quirk, see doc comment above
+                DeployBattleFleet(emp, fleetStates, betterBase, fleetPower, fleetGat, NpeMissionType.JumpAttack, target, game, random, persona.CompositionGene, persona.HeavyRangeGene); // verbatim quirk, see doc comment above
             }
         }
     }
@@ -843,14 +954,14 @@ public static class NpeToolkit
     /// </summary>
     public static void SetRaidingFleetNewTarget(
         Empire emp, Fleet fleet, IEconomicWorld target, IEconomicWorld homeBase,
-        Dictionary<Fleet, KingdomFleetState> fleetStates, NpeCharacter persona, Game game, Random random)
+        Dictionary<Fleet, KingdomFleetState> fleetStates, NpeCharacter persona, IReadOnlyList<IEconomicWorld> regionCapitals, Game game, Random random)
     {
         var enemyEmp = target.Owner;
 
         if (Rnd(random, 1, 100) <= persona.Offensive && enemyEmp != emp) {
             var fleetPower = MilitaryPower(fleet.Ships, new DefenseCounts());
             var candidates = game.Galaxy.Planets.Where(p => p.Owner == enemyEmp);
-            var (newTarget, _, _) = GetBestTarget(emp, candidates, fleetPower, persona, fleetStates, random);
+            var (newTarget, _, _) = GetBestTarget(emp, candidates, fleetPower, persona, fleetStates, regionCapitals, random);
             if (newTarget is not null) {
                 FleetLifecycle.SetFleetDestination(fleet, newTarget.Location);
                 var state = fleetStates[fleet];
@@ -1336,7 +1447,7 @@ public static class NpeToolkit
                 }
             }
 
-            var (target, targetDefense, targetMen) = GetBestTarget(emp, candidates, basePower, persona, fleetStates, random);
+            var (target, targetDefense, targetMen) = GetBestTarget(emp, candidates, basePower, persona, fleetStates, regionCapitals, random);
             if (target is not null) {
                 var fleetPower = PascalRound((1.5 + random.NextDouble()) * targetDefense);
                 var fleetGat = PascalRound(1.5 * targetMen);
@@ -1599,8 +1710,24 @@ public static class NpeToolkit
             var enemyMilitary = MilitaryTotal(enemyShips);
 
             var enemyState = GetOrCreateState(state, enemyEmp, defaultPolicy);
+
+            // Not real Pascal: a smoothed fractional-decline trend, computed from the value
+            // TotalMilitary is about to be overwritten with, before that overwrite — see Trend's own
+            // doc comment. Skipped on this enemy's first-ever report (TotalMilitary still 0, a fresh
+            // GetOrCreateState default) so a brand-new record doesn't read as "declined from nothing."
+            if (enemyState.TotalMilitary > 0) {
+                var militaryChangeRatio = (enemyState.TotalMilitary - enemyMilitary) / (double)enemyState.TotalMilitary;
+                enemyState.Trend = (enemyState.Trend * 0.5) + (militaryChangeRatio * 0.5);
+            }
+
             enemyState.TotalMilitary = enemyMilitary;
             enemyState.Worlds = worlds;
+
+            // Not real Pascal: capital-to-capital distance — see Distance's own doc comment on why a
+            // missing capital leaves the last known value in place rather than a sentinel.
+            if (emp.Capital is { } ownCapital && enemyEmp.Capital is { } enemyCapital) {
+                enemyState.Distance = ownCapital.Location.DistanceTo(enemyCapital.Location);
+            }
 
             var tech = empireTech; // see this method's own doc comment — the confirmed GetCapital(Emp,...) bug.
 
@@ -1616,6 +1743,26 @@ public static class NpeToolkit
 
             enemyState.ThreatAssess = threat > 100 ? 100 : PascalRound(threat);
         }
+    }
+
+    /// <summary>
+    /// Not real Pascal. How worth focusing on a given enemy is, combining its current weakness
+    /// (<see cref="StateDeptRecord.ThreatAssess"/>, inverted — a low-threat enemy is a good target),
+    /// how much its strength is trending down (<see cref="StateDeptRecord.Trend"/>, weighted by
+    /// <see cref="NpeCharacter.TrendWeightGene"/>), and how close its capital is
+    /// (<see cref="StateDeptRecord.Distance"/>, weighted by <see cref="NpeCharacter.CenterOfGravityGene"/>).
+    /// Each term is scaled to roughly 0-100 so the two gene weights (0-100, "how much of this term's
+    /// full swing to count") combine in comparable units; not a claim that this is real Pascal's own
+    /// weighting scheme, since none exists to match. Only ever read by <see cref="WarCabinet"/>'s own
+    /// focus mechanism, which is itself a no-op at <see cref="NpeCharacter.FocusGene"/>=0 — this method
+    /// runs and costs nothing extra either way, so it isn't gated separately.
+    /// </summary>
+    private static double EnemyPriority(StateDeptRecord enemyState, NpeCharacter persona)
+    {
+        var weakness = 100 - enemyState.ThreatAssess;
+        var trend = (persona.TrendWeightGene / 100.0) * 100 * enemyState.Trend;
+        var proximity = (persona.CenterOfGravityGene / 100.0) * (100 - Math.Min(100, enemyState.Distance));
+        return weakness + trend + proximity;
     }
 
     /// <summary>
@@ -1713,16 +1860,48 @@ public static class NpeToolkit
         Empire emp, IReadOnlyList<IEconomicWorld> regionCapitals, Dictionary<Fleet, KingdomFleetState> fleetStates,
         NpeCharacter persona, Dictionary<Empire, StateDeptRecord> state, PolicyType defaultPolicy, Game game, Random random)
     {
+        // Not real Pascal: at FocusGene=0 (real Kingdom1/Kingdom2, always) topPriorityEnemy stays null
+        // and every AttackChance check below reads enemyState.AttackChance directly, unchanged from
+        // before this feature existed. Computed once per call rather than per enemy since it needs to
+        // compare across all of them; self is excluded here (unlike this method's own per-enemy loop
+        // below, which keeps its real, documented self-targeting bug) since "focus on myself" isn't a
+        // sensible ranking outcome to introduce.
+        Empire? topPriorityEnemy = null;
+        if (persona.FocusGene != 0) {
+            var topPriority = double.NegativeInfinity;
+            foreach (var candidate in game.Empires) {
+                if (candidate == emp || candidate.Status == EmpireStatus.Eliminated) {
+                    continue;
+                }
+                var priority = EnemyPriority(GetOrCreateState(state, candidate, defaultPolicy), persona);
+                if (priority > topPriority) {
+                    topPriority = priority;
+                    topPriorityEnemy = candidate;
+                }
+            }
+        }
+
         foreach (var enemyEmp in game.Empires) {
             var enemyState = GetOrCreateState(state, enemyEmp, defaultPolicy);
             var noOfRaidersOut = fleetStates.Values.Count(s => s.Mission == NpeMissionType.RaidTransports);
 
+            // Not real Pascal: shifts this enemy's effective attack chance toward the top-priority
+            // enemy (found above) and away from everyone else, by up to half of FocusGene. Identical to
+            // enemyState.AttackChance whenever FocusGene=0 or no top-priority enemy was found.
+            var effectiveAttackChance = enemyState.AttackChance;
+            if (persona.FocusGene != 0 && topPriorityEnemy is not null) {
+                var shift = persona.FocusGene / 2;
+                effectiveAttackChance = enemyEmp == topPriorityEnemy
+                    ? Math.Min(100, effectiveAttackChance + shift)
+                    : Math.Max(0, effectiveAttackChance - shift);
+            }
+
             if (noOfRaidersOut < NpeConstants.MaxNoOfRaiders
-                && (enemyState.Balance < 0 || (enemyState.Policy >= PolicyType.Harass && Rnd(random, 1, 100) <= enemyState.AttackChance))) {
+                && (enemyState.Balance < 0 || (enemyState.Policy >= PolicyType.Harass && Rnd(random, 1, 100) <= effectiveAttackChance))) {
                 DeployHKRaiders(emp, enemyEmp, regionCapitals, fleetStates, game, random);
             }
 
-            if ((enemyState.Balance < 0 && Rnd(random, 1, 2) == 1) || Rnd(random, 1, 100) <= enemyState.AttackChance) {
+            if ((enemyState.Balance < 0 && Rnd(random, 1, 2) == 1) || Rnd(random, 1, 100) <= effectiveAttackChance) {
                 switch (enemyState.Policy) {
                     case PolicyType.Harass:
                         if (noOfRaidersOut < NpeConstants.MaxNoOfRaiders) {
