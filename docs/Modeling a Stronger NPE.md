@@ -1,136 +1,160 @@
 # Modeling a stronger NPE
 
-A record of what we know about the ported NPE AI (Kingdom1/Kingdom2) and what it would take to
-make it a genuinely competent opponent, following from the question "how fast can this game
-actually be won."
+Current understanding of the ported NPE AI (Kingdom1/Kingdom2), what's wrong with it, and what
+we've tried to fix. This tracks where we are, not a chronological log of every round; superseded
+findings are removed rather than marked retired.
 
 ## What we know about NPE behavior
 
-**There's no enforced win condition.** Nothing in either the Pascal original or the C# port checks
-"only one empire remains" and declares a winner. A scenario's suggested length (`.SCN`'s
-`MinLen`/`MaxLen`, e.g. Intro's "50+ years," East-vs-West's "5-10 years") is read and discarded —
-flavor text, not an enforced rule.
+There's no enforced win condition anywhere in this port or the original Pascal. Nothing checks
+"only one empire remains" and declares a winner; a scenario's suggested length (`.SCN`'s
+`MinLen`/`MaxLen`) is read by `ScenarioLoader` and discarded.
 
-**Symmetric Kingdom-vs-Kingdom NPE combat essentially never finishes.** A harness
-(`ScenarioPlayoutTests.cs`) plays a real scenario to elimination or a 500-year cap with every empire
-driven by `KingdomTurnHandler`. Across 40 runs (Intro and East-vs-West, Kingdom1 and Kingdom2
-personas, 10 seeds each), zero eliminations. The galaxy is not frozen, though: population grows
-4x-40x, ship counts 100x-3,000x, industry 4x-30x per empire, almost entirely from conquering
-independent worlds, never from finishing off a rival.
+Symmetric Kingdom-vs-Kingdom combat, where every empire runs the same persona, essentially never
+resolves. Confirmed identically in both the C# port and real Pascal (a matching harness drives the
+actual `ImplementKingdom1NPE`/`ImplementKingdom2NPE` from `NPE02.PAS`): zero eliminations across 40
+runs at up to a 500-year cap, in both engines, despite large real growth (4x-40x population,
+100x-3,000x ships) from conquering independent worlds. This isn't a porting defect; it's genuine
+1988 AI behavior.
 
-**This is real Pascal behavior, not a porting defect.** A matching harness was built on the Pascal
-side: a new `npeplayout` domain in `reference/verify/runworld.pas`, driving the real
-`ImplementKingdom1NPE`/`ImplementKingdom2NPE` (`NPE02.PAS`) through the same non-interactive
-per-turn loop real Pascal uses for an all-NPE game, loaded via the existing `LoadScenario` call.
-Result: 0/40 eliminations, same shape and magnitude of growth as the C# port. Getting this running
-surfaced one genuine bug: `DestroyFleet` (`FLEET.PAS`) disposes a fleet's pointer without
-re-nilling or reallocating it. Real Turbo Pascal's heap leaves that block harmlessly readable
-afterward; `fpc`'s heap doesn't, and `EnforceNPEDataLinks` unconditionally dereferences all 240
-fleet slots every NPE turn, so a long enough run reliably crashed around year 40-45. Fixed with a
-minimal patch (`reference/verify/patches/FLEET.PAS.patch`) that reproduces real Pascal's guarantee
-rather than changing any observable behavior.
+Once one side is tuned even a little better than a fixed opponent, real eliminations happen, and
+the rate collapses steeply with how many opponents there are at once:
 
-**Asymmetric matchups are a different story.** Once one side's persona is tuned even a bit better
-than a fixed opponent (see the genetic algorithm section below), real eliminations happen, some
-within 120 years. So the game isn't structurally incapable of producing a winner — two AIs of
-matched skill just stall each other out. What that means for whether a human can lose is still
-open: we never tested a human-shaped strategy (or mistake) against this AI, never tested
-Pirate/Berserker (narrower hostile-roamer personas, untested in either harness), and never tested
-non-combat loss vectors like rebellion/`RevolutionIndex`-driven collapse. It's also not confirmed
-whether human player slots in these scenarios have `LosesIfCapitalConquered` set — if they do, a
-human's practical "loss" condition could be easier to trigger than anything measured here.
+| Matchup | Scenario | Best confirmed win rate |
+|---|---|---|
+| 1 vs 1 | East-vs-West | ~8% held-out |
+| 1 vs 2 | A purpose-built 3-empire scenario (below) | ~0.5% |
+| 1 vs 4 | Intro | 0%, even at a 500-year horizon |
 
-## The ML path, evaluated
+Going from one simultaneous opponent to two alone costs roughly a 16x drop in win rate. This
+"force-division tax" is the single largest factor found in any of this work, bigger than anything
+any tunable behavior has moved so far.
 
-An investigation into training an ML.NET model — tree-based, not a neural net — to imitate or
-evaluate NPE decisions had already been undertaken. That general shape still holds up: this game's
-state space is small and tabular (ratios, counts), exactly where gradient-boosted trees match or
-beat neural nets while staying fast, deterministic, and inspectable. A bigger model doesn't fix
-anything here, because the problem we actually found isn't about model capacity.
+**The bottleneck is not targeting sophistication.** Trend-awareness (does an enemy's strength show
+a real decline over time), empire-level proximity ("center of gravity" distance between empires,
+distinct from picking a nearby individual world), and a focus-bias (concentrate attacks on one
+priority enemy rather than spreading) were all built as tunable genes and tested across three
+different scenario setups, including one purpose-built to give empire-proximity an unambiguous
+signal to find (a 3-empire scenario with the evolved side at one end, a near opponent, and a far
+opponent 2.7x farther away). None showed a positive effect; two showed a small negative one. Only
+after re-running with far more samples per candidate did one of them (focus) reveal a small real
+positive signal that a smaller sample had hidden, worth remembering when a result looks flat.
 
-**Pure imitation is capped at its teacher's skill, and none of the available teachers are good
-enough.** Behavioral cloning of Kingdom1, Kingdom2, Pirate, or Berserker would, at best, reproduce
-that persona's own decision function — and we now know none of them reliably wins. In practice
-cloning tends to land slightly below the teacher (compounding errors on states the teacher never
-demonstrated), not above it. The one real exception: cloning across many noisy teacher rollouts can
-average out that teacher's own bad luck, a modest smoothing gain, not a capability gain.
+**A real mechanical bottleneck was found and worked through to a settled conclusion: powerful,
+slow ships are a genuine net negative in this game, not an idea sabotaged by implementation bugs.**
+`GetFleetComposition`'s dominant dispatch mode (`JumpAttack`, ~95% of real attacks) draws from a
+hardcoded ship-priority table that never includes Starships and only reaches Penetrator as a last
+resort, so a `CompositionGene` was built to let the AI deliberately choose to include them. Three
+separate, real, confirmed problems were found and fixed along the way, and the correlation with
+fitness never once turned positive through any of them:
 
-**Exceeding a fixed teacher requires scoring outcomes, not imitating choices.** Once the training
-signal is "did this action correlate with actually winning" instead of "what would the teacher have
-picked," the result is no longer bounded by any single teacher's policy. This is the actual
-justification for the genetic algorithm work below: it optimizes directly against simulated
-outcomes, sidestepping the "no good teacher" problem entirely.
+- Any fleet containing a Starship or a cargo-carrying Transport collapses to the slowest speed
+  tier, confirmed directly against the real Pascal source (`PRIMINTR.PAS`'s `TypeOfFleet`), the
+  same all-or-nothing purity rule that also governs stealth (below). This is faithful 1988 design,
+  not a bug, so the fix was dispatching a Starship-heavy attack as its own separate fleet instead
+  of merging it into a fast escort.
+- A dedicated heavy wave is still slow in absolute terms and target defenses grow continuously
+  regardless of distance, so a wide-ranging heavy wave often arrived too late to matter. Gating
+  heavy-wave dispatch by target distance helped some.
+- The dominant cost turned out to be neither of those: launching a heavy wave was draining a base's
+  entire trillum stockpile, leaving nothing to fuel that same base's next ordinary attack, which
+  then aborted before it even launched. This was starving the empire's normal offense, not just the
+  heavy wave itself; measured directly, 60% of a heavy-composition genome's attack dispatches
+  aborted this way, versus 0% for a cheap-ship genome. Fixed by checking a base's fuel reserve
+  before committing a heavy wave, skipping it rather than starving the escort.
 
-**A staged path (proposed, not yet attempted) for going further:** GA-tune the existing persona's
-parameters (cheap, bounded search space) to get a better-than-baseline teacher; distill that into a
-structurally richer model — more decision points than the existing hand-coded genes can express;
-run a second round of evolution or outcome-based training on the richer model's own parameters,
-now searching a space that strictly contains the first solution. The first distillation step can
-only recover what the GA-tuned teacher already does, per the imitation ceiling above — the actual
-gain comes from the second round searching a larger space than the first could ever express. This
-is a real, recognized pattern (roughly "iterated distillation and amplification" / policy iteration
-with growing function approximation), not a hopeful guess, but it hasn't been built.
+Correlation with fitness across these three fixes: -0.44, then -0.29, then -0.07 (closest to
+neutral), then, once the trillum-starvation confound was actually removed, **-0.22**, further
+negative than the step before it. That's the real, final signal, not an artifact: once the escort
+was no longer being collaterally starved, the data more cleanly showed the underlying cost that was
+there from the start. Settled: this isn't a bug hunt anymore, it's a genuine property of the game.
+Slow, powerful ships cost more in lost time than they gain in strength, at least in every scenario
+tested here.
 
-## The genetic algorithm: what was tried, and what it found
+Every ship also burns trillum-derived fuel per year of activity, at a wildly uneven rate (a
+Starship costs more than double a Jumpship's), and each world has its own finite, non-renewable
+trillum reserve funding ongoing production. Neither of those turned out to be the actual mechanism
+above (world reserves never got close to zero in a 120-year run, and mid-journey fleet fuel
+exhaustion happened once in an entire sampled run); the real cost was the one-time drain on a
+base's stockpile at launch, not ongoing consumption. An empire could in principle send trillum
+ahead as cargo to resupply a long campaign, but that would be a real three-way trade against speed
+and stealth (`VisibilityHandler.cs`: a fleet that's *purely* HunterKillers is exempt from ordinary
+detection, a pure-Penetrator fleet gets a partial version of the same exemption, and adding any
+other ship type, including a cargo carrier, loses that exemption immediately, the same purity
+mechanic as the speed cliff) rather than a free fix, and isn't needed now that the actual bug is
+fixed.
 
-`GeneticAlgorithmTests.cs` evolves `NpeCharacter`'s gene fields — `ImperialistGene`,
-`DefensiveGene`, `OffensiveGene`, `FactorGene`, `Provoke`, `SphereX` — against a *fixed* baseline
-Kingdom1 opponent in East-vs-West (2 empires, cleaner 1-v-1 signal than Intro's 5). Gene bounds are
-the union of Kingdom1's and Kingdom2's own real roll ranges, not invented values.
+**Two more real, confirmed gaps, not yet built, next up:**
 
-Four rounds, each addressing a problem the previous one surfaced:
+- Attack size and frequency (small fleets often vs. large fleets rarely) is currently a fixed
+  probability split ported straight from Pascal (`WarCabinet`'s 75/25 or 50/50 JumpAttack/SlowAttack
+  choice by policy tier), not tunable by any persona today.
+- Target selection is currently omniscient. `GetBestTarget` reads a candidate's `Ships`/`Defenses`
+  directly off the live world object, gated only by a one-time "have I ever discovered this world"
+  flag, no notion of stale or last-scouted intelligence distinct from ground truth. A human player
+  would only know what they last scouted. Worth fixing if the goal is a defensible opponent rather
+  than a cheating one.
 
-1. **First pass** (population 16, generations 6, 3 seeds/candidate, population-margin fitness,
-   120-year horizon): cheap (7.7s total), and the numbers implied real eliminations were happening,
-   though not logged explicitly.
-2. **Scaled up with explicit elimination logging** (population 24, generations 12, 8
-   seeds/candidate): confirmed real eliminations (84 evolved-wins / 0 baseline-wins / 2,220
-   neither, of 2,304 playouts), but held-out validation on 20 fresh seeds exposed the problem: the
-   best training genome (38% training win rate) scored **0%** held out. The fitness function
-   (evolved side's population minus baseline's population, plus a large elimination bonus) was
-   rewarding economic growth, which this game's mechanics make easy to get from conquering
-   independent worlds, not war-winning capability — a real design flaw, not sampling noise.
-3. **Redesigned fitness function**: instead of comparing final population sizes, score the fixed
-   baseline's own decline in population/ships/industry/planet-count from its own starting values,
-   sampled every 10 years and summed across the horizon (an area-under-curve measure), plus the
-   same large elimination bonus as a terminal term. Re-run at the same scale: eliminations rose to
-   101/0/2,203, the generation-over-generation win-rate trend went from noisy and flat to a real
-   climb (2%→7%), and held-out win rate moved from 0% to **5%** (1/20). Real improvement, not a
-   full fix — the best training genome still showed the same shape of gap (38% training vs. this
-   round's 5% held-out).
-4. **More seeds per candidate** (8→30, held-out set 20→50), same fitness function, same population
-   and generation counts, to test whether the remaining gap was measurement noise (a ~5% true win
-   rate is hard to estimate reliably from only 8 samples) rather than a fitness design problem.
-   Result: held-out win rate rose to **8%** (4/50, a sturdier result on 4 real wins instead of 1),
-   the training/held-out optimism gap narrowed from ~7.6x to ~2.9x, and the win-rate trend across
-   generations climbed further (peaking at 9%). Improved, not resolved — some residual gap is
-   expected at this sample size and would need a substantially larger sample to close further.
+## Training methodology, separate from persona capability
 
-**The best genome found is a real, qualitatively new strategy, not just "become Kingdom2."** Final
-best: Imp=14, Def=5, Off=100, Fac=24, Prv=62, Sph=31 — near-maximum offense and near-minimum
-defense (Kingdom2-like), paired with a low Imperialist gene, in Kingdom1's passive range rather than
-Kingdom2's. In plain terms: skip the independent-world land grab, focus on attacking. Neither
-hand-tuned preset represents that combination.
+Two things matter for training a genetic search on this AI, independent of which behaviors are
+gened: the fitness function, and how many seeds per candidate.
 
-## Open threads
+The fitness function needs to reward actually damaging an opponent, not growing the economy.
+Comparing final population sizes rewarded conquering independent worlds, which this game makes easy
+regardless of combat skill, and produced genomes that scored 38% on their training seeds but 0% on
+fresh ones. Scoring the opponent's own decline in population, ships, industry, and world count
+against its own starting values, summed across the whole horizon, fixed this: held-out win rate
+went from 0% to a real, if modest, 5-8%. With more than one fixed opponent, even that broke down,
+since opponents' independent-world growth can outpace real combat damage regardless of what's done
+to them; the fix there was crediting directly attributable combat outcomes (worlds actually
+conquered from a specific opponent) rather than net stock decline.
 
-- Whether pushing seeds-per-candidate (and/or population/generation count) further continues to
-  close the training/held-out gap, or whether the fitness function needs further refinement beyond
-  the damage-based redesign.
-- The staged distillation/re-evolution bootstrap described above, not yet attempted.
-- Whether `LosesIfCapitalConquered` is set for human player slots in the tested scenarios, which
-  bears directly on what "losing" actually means for a human versus what this session's harnesses
-  measured (full empire elimination).
-- Rebellion/`RevolutionIndex`-driven internal collapse as a loss vector, entirely untested here —
-  everything measured this session was combat-driven.
-- Pirate and Berserker personas, untested in either playout harness.
-- Cheap behavioral-cloning of the existing personas as a way to validate the ML.NET pipeline
-  end-to-end, independent of whether it produces a strong opponent.
+Seed count per candidate matters more than it looks like it should. At a win rate below 1%, 8-16
+seeds per candidate isn't enough to reliably tell a genuinely better genome from a lucky one; this
+is why the Composition and Focus genes above needed 50 seeds per candidate before their real signal
+(negative and positive, respectively) became visible.
+
+## Architecture
+
+Experimental genes and behaviors live on a new, separate `ITurnHandler` implementation,
+`Kingdom2ModernTurnHandler` (`src/Reconstructed4021.LegacyNpe/`), not on the real `KingdomTurnHandler`
+that actual games use. It reuses `NpeToolkit`'s shared static helpers (`StateDepartment`,
+`WarCabinet`, `GetBestTarget`, and so on) so there's no duplicated engine logic, but it's wired into
+the GA harness through `INpeHandlerProvider`, the same extension point real scenario loading already
+uses to pick a persona's implementation. Real Kingdom1/Kingdom2 behavior is never touched by any of
+this work; it doesn't need per-round reverification against the regression suite anymore, since the
+experimental path is a genuinely different class rather than a no-op-gated flag on the production
+one.
 
 ## Where things live
 
-- `src/Reconstructed4021.Tests/ScenarioPlayoutTests.cs` — C# all-Kingdom-AI playout harness.
+- `src/Reconstructed4021.Tests/ScenarioPlayoutTests.cs`: C# all-Kingdom-AI scenario playout harness.
 - `reference/verify/runworld.pas` (`npeplayout` domain) and
-  `src/Reconstructed4021.Tests/PascalGroundTruth/NpePlayoutCases.cs` — the Pascal-side equivalent.
-- `reference/verify/patches/FLEET.PAS.patch` — the heap-safety fix the Pascal harness needed.
-- `src/Reconstructed4021.Tests/GeneticAlgorithmTests.cs` — the genetic algorithm harness.
+  `src/Reconstructed4021.Tests/PascalGroundTruth/NpePlayoutCases.cs`: the Pascal-side equivalent, for
+  ground-truth comparison.
+- `reference/verify/patches/FLEET.PAS.patch`: a real heap-safety fix the Pascal harness needed
+  (`fpc`'s heap doesn't tolerate a dangling disposed pointer the way real Turbo Pascal's does).
+- `src/Reconstructed4021.LegacyNpe/Kingdom2ModernTurnHandler.cs`: the experimental persona.
+- `src/Reconstructed4021.Tests/GeneticAlgorithmTests.cs`: the genetic algorithm harness, including
+  the fitness functions and gene definitions described above.
+- `src/Reconstructed4021.Tests/Fixtures/OrionsBelt.scn`: a purpose-built 3-empire scenario with a
+  guaranteed near/far opponent geometry and zero independent worlds, for isolating force-division
+  and proximity questions from economic growth.
+
+## Open questions
+
+- Attack size/frequency and masked-intel target selection, both confirmed real gaps, neither built,
+  next up.
+- Whether the force-division tax itself is addressable at all by tuning the existing decision
+  structure, or whether it needs a genuinely different mechanism, such as an empire deliberately
+  building up overwhelming economic strength before engaging more than one opponent.
+- Whether `LosesIfCapitalConquered` is set for human player slots in these scenarios, which bears on
+  what "losing" means for a human versus what these harnesses measure (full empire elimination).
+- Rebellion and internal collapse as a loss vector, entirely untested; everything measured so far is
+  combat-driven.
+- Pirate and Berserker personas, untested in any playout harness.
+- Cheap behavioral cloning of the existing personas as a way to validate an ML.NET pipeline
+  end-to-end, independent of whether it produces a strong opponent; deprioritized relative to the
+  genetic-algorithm work above, since pure imitation can't exceed any of the four existing personas'
+  own skill, and none of them are good.

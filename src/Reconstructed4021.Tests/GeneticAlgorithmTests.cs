@@ -24,13 +24,16 @@ namespace Reconstructed4021.Tests;
 /// (<see cref="NpeCharacter.ImperialistGene"/>/<see cref="NpeCharacter.DefensiveGene"/>/
 /// <see cref="NpeCharacter.OffensiveGene"/>/<see cref="NpeCharacter.FactorGene"/>/
 /// <see cref="NpeCharacter.Provoke"/>/<see cref="NpeCharacter.SphereX"/> -- see
-/// <see cref="KingdomTurnHandler"/>'s own constructor). <see cref="NpeCharacter.WorldPower"/>/
-/// <see cref="NpeCharacter.Offset"/> (randomized identically for both personas) and
-/// <see cref="NpeCharacter.RandomGene"/>/<see cref="NpeCharacter.Techno"/>/
-/// <see cref="NpeCharacter.Honorable"/> (fixed constants for both) are held at representative fixed
-/// values for every candidate here, not evolved -- keeps the search space to what actually
-/// differentiates behavior. Bounds per gene are the union of Kingdom1's and Kingdom2's own roll
-/// ranges (real, balance-tested ranges from the original design), not invented ones.
+/// <see cref="KingdomTurnHandler"/>'s own constructor), plus four more that no real persona rolls
+/// either (<see cref="NpeCharacter.ProximityGene"/>, <see cref="NpeCharacter.TrendWeightGene"/>,
+/// <see cref="NpeCharacter.CenterOfGravityGene"/>, <see cref="NpeCharacter.FocusGene"/> -- see each
+/// field's own doc comment). <see cref="NpeCharacter.WorldPower"/>/<see cref="NpeCharacter.Offset"/>
+/// (randomized identically for both personas) and <see cref="NpeCharacter.RandomGene"/>/
+/// <see cref="NpeCharacter.Techno"/>/<see cref="NpeCharacter.Honorable"/> (fixed constants for both)
+/// are held at representative fixed values for every candidate here, not evolved -- keeps the search
+/// space to what actually differentiates behavior. Bounds per real-persona gene are the union of
+/// Kingdom1's and Kingdom2's own roll ranges (real, balance-tested ranges from the original design);
+/// the four invented genes have no such precedent and use an arbitrary but reasonable 0-100.
 ///
 /// Needs LegacyNpe's <c>InternalsVisibleTo</c> (see its own <c>AssemblyInfo.cs</c>) to reach
 /// <see cref="KingdomTurnHandler"/>'s internal <c>(NpeEmpireType, NpeCharacter, ...)</c> constructor
@@ -63,6 +66,12 @@ namespace Reconstructed4021.Tests;
 /// loop's own <c>generation*100_000 + candidateIndex*1_000 + seedIndex</c> scheme could reach) to
 /// check whether the search found something that generalizes or just overfit its small training seed
 /// set.
+///
+/// A second test, <see cref="EvolveAgainstFourKingdom1BaselinesOnIntro"/>, runs the same evolved
+/// persona against four fixed Kingdom1 opponents on the Intro scenario (5 empires total) instead of
+/// one on East-vs-West -- the multi-enemy features (<c>TrendWeightGene</c>/<c>CenterOfGravityGene</c>/
+/// <c>FocusGene</c>) have nothing to differentiate between in a 2-empire game, by construction, so
+/// they can only be meaningfully tested here.
 /// </summary>
 public class GeneticAlgorithmTests
 {
@@ -90,7 +99,8 @@ public class GeneticAlgorithmTests
     }
 
     private sealed record GeneVector(
-        double Imperialist, double Defensive, double Offensive, double Factor, double Provoke, double SphereX)
+        double Imperialist, double Defensive, double Offensive, double Factor, double Provoke, double SphereX,
+        double Proximity, double TrendWeight, double CenterOfGravity, double Focus, double Composition, double HeavyRange)
     {
         public NpeCharacter ToPersona()
         {
@@ -104,6 +114,12 @@ public class GeneticAlgorithmTests
                 FactorGene = (int)Math.Round(Factor),
                 Provoke = (int)Math.Round(Provoke),
                 SphereX = (int)Math.Round(SphereX),
+                ProximityGene = (int)Math.Round(Proximity),
+                TrendWeightGene = (int)Math.Round(TrendWeight),
+                CenterOfGravityGene = (int)Math.Round(CenterOfGravity),
+                FocusGene = (int)Math.Round(Focus),
+                CompositionGene = (int)Math.Round(Composition),
+                HeavyRangeGene = (int)Math.Round(HeavyRange),
                 RandomGene = 50,
                 Techno = 50,
                 Honorable = 50,
@@ -117,7 +133,11 @@ public class GeneticAlgorithmTests
         }
     }
 
-    // Union of Kingdom1's and Kingdom2's own roll ranges (KingdomTurnHandler.cs's constructor).
+    // Union of Kingdom1's and Kingdom2's own roll ranges (KingdomTurnHandler.cs's constructor) for the
+    // six real genes. The four invented genes (Proximity/TrendWeight/CenterOfGravity/Focus -- see each
+    // NpeCharacter field's own doc comment) have no such precedent -- both real personas fix them at 0,
+    // reproducing today's distance-blind/trend-blind/geography-blind/independent-per-enemy behavior
+    // exactly -- so 0-100 is an arbitrary but reasonable bound to search for all four.
     private static readonly Dictionary<string, GeneBounds> Bounds = new() {
         ["Imperialist"] = new GeneBounds(1, 100),
         ["Defensive"] = new GeneBounds(5, 75),
@@ -125,13 +145,22 @@ public class GeneticAlgorithmTests
         ["Factor"] = new GeneBounds(15, 25),
         ["Provoke"] = new GeneBounds(50, 100),
         ["SphereX"] = new GeneBounds(25, 100),
+        ["Proximity"] = new GeneBounds(0, 100),
+        ["TrendWeight"] = new GeneBounds(0, 100),
+        ["CenterOfGravity"] = new GeneBounds(0, 100),
+        ["Focus"] = new GeneBounds(0, 100),
+        ["Composition"] = new GeneBounds(0, 100),
+        // 30 comfortably exceeds the max Chebyshev distance on every 21x21 scenario in use (max 20),
+        // so the top of this range means "always fire regardless of target distance" -- paired with
+        // the now-monotonic cutoff in NpeToolkit.DeployBattleFleet (0 = never, 30 = always).
+        ["HeavyRange"] = new GeneBounds(0, 30),
     };
 
     [Test, Explicit]
     public async Task EvolveAgainstKingdom1Baseline()
     {
         var gaRandom = new Random(12345);
-        var population = InitialPopulation(gaRandom);
+        var population = InitialPopulation(gaRandom, PopulationSize);
         var overallStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         GeneVector? bestEver = null;
@@ -158,7 +187,7 @@ public class GeneticAlgorithmTests
             var worst = scored[^1];
             Console.WriteLine($"gen {gen}: best={best.Fitness:0.#} (winrate={best.WinRate:P0}) worst={worst.Fitness:0.#} (winrate={worst.WinRate:P0}) mean={scored.Average(x => x.Fitness):0.#} meanWinRate={scored.Average(x => x.WinRate):P0} ({genStopwatch.Elapsed.TotalSeconds:0.#}s, {PopulationSize * SeedsPerCandidate} evals)");
             var b = best.Genome;
-            Console.WriteLine($"  best genes: Imp={b.Imperialist:0} Def={b.Defensive:0} Off={b.Offensive:0} Fac={b.Factor:0} Prv={b.Provoke:0} Sph={b.SphereX:0}");
+            Console.WriteLine($"  best genes: Imp={b.Imperialist:0} Def={b.Defensive:0} Off={b.Offensive:0} Fac={b.Factor:0} Prv={b.Provoke:0} Sph={b.SphereX:0} Prx={b.Proximity:0} Trd={b.TrendWeight:0} Cog={b.CenterOfGravity:0} Foc={b.Focus:0}");
 
             if (best.Fitness > bestEverFitness) {
                 bestEverFitness = best.Fitness;
@@ -166,16 +195,16 @@ public class GeneticAlgorithmTests
             }
 
             var survivors = scored.Take(Math.Max(2, PopulationSize / 3)).Select(x => x.Genome).ToList();
-            population = NextGeneration(survivors, gaRandom);
+            population = NextGeneration(survivors, gaRandom, PopulationSize);
         }
 
         overallStopwatch.Stop();
         var totalEvals = totalWins + totalLosses + totalNeither;
         Console.WriteLine($"total wall clock: {overallStopwatch.Elapsed.TotalSeconds:0.#}s ({totalEvals} playouts, {overallStopwatch.Elapsed.TotalMilliseconds / totalEvals:0.#}ms/playout)");
         Console.WriteLine($"eliminations across entire search: evolved-wins={totalWins} baseline-wins={totalLosses} neither={totalNeither} (of {totalEvals} total playouts)");
-        Console.WriteLine($"best ever: fitness={bestEverFitness:0.#} genes: Imp={bestEver!.Imperialist:0} Def={bestEver.Defensive:0} Off={bestEver.Offensive:0} Fac={bestEver.Factor:0} Prv={bestEver.Provoke:0} Sph={bestEver.SphereX:0}");
-        Console.WriteLine("Kingdom1 baseline ranges: Imp=1-5 Def=50-75 Off=1-2 Fac=15 Prv=75 Sph=25-75");
-        Console.WriteLine("Kingdom2 baseline ranges: Imp=50-100 Def=5-10 Off=50-100 Fac=25 Prv=50-100 Sph=25-100");
+        Console.WriteLine($"best ever: fitness={bestEverFitness:0.#} genes: Imp={bestEver!.Imperialist:0} Def={bestEver.Defensive:0} Off={bestEver.Offensive:0} Fac={bestEver.Factor:0} Prv={bestEver.Provoke:0} Sph={bestEver.SphereX:0} Prx={bestEver.Proximity:0} Trd={bestEver.TrendWeight:0} Cog={bestEver.CenterOfGravity:0} Foc={bestEver.Focus:0}");
+        Console.WriteLine("Kingdom1 baseline ranges: Imp=1-5 Def=50-75 Off=1-2 Fac=15 Prv=75 Sph=25-75 Prx=Trd=Cog=Foc=0 (fixed, real games never set these)");
+        Console.WriteLine("Kingdom2 baseline ranges: Imp=50-100 Def=5-10 Off=50-100 Fac=25 Prv=50-100 Sph=25-100 Prx=Trd=Cog=Foc=0 (fixed, real games never set these)");
 
         // Held-out validation: re-score the best-ever genome against seeds the search never trained
         // on, to check whether it generalizes or just overfit its small training seed set.
@@ -202,28 +231,41 @@ public class GeneticAlgorithmTests
         await Task.CompletedTask;
     }
 
-    private static List<GeneVector> InitialPopulation(Random gaRandom)
+    private static List<GeneVector> InitialPopulation(Random gaRandom, int populationSize)
     {
         var population = new List<GeneVector>();
-        for (var i = 0; i < PopulationSize; i++) {
+        for (var i = 0; i < populationSize; i++) {
             var useKingdom2Style = gaRandom.Next(2) == 0;
+            // The four invented genes have no Kingdom1/Kingdom2 precedent to seed from either style
+            // with -- start every candidate at a uniform random roll across its own full bound,
+            // independent of style.
+            var proximity = gaRandom.Next(0, 101);
+            var trendWeight = gaRandom.Next(0, 101);
+            var centerOfGravity = gaRandom.Next(0, 101);
+            var focus = gaRandom.Next(0, 101);
+            var composition = gaRandom.Next(0, 101);
+            var heavyRange = gaRandom.Next(0, 101);
             population.Add(useKingdom2Style
                 ? new GeneVector(
                     Imperialist: gaRandom.Next(50, 101), Defensive: gaRandom.Next(5, 11),
                     Offensive: gaRandom.Next(50, 101), Factor: 25,
-                    Provoke: gaRandom.Next(50, 101), SphereX: gaRandom.Next(25, 101))
+                    Provoke: gaRandom.Next(50, 101), SphereX: gaRandom.Next(25, 101),
+                    Proximity: proximity, TrendWeight: trendWeight, CenterOfGravity: centerOfGravity, Focus: focus,
+                    Composition: composition, HeavyRange: heavyRange)
                 : new GeneVector(
                     Imperialist: gaRandom.Next(1, 6), Defensive: gaRandom.Next(50, 76),
                     Offensive: gaRandom.Next(1, 3), Factor: 15,
-                    Provoke: 75, SphereX: gaRandom.Next(25, 76)));
+                    Provoke: 75, SphereX: gaRandom.Next(25, 76),
+                    Proximity: proximity, TrendWeight: trendWeight, CenterOfGravity: centerOfGravity, Focus: focus,
+                    Composition: composition, HeavyRange: heavyRange));
         }
         return population;
     }
 
-    private static List<GeneVector> NextGeneration(List<GeneVector> survivors, Random gaRandom)
+    private static List<GeneVector> NextGeneration(List<GeneVector> survivors, Random gaRandom, int populationSize)
     {
         var next = new List<GeneVector>(survivors);
-        while (next.Count < PopulationSize) {
+        while (next.Count < populationSize) {
             var parentA = survivors[gaRandom.Next(survivors.Count)];
             if (survivors.Count > 1 && gaRandom.NextDouble() < 0.3) {
                 var parentB = survivors[gaRandom.Next(survivors.Count)];
@@ -238,7 +280,9 @@ public class GeneticAlgorithmTests
     private static GeneVector Crossover(GeneVector a, GeneVector b) => new(
         (a.Imperialist + b.Imperialist) / 2, (a.Defensive + b.Defensive) / 2,
         (a.Offensive + b.Offensive) / 2, (a.Factor + b.Factor) / 2,
-        (a.Provoke + b.Provoke) / 2, (a.SphereX + b.SphereX) / 2);
+        (a.Provoke + b.Provoke) / 2, (a.SphereX + b.SphereX) / 2, (a.Proximity + b.Proximity) / 2,
+        (a.TrendWeight + b.TrendWeight) / 2, (a.CenterOfGravity + b.CenterOfGravity) / 2, (a.Focus + b.Focus) / 2,
+        (a.Composition + b.Composition) / 2, (a.HeavyRange + b.HeavyRange) / 2);
 
     private static GeneVector Mutate(GeneVector g, Random gaRandom) => new(
         Perturb(g.Imperialist, Bounds["Imperialist"], gaRandom),
@@ -246,7 +290,13 @@ public class GeneticAlgorithmTests
         Perturb(g.Offensive, Bounds["Offensive"], gaRandom),
         Perturb(g.Factor, Bounds["Factor"], gaRandom),
         Perturb(g.Provoke, Bounds["Provoke"], gaRandom),
-        Perturb(g.SphereX, Bounds["SphereX"], gaRandom));
+        Perturb(g.SphereX, Bounds["SphereX"], gaRandom),
+        Perturb(g.Proximity, Bounds["Proximity"], gaRandom),
+        Perturb(g.TrendWeight, Bounds["TrendWeight"], gaRandom),
+        Perturb(g.CenterOfGravity, Bounds["CenterOfGravity"], gaRandom),
+        Perturb(g.Focus, Bounds["Focus"], gaRandom),
+        Perturb(g.Composition, Bounds["Composition"], gaRandom),
+        Perturb(g.HeavyRange, Bounds["HeavyRange"], gaRandom));
 
     /// <summary>Box-Muller Gaussian step, sigma = 10% of the gene's real (union) range.</summary>
     private static double Perturb(double value, GeneBounds bounds, Random gaRandom)
@@ -300,11 +350,9 @@ public class GeneticAlgorithmTests
 
         // No npeProvider was passed to Load, so neither empire's defenses were seeded yet -- the
         // public KingdomTurnHandler constructor normally does this itself; replicate it here since
-        // the evolved side goes through the internal (persona-injecting) constructor instead.
+        // the evolved side goes through Kingdom2ModernTurnHandler instead, which doesn't.
         NpeToolkit.SetEmpireDefenses(evolved, random);
-        game.TurnHandlers[evolved] = new KingdomTurnHandler(
-            NpeEmpireType.Kingdom2, genome.ToPersona(), new Dictionary<Empire, StateDeptRecord>(),
-            new Dictionary<Fleet, KingdomFleetState>(), random);
+        game.TurnHandlers[evolved] = new Kingdom2ModernTurnHandler(genome.ToPersona(), PolicyType.Harass, random);
         game.TurnHandlers[baseline] = new KingdomTurnHandler(baseline, NpeEmpireType.Kingdom1, random);
 
         var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random));
@@ -368,5 +416,583 @@ public class GeneticAlgorithmTests
             _ => (0, Outcome.Neither),
         };
         return (damageAccum + bonus, outcome);
+    }
+
+    // ---- Intro (5 empires): 1 evolved vs. 4 fixed Kingdom1 baselines ----
+    //
+    // Sized down from the East-vs-West constants above after measuring real per-playout cost on this
+    // scenario (5 empires means 5 empire-turns per simulated year instead of 2, so each playout costs
+    // more) -- see this test's own report for the measured number and the reasoning behind the final
+    // values chosen here.
+
+    // Measured 716.5ms/playout at the 500-year horizon (probe: population 2/generations 1/seeds 2,
+    // 2.9s/4 playouts) -- ~15.6x the ~46ms/playout measured at 120 years, a super-linear jump from
+    // population/ship counts growing much larger over a longer horizon. Sized to land around 12-13
+    // minutes total: 16 x 8 x 8 = 1,024 training playouts + 30 held-out = 1,054 x 0.7165s ~= 755s.
+    private const int IntroPopulationSize = 16;
+    private const int IntroGenerations = 8;
+    private const int IntroSeedsPerCandidate = 8;
+    // Extended from 120: at 120 years, real combat damage was measurable (5-7 world conquests/seed for
+    // the best genome) but zero eliminations occurred across the entire search, in either direction --
+    // not enough time for any campaign, focused or not, to actually finish an opponent off. 500 matches
+    // the cap used by this session's very first all-Kingdom playout harness (ScenarioPlayoutTests.cs).
+    private const int IntroYearCap = 500;
+    // Points per world the evolved side actually conquers from a fixed opponent (see
+    // RunOneFitnessPlayoutIntro's own doc comment for why this replaced the checkpoint-damage metric).
+    // 20 worlds taken without finishing anyone off (2000/100) still scores below one real elimination --
+    // preserves "finish one opponent" outranking "scatter damage across all four" for the normal case,
+    // while still letting a genuinely dominant sweep across many worlds outscore a single elimination in
+    // the extreme case, which is a real outcome that should score higher, not a design flaw.
+    private const double ConquestWeight = 100;
+    // One opponent's worth of "took every world" is comfortably above what ConquestWeight alone could
+    // plausibly reach for a single opponent before they'd already be eliminated -- so an elimination
+    // still dominates equivalent partial damage against that same opponent.
+    private const double IntroEliminationBonus = 2000;
+    private const int IntroHeldOutSeedBase = 20_000_000;
+    private const int IntroHeldOutSeedCount = 30;
+
+    [Test, Explicit]
+    public async Task EvolveAgainstFourKingdom1BaselinesOnIntro()
+    {
+        var introPath = Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "reference", "scenarios", "dos_131", "INTRO.SCN");
+        var introText = File.ReadAllText(introPath);
+
+        var gaRandom = new Random(67890);
+        var population = InitialPopulation(gaRandom, IntroPopulationSize);
+        var overallStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        GeneVector? bestEver = null;
+        var bestEverFitness = double.NegativeInfinity;
+        var totalAnyWins = 0;
+        var totalAllWins = 0;
+        var totalLosses = 0;
+        var totalSeeds = 0;
+        // Every candidate evaluated across the whole search (not just each generation's winner) -- the
+        // GA's own convergence path can be misleading (it might converge on high Focus for reasons
+        // unrelated to whether Focus actually helps, or fail to converge there even if it does, given
+        // how sparse the elimination signal was at the shorter horizon) -- a direct correlation between
+        // each gene's value and outcome across every real candidate is the actual empirical answer.
+        var allEvaluated = new List<IntroCandidateResult>();
+
+        for (var gen = 0; gen < IntroGenerations; gen++) {
+            var genStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var scored = population
+                .Select((genome, i) => EvaluateIntro(genome, gen, i, introText))
+                .OrderByDescending(x => x.Fitness)
+                .ToList();
+            genStopwatch.Stop();
+            allEvaluated.AddRange(scored);
+
+            foreach (var c in scored) {
+                totalAnyWins += c.AnyWins;
+                totalAllWins += c.AllWins;
+                totalLosses += c.Losses;
+                totalSeeds += IntroSeedsPerCandidate;
+            }
+
+            var best = scored[0];
+            var worst = scored[^1];
+            Console.WriteLine($"gen {gen}: best={best.Fitness:0.#} (winRateAny={best.WinRateAny:P0} winRateAll={best.WinRateAll:P0}) worst={worst.Fitness:0.#} mean={scored.Average(x => x.Fitness):0.#} meanWinRateAny={scored.Average(x => x.WinRateAny):P0} ({genStopwatch.Elapsed.TotalSeconds:0.#}s, {IntroPopulationSize * IntroSeedsPerCandidate} evals)");
+            var b = best.Genome;
+            Console.WriteLine($"  best genes: Imp={b.Imperialist:0} Def={b.Defensive:0} Off={b.Offensive:0} Fac={b.Factor:0} Prv={b.Provoke:0} Sph={b.SphereX:0} Prx={b.Proximity:0} Trd={b.TrendWeight:0} Cog={b.CenterOfGravity:0} Foc={b.Focus:0}");
+
+            if (best.Fitness > bestEverFitness) {
+                bestEverFitness = best.Fitness;
+                bestEver = best.Genome;
+            }
+
+            var survivors = scored.Take(Math.Max(2, IntroPopulationSize / 3)).Select(x => x.Genome).ToList();
+            population = NextGeneration(survivors, gaRandom, IntroPopulationSize);
+        }
+
+        overallStopwatch.Stop();
+        Console.WriteLine($"total wall clock: {overallStopwatch.Elapsed.TotalSeconds:0.#}s ({totalSeeds} playouts, {overallStopwatch.Elapsed.TotalMilliseconds / totalSeeds:0.#}ms/playout)");
+        Console.WriteLine($"across entire search: evolved-eliminated-at-least-one={totalAnyWins} evolved-eliminated-all-four={totalAllWins} evolved-itself-eliminated={totalLosses} (of {totalSeeds} total playouts)");
+        Console.WriteLine($"best ever: fitness={bestEverFitness:0.#} genes: Imp={bestEver!.Imperialist:0} Def={bestEver.Defensive:0} Off={bestEver.Offensive:0} Fac={bestEver.Factor:0} Prv={bestEver.Provoke:0} Sph={bestEver.SphereX:0} Prx={bestEver.Proximity:0} Trd={bestEver.TrendWeight:0} Cog={bestEver.CenterOfGravity:0} Foc={bestEver.Focus:0}");
+
+        var heldOutStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var heldOutAnyWins = 0;
+        var heldOutAllWins = 0;
+        var heldOutLosses = 0;
+        double heldOutTotal = 0;
+        for (var i = 0; i < IntroHeldOutSeedCount; i++) {
+            var seed = IntroHeldOutSeedBase + i;
+            var (score, eliminatedCount, opponentCount, evolvedEliminated, _) = RunOneFitnessPlayoutIntro(introText, bestEver, seed, IntroPlayers, IntroYearCap);
+            heldOutTotal += score;
+            if (eliminatedCount >= 1) heldOutAnyWins++;
+            if (eliminatedCount == opponentCount) heldOutAllWins++;
+            if (evolvedEliminated) heldOutLosses++;
+        }
+        heldOutStopwatch.Stop();
+        Console.WriteLine($"held-out validation ({IntroHeldOutSeedCount} fresh seeds, never used in training, {heldOutStopwatch.Elapsed.TotalSeconds:0.#}s): mean fitness={heldOutTotal / IntroHeldOutSeedCount:0.#} winRateAny={(double)heldOutAnyWins / IntroHeldOutSeedCount:P0} winRateAll={(double)heldOutAllWins / IntroHeldOutSeedCount:P0} lossRate={(double)heldOutLosses / IntroHeldOutSeedCount:P0}");
+
+        // Direct empirical check: does each gene's value actually predict outcome across every real
+        // candidate evaluated, independent of what the GA itself happened to converge on? Pearson
+        // correlation plus a top-third-vs-bottom-third bucketed comparison against fitness, elimination
+        // rate (winRateAny), and raw conquest count.
+        Console.WriteLine($"--- gene-vs-outcome analysis over {allEvaluated.Count} total evaluated candidates ---");
+        ReportGeneCorrelation("Focus", allEvaluated, c => c.Genome.Focus);
+        ReportGeneCorrelation("TrendWeight", allEvaluated, c => c.Genome.TrendWeight);
+        ReportGeneCorrelation("CenterOfGravity", allEvaluated, c => c.Genome.CenterOfGravity);
+
+        await Task.CompletedTask;
+    }
+
+    private static void ReportGeneCorrelation(string name, List<IntroCandidateResult> all, Func<IntroCandidateResult, double> geneValue)
+    {
+        var withGene = all.Select(c => (Gene: geneValue(c), c.Fitness, c.WinRateAny, c.MeanWorldsConquered)).ToList();
+
+        var corrFitness = Correlation(withGene.Select(x => (x.Gene, x.Fitness)));
+        var corrWinRate = Correlation(withGene.Select(x => (x.Gene, x.WinRateAny)));
+        var corrConquest = Correlation(withGene.Select(x => (x.Gene, x.MeanWorldsConquered)));
+
+        var ordered = withGene.OrderBy(x => x.Gene).ToList();
+        var third = Math.Max(1, ordered.Count / 3);
+        var bottom = ordered.Take(third).ToList();
+        var top = ordered.Skip(ordered.Count - third).ToList();
+
+        Console.WriteLine($"{name}: corr(fitness)={corrFitness:0.00} corr(winRateAny)={corrWinRate:0.00} corr(conquests)={corrConquest:0.00}");
+        Console.WriteLine($"  bottom third (n={bottom.Count}, gene {bottom.Min(x => x.Gene):0}-{bottom.Max(x => x.Gene):0}): meanFitness={bottom.Average(x => x.Fitness):0.#} meanWinRateAny={bottom.Average(x => x.WinRateAny):P0} meanConquests={bottom.Average(x => x.MeanWorldsConquered):0.#}");
+        Console.WriteLine($"  top third    (n={top.Count}, gene {top.Min(x => x.Gene):0}-{top.Max(x => x.Gene):0}): meanFitness={top.Average(x => x.Fitness):0.#} meanWinRateAny={top.Average(x => x.WinRateAny):P0} meanConquests={top.Average(x => x.MeanWorldsConquered):0.#}");
+    }
+
+    /// <summary>Plain Pearson correlation coefficient -- no library needed for a pairwise check this small.</summary>
+    private static double Correlation(IEnumerable<(double X, double Y)> pairs)
+    {
+        var list = pairs.ToList();
+        var n = list.Count;
+        if (n < 2) return 0;
+
+        var meanX = list.Average(p => p.X);
+        var meanY = list.Average(p => p.Y);
+        var cov = list.Sum(p => (p.X - meanX) * (p.Y - meanY));
+        var varX = list.Sum(p => (p.X - meanX) * (p.X - meanX));
+        var varY = list.Sum(p => (p.Y - meanY) * (p.Y - meanY));
+        var denom = Math.Sqrt(varX * varY);
+        return denom == 0 ? 0 : cov / denom;
+    }
+
+    private sealed record IntroCandidateResult(
+        GeneVector Genome, double Fitness, double WinRateAny, double WinRateAll, int AnyWins, int AllWins, int Losses,
+        double MeanWorldsConquered);
+
+    private static IntroCandidateResult EvaluateIntro(GeneVector genome, int generation, int candidateIndex, string introText)
+        => EvaluateMultiOpponent(genome, generation, candidateIndex, introText, IntroPlayers, IntroYearCap, IntroSeedsPerCandidate);
+
+    /// <summary>
+    /// Generalized over <see cref="EvaluateIntro"/> so the same fitness/elimination-tracking logic can
+    /// drive any multi-opponent scenario, not just Intro -- <see cref="EvolveOnOrionsBelt"/> reuses this
+    /// unchanged for the 3-empire near/far fixture. <paramref name="players"/>'s first entry must be the
+    /// evolved side (matched by name below, same as <see cref="RunOneFitnessPlayoutIntro"/> always did
+    /// for Intro's "evolved").
+    /// </summary>
+    private static IntroCandidateResult EvaluateMultiOpponent(
+        GeneVector genome, int generation, int candidateIndex, string scenarioText,
+        IReadOnlyList<ScenarioLoader.PlayerInfo> players, int yearCap, int seedsPerCandidate)
+    {
+        double total = 0;
+        var anyWins = 0;
+        var allWins = 0;
+        var losses = 0;
+        var worldsConqueredTotal = 0;
+        for (var seedIndex = 0; seedIndex < seedsPerCandidate; seedIndex++) {
+            var seed = generation * 100_000 + candidateIndex * 1_000 + seedIndex;
+            var (score, eliminatedCount, opponentCount, evolvedEliminated, worldsConquered) = RunOneFitnessPlayoutIntro(scenarioText, genome, seed, players, yearCap);
+            total += score;
+            worldsConqueredTotal += worldsConquered;
+            if (eliminatedCount >= 1) anyWins++;
+            if (eliminatedCount == opponentCount) allWins++;
+            if (evolvedEliminated) losses++;
+        }
+        return new IntroCandidateResult(genome, total / seedsPerCandidate,
+            (double)anyWins / seedsPerCandidate, (double)allWins / seedsPerCandidate, anyWins, allWins, losses,
+            (double)worldsConqueredTotal / seedsPerCandidate);
+    }
+
+    /// <summary>
+    /// One evolved empire vs. every other empire the Intro scenario creates (3 player slots, one of
+    /// which is "evolved" -- the rest given placeholder names and left as fixed baselines -- plus
+    /// whatever NPE-declared empires the scenario itself adds independent of the player list). Found
+    /// by name, not by <c>game.Empires</c> index: <see cref="ScenarioLoader"/> appends empires in
+    /// whatever order CREATEPLAYEREMPIRE/CREATENPEMPIRE tokens appear in the .SCN text, not
+    /// players-first -- indexing would silently pick the wrong empire as "evolved" if that order ever
+    /// isn't what it looks like from the player list alone.
+    ///
+    /// Fitness here is NOT the East-vs-West "decline from the opponent's own starting stock" metric
+    /// (<see cref="Damage"/>/<see cref="MeasureBaseline"/>, still used by the East-vs-West path above,
+    /// unchanged). That metric went completely flat on Intro -- 2,880/2,880 training playouts and
+    /// 30/30 held-out playouts scored exactly 0.0 in the first Intro round, confirmed by direct
+    /// diagnostic sampling: all four fixed opponents grow 3-9x population and 60-200x ships over 120
+    /// years purely from conquering independent worlds, regardless of what the evolved side does, and
+    /// with force now split across up to four simultaneous targets instead of one, nothing ever dented
+    /// any opponent's own trajectory enough to go net-negative relative to its start. The metric was
+    /// measuring net stock change, which their own unrelated growth swamps -- not combat outcomes.
+    ///
+    /// The fix: count real, directly-attributable combat outcomes instead of net trajectories.
+    /// <see cref="Types.NewsType.WorldConqueredByEnemy"/> fires unconditionally (no scouting gate,
+    /// confirmed by reading <c>Empire.AddNews</c>'s own guard clause) on the DEFENDER's own
+    /// <see cref="Empire.News"/> list whenever a world changes hands, tagged with
+    /// <see cref="Entities.NewsItem.OtherEmpire"/> = the attacker (<c>CombatOutcome.cs</c>'s
+    /// <c>ConquerWorld</c>) -- exactly the attribution needed to count "worlds the evolved side
+    /// specifically took from this specific fixed opponent," sidestepping the opponent's own unrelated
+    /// growth entirely. (The <c>Global</c> variants of this headline,
+    /// <c>EnemyConqueredWorldGlobal</c>/<c>EnemyConqueredCapitalGlobal</c>, looked promising at first
+    /// but turned out to broadcast to every THIRD-PARTY empire that scouted the event and explicitly
+    /// exclude the attacker/defender themselves from that broadcast -- the wrong list to read.)
+    ///
+    /// News gets erased on an empire's own turn (real Pascal's EraseNews, <c>ANACREON.PAS</c>'s
+    /// per-empire NPE sequence) -- polling every opponent's <c>News.Count</c> after every single
+    /// <see cref="TurnEngine.AdvanceOneTurn"/> call (not just at checkpoints) and only scanning the
+    /// slice since the last poll catches every new item before any later call can erase it: addition
+    /// always happens during the ATTACKER's own turn call (a world can only change hands while its new
+    /// owner is acting), while erasure only ever happens during that SAME opponent's own turn call --
+    /// two different calls can never both add-to and erase-from the same list in one step, so a add
+    /// always gets polled at least once before any later erase reaches it. A list shrinking between
+    /// polls means it was just erased; the cursor resets to 0 rather than reading stale/absent items
+    /// (there's nothing left to recover -- the point above is that this can't happen to an unpolled
+    /// item).
+    /// </summary>
+    /// <summary>The 3 player slots Intro's own scenario text declares -- see <see cref="RunOneFitnessPlayoutIntro"/>'s own doc comment for the two NPE-declared empires Intro adds independent of this list.</summary>
+    private static readonly ScenarioLoader.PlayerInfo[] IntroPlayers = [
+        new("evolved", null, IsEmpress: false),
+        new("baseline-p1", null, IsEmpress: false),
+        new("baseline-p2", null, IsEmpress: false),
+    ];
+
+    private static (double Score, int EliminatedCount, int OpponentCount, bool EvolvedEliminated, int WorldsConquered) RunOneFitnessPlayoutIntro(
+        string scenarioText, GeneVector genome, int seed, IReadOnlyList<ScenarioLoader.PlayerInfo> players, int yearCap)
+    {
+        var random = new Random(seed);
+        var setup = new GalaxySetup(random);
+        var loader = new ScenarioLoader(setup, random);
+
+        var game = loader.Load(scenarioText, players);
+        var startYear = game.Year;
+        var evolved = game.Empires.First(e => e.Name == "evolved");
+        var opponents = game.Empires.Where(e => e != evolved).ToList();
+
+        NpeToolkit.SetEmpireDefenses(evolved, random);
+        game.TurnHandlers[evolved] = new Kingdom2ModernTurnHandler(genome.ToPersona(), PolicyType.Harass, random);
+        foreach (var opponent in opponents) {
+            game.TurnHandlers[opponent] = new KingdomTurnHandler(opponent, NpeEmpireType.Kingdom1, random);
+        }
+
+        var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random));
+
+        var worldsConquered = new int[opponents.Count];
+        var lastNewsCount = new int[opponents.Count];
+
+        var maxCalls = yearCap * game.Empires.Count * 2;
+        for (var call = 0; call < maxCalls; call++) {
+            turnEngine.AdvanceOneTurn(game);
+
+            for (var i = 0; i < opponents.Count; i++) {
+                var news = opponents[i].News;
+                if (news.Count < lastNewsCount[i]) {
+                    lastNewsCount[i] = 0; // erased on this opponent's own turn -- nothing to recover, see doc comment above.
+                }
+                for (var j = lastNewsCount[i]; j < news.Count; j++) {
+                    if (news[j].Headline == NewsType.WorldConqueredByEnemy && news[j].OtherEmpire == evolved) {
+                        worldsConquered[i]++;
+                    }
+                }
+                lastNewsCount[i] = news.Count;
+            }
+
+            var evolvedAlive = evolved.Status != EmpireStatus.Eliminated;
+            var opponentsRemaining = opponents.Count(o => o.Status != EmpireStatus.Eliminated);
+            if (!evolvedAlive || opponentsRemaining == 0 || game.Year - startYear >= yearCap) {
+                return FinalizeScoreIntro(worldsConquered.Sum(), opponents, evolvedAlive);
+            }
+        }
+
+        return FinalizeScoreIntro(worldsConquered.Sum(), opponents, evolved.Status != EmpireStatus.Eliminated);
+    }
+
+    private static (double Score, int EliminatedCount, int OpponentCount, bool EvolvedEliminated, int WorldsConquered) FinalizeScoreIntro(
+        int totalWorldsConquered, List<Empire> opponents, bool evolvedAlive)
+    {
+        var eliminatedCount = opponents.Count(o => o.Status == EmpireStatus.Eliminated);
+        var bonus = (IntroEliminationBonus * eliminatedCount) - (evolvedAlive ? 0 : IntroEliminationBonus);
+        return (totalWorldsConquered * ConquestWeight + bonus, eliminatedCount, opponents.Count, !evolvedAlive, totalWorldsConquered);
+    }
+
+    // ---- Orion's Belt (3 empires, collinear): 1 evolved vs. 2 fixed Kingdom1 baselines ----
+    //
+    // Purpose-built fixture (Fixtures/OrionsBelt.scn -- kept, reusable, not thrown away) to isolate two
+    // open questions the Intro round (1-vs-4, zero eliminations even at 500 years) couldn't answer: is
+    // 1-vs-2 winnable at all (intermediate difficulty between East-vs-West's working 1-vs-1 and Intro's
+    // failing 1-vs-4), and does CenterOfGravityGene show a real signal now that there's an unambiguous
+    // near opponent (Chebyshev distance 7) and far opponent (distance 19, ~2.7x farther) instead of
+    // Intro's four roughly-equidistant-and-scattered opponents. No independent worlds exist in this
+    // scenario at all, so growth can only come from conquering a rival -- removes the "expand into empty
+    // space" confound entirely rather than just outrunning it with a bigger fitness number.
+    //
+    // Reuses EvaluateMultiOpponent/RunOneFitnessPlayoutIntro/FinalizeScoreIntro unchanged (all already
+    // generalized over opponent count and scenario text) -- only the scenario, player list, and horizon
+    // differ from the Intro path.
+
+    private static readonly ScenarioLoader.PlayerInfo[] OrionsBeltPlayers = [
+        new("evolved", null, IsEmpress: false),
+        new("near", null, IsEmpress: false),
+        new("far", null, IsEmpress: false),
+    ];
+
+    // Started at the same 120-year horizon East-vs-West's working 1-vs-1 case used, per the user's own
+    // instruction to isolate opponent count as the only changed variable from that known-working
+    // baseline, before considering whether to escalate the way the Intro round did.
+    private const int OrionsBeltYearCap = 120;
+    // Measured 11.9ms/playout in the CompositionGene round's actual run (population 16/generations
+    // 10/seeds 16, 30.6s/2,560 playouts) -- cheaper than East-vs-West despite one more empire, since
+    // Orion's Belt has far fewer total worlds (9 vs. 14). At a true win rate this small (0.2%-0.5%
+    // observed across the last two rounds), 16 seeds/candidate gives a binomial standard error well
+    // above the effect size being searched for -- the exact problem already diagnosed and fixed once
+    // for East-vs-West by raising seeds 8->30 (held-out 5%->8%). Raised to 50 here (held-out
+    // proportionally to 60) rather than just matching East-vs-West's 30, since Orion's Belt's true win
+    // rate is smaller still; at ~12ms/playout this is still only ~90s projected, not a real cost
+    // tradeoff worth trimming for.
+    // Population x generations raised from 16x10 (160 evaluated candidates) to 48x24 (1,152) after
+    // FocusGene/TrendWeightGene's correlations flipped sign twice between rounds at the smaller pool
+    // despite a reliable per-candidate seed count (50) -- too few DISTINCT candidates for a stable
+    // correlation reading, a different problem than per-candidate noise. Measured cost at the old
+    // scale (50 seeds/candidate) was ~10-11ms/playout; sized against that below, re-measure the first
+    // generation's real cost before trusting this comment's projection.
+    private const int OrionsBeltPopulationSize = 48;
+    private const int OrionsBeltGenerations = 24;
+    private const int OrionsBeltSeedsPerCandidate = 50;
+    private const int OrionsBeltHeldOutSeedBase = 30_000_000;
+    private const int OrionsBeltHeldOutSeedCount = 80;
+
+    [Test, Explicit]
+    public async Task EvolveOnOrionsBelt()
+    {
+        var path = Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "src", "Reconstructed4021.Tests", "Fixtures", "OrionsBelt.scn");
+        var text = File.ReadAllText(path);
+
+        var gaRandom = new Random(24680);
+        var population = InitialPopulation(gaRandom, OrionsBeltPopulationSize);
+        var overallStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        GeneVector? bestEver = null;
+        var bestEverFitness = double.NegativeInfinity;
+        var totalAnyWins = 0;
+        var totalAllWins = 0;
+        var totalLosses = 0;
+        var totalSeeds = 0;
+        var allEvaluated = new List<IntroCandidateResult>();
+
+        for (var gen = 0; gen < OrionsBeltGenerations; gen++) {
+            var genStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var scored = population
+                .Select((genome, i) => EvaluateMultiOpponent(genome, gen, i, text, OrionsBeltPlayers, OrionsBeltYearCap, OrionsBeltSeedsPerCandidate))
+                .OrderByDescending(x => x.Fitness)
+                .ToList();
+            genStopwatch.Stop();
+            allEvaluated.AddRange(scored);
+
+            foreach (var c in scored) {
+                totalAnyWins += c.AnyWins;
+                totalAllWins += c.AllWins;
+                totalLosses += c.Losses;
+                totalSeeds += OrionsBeltSeedsPerCandidate;
+            }
+
+            var best = scored[0];
+            var worst = scored[^1];
+            Console.WriteLine($"gen {gen}: best={best.Fitness:0.#} (winRateAny={best.WinRateAny:P0} winRateAll={best.WinRateAll:P0}) worst={worst.Fitness:0.#} mean={scored.Average(x => x.Fitness):0.#} meanWinRateAny={scored.Average(x => x.WinRateAny):P0} ({genStopwatch.Elapsed.TotalSeconds:0.#}s, {OrionsBeltPopulationSize * OrionsBeltSeedsPerCandidate} evals)");
+            var b = best.Genome;
+            Console.WriteLine($"  best genes: Imp={b.Imperialist:0} Def={b.Defensive:0} Off={b.Offensive:0} Fac={b.Factor:0} Prv={b.Provoke:0} Sph={b.SphereX:0} Prx={b.Proximity:0} Trd={b.TrendWeight:0} Cog={b.CenterOfGravity:0} Foc={b.Focus:0} Cmp={b.Composition:0} Hrg={b.HeavyRange:0}");
+
+            if (best.Fitness > bestEverFitness) {
+                bestEverFitness = best.Fitness;
+                bestEver = best.Genome;
+            }
+
+            var survivors = scored.Take(Math.Max(2, OrionsBeltPopulationSize / 3)).Select(x => x.Genome).ToList();
+            population = NextGeneration(survivors, gaRandom, OrionsBeltPopulationSize);
+        }
+
+        overallStopwatch.Stop();
+        Console.WriteLine($"total wall clock: {overallStopwatch.Elapsed.TotalSeconds:0.#}s ({totalSeeds} playouts, {overallStopwatch.Elapsed.TotalMilliseconds / totalSeeds:0.#}ms/playout)");
+        Console.WriteLine($"across entire search: evolved-eliminated-at-least-one={totalAnyWins} evolved-eliminated-both={totalAllWins} evolved-itself-eliminated={totalLosses} (of {totalSeeds} total playouts)");
+        Console.WriteLine($"best ever: fitness={bestEverFitness:0.#} genes: Imp={bestEver!.Imperialist:0} Def={bestEver.Defensive:0} Off={bestEver.Offensive:0} Fac={bestEver.Factor:0} Prv={bestEver.Provoke:0} Sph={bestEver.SphereX:0} Prx={bestEver.Proximity:0} Trd={bestEver.TrendWeight:0} Cog={bestEver.CenterOfGravity:0} Foc={bestEver.Focus:0} Cmp={bestEver.Composition:0} Hrg={bestEver.HeavyRange:0}");
+
+        var heldOutStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var heldOutAnyWins = 0;
+        var heldOutAllWins = 0;
+        var heldOutLosses = 0;
+        double heldOutTotal = 0;
+        for (var i = 0; i < OrionsBeltHeldOutSeedCount; i++) {
+            var seed = OrionsBeltHeldOutSeedBase + i;
+            var (score, eliminatedCount, opponentCount, evolvedEliminated, _) = RunOneFitnessPlayoutIntro(text, bestEver, seed, OrionsBeltPlayers, OrionsBeltYearCap);
+            heldOutTotal += score;
+            if (eliminatedCount >= 1) heldOutAnyWins++;
+            if (eliminatedCount == opponentCount) heldOutAllWins++;
+            if (evolvedEliminated) heldOutLosses++;
+        }
+        heldOutStopwatch.Stop();
+        Console.WriteLine($"held-out validation ({OrionsBeltHeldOutSeedCount} fresh seeds, never used in training, {heldOutStopwatch.Elapsed.TotalSeconds:0.#}s): mean fitness={heldOutTotal / OrionsBeltHeldOutSeedCount:0.#} winRateAny={(double)heldOutAnyWins / OrionsBeltHeldOutSeedCount:P0} winRateAll={(double)heldOutAllWins / OrionsBeltHeldOutSeedCount:P0} lossRate={(double)heldOutLosses / OrionsBeltHeldOutSeedCount:P0}");
+
+        Console.WriteLine($"--- gene-vs-outcome analysis over {allEvaluated.Count} total evaluated candidates ---");
+        ReportGeneCorrelation("Proximity", allEvaluated, c => c.Genome.Proximity);
+        ReportGeneCorrelation("Focus", allEvaluated, c => c.Genome.Focus);
+        ReportGeneCorrelation("TrendWeight", allEvaluated, c => c.Genome.TrendWeight);
+        ReportGeneCorrelation("CenterOfGravity", allEvaluated, c => c.Genome.CenterOfGravity);
+        ReportGeneCorrelation("Composition", allEvaluated, c => c.Genome.Composition);
+        ReportGeneCorrelation("HeavyRange", allEvaluated, c => c.Genome.HeavyRange);
+
+        await Task.CompletedTask;
+    }
+
+    // ---- Diagnostic-only, temporary: fleet dispatch instrumentation ----
+    // Not part of the GA -- a one-off tool to look at real attack-dispatch data (fleet power/
+    // composition, target defense, home-capital defense at dispatch time) from actual playouts, to
+    // find out mechanically why 2+ simultaneous opponents collapses win rate so much harder than the
+    // opponent-count alone would suggest. Set NPE_DIAG=1 to get per-dispatch DIAG lines from
+    // NpeToolkit.DeployBattleFleet (temporary instrumentation there too).
+    [Test, Explicit]
+    public async Task DiagnoseFleetDispatch()
+    {
+        // A representative "aggressive" genome -- Off high/Def low, matching the best-genome shape
+        // every round this session converged toward. New genes held at 0 (no-op) since this is about
+        // baseline dispatch mechanics, not testing those genes.
+        var genome = new GeneVector(
+            Imperialist: 60, Defensive: 7, Offensive: 88, Factor: 25, Provoke: 70, SphereX: 60,
+            Proximity: 0, TrendWeight: 0, CenterOfGravity: 0, Focus: 0, Composition: 0, HeavyRange: 0);
+
+        Environment.SetEnvironmentVariable("NPE_DIAG", "1");
+        try {
+            Console.WriteLine("=== East-vs-West (1v1), 3 seeds ===");
+            var ewPath = Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "reference", "scenarios", "dos_131", "EASTWEST.SCN");
+            var ewText = File.ReadAllText(ewPath);
+            for (var seed = 0; seed < 3; seed++) {
+                Console.WriteLine($"--- seed {seed} ---");
+                var (score, outcome) = RunOneFitnessPlayout(ewText, genome, seed);
+                Console.WriteLine($"RESULT seed={seed} outcome={outcome} score={score:0.#}");
+            }
+
+            Console.WriteLine("=== Orion's Belt (1v2), 3 seeds ===");
+            var obPath = Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "src", "Reconstructed4021.Tests", "Fixtures", "OrionsBelt.scn");
+            var obText = File.ReadAllText(obPath);
+            for (var seed = 0; seed < 3; seed++) {
+                Console.WriteLine($"--- seed {seed} ---");
+                var (score, eliminatedCount, opponentCount, evolvedEliminated, worldsConquered) =
+                    RunOneFitnessPlayoutIntro(obText, genome, seed, OrionsBeltPlayers, OrionsBeltYearCap);
+                Console.WriteLine($"RESULT seed={seed} eliminated={eliminatedCount}/{opponentCount} evolvedEliminated={evolvedEliminated} worldsConquered={worldsConquered} score={score:0.#}");
+            }
+        } finally {
+            Environment.SetEnvironmentVariable("NPE_DIAG", null);
+        }
+
+        await Task.CompletedTask;
+    }
+
+    // ---- Diagnostic-only, temporary: verifies HeavyRangeGene's fixed monotonic cutoff ----
+    // A direct call to DeployBattleFleet against two explicit, fixed-distance targets, bypassing
+    // GetBestTarget's own target selection entirely -- a full-playout version of this check (tried
+    // first) was inconclusive because the AI's target selection never chose the far world at all in
+    // the seeds tried, for either the cheap or heavy dispatch, which is a fact about target selection
+    // and defense/value scoring, not about this gate. Calling DeployBattleFleet directly with an
+    // explicit target removes that confound. Not kept as a permanent regression test.
+    [Test, Explicit]
+    public async Task DiagnoseHeavyRangeGating()
+    {
+        // Checks whether the heavy wave actually gets dispatched (fleetStates gains a Starship-bearing
+        // entry). "far" is deliberately 15, not farther: a pure-Starship fleet's own fuel range is
+        // ~20 years at 1 sector/year (28.54 fuel capacity / 1.427 consumption per Starship,
+        // FleetLogistics.cs), so a target right at that boundary conflates a real, separate fuel/range
+        // abort with the withinHeavyRange gate this test exists to check -- 15 stays comfortably clear
+        // of that so only the gate itself is under test.
+        foreach (var heavyRange in new[] { 0, 10, 30 }) {
+            foreach (var (label, distance) in new[] { ("near", 5), ("far", 15) }) {
+                var attacker = new Empire { Name = "Attacker" };
+                var defender = new Empire { Name = "Defender" };
+                var fromWorld = new Planet {
+                    Location = new Core.Galaxy.Coordinate(0, 0),
+                    Owner = attacker,
+                    Class = WorldClass.EarthLike,
+                    TechLevel = TechLevel.Jump,
+                    Efficiency = 100,
+                    Type = WorldType.Capital,
+                    Ships = new ShipCounts { Starships = 2000, Penetrators = 2000, Jumpships = 2000, HunterKillers = 2000 },
+                };
+                fromWorld.Cargo.Trillum = 9999;
+                var target = new Planet { Location = new Core.Galaxy.Coordinate(distance, 0), Owner = defender, Class = WorldClass.EarthLike, TechLevel = TechLevel.Jump };
+
+                var game = new Game(new Core.Galaxy.Galaxy(size: 21));
+                game.Galaxy.Planets.AddRange([fromWorld, target]);
+                var random = new Random(1);
+                var fleetStates = new Dictionary<Fleet, KingdomFleetState>();
+
+                NpeToolkit.DeployBattleFleet(attacker, fleetStates, fromWorld, 100_000, 0, NpeMissionType.JumpAttack, target, game, random, compositionGene: 80, heavyRangeGene: heavyRange);
+
+                var heavyDispatched = fleetStates.Keys.Any(f => f.Ships.Starships > 0 || f.Ships.Penetrators > 0);
+                Console.WriteLine($"HeavyRange={heavyRange,2} target={label,4} (distance={distance}): heavy wave dispatched={heavyDispatched}");
+            }
+        }
+
+        await Task.CompletedTask;
+    }
+
+    // ---- Diagnostic-only, temporary: does fuel/trillum exhaustion actually happen in real runs? ----
+    // Checks two things full playouts can reveal that the direct-call tests above can't: (1) real
+    // pre-flight aborts (DeployBattleFleet's EDA>Range check) and mid-journey FleetOutOfFuel events,
+    // via the new NPE_DIAG-FUEL/-FUELOUT lines added to NpeToolkit.DeployBattleFleet and
+    // FleetMovementHandler.ConsumeFuel this round; (2) whether any world's TrillumReserve actually
+    // approaches zero within a 120-year horizon. Runs a "heavy" genome (Composition=80, HeavyRange=30
+    // -- unlimited on Orion's Belt's own map, so nothing gates dispatch) against a "cheap" control
+    // (Composition=0) for a direct comparison.
+    [Test, Explicit]
+    public async Task DiagnoseFuelAndTrillumExhaustion()
+    {
+        var obPath = Path.Combine(PascalGroundTruth.PascalHarness.RepoRoot, "src", "Reconstructed4021.Tests", "Fixtures", "OrionsBelt.scn");
+        var obText = File.ReadAllText(obPath);
+
+        var heavyGenome = new GeneVector(
+            Imperialist: 60, Defensive: 7, Offensive: 88, Factor: 25, Provoke: 70, SphereX: 60,
+            Proximity: 0, TrendWeight: 0, CenterOfGravity: 0, Focus: 0, Composition: 80, HeavyRange: 30);
+        var cheapGenome = heavyGenome with { Composition = 0, HeavyRange = 0 };
+
+        Environment.SetEnvironmentVariable("NPE_DIAG", "1");
+        try {
+            foreach (var (label, genome) in new[] { ("HEAVY", heavyGenome), ("CHEAP", cheapGenome) }) {
+                Console.WriteLine($"=== {label} genome (Composition={genome.Composition}, HeavyRange={genome.HeavyRange}), 5 seeds, 120-year horizon ===");
+                for (var seed = 0; seed < 5; seed++) {
+                    var random = new Random(seed);
+                    var setup = new GalaxySetup(random);
+                    var loader = new ScenarioLoader(setup, random);
+                    var game = loader.Load(obText, OrionsBeltPlayers);
+                    var startYear = game.Year;
+                    var evolved = game.Empires.First(e => e.Name == "evolved");
+                    var opponents = game.Empires.Where(e => e != evolved).ToList();
+
+                    NpeToolkit.SetEmpireDefenses(evolved, random);
+                    game.TurnHandlers[evolved] = new Kingdom2ModernTurnHandler(genome.ToPersona(), PolicyType.Harass, random);
+                    foreach (var opponent in opponents) {
+                        game.TurnHandlers[opponent] = new KingdomTurnHandler(opponent, NpeEmpireType.Kingdom1, random);
+                    }
+
+                    var turnEngine = new TurnEngine(new VisibilityHandler(random), new FleetMovementHandler(random), new AnnualTickHandler(random));
+                    var maxCalls = OrionsBeltYearCap * game.Empires.Count * 2;
+                    for (var call = 0; call < maxCalls; call++) {
+                        turnEngine.AdvanceOneTurn(game);
+                        var evolvedAlive = evolved.Status != EmpireStatus.Eliminated;
+                        var opponentsRemaining = opponents.Count(o => o.Status != EmpireStatus.Eliminated);
+                        if (!evolvedAlive || opponentsRemaining == 0 || game.Year - startYear >= OrionsBeltYearCap) {
+                            break;
+                        }
+                    }
+
+                    var evolvedWorlds = game.Galaxy.Planets.Where(p => p.Owner == evolved).ToList();
+                    var minReserve = evolvedWorlds.Count == 0 ? -1 : evolvedWorlds.Min(p => p.TrillumReserve);
+                    var maxReserve = evolvedWorlds.Count == 0 ? -1 : evolvedWorlds.Max(p => p.TrillumReserve);
+                    Console.WriteLine($"seed={seed} finalYear={game.Year} evolvedWorlds={evolvedWorlds.Count} evolvedTrillumReserve=[min={minReserve} max={maxReserve}]");
+                }
+            }
+        } finally {
+            Environment.SetEnvironmentVariable("NPE_DIAG", null);
+        }
+
+        await Task.CompletedTask;
     }
 }

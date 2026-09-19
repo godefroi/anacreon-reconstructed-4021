@@ -295,7 +295,7 @@ public class NpeToolkitTests
         emp.Planets.MarkKnown(candidate);
 
         var (target, defense, men) = NpeToolkit.GetBestTarget(
-            emp, [candidate], basePower: 1_000_000, persona, new Dictionary<Fleet, KingdomFleetState>(), new FixedRandom(0, 0.5));
+            emp, [candidate], basePower: 1_000_000, persona, new Dictionary<Fleet, KingdomFleetState>(), [], new FixedRandom(0, 0.5));
 
         await Assert.That(target).IsEqualTo(candidate);
         await Assert.That(defense).IsEqualTo(0L);
@@ -318,7 +318,7 @@ public class NpeToolkitTests
             [fleet] = new KingdomFleetState { Mission = NpeMissionType.Conquer, Target = alreadyTargeted },
         };
 
-        var (target, _, _) = NpeToolkit.GetBestTarget(emp, [unknown, alreadyTargeted], basePower: 1_000_000, persona, states, new FixedRandom(0, 0.5));
+        var (target, _, _) = NpeToolkit.GetBestTarget(emp, [unknown, alreadyTargeted], basePower: 1_000_000, persona, states, [], new FixedRandom(0, 0.5));
 
         await Assert.That(target).IsNull();
     }

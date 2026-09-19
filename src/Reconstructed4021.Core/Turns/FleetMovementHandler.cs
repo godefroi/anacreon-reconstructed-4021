@@ -917,6 +917,9 @@ public sealed class FleetMovementHandler(Random random, bool useLegacyOrderResol
             }
 
             if (fleet.Cargo.Trillum <= 0) {
+                if (Environment.GetEnvironmentVariable("NPE_DIAG") == "1") {
+                    Console.WriteLine($"DIAG-FUELOUT emp={fleet.Owner.Name} ships=[fgt={fleet.Ships.Fighters},hk={fleet.Ships.HunterKillers},jmp={fleet.Ships.Jumpships},pen={fleet.Ships.Penetrators},str={fleet.Ships.Starships}] location={fleet.Location.X},{fleet.Location.Y}");
+                }
                 fleet.Owner.AddNews(NewsType.FleetOutOfFuel, fleet);
                 fleet.Status = FleetStatus.Inactive;
                 return false;

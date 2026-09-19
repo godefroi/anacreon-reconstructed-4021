@@ -1,0 +1,188 @@
+ANACREON 12
+"Orion's Belt"
+0     ; random scenario
+3 3   ; exactly 3 players -- empire under test, one near, one far
+21    ; 21x21 galaxy, same size as every other scenario used this session
+10    ; planet cap (9 worlds actually placed)
+1     ; Difficulty: Intermediate
+120 120 ; suggested length (unenforced by the engine anyway)
+4021
+
+BEGINTEXT
+
+ Orion's Belt
+
+ A synthetic, hand-authored 3-empire test fixture, not real DOS content. Three
+ collinear empires along row 11 of a 21x21 galaxy: the Empire Under Test (EUT,
+ slot 0) at x=2, a Near opponent (slot 1) at x=9, and a Far opponent (slot 2)
+ at x=21. Chebyshev distance EUT-to-Near is 7; EUT-to-Far is 19 -- an
+ unambiguous, ~2.7x near/far margin, built to test whether empire-level
+ proximity awareness (CenterOfGravityGene) or target-focus (FocusGene) show
+ any real effect once "closer" is well-defined, unlike a symmetric or
+ many-opponent layout. No independent worlds are placed at all -- every world
+ belongs to one of the three empires from the start, so growth can only come
+ from conquering a rival, not from the "expand into empty space" pattern that
+ dominates growth in every other scenario used this session.
+
+ All three empires start with identical tech (Bio), identical modifiers
+ (CENTRAL), and three worlds each (a capital plus two others) using matched
+ population/efficiency/ship/defense loadouts, so the only asymmetry in this
+ galaxy is geometry.
+ENDTEXT
+
+; No BEGINDESCRIPTION / WorldBackgroundIndex -- purely optional flavor-text
+; metadata for the Close Up screen, not needed for a headless GA harness.
+
+; Create Empires ---------------------------------------------------------------
+
+CreatePlayerEmpire 0
+0           ; Revolution factor
+7           ; Bio-tech level
+0           ; No of technologies (extra techs)
+1           ; No of modifiers
+CENTRAL     ;    Capital is essential to the empire
+
+CreatePlayerEmpire 1
+0           ; Revolution factor
+7           ; Bio-tech level
+0           ; No of technologies (extra techs)
+1           ; No of modifiers
+CENTRAL     ;    Capital is essential to the empire
+
+CreatePlayerEmpire 2
+0           ; Revolution factor
+7           ; Bio-tech level
+0           ; No of technologies (extra techs)
+1           ; No of modifiers
+CENTRAL     ;    Capital is essential to the empire
+
+; Empire 0 (EUT) -- x=2, far west -----------------------------------------------
+
+CreateWorld 1 2,11
+9    ; earth-like
+7    ; Bio tech
+4    ; Capital type
+0    ; empire 0 (EUT)
+2200 ; population
+85   ; efficiency
+100  ; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 4400  800
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   800 3800 3600 2250 6000  500  250
+;  men  nnj  amb  che  met  sup  tri
+  6000    0    0 3000 3500 2000 2200
+
+CreateWorld 2 3,9
+3     ; Barren
+7     ; Bio tech
+2     ; Base planet
+0     ; empire 0 (EUT)
+1155  ; population
+80    ; efficiency
+100  ; trillum reserves
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn
+    0    0 2400  500 7000 1000 5000 3000 6500 1000 4000
+; men  nnj  amb  che  met  sup  tri
+ 2000    0    0 2500 3500 4500 1500
+
+CreateWorld 3 3,13
+7     ; Class M
+7     ; Bio tech
+18    ; WPI
+0     ; empire 0 (EUT)
+156   ; Population
+50    ; Efficiency
+100  ; trillum reserves
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn
+    0  100 1100    0 1000    0    0    0 7800 1000    0
+; men  nnj  amb  che  met  sup  tri
+ 1400    0    0 2500 1500 3200  500
+
+; Empire 1 (Near opponent) -- x=9, distance 7 from EUT --------------------------
+
+CreateWorld 4 9,11
+9    ; earth-like
+7    ; Bio tech
+4    ; Capital type
+1    ; empire 1 (Near)
+2200 ; population
+85   ; efficiency
+100  ; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 4400  800
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   800 3800 3600 2250 6000  500  250
+;  men  nnj  amb  che  met  sup  tri
+  6000    0    0 3000 3500 2000 2200
+
+CreateWorld 5 9,9
+3     ; Barren
+7     ; Bio tech
+2     ; Base planet
+1     ; empire 1 (Near)
+1155  ; population
+80    ; efficiency
+100  ; trillum reserves
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn
+    0    0 2400  500 7000 1000 5000 3000 6500 1000 4000
+; men  nnj  amb  che  met  sup  tri
+ 2000    0    0 2500 3500 4500 1500
+
+CreateWorld 6 9,13
+7     ; Class M
+7     ; Bio tech
+18    ; WPI
+1     ; empire 1 (Near)
+156   ; Population
+50    ; Efficiency
+100  ; trillum reserves
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn
+    0  100 1100    0 1000    0    0    0 7800 1000    0
+; men  nnj  amb  che  met  sup  tri
+ 1400    0    0 2500 1500 3200  500
+
+; Empire 2 (Far opponent) -- x=21, distance 19 from EUT --------------------------
+
+CreateWorld 7 21,11
+9    ; earth-like
+7    ; Bio tech
+4    ; Capital type
+2    ; empire 2 (Far)
+2200 ; population
+85   ; efficiency
+100  ; trillum reserves
+;  LAM  def  GDM  ion
+     0    0 4400  800
+;  fgt  hkr  jmp  jtn  pen  str  trn
+   800 3800 3600 2250 6000  500  250
+;  men  nnj  amb  che  met  sup  tri
+  6000    0    0 3000 3500 2000 2200
+
+CreateWorld 8 20,9
+3     ; Barren
+7     ; Bio tech
+2     ; Base planet
+2     ; empire 2 (Far)
+1155  ; population
+80    ; efficiency
+100  ; trillum reserves
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn
+    0    0 2400  500 7000 1000 5000 3000 6500 1000 4000
+; men  nnj  amb  che  met  sup  tri
+ 2000    0    0 2500 3500 4500 1500
+
+CreateWorld 9 20,13
+7     ; Class M
+7     ; Bio tech
+18    ; WPI
+2     ; empire 2 (Far)
+156   ; Population
+50    ; Efficiency
+100  ; trillum reserves
+; LAM  def  GDM  ion  fgt  hkr  jmp  jtn  pen  str  trn
+    0  100 1100    0 1000    0    0    0 7800 1000    0
+; men  nnj  amb  che  met  sup  tri
+ 1400    0    0 2500 1500 3200  500
+
+EndScenario

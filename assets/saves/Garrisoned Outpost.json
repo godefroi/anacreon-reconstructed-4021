@@ -602,6 +602,11 @@
           "worldPower": 54,
           "honorable": 50,
           "sphereX": 56,
+          "proximityGene": 0,
+          "trendWeightGene": 0,
+          "centerOfGravityGene": 0,
+          "focusGene": 0,
+          "compositionGene": 0,
           "clock": 0,
           "offset": 3
         },
