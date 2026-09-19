@@ -31,7 +31,12 @@ public class ProductionEfficiencyTests
         Dictionary<ShipType, long> ShipsLost,
         Dictionary<CargoType, long> CargoLost,
         Dictionary<CargoType, long> GrossCargo,
-        Dictionary<ShipType, long> GrossShips);
+        Dictionary<ShipType, long> GrossShips,
+        Dictionary<(WorldType, CargoType), long> OverflowByWorldType,
+        Dictionary<WorldType, long> ShortageByWorldType,
+        Dictionary<int, long> ShortageByEfficiencyBucket,
+        Dictionary<WorldType, (long EfficiencySum, long PopulationSum, int Count)> OverflowWorldStats,
+        Dictionary<WorldType, (long EfficiencySum, long PopulationSum, int Count)> ShortageWorldStats);
 
     [Test, Explicit]
     public async Task IntroKingdom1_ProductionLossTotals()
@@ -62,7 +67,57 @@ public class ProductionEfficiencyTests
         Report("Gross ships produced (before any shortage loss)", perSeed.Select(s => s.GrossShips));
         Report("Cargo products lost to raw-material shortage (legions/ninjas/ambrosia)", perSeed.Select(s => s.CargoLost));
 
+        Console.WriteLine();
+        Console.WriteLine("-- World-type / efficiency breakdown --");
+
+        var overflowByWorldType = Merge(perSeed.Select(s => s.OverflowByWorldType));
+        Console.WriteLine("Overflow lost by (WorldType, CargoType):");
+        foreach (var (k, v) in overflowByWorldType.OrderByDescending(kv => kv.Value))
+            Console.WriteLine($"  {k.Item1} / {k.Item2}: {v}");
+
+        var overflowStats = MergeStats(perSeed.Select(s => s.OverflowWorldStats));
+        Console.WriteLine("Overflow world stats (avg efficiency, avg population, event count) by WorldType:");
+        foreach (var (worldType, stats) in overflowStats.OrderByDescending(kv => kv.Value.Count))
+            Console.WriteLine($"  {worldType}: avgEff={stats.EfficiencySum / (double)stats.Count:0.0} avgPop={stats.PopulationSum / (double)stats.Count:0.0} count={stats.Count}");
+
+        var shortageByWorldType = Merge(perSeed.Select(s => s.ShortageByWorldType));
+        Console.WriteLine("Industry growth lost to metals shortage by WorldType:");
+        foreach (var (k, v) in shortageByWorldType.OrderByDescending(kv => kv.Value))
+            Console.WriteLine($"  {k}: {v}");
+
+        var shortageStats = MergeStats(perSeed.Select(s => s.ShortageWorldStats));
+        Console.WriteLine("Shortage world stats (avg efficiency, avg population, event count) by WorldType:");
+        foreach (var (worldType, stats) in shortageStats.OrderByDescending(kv => kv.Value.Count))
+            Console.WriteLine($"  {worldType}: avgEff={stats.EfficiencySum / (double)stats.Count:0.0} avgPop={stats.PopulationSum / (double)stats.Count:0.0} count={stats.Count}");
+
+        var shortageByEfficiencyBucket = Merge(perSeed.Select(s => s.ShortageByEfficiencyBucket));
+        Console.WriteLine("Industry growth lost to metals shortage by efficiency bucket (rounded down to nearest 10):");
+        foreach (var (bucket, v) in shortageByEfficiencyBucket.OrderBy(kv => kv.Key))
+            Console.WriteLine($"  {bucket}-{bucket + 9}: {v}");
+
         await Task.CompletedTask;
+    }
+
+    private static Dictionary<TKey, long> Merge<TKey>(IEnumerable<Dictionary<TKey, long>> perSeedDicts) where TKey : notnull
+    {
+        var totals = new Dictionary<TKey, long>();
+        foreach (var d in perSeedDicts)
+            foreach (var (k, v) in d)
+                totals[k] = totals.GetValueOrDefault(k) + v;
+        return totals;
+    }
+
+    private static Dictionary<TKey, (long EfficiencySum, long PopulationSum, int Count)> MergeStats<TKey>(
+        IEnumerable<Dictionary<TKey, (long EfficiencySum, long PopulationSum, int Count)>> perSeedDicts) where TKey : notnull
+    {
+        var totals = new Dictionary<TKey, (long, long, int)>();
+        foreach (var d in perSeedDicts) {
+            foreach (var (k, v) in d) {
+                var existing = totals.GetValueOrDefault(k);
+                totals[k] = (existing.Item1 + v.EfficiencySum, existing.Item2 + v.PopulationSum, existing.Item3 + v.Count);
+            }
+        }
+        return totals;
     }
 
     private static SeedTotals RunOneSeed(int seed)
@@ -101,6 +156,11 @@ public class ProductionEfficiencyTests
             new Dictionary<ShipType, long>(ProductionDiagnostics.ShipsLostToShortage),
             new Dictionary<CargoType, long>(ProductionDiagnostics.CargoLostToShortage),
             new Dictionary<CargoType, long>(ProductionDiagnostics.GrossCargoProduced),
-            new Dictionary<ShipType, long>(ProductionDiagnostics.GrossShipsProduced));
+            new Dictionary<ShipType, long>(ProductionDiagnostics.GrossShipsProduced),
+            new Dictionary<(WorldType, CargoType), long>(ProductionDiagnostics.OverflowByWorldType),
+            new Dictionary<WorldType, long>(ProductionDiagnostics.IndustryGrowthLostByWorldType),
+            new Dictionary<int, long>(ProductionDiagnostics.IndustryGrowthLostByEfficiencyBucket),
+            new Dictionary<WorldType, (long, long, int)>(ProductionDiagnostics.OverflowWorldStats),
+            new Dictionary<WorldType, (long, long, int)>(ProductionDiagnostics.ShortageWorldStats));
     }
 }

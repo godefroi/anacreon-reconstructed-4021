@@ -127,6 +127,50 @@ showed this session's only confirmed real *positive* correlation with win rate (
 seed count was scaled up enough to see past noise — a real side effect of doing the thing that
 helps, not evidence the underlying idea is bad.
 
+**Overflow and shortage turned out to sit on completely different worlds, not two ends of one
+routing problem.** Tagging every waste/shortage event by world type and characteristics: overflow is
+concentrated on mature, high-population `Capital`-type worlds (88% combined with other generalist
+types) whose byproduct raw-material output outgrows what their own shipyard can absorb once its
+industry level hits its own ceiling. Shortage is concentrated (97.3%) on `WorldType.Independent`
+worlds, owned-but-undesignated, freshly-conquered worlds still climbing their growth curve, with an
+average population (464) roughly a sixth of the overflow-side average (2,863) despite sharing the
+same type label. Same production formula, two genuinely different populations of world underneath
+it.
+
+**No NPE persona has ever once touched ISSP, and that turned out to be the single largest lever
+found this session, once properly isolated.** `SelfSufficiencySettings` defaults every world to
+100% self-sufficiency on Chemical/Metal/Trillum forever; nothing in `NpeToolkit`, real or
+experimental, ever adjusts it. Three regimes, tested properly (seeded via `GetOptimumIndustry`, the
+same way a real new world is created, after an earlier attempt with a zero-started world produced a
+completely wrong, discarded result):
+
+- **A mature, wealthy `Capital` world**, self-managing each resource's ISSP dial independently every
+  year toward a fixed target (raise the dial when a resource's stock is below target, lower it when
+  above), goes from 339 to 997 ships/year, a real, safe 2.9x gain, verified by checking the game's
+  own shortage-throttle diagnostic across the world's entire history: it never once fires. This
+  world was never material-constrained to begin with; once ISSP correctly reflects that, its own
+  local capacity does the rest. Adding a paired raw-material world sending it surplus material adds
+  nothing further; there's nothing left to gain.
+- **The same self-management approach can *actively backfire*** if its target isn't scaled to the
+  receiving world's own economy. Applied naively to a small, young `Independent` world using the
+  same absolute target built for the Capital's economy, it read itself as chronically short and
+  ratcheted ISSP *up* instead of down, output fell from 44 to 37 ships/year. Not a shortage problem
+  (the same diagnostic check confirmed it never shortage-throttles either) — a miscalibrated target
+  pushing the controller the wrong direction entirely. A real implementation needs a target relative
+  to the receiving world's own scale, not a flat number.
+- **Paired logistics genuinely delivers, but only for this second kind of world.** Feeding that same
+  young world real surplus material let it safely drive ISSP toward zero and reach 134 ships/year,
+  3.6x the broken self-managed-alone attempt and 3x the untouched baseline. A known, separately
+  confirmed measurement artifact (the sending world's own cargo pegs at the storage cap before a
+  before/after-delta transfer can see its true output) means this number understates the real
+  achievable gain, not overstates it.
+
+The closed-out picture: self-management is the right lever for wealthy, mature worlds and does
+nothing further for them once correctly tuned. Logistics is the right lever for young,
+resource-poor ones, and self-management alone can make those worse if naively applied. Neither
+substitutes for the other, and a real `IsspGene` needs to know which regime a given world is in
+before choosing which lever to pull.
+
 ## Training methodology, separate from persona capability
 
 Two things matter for training a genetic search on this AI, independent of which behaviors are
@@ -174,16 +218,22 @@ one.
   guaranteed near/far opponent geometry and zero independent worlds, for isolating force-division
   and proximity questions from economic growth.
 - `src/Reconstructed4021.Core/Turns/ProductionDiagnostics.cs`: a static, opt-in accumulator tracking
-  production lost to storage-cap overflow and raw-material shortage, filterable to a single empire.
-  Used to find and isolate the `FocusGene` overflow effect above; also the natural data source for
+  production lost to storage-cap overflow and raw-material shortage, filterable to a single empire
+  and, since the ISSP work, by world type too. Used to find and isolate the `FocusGene` overflow
+  effect and the ISSP self-management/logistics regimes above; also the natural data source for
   [issue #50](https://github.com/godefroi/anacreon-reconstructed-4021/issues/50)'s proposed report.
+- `src/Reconstructed4021.Tests/ZZZIssp*.cs`: the standalone ISSP comparison tests (ship-output
+  tracing, self-management vs. paired logistics, the young-world regime) described above.
 
 ## Open questions
 
+- Building a real `IsspGene`: self-management for mature worlds, paired logistics for young ones,
+  a scale-relative target rather than an absolute one, and a smarter convergence rule than the
+  simple step-by-one-per-year controller used for testing (it took decades to settle, oscillating
+  the whole way). The clearest, best-evidenced next build of anything on this list.
 - Whether reclaiming `FocusGene`'s own overflow (spending or redistributing the surplus it creates)
   makes its already-positive effect on win rate stronger, now that the cause is confirmed and
-  isolated rather than hypothetical. The natural next build, and a better-understood one than the
-  trillum-logistics idea below.
+  isolated rather than hypothetical.
 - Whether the general resource-redistribution gap behind both findings above (no empire-wide
   mechanism moves surplus to shortage, only `SupplyLink`/`SurplusLink`'s adjacent-worlds-only
   version) is worth fixing on its own, independent of any specific gene.
