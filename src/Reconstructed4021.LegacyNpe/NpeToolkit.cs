@@ -555,6 +555,51 @@ public static class NpeToolkit
     /// `NOT(A OR B)` short-circuits B, so a planet that's already one of those three types never
     /// consumes an Rnd draw here at all).
     /// </summary>
+    /// <summary>
+    /// New, no Pascal precedent: gated entirely on <see cref="NpeCharacter.IsspTargetGene"/> (0 = this
+    /// never runs, a true no-op for every real Kingdom1/Kingdom2 persona, which never sets it). Steps
+    /// each owned planet's Chemical/Metal/Trillum ISSP dial toward a target scaled to that world's own
+    /// population, proportional to how far off target the current cargo is, so a badly-off world
+    /// converges in a handful of years instead of the ~65-year, oscillating settle a naive fixed
+    /// step-by-one produced under testing (`ZZZIsspSelfManagementVsLogisticsTest`). Starbases have no
+    /// real ISSP dial of their own (<see cref="IEconomicWorld.SelfSufficiencyIndex"/>'s own doc
+    /// comment -- GetISSP's Base case is a hardcoded 0) so only planets are visited.
+    /// </summary>
+    public static void ManageSelfSufficiency(Empire emp, NpeCharacter persona, Game game)
+    {
+        if (persona.IsspTargetGene <= 0) {
+            return;
+        }
+
+        static void Step(Func<int> get, Action<int> set, int cargo, int target)
+        {
+            if (target <= 0) {
+                return;
+            }
+
+            // Dead zone widened to +-35% (from an effective +-25%) and max step cut from 2 to 1:
+            // the ISSP multiplier table (SelfSufficiencySettings.Multipliers) is exponential, not
+            // linear, so a 2-index jump near the low end swings real output far more than the same
+            // jump near the high end. A bigger, faster step overshoot-corrected forever under
+            // testing (ZZZIsspSelfManagementVsLogisticsTest's ~65-year non-settling oscillation);
+            // a gentler, single-index step with more tolerance for noise settles instead of chasing it.
+            var error = (cargo - target) / (double)target;
+            if (Math.Abs(error) < 0.35) {
+                return;
+            }
+
+            var step = Math.Sign(error);
+            set(Math.Clamp(get() - step, 0, 10));
+        }
+
+        foreach (var planet in game.Galaxy.Planets.Where(p => p.Owner == emp)) {
+            var target = Math.Max(1, planet.Population * persona.IsspTargetGene / 100);
+            Step(() => planet.SelfSufficiency.Chemical, v => planet.SelfSufficiency.Chemical = v, planet.Cargo.Chemicals, target);
+            Step(() => planet.SelfSufficiency.Metal, v => planet.SelfSufficiency.Metal = v, planet.Cargo.Metals, target);
+            Step(() => planet.SelfSufficiency.Trillum, v => planet.SelfSufficiency.Trillum = v, planet.Cargo.Trillum, target);
+        }
+    }
+
     public static void ReDesignateEmpire(Empire emp, IReadOnlyList<IEconomicWorld> regionCapitals, Game game, Random random)
     {
         var capital = emp.Capital;

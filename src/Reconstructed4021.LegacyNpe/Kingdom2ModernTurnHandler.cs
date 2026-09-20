@@ -55,6 +55,7 @@ public sealed class Kingdom2ModernTurnHandler : ITurnHandler
 
         NpeToolkit.DefendEmpire(empire, regionCapitals, _fleetStates, _persona, game, _random);
         NpeToolkit.ImperialExpansion(empire, regionCapitals, _fleetStates, _persona, game, _random);
+        NpeToolkit.ManageSelfSufficiency(empire, _persona, game);
 
         if ((_persona.Clock + _persona.Offset) % 7 == 0) {
             NpeToolkit.StateDeptReport(empire, _state, _defaultPolicy, game);

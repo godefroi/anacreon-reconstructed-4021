@@ -128,6 +128,20 @@ public sealed class NpeCharacter
     /// </summary>
     public int AttackSizeGene { get; set; }
 
+    /// <summary>
+    /// New, no Pascal precedent (0-150; 0 disables self-management entirely, matching every other
+    /// gene's no-op default): scales each owned planet's ISSP target to
+    /// <c>Population * IsspTargetGene / 100</c>, then steps Chemical/Metal/Trillum ISSP toward
+    /// whichever direction reduces that gap, by an amount proportional to how far off target the
+    /// world's own cargo currently is (a real proportional response, not a fixed step-by-one -- see
+    /// <see cref="NpeToolkit.ManageSelfSufficiency"/>). Scaling the target to population rather than
+    /// using one fixed number was the fix for a real, tested failure mode: a fixed absolute target
+    /// tuned for a large economy pushes a small world's dials the wrong way entirely, reading it as
+    /// permanently short. Defaults to 0 everywhere except the genetic algorithm harness, which evolves
+    /// it.
+    /// </summary>
+    public int IsspTargetGene { get; set; }
+
     public int Clock { get; set; }
     public int Offset { get; set; }
 }
