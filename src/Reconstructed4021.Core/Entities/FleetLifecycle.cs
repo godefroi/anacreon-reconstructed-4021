@@ -153,8 +153,8 @@ public static class FleetLifecycle
     /// (FLTCOMM.PAS: AbortFleetCommand's own tail, lines 597-609): dumps every ship/cargo in
     /// <paramref name="fleet"/> onto <paramref name="ground"/>, then removes <paramref name="fleet"/>.
     /// No distribution grid -- AbortFleetCommand never calls InputNewDistribution, unlike
-    /// TransferFleetCommand -- and no capacity clamp, matching <see cref="Combat.CombatOutcome"/>'s
-    /// own AbortFleet doc comment (Pascal has none here either). CombatOutcome's AbortFleet/DestroyFleet
+    /// TransferFleetCommand. Capacity clamping to [0,MaxResources] happens inside
+    /// <see cref="Combat.CombatOutcome.AbortFleet"/> itself. CombatOutcome's AbortFleet/DestroyFleet
     /// stay internal (every other caller -- DestroyEmpire, ChangeCompositionOfFleet above -- is
     /// Core-internal); this is the one real Tui entry point for the raw operation, confirmation
     /// prompts (ownership warning, MaxResources overflow warning) staying in Tui to ask the player.
