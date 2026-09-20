@@ -541,6 +541,7 @@
           "compositionGene": 0,
           "heavyRangeGene": 0,
           "attackSizeGene": 0,
+          "isspTargetGene": 0,
           "clock": 0,
           "offset": 3
         },

@@ -101,7 +101,7 @@ public class GeneticAlgorithmTests
     private sealed record GeneVector(
         double Imperialist, double Defensive, double Offensive, double Factor, double Provoke, double SphereX,
         double Proximity, double TrendWeight, double CenterOfGravity, double Focus, double Composition, double HeavyRange,
-        double AttackSize = 0)
+        double AttackSize = 0, double IsspTarget = 0)
     {
         public NpeCharacter ToPersona()
         {
@@ -122,6 +122,7 @@ public class GeneticAlgorithmTests
                 CompositionGene = (int)Math.Round(Composition),
                 HeavyRangeGene = (int)Math.Round(HeavyRange),
                 AttackSizeGene = (int)Math.Round(AttackSize),
+                IsspTargetGene = (int)Math.Round(IsspTarget),
                 RandomGene = 50,
                 Techno = 50,
                 Honorable = 50,
@@ -160,6 +161,12 @@ public class GeneticAlgorithmTests
         // (frequent, small), negative toward SlowAttack (rare, large). 0 reproduces the original fixed
         // splits (75/25 Conflict, 50/50 War) exactly.
         ["AttackSize"] = new GeneBounds(-100, 100),
+        // 0 disables self-management entirely (NpeToolkit.ManageSelfSufficiency's own no-op gate).
+        // 108-123 is the range already found to reproduce known-good ISSP targets for two very
+        // differently-sized reference worlds (a population-4055 Capital and a population-464
+        // Independent world) from the same Population*IsspTargetGene/100 formula -- 0-150 gives the
+        // search room on both sides of that without being unboundedly wide.
+        ["IsspTarget"] = new GeneBounds(0, 150),
     };
 
     [Test, Explicit]
@@ -252,19 +259,20 @@ public class GeneticAlgorithmTests
             var composition = gaRandom.Next(0, 101);
             var heavyRange = gaRandom.Next(0, 101);
             var attackSize = gaRandom.Next(-100, 101);
+            var isspTarget = gaRandom.Next(0, 151);
             population.Add(useKingdom2Style
                 ? new GeneVector(
                     Imperialist: gaRandom.Next(50, 101), Defensive: gaRandom.Next(5, 11),
                     Offensive: gaRandom.Next(50, 101), Factor: 25,
                     Provoke: gaRandom.Next(50, 101), SphereX: gaRandom.Next(25, 101),
                     Proximity: proximity, TrendWeight: trendWeight, CenterOfGravity: centerOfGravity, Focus: focus,
-                    Composition: composition, HeavyRange: heavyRange, AttackSize: attackSize)
+                    Composition: composition, HeavyRange: heavyRange, AttackSize: attackSize, IsspTarget: isspTarget)
                 : new GeneVector(
                     Imperialist: gaRandom.Next(1, 6), Defensive: gaRandom.Next(50, 76),
                     Offensive: gaRandom.Next(1, 3), Factor: 15,
                     Provoke: 75, SphereX: gaRandom.Next(25, 76),
                     Proximity: proximity, TrendWeight: trendWeight, CenterOfGravity: centerOfGravity, Focus: focus,
-                    Composition: composition, HeavyRange: heavyRange, AttackSize: attackSize));
+                    Composition: composition, HeavyRange: heavyRange, AttackSize: attackSize, IsspTarget: isspTarget));
         }
         return population;
     }
@@ -289,7 +297,8 @@ public class GeneticAlgorithmTests
         (a.Offensive + b.Offensive) / 2, (a.Factor + b.Factor) / 2,
         (a.Provoke + b.Provoke) / 2, (a.SphereX + b.SphereX) / 2, (a.Proximity + b.Proximity) / 2,
         (a.TrendWeight + b.TrendWeight) / 2, (a.CenterOfGravity + b.CenterOfGravity) / 2, (a.Focus + b.Focus) / 2,
-        (a.Composition + b.Composition) / 2, (a.HeavyRange + b.HeavyRange) / 2, (a.AttackSize + b.AttackSize) / 2);
+        (a.Composition + b.Composition) / 2, (a.HeavyRange + b.HeavyRange) / 2, (a.AttackSize + b.AttackSize) / 2,
+        (a.IsspTarget + b.IsspTarget) / 2);
 
     private static GeneVector Mutate(GeneVector g, Random gaRandom) => new(
         Perturb(g.Imperialist, Bounds["Imperialist"], gaRandom),
@@ -304,7 +313,8 @@ public class GeneticAlgorithmTests
         Perturb(g.Focus, Bounds["Focus"], gaRandom),
         Perturb(g.Composition, Bounds["Composition"], gaRandom),
         Perturb(g.HeavyRange, Bounds["HeavyRange"], gaRandom),
-        Perturb(g.AttackSize, Bounds["AttackSize"], gaRandom));
+        Perturb(g.AttackSize, Bounds["AttackSize"], gaRandom),
+        Perturb(g.IsspTarget, Bounds["IsspTarget"], gaRandom));
 
     /// <summary>Box-Muller Gaussian step, sigma = 10% of the gene's real (union) range.</summary>
     private static double Perturb(double value, GeneBounds bounds, Random gaRandom)
@@ -810,7 +820,7 @@ public class GeneticAlgorithmTests
             var worst = scored[^1];
             Console.WriteLine($"gen {gen}: best={best.Fitness:0.#} (winRateAny={best.WinRateAny:P0} winRateAll={best.WinRateAll:P0}) worst={worst.Fitness:0.#} mean={scored.Average(x => x.Fitness):0.#} meanWinRateAny={scored.Average(x => x.WinRateAny):P0} ({genStopwatch.Elapsed.TotalSeconds:0.#}s, {OrionsBeltPopulationSize * OrionsBeltSeedsPerCandidate} evals)");
             var b = best.Genome;
-            Console.WriteLine($"  best genes: Imp={b.Imperialist:0} Def={b.Defensive:0} Off={b.Offensive:0} Fac={b.Factor:0} Prv={b.Provoke:0} Sph={b.SphereX:0} Prx={b.Proximity:0} Trd={b.TrendWeight:0} Cog={b.CenterOfGravity:0} Foc={b.Focus:0} Cmp={b.Composition:0} Hrg={b.HeavyRange:0} Atk={b.AttackSize:0}");
+            Console.WriteLine($"  best genes: Imp={b.Imperialist:0} Def={b.Defensive:0} Off={b.Offensive:0} Fac={b.Factor:0} Prv={b.Provoke:0} Sph={b.SphereX:0} Prx={b.Proximity:0} Trd={b.TrendWeight:0} Cog={b.CenterOfGravity:0} Foc={b.Focus:0} Cmp={b.Composition:0} Hrg={b.HeavyRange:0} Atk={b.AttackSize:0} Isp={b.IsspTarget:0}");
 
             if (best.Fitness > bestEverFitness) {
                 bestEverFitness = best.Fitness;
@@ -824,7 +834,7 @@ public class GeneticAlgorithmTests
         overallStopwatch.Stop();
         Console.WriteLine($"total wall clock: {overallStopwatch.Elapsed.TotalSeconds:0.#}s ({totalSeeds} playouts, {overallStopwatch.Elapsed.TotalMilliseconds / totalSeeds:0.#}ms/playout)");
         Console.WriteLine($"across entire search: evolved-eliminated-at-least-one={totalAnyWins} evolved-eliminated-both={totalAllWins} evolved-itself-eliminated={totalLosses} (of {totalSeeds} total playouts)");
-        Console.WriteLine($"best ever: fitness={bestEverFitness:0.#} genes: Imp={bestEver!.Imperialist:0} Def={bestEver.Defensive:0} Off={bestEver.Offensive:0} Fac={bestEver.Factor:0} Prv={bestEver.Provoke:0} Sph={bestEver.SphereX:0} Prx={bestEver.Proximity:0} Trd={bestEver.TrendWeight:0} Cog={bestEver.CenterOfGravity:0} Foc={bestEver.Focus:0} Cmp={bestEver.Composition:0} Hrg={bestEver.HeavyRange:0} Atk={bestEver.AttackSize:0}");
+        Console.WriteLine($"best ever: fitness={bestEverFitness:0.#} genes: Imp={bestEver!.Imperialist:0} Def={bestEver.Defensive:0} Off={bestEver.Offensive:0} Fac={bestEver.Factor:0} Prv={bestEver.Provoke:0} Sph={bestEver.SphereX:0} Prx={bestEver.Proximity:0} Trd={bestEver.TrendWeight:0} Cog={bestEver.CenterOfGravity:0} Foc={bestEver.Focus:0} Cmp={bestEver.Composition:0} Hrg={bestEver.HeavyRange:0} Atk={bestEver.AttackSize:0} Isp={bestEver.IsspTarget:0}");
 
         var heldOutStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var heldOutAnyWins = 0;
@@ -850,6 +860,7 @@ public class GeneticAlgorithmTests
         ReportGeneCorrelation("Composition", allEvaluated, c => c.Genome.Composition);
         ReportGeneCorrelation("HeavyRange", allEvaluated, c => c.Genome.HeavyRange);
         ReportGeneCorrelation("AttackSize", allEvaluated, c => c.Genome.AttackSize);
+        ReportGeneCorrelation("IsspTarget", allEvaluated, c => c.Genome.IsspTarget);
 
         await Task.CompletedTask;
     }

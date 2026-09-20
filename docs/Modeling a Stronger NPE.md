@@ -127,6 +127,14 @@ showed this session's only confirmed real *positive* correlation with win rate (
 seed count was scaled up enough to see past noise — a real side effect of doing the thing that
 helps, not evidence the underlying idea is bad.
 
+**`IsspTargetGene` (built from the ISSP investigation below) surpasses this as the strongest result
+of the whole session.** Run through the actual GA, not just an isolated single-world test: corr(fitness)
+0.39, corr(win rate) 0.17, corr(conquests) 0.38, all above Focus's own numbers, and overall training
+win rate on Orion's Belt reached 1.2%, roughly 3-6x every prior round's ~0.2-0.5% baseline on this
+scenario. The best genome converged to the edge of its allowed range, meaning the bound is
+constraining the search rather than 150 being a true optimum; widening it and re-running is the
+immediate next step.
+
 **Overflow and shortage turned out to sit on completely different worlds, not two ends of one
 routing problem.** Tagging every waste/shortage event by world type and characteristics: overflow is
 concentrated on mature, high-population `Capital`-type worlds (88% combined with other generalist
@@ -224,13 +232,18 @@ one.
   [issue #50](https://github.com/godefroi/anacreon-reconstructed-4021/issues/50)'s proposed report.
 - `src/Reconstructed4021.Tests/ZZZIssp*.cs`: the standalone ISSP comparison tests (ship-output
   tracing, self-management vs. paired logistics, the young-world regime) described above.
+- `IsspTargetGene` (`NpeCharacter`) and `NpeToolkit.ManageSelfSufficiency`: the real, built,
+  GA-verified self-management capability, target scaled to `Population * IsspTargetGene / 100`.
 
 ## Open questions
 
-- Building a real `IsspGene`: self-management for mature worlds, paired logistics for young ones,
-  a scale-relative target rather than an absolute one, and a smarter convergence rule than the
-  simple step-by-one-per-year controller used for testing (it took decades to settle, oscillating
-  the whole way). The clearest, best-evidenced next build of anything on this list.
+- Whether widening `IsspTargetGene`'s bound (currently 0-150, with the best genome sitting at the
+  edge of it) finds a genuinely better setting, or 150 turns out to be close to a real optimum once
+  there's room to overshoot it. The immediate next step.
+- Proactive logistics for young worlds, the second half of the ISSP work, not yet built as a real
+  in-game capability (the standalone test used instantaneous, fleet-free transfer to isolate the
+  concept). Needs real fleet dispatch, closer to the existing reactive `CargoSupplyFleet` mechanism
+  but proactive, and a way for an NPE to tell which of its own worlds are in which regime.
 - Whether reclaiming `FocusGene`'s own overflow (spending or redistributing the surplus it creates)
   makes its already-positive effect on win rate stronger, now that the cause is confirmed and
   isolated rather than hypothetical.
