@@ -164,9 +164,15 @@ public class GeneticAlgorithmTests
         // 0 disables self-management entirely (NpeToolkit.ManageSelfSufficiency's own no-op gate).
         // 108-123 is the range already found to reproduce known-good ISSP targets for two very
         // differently-sized reference worlds (a population-4055 Capital and a population-464
-        // Independent world) from the same Population*IsspTargetGene/100 formula -- 0-150 gives the
-        // search room on both sides of that without being unboundedly wide.
-        ["IsspTarget"] = new GeneBounds(0, 150),
+        // Independent world) from the same Population*IsspTargetGene/100 formula. A prior GA round
+        // (bound 0-150) converged its best genome to the ceiling (150), so this is widened to 400 --
+        // sanity-checked against Orion's Belt's largest world (population 2200, the capital): at 400
+        // its target is 8800, still meaningfully under the 9999 cargo cap, leaving real headroom for
+        // the controller to read "above target" and ease ISSP down. 500 would already be degenerate
+        // for that same world (target 11000 exceeds the cap entirely, so it could never read "above
+        // target" and would permanently ratchet ISSP up, collapsing toward default-like behavior) --
+        // 400 is the widest sensible bound before hitting that failure mode.
+        ["IsspTarget"] = new GeneBounds(0, 400),
     };
 
     [Test, Explicit]

@@ -131,9 +131,10 @@ helps, not evidence the underlying idea is bad.
 of the whole session.** Run through the actual GA, not just an isolated single-world test: corr(fitness)
 0.39, corr(win rate) 0.17, corr(conquests) 0.38, all above Focus's own numbers, and overall training
 win rate on Orion's Belt reached 1.2%, roughly 3-6x every prior round's ~0.2-0.5% baseline on this
-scenario. The best genome converged to the edge of its allowed range, meaning the bound is
-constraining the search rather than 150 being a true optimum; widening it and re-running is the
-immediate next step.
+scenario. The best genome converged to the edge of its allowed range (0-150); widening the bound to
+0-400 settled the question: the new best landed comfortably inside it at 181, with correlations
+essentially unchanged (fitness 0.35, win rate 0.16), confirming this is a real effect near its own
+ceiling, not one that was bound-constrained by a large margin.
 
 **Overflow and shortage turned out to sit on completely different worlds, not two ends of one
 routing problem.** Tagging every waste/shortage event by world type and characteristics: overflow is
@@ -237,9 +238,6 @@ one.
 
 ## Open questions
 
-- Whether widening `IsspTargetGene`'s bound (currently 0-150, with the best genome sitting at the
-  edge of it) finds a genuinely better setting, or 150 turns out to be close to a real optimum once
-  there's room to overshoot it. The immediate next step.
 - Proactive logistics for young worlds, the second half of the ISSP work, not yet built as a real
   in-game capability (the standalone test used instantaneous, fleet-free transfer to isolate the
   concept). Needs real fleet dispatch, closer to the existing reactive `CargoSupplyFleet` mechanism
