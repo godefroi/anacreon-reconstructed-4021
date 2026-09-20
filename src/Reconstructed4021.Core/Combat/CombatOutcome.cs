@@ -321,8 +321,10 @@ public static class CombatOutcome
     /// (FLEET.PAS:169,176-183) before the report loop below reads <c>source.Cargo</c>, matching
     /// Pascal's own ordering (<c>Cr2[Tri]</c> is folded in at line 177, before the Trns2 report loop at
     /// 197-199 reads it) — <see cref="FleetLogistics"/>'s <see cref="FleetLogistics.FuelPerTon"/> is the
-    /// only piece of that model this method needs; no capacity clamp applies on either branch (Pascal
-    /// has none here). Every call site destroys <paramref name="source"/> immediately after calling
+    /// only piece of that model this method needs; the ships/cargo merge below clamps to
+    /// [0,MaxResources] (MISC.PAS's <c>ThgLmt</c>, via <see cref="ClampResource"/>), matching AddThings
+    /// (MISC.PAS:269-285), which is what Pascal's own AbortFleet delegates the merge to (issue #51).
+    /// Every call site destroys <paramref name="source"/> immediately after calling
     /// this (grep-confirmed), so mutating <paramref name="source"/>'s own fields in place rather than
     /// working from a copy, unlike Pascal's Sh2/Cr2, is safe. FleetNameDestruction/DeleteName's own
     /// naming-system call (FLEET.PAS:208) needs no equivalent here: <paramref name="source"/>'s own
@@ -362,10 +364,10 @@ public static class CombatOutcome
         }
 
         foreach (var t in Enum.GetValues<ShipType>()) {
-            ships[t] += source.Ships[t];
+            ships[t] = ClampResource(ships[t] + source.Ships[t]);
         }
         foreach (var t in Enum.GetValues<CargoType>()) {
-            cargo![t] += source.Cargo[t];
+            cargo![t] = ClampResource(cargo[t] + source.Cargo[t]);
         }
     }
 

@@ -171,6 +171,37 @@ public class CombatOutcomeTests
     }
 
     /// <summary>
+    /// GitHub #51: AbortFleet's ships/cargo merge clamps to [0,MaxResources] at the merge site,
+    /// matching Pascal's AddThings (MISC.PAS:281,284 via ThgLmt) -- a world can't come out of a merge
+    /// already over the cap.
+    /// </summary>
+    [Test]
+    public async Task AbortFleet_ClampsShipsAndCargoToMaxResources()
+    {
+        var galaxy = new Galaxy(size: 100);
+        var game = new Core.Game(galaxy);
+
+        var attacker = EmpireFactory.CreateEmpire("Attacker", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var attackerFleet = new Fleet { Location = new Coordinate(0, 0), Owner = attacker };
+        attackerFleet.Ships[ShipType.Fighter] = 9000;
+        attackerFleet.Cargo.Trillum = 9000;
+        galaxy.Fleets.Add(attackerFleet);
+
+        var defender = EmpireFactory.CreateEmpire("Defender", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var targetFleet = new Fleet { Location = new Coordinate(0, 0), Owner = defender };
+        targetFleet.Ships[ShipType.Fighter] = 9000;
+        targetFleet.Cargo.Trillum = 9000;
+        galaxy.Fleets.Add(targetFleet);
+
+        CombatOutcome.ResolveAttack(
+            AttackResultType.DefenderConquered, attackerFleet, targetFleet,
+            hkAttack: false, capture: true, new AttackTally(), new AttackTally(), game, new FixedRandom(0));
+
+        await Assert.That(attackerFleet.Ships[ShipType.Fighter]).IsEqualTo(PascalMath.MaxResources);
+        await Assert.That(attackerFleet.Cargo.Trillum).IsEqualTo(PascalMath.MaxResources);
+    }
+
+    /// <summary>
     /// GitHub #43: a conquered Fleet is removed from Galaxy.Fleets (DestroyFleet) before
     /// ResolveAttack's later AddNews calls fire. Those calls must report the fleet's last-known
     /// location, not the fleet object itself -- otherwise the news survives this turn holding a
