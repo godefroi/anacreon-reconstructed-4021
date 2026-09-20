@@ -92,7 +92,11 @@ public static class GameJson
         node["unimplementedNpeBlobs"] = blobsNode;
         node["messages"] = messagesNode;
 
-        return node.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        // NewLine pinned to CRLF -- WriteIndented defaults to Environment.NewLine (.NET 9+), which
+        // would make this output LF on Linux CI while the committed assets/saves/*.json fixtures are
+        // git-normalized to CRLF everywhere (.gitattributes: `* text=auto eol=crlf`), failing
+        // BuildMenuSmokeTest_MatchesTheCommittedFixture/BorderSkirmish/GarrisonedOutpost only in CI.
+        return node.ToJsonString(new JsonSerializerOptions { WriteIndented = true, NewLine = "\r\n" });
     }
 
     /// <summary>The inverse of <see cref="Serialize"/>.</summary>
