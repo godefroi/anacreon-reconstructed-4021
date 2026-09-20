@@ -122,7 +122,8 @@ public static class CombatResolution
             engageRound++;
             FleetRetreats(engageRound, groups, ref result);
 
-            if (smartRetreat && result == AttackResultType.None && hadEscort && TransportsLeft(groups)) {
+            if (smartRetreat && result == AttackResultType.None && hadEscort
+                && TransportsLeft(groups) && HasNonGroundDefenses(enemy)) {
                 result = AttackResultType.AttackerRetreats;
                 break;
             }
@@ -172,6 +173,19 @@ public static class CombatResolution
     /// <summary>TransportsLeft (ATTNPE.PAS:194-207): whether every still-live group is a transport (i.e. every non-transport combat ship is gone).</summary>
     private static bool TransportsLeft(IReadOnlyList<GroupRecord> groups) =>
         groups.All(g => g.Sta == GroupStatus.Destroyed || g.Typ is AttackType.Jumptransport or AttackType.Transport);
+
+    private static bool HasNonGroundDefenses(EnemyForces enemy)
+    {
+        foreach (var position in _allShellPositions) {
+            foreach (var type in Enum.GetValues<AttackType>()) {
+                if (type is not (AttackType.Legion or AttackType.NinjaLegion) && enemy[position, type] > 0) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>AllAdvance (ATTACK.PAS-adjacent, ATTNPE.PAS:113-122): sends every live combat-ship group (not transports, not troops) forward one shell, short of SubOrbit.</summary>
     private static void AllAdvance(IReadOnlyList<GroupRecord> groups)

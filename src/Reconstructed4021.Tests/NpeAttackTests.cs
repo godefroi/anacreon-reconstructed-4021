@@ -226,6 +226,26 @@ public class NpeAttackTests
         await Assert.That(groups.Any(g => g.Sta != GroupStatus.Destroyed && g.Gat != 0 && g.Pos < ShellPosition.Ground)).IsTrue();
     }
 
+    [Test]
+    public async Task WorldEngage_SmartRetreat_LandsWhenOnlyGroundTroopsRemain()
+    {
+        var attacker = new Empire { Name = "Attacker" };
+        attacker.Capital = new Planet { Location = new Coordinate(0, 0), Owner = attacker, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = attacker };
+        fleet.Ships.Jumptransports = 100;
+        fleet.Cargo.Legions = 1000;
+
+        var defender = EmpireFactory.CreateEmpire("Defender", null, isEmpress: false, TechLevel.PreTech, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var target = new Planet { Location = new Coordinate(0, 0), Owner = defender, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        target.Cargo.Legions = 1;
+        defender.Capital = target;
+
+        var outcome = CombatResolution.NPEAttack(attacker, fleet, target, AttackIntentionType.Conquer, new Core.Game(new Galaxy(size: 100)), new Random(1), smartRetreat: true);
+
+        await Assert.That(outcome.Result).IsEqualTo(AttackResultType.DefenderConquered);
+        await Assert.That(target.Owner).IsEqualTo(attacker);
+    }
+
     // smartRetreat must never change the outcome of a fight the escort was always going to win outright
     // -- a strong escort (200 Fighters/200 HunterKillers) against a defender too weak to ever wipe it
     // never makes TransportsLeft true, so the new check never fires. Pins the actual measured values at
