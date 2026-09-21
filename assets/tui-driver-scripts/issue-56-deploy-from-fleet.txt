@@ -1,0 +1,14 @@
+# Verifies issue #56: Deploy is now reachable from an existing owned fleet's Close Up (the D
+# fleet-action shortcut), not just from a world. Loaded on "Fleet Status Tag Test.json", whose
+# capital and four owned fleets all share (0,0), so Enter opens the sector object picker first.
+DUMP
+
+Enter
+DUMP
+
+Down
+Enter
+DUMP
+
+D
+DUMP
