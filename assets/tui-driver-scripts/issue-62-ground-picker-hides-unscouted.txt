@@ -1,0 +1,23 @@
+# Verifies issue #62: the Transfer/Abort-Join ground picker (PickGround) no longer offers an
+# unscouted enemy fleet as a candidate. Loaded on "Enemy Fleet Tag Test.json": empire 0's
+# HumanEscort1 fleet at (4,3) shares that sector with empire 1's KnownOnlyFleet, which is Known
+# but not Scouted -- before the fix, PickGround built its candidate list straight off
+# _fleetsByLocation with no visibility check at all, so KnownOnlyFleet would show up as something
+# to transfer with even though the player has never scouted it. Capital (and cursor start) is at
+# (0,0); moving right 4, down 3 reaches (4,3).
+DUMP
+
+Right
+Right
+Right
+Right
+Down
+Down
+Down
+DUMP
+
+Enter
+DUMP
+
+T
+DUMP

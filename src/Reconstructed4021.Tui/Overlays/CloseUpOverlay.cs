@@ -24,7 +24,7 @@ namespace Reconstructed4021.Tui.Overlays;
 // A second tab, Orders (FLTCOMM.PAS's own FleetOrdersCommand mini scripting language), now exists for
 // one of the player's own fleets -- see FleetOrdersTabView's own doc comment (Reconstructed4021.Tui)
 // for the compile/commit flow this ports. F2 (rename), F10 (go to map), and the fleet-action shortcuts
-// (C/T/J/A/R, resolved externally via _resolveFleetAction) are all wired on the Close Up tab; none of
+// (C/T/J/A/R/D, resolved externally via _resolveFleetAction) are all wired on the Close Up tab; none of
 // them apply while editing Orders.
 internal sealed class CloseUpOverlay : IOverlay
 {
@@ -301,8 +301,6 @@ internal sealed class CloseUpOverlay : IOverlay
         // instead of this class, so CloseUpOverlay only ever sees a fleet or someone else's world.
         var fleetOwned = fleet is not null && ReferenceEquals(fleet.Owner, _viewer);
         At(1, 17, fleetOwned
-            // D (Deploy) is deliberately absent: Deploy has no path here from an existing fleet (it
-            // only launches from a world picked via the map cursor) -- its own follow-on slice.
             ? $"F2:rename  F10:map   Ctrl+PgUp/PgDn: Orders tab   {GalaxyMapScreen.FleetActionHint(fleet!, _resolveFleetAction)}"
             : "F2:rename  F10:map   (any other key closes)");
     }

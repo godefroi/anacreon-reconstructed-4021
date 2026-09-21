@@ -497,10 +497,21 @@ internal sealed class GalaxyMapScreen : IScreen
 
     // Contextual Deploy from an owned world's own Close Up (WorldInfoOverlay's D shortcut): that world
     // is already the deploy source, no map-cursor source pick needed -- GameShell.DeployFleet(ISectorObject)'s
-    // own equivalent, narrowed to a world since that's the only source WorldInfoOverlay can ever offer
-    // (a Fleet source would need FleetLifecycle.DeployFleet to accept a Fleet, which nothing here wires
-    // up yet -- CloseUpOverlay's own D-key note already flagged that as its own follow-on slice).
+    // own equivalent, narrowed to a world since that's the only source WorldInfoOverlay can ever offer.
     private void DeployFleet(IEconomicWorld source)
+    {
+        _overlays.Add(new TextPromptOverlay("Name This Fleet", "Fleet name (optional):", string.Empty, name =>
+            ValidateDeploySource(source, name),
+            maxLength: 40, borderFg: ConsoleColor.Gray, borderBg: ConsoleColor.Black));
+    }
+
+    // Same as DeployFleet(IEconomicWorld) above, but sourced from one of the player's own fleets
+    // (CloseUpOverlay/the sector picker's own D shortcut, ResolveFleetContextAction below): real
+    // Pascal's own Deploy command (PLAYTURN.PAS's IDParm2, ErrorCond [NotPartOfEmp,NotInUse] -- no
+    // NotAWorld) never restricted the source to a world either. ValidateDeploySource/
+    // BeginDeployDistribution are already IShipCargoHolder-generic (FleetLifecycle.DeployFleet itself
+    // has always branched on launchSource is Fleet) -- this overload was the only missing wiring.
+    private void DeployFleet(Fleet source)
     {
         _overlays.Add(new TextPromptOverlay("Name This Fleet", "Fleet name (optional):", string.Empty, name =>
             ValidateDeploySource(source, name),
@@ -546,7 +557,7 @@ internal sealed class GalaxyMapScreen : IScreen
     private void BeginDeployDistribution(IShipCargoHolder source, string fleetName, Coordinate destination)
     {
         // A snapshot, not the source's own live Ships/Cargo -- FleetLifecycle.ChangeCompositionOfFleet
-        // (which DeployFleet calls internally) overwrites the launch world's own Ships in place, and
+        // (which DeployFleet calls internally) overwrites the launch source's own Ships in place, and
         // the editor mutates ground counts live as the player fills/empties columns; passing the real
         // object through would let that happen before the player ever confirms anything.
         var groundShips = CloneShips(source.Ships);
@@ -623,7 +634,14 @@ internal sealed class GalaxyMapScreen : IScreen
     /// first, then anyone else's, matching real Pascal's own display order. Real GetGround always opens
     /// the picker even for a single candidate; this port auto-picks it instead (same
     /// PickOwnFleetAtCursor exactly-1-auto-picks convenience below), per the user's own explicit
-    /// request -- a deliberate deviation, not a restoration.
+    /// request -- a deliberate deviation, not a restoration. Every fleet candidate (own or enemy) is
+    /// also gated on <see cref="Game.ScoutedOrOwned"/> (FLTCOMM.PAS:108-109's own "AND
+    /// (Scouted(Player,Flt2))" -- real Pascal's ScoutFleets unconditionally Scouts every one of the
+    /// player's own fleets at creation, see ScoutedOrOwned's own doc comment for why this port needs
+    /// the explicit ownership fallback to restore that same invariant), so a stealthed/unscouted fleet
+    /// sharing the sector -- an HK fleet in particular -- never shows up as something to Transfer/
+    /// Abort-Join with; the world candidate has no such gate in real Pascal either (worlds aren't
+    /// stealthed).
     /// </summary>
     private void PickGround(Fleet source, bool playerOnly, bool includeFleet, string title, string emptyMessage, Action<ISectorObject> onPicked,
         Func<ISectorObject, bool>? exclude = null, string? excludedEmptyMessage = null)
@@ -639,6 +657,11 @@ internal sealed class GalaxyMapScreen : IScreen
 
             var isOwn = ReferenceEquals(f.Owner, _player);
             if (playerOnly && !isOwn)
+            {
+                continue;
+            }
+
+            if (!Game.ScoutedOrOwned(_player, f))
             {
                 continue;
             }
@@ -701,15 +724,11 @@ internal sealed class GalaxyMapScreen : IScreen
     // Fleet menu > Transfer (FLTCOMM.PAS: TransferFleetCommand) -- the same Resource Distribution
     // Editor Deploy uses, between one of the player's own fleets and whatever PickGround picks as the
     // other side (any owner).
-    // GameShell.ResolveFleetContextAction: C/T/J/A/R, the five Fleet/Ministry-of-War commands reachable
-    // directly off an already-selected owned fleet in CloseUpOverlay and the sector object picker. D
-    // (Deploy) isn't here -- CloseUpOverlay/the sector picker never carry a source object Tui's own
-    // Deploy flow can consume directly (it only launches from a world picked via the map cursor, not an
-    // existing fleet), so wiring D would mean building that fleet-source deploy path first, not just
-    // pointing at an existing method. A (Attack) is gated on HasAttackTarget -- a port-only refinement
-    // over tui1's own FleetActionHint (which shows it unconditionally for any owned fleet) per the
-    // user's own explicit request: no point offering Attack from a fleet sitting somewhere with nothing
-    // to hit.
+    // GameShell.ResolveFleetContextAction: C/T/J/A/R/D, the six Fleet/Ministry-of-War commands reachable
+    // directly off an already-selected owned fleet in CloseUpOverlay and the sector object picker. A
+    // (Attack) is gated on HasAttackTarget -- a port-only refinement over tui1's own FleetActionHint
+    // (which shows it unconditionally for any owned fleet) per the user's own explicit request: no point
+    // offering Attack from a fleet sitting somewhere with nothing to hit.
     private Action<Fleet>? ResolveFleetContextAction(char letter, Fleet fleet) => letter switch
     {
         'C' => ChangeDestination,
@@ -717,6 +736,7 @@ internal sealed class GalaxyMapScreen : IScreen
         'J' => AbortJoinFleet,
         'A' => HasAttackTarget(fleet) ? Attack : null,
         'R' => RefuelFleet,
+        'D' => DeployFleet,
         _ => null,
     };
 
@@ -728,7 +748,7 @@ internal sealed class GalaxyMapScreen : IScreen
         string.Join("  ", FleetActionLabels.Where(l => resolve(l.Letter, fleet) is not null).Select(l => $"{l.Letter}:{l.Label}"));
 
     private static readonly (char Letter, string Label)[] FleetActionLabels = [
-        ('C', "dest"), ('T', "transfer"), ('J', "abort/join"), ('A', "attack"), ('R', "refuel"),
+        ('D', "deploy"), ('C', "dest"), ('T', "transfer"), ('J', "abort/join"), ('A', "attack"), ('R', "refuel"),
     ];
 
     private void TransferFleet() => PickOwnFleetAtCursor("Transfer Fleet", TransferFleet);
