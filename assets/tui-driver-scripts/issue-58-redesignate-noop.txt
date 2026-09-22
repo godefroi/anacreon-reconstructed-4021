@@ -1,0 +1,24 @@
+# Verifies issue #58: re-selecting a world's own current designation is a true no-op -- no
+# efficiency penalty, no confirmation prompt. Loaded on "Resupply Smoke Test.json"; (0,0) has both
+# the capital and a fleet, so the first Enter opens the sector-object picker, the second picks the
+# planet (item 0) -- opens WorldInfoOverlay on Close Up (Eff: 80%, noted as the baseline). Then
+# Designate -> "Capital" is index 2 (Agricultural, Base, Capital, Chemical, Independent, ...) --
+# already this world's own current type -- Enter on it should do nothing: no warning, no Eff change.
+Enter
+Enter
+DUMP
+
+Ctrl+PageDown
+Ctrl+PageDown
+Ctrl+PageDown
+Down
+Down
+DUMP
+
+Enter
+DUMP
+
+Ctrl+PageUp
+Ctrl+PageUp
+Ctrl+PageUp
+DUMP

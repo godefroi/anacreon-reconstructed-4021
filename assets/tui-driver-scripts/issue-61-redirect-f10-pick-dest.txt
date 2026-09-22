@@ -1,0 +1,19 @@
+# Verifies issue #61: on the Redirect tab, F10 is "pick destination", not Enter. Loaded on
+# "Resupply Smoke Test.json"; (0,0) has both the capital and a fleet, so the first Enter opens the
+# sector-object picker, the second picks the planet (item 0) -- opens WorldInfoOverlay on Close Up,
+# then Ctrl+PageDown x4 lands on Redirect. Enter there should now do nothing (footer already reads
+# F10: pick dest., not Enter); F10 should dismiss the overlay and drop into the map's own
+# "Redirect -- move cursor to destination" pick mode, same as Deploy Fleet's own BeginPick.
+Enter
+Enter
+Ctrl+PageDown
+Ctrl+PageDown
+Ctrl+PageDown
+Ctrl+PageDown
+DUMP
+
+Enter
+DUMP
+
+F10
+DUMP

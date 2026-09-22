@@ -39,7 +39,8 @@ public class WorldDesignationTests
     public async Task Redesignate_NonCapital_NoTypeChange_StillAppliesEfficiencyPenalty()
     {
         // Real Pascal never special-cases a no-op redesignation -- the efficiency hit fires even
-        // when NewType equals the world's current type.
+        // when NewType equals the world's current type. WorldOwnership.Liberate relies on exactly
+        // this when it redesignates a starbase to its own current type just for the side effect.
         var world = new Planet {
             Location = new Coordinate(0, 0),
             Owner = NewEmpire("Owner"),
