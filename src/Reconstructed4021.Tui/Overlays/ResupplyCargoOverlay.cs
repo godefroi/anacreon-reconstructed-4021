@@ -9,11 +9,12 @@ namespace Reconstructed4021.Tui.Overlays;
 
 
 // Fleet menu > Resupply's own cargo-type-and-amount step (GameShell.PickResupplyCargoAndAmount) --
-// a list of cargo types (how much is available at the source, how much room the fleet has for it,
-// and how much the destination already has on hand -- port-only addition, no Pascal precedent, since
-// that's useful context for deciding whether a shuttle run is even worth it), Enter on a row moves
-// into an amount field pre-filled with that row's own max; Enter there commits, Esc there backs out
-// to the list, Esc on the list cancels the whole thing.
+// a list of cargo types (how much is available at the source, the actual max you could shuttle --
+// fleet room capped at source availability, issue #60 -- and how much the destination already has on
+// hand -- port-only addition, no Pascal precedent, since that's useful context for deciding whether a
+// shuttle run is even worth it), Enter on a row moves into an amount field pre-filled with that row's
+// own max; Enter there commits, Esc there backs out to the list, Esc on the list cancels the whole
+// thing.
 internal sealed class ResupplyCargoOverlay : IOverlay
 {
     private const int Width = 60;
@@ -45,7 +46,7 @@ internal sealed class ResupplyCargoOverlay : IOverlay
         _sourceName = sourceName;
         _onCommitted = onCommitted;
         var rows = Enum.GetValues<CargoType>().Select(t => new Row(t, source.Cargo[t],
-            Math.Max(0, Math.Min(FleetLogistics.FleetCargoSpaceFor(t, fleet.Ships, fleet.Cargo), PascalMath.MaxResources - fleet.Cargo[t])),
+            Math.Max(0, Math.Min(Math.Min(FleetLogistics.FleetCargoSpaceFor(t, fleet.Ships, fleet.Cargo), PascalMath.MaxResources - fleet.Cargo[t]), source.Cargo[t])),
             destination.Cargo[t])).ToList();
         _list = new ListBox<Row>(rows, FormatRow);
     }
@@ -149,7 +150,7 @@ internal sealed class ResupplyCargoOverlay : IOverlay
         BoxDrawing.DrawSingleLine(fb, x, y, width, height, ConsoleColor.Gray, ConsoleColor.Black);
         fb.DrawText(x + Math.Max(1, (width - 10) / 2), y, " Resupply ", ConsoleColor.White, ConsoleColor.Black);
 
-        fb.DrawText(x + 1, y + 1, $"{"Cargo".PadRight(NameColumnWidth)}{"Available",9}  {"Capacity",9}  {"Dest",9}", ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
+        fb.DrawText(x + 1, y + 1, $"{"Cargo".PadRight(NameColumnWidth)}{"Available",9}  {"Max",9}  {"Dest",9}", ConsoleColor.Gray, ConsoleColor.Black, maxWidth: width - 2);
         _list.Draw(fb, x + 1, y + 2, width - 2, ListHeight, ConsoleColor.Gray, ConsoleColor.Black, ConsoleColor.Black, ConsoleColor.Gray);
 
         var row = y + 2 + ListHeight;

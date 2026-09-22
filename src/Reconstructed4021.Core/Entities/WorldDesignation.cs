@@ -191,7 +191,9 @@ public static class WorldDesignation
     /// penalty below (<c>Eff-Round(Eff/(1.5+Random))</c>) fires unconditionally, including on the old
     /// capital when swapping and on <paramref name="world"/> itself even when <paramref name="newType"/>
     /// equals its current type -- matching real Pascal exactly, which never special-cases a no-op
-    /// redesignation.
+    /// redesignation. <see cref="WorldOwnership.Liberate"/> relies on this: it deliberately calls here
+    /// with an unchanged type just for this side effect. The player-facing redesignate command instead
+    /// guards against a same-type no-op itself, before ever calling here (issue #58).
     ///
     /// Generalizes NpeToolkit's own private RedesignateWorldType (ReDesignateEmpire never redesignates
     /// to Capital, so it never needed this branch) -- that method now calls this one directly instead

@@ -136,7 +136,9 @@ internal sealed class WorldInfoOverlay : IOverlay
         }
 
         // F2/F10 are global here too, same as D above -- matching GameShell.ShowWorldInfo's own
-        // window.KeyDown handler running ahead of any tab-specific key handling.
+        // window.KeyDown handler running ahead of any tab-specific key handling. On the Redirect tab,
+        // F10 is "pick destination" instead (issue #61) rather than go-to-map -- that tab has no other
+        // use for the map, and Enter no longer doubles for this there.
         if (key.Key == ConsoleKey.F2)
         {
             _push(new TextPromptOverlay("Name", "New name (blank to clear):", _world.Names.GetValueOrDefault(_viewer, string.Empty), newName =>
@@ -155,6 +157,13 @@ internal sealed class WorldInfoOverlay : IOverlay
 
         if (key.Key == ConsoleKey.F10)
         {
+            if (_tabKinds[_frame.ActiveIndex] == TabKind.Redirect)
+            {
+                IsDismissed = true;
+                _pickRedirectDestination((Planet)_world);
+                return;
+            }
+
             IsDismissed = true;
             _onGoToMap(_world);
             return;
@@ -557,7 +566,10 @@ internal sealed class WorldInfoOverlay : IOverlay
             return;
         }
 
-        if (key.Key == ConsoleKey.Enter && _designateList.SelectedItem is { } selected)
+        // Re-selecting the world's own current type is a true no-op (issue #58) -- skipped before
+        // ConfirmDesignate's own risk-confirm chain even runs, unlike WorldDesignation.Redesignate
+        // itself (WorldOwnership.Liberate relies on that one still applying its side effect).
+        if (key.Key == ConsoleKey.Enter && _designateList.SelectedItem is { Type: var newType } selected && newType != _world.Type)
         {
             ConfirmDesignate(selected.Type);
         }
@@ -642,7 +654,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         _ => type.ToString(),
     };
 
-    // RedirectTabView -- planet-only. Enter hands off to _pickRedirectDestination
+    // RedirectTabView -- planet-only. F10 hands off to _pickRedirectDestination
     // (GalaxyMapScreen.PickRedirectDestination), the same map-cursor BeginPick mode Deploy Fleet's own
     // destination pick uses -- this overlay dismisses itself first (BeginPick's own doc comment
     // requires an empty stack) and reopens back on this tab once a destination is confirmed.
@@ -705,7 +717,7 @@ internal sealed class WorldInfoOverlay : IOverlay
             fb.DrawText(cx + 1, cy + 5 + i, visible, selected ? SelectedFg : ContentFg, selected ? SelectedBg : ContentBg);
         }
 
-        At(1, ch - 1, "Up/Down: select   Left/Right: change   Enter: pick dest.   X: clear dest.");
+        At(1, ch - 1, "Up/Down: select   Left/Right: change   F10: pick dest.   X: clear dest.");
     }
 
     private void HandleRedirectKey(ConsoleKeyInfo key)
@@ -726,10 +738,6 @@ internal sealed class WorldInfoOverlay : IOverlay
             case ConsoleKey.DownArrow:
             case ConsoleKey.PageDown:
                 _redirectRow = (_redirectRow + 1) % RedirectRows.Length;
-                return;
-            case ConsoleKey.Enter:
-                IsDismissed = true;
-                _pickRedirectDestination((Planet)_world);
                 return;
         }
 

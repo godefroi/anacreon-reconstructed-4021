@@ -1,0 +1,31 @@
+# Verifies issue #60: the resupply dialog's suggested/max amount is capped at BOTH fleet capacity
+# and how much is actually on hand at the source, not fleet capacity alone. Loaded on "Resupply
+# Smoke Test.json": a fleet of 20 transports at (0,0) has room for 20*100=2000 tons of trillum
+# (CargoSpacePerUnit[Trillum]=100), but the source world only has 200 trillum on hand -- before the
+# fix, the Trillum row's Max column (and the amount field's pre-fill) showed 2000; after, 200.
+Alt+F
+U
+DUMP
+
+Enter
+DUMP
+
+Right
+Right
+Right
+Right
+Down
+Down
+Down
+Down
+Enter
+DUMP
+
+Down
+Down
+Down
+Down
+Down
+Down
+Enter
+DUMP
