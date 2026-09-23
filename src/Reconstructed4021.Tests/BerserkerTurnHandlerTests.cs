@@ -1,3 +1,4 @@
+using System.Reflection;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
@@ -136,6 +137,48 @@ public class BerserkerTurnHandlerTests
         var fleet = galaxy.Fleets.Single();
         await Assert.That(fleet.Owner).IsEqualTo(owner);
         await Assert.That(fleet.Destination).IsEqualTo(target.Location);
+    }
+
+    [Test]
+    public async Task AttackBase_AtFleetTrackingCap_AbortsAndDoesNotDeployFleet()
+    {
+        // Same setup as AttackBase_CloseEnough_DeploysAttackFleet, but with 30 fleets already tracked --
+        // DeployBerserkerFleet's own MaxTrackedFleetsPerEmpire check should abort/destroy the composed
+        // fleet the instant it's deployed, same branch real Pascal's Slot=0 arm shares with the
+        // EDA>Range check (NPEINTR.PAS:530), rather than growing past the 30-slot NPE-data table.
+        var (game, galaxy) = NewGame();
+        var owner = NewEmpire("Owner");
+        game.Empires.Add(owner);
+
+        var starbase = new Starbase { Location = new Coordinate(10, 10), Owner = owner, Kind = StarbaseKind.Fortress };
+        starbase.Ships[ShipType.HunterKiller] = 6000;
+        starbase.Ships[ShipType.Jumpship] = 6000;
+        starbase.Cargo[CargoType.Trillum] = 10000;
+        galaxy.Starbases.Add(starbase);
+
+        var target = new Planet { Location = new Coordinate(13, 10), Owner = Empire.Independent, Type = WorldType.Independent, Class = WorldClass.EarthLike, TechLevel = TechLevel.PreTech };
+        target.Cargo[CargoType.Metals] = 2500;
+        galaxy.Planets.Add(target);
+
+        var handler = new BerserkerTurnHandler(owner, new FixedRandom(0));
+        var fleetStatesField = typeof(BerserkerTurnHandler).GetField("_fleetStates", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var fleetStates = (Dictionary<Fleet, BerserkerFleetState>)fleetStatesField.GetValue(handler)!;
+        for (var i = 0; i < NpeToolkit.MaxTrackedFleetsPerEmpire; i++) {
+            // InTransit, not the default Ready: UpdateFleets' own switch on state.Mission destroys any
+            // Ready fleet whose mission matches neither BerserkerReturn nor BerserkerAttack (the
+            // default: CombatOutcome.DestroyFleet(fleet, game) arm) -- these padding fleets' Mission is
+            // deliberately left at its default (None) and must survive untouched until PlayTurn's
+            // second call actually attempts (and should abort) the real deploy.
+            var dummy = new Fleet { Location = new Coordinate(0, 0), Owner = owner, Status = FleetStatus.InTransit };
+            galaxy.Fleets.Add(dummy);
+            fleetStates[dummy] = new BerserkerFleetState();
+        }
+
+        handler.PlayTurn(owner, game); // seeds AttackBMS, destination = target
+        handler.PlayTurn(owner, game); // ImplementAttackBase: Dist=3<=5 -> would deploy, but the cap aborts it
+
+        await Assert.That(galaxy.Fleets).Count().IsEqualTo(NpeToolkit.MaxTrackedFleetsPerEmpire);
+        await Assert.That(fleetStates).Count().IsEqualTo(NpeToolkit.MaxTrackedFleetsPerEmpire);
     }
 
     [Test]

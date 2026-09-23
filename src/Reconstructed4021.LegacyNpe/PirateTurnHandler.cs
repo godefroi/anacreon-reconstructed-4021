@@ -120,9 +120,10 @@ public sealed class PirateTurnHandler : ITurnHandler
     /// <summary>
     /// DeployRaiders (NPE01.PAS:234-352) — from every owned world with enough hkr/jmp/jtn ships on
     /// hand, rolls a raider fleet and sends it to the best scoring raid target (<see cref="GetRaidTarget"/>).
-    /// Real Pascal's <c>Slot=0</c> (fleet-data-array-full) guard can't happen with this port's
-    /// Dictionary — dropped, same precedent as <see cref="NpeToolkit.DeployBattleFleet"/>. No
-    /// fuel-range abort check here: Pirate calls FLEET.PAS's own <c>DeployFleet</c> directly, not
+    /// Real Pascal checks <c>Slot:=NextFleetDataSlot(...); IF Slot&lt;&gt;0</c> before ever calling
+    /// <c>DeployFleet</c> (NPE01.PAS:335-337) — unlike <see cref="NpeToolkit.DeployBattleFleet"/>'s
+    /// deploy-then-abort pattern, a full fleet-data table means this world's raiders never launch at
+    /// all. No fuel-range abort check here: Pirate calls FLEET.PAS's own <c>DeployFleet</c> directly, not
     /// NPEINTR.PAS's <c>DeployBattleFleet</c> wrapper that adds that check — confirmed by reading
     /// NPE01.PAS itself, not assumed from Kingdom's own call pattern.
     /// </summary>
@@ -144,7 +145,7 @@ public sealed class PirateTurnHandler : ITurnHandler
             };
 
             var target = GetRaidTarget(empire, fltSh, fltCr[CargoType.Legion], game);
-            if (target is null) {
+            if (target is null || _fleetStates.Count >= NpeToolkit.MaxTrackedFleetsPerEmpire) {
                 continue;
             }
 
@@ -201,13 +202,17 @@ public sealed class PirateTurnHandler : ITurnHandler
     /// DeployNewFleets (NPE01.PAS:354-417) — from every owned world, composes a patrol fleet per
     /// <see cref="GetPatrolFleetComposition"/> and sends it to a hunting-ground-weighted point to wait
     /// for passing transports. Skipped for a world whose composition comes out empty (no ships at
-    /// all) — matches Pascal's own <c>NOT NoShips(FltSh)</c> guard.
+    /// all) — matches Pascal's own <c>NOT NoShips(FltSh)</c> guard. Also skipped once this empire
+    /// already tracks <see cref="NpeToolkit.MaxTrackedFleetsPerEmpire"/> fleets, matching NPE01.PAS's
+    /// own <c>Slot:=NextFleetDataSlot(...); IF Slot&lt;&gt;0</c> pre-check (NPE01.PAS:400-401) — same
+    /// precedent as <see cref="DeployRaiders"/>.
     /// </summary>
     private void DeployNewFleets(Empire empire, Game game)
     {
         foreach (var planet in game.Galaxy.Planets.Where(p => p.Owner == empire).ToList()) {
             var fltSh = GetPatrolFleetComposition(planet.Ships);
-            if (fltSh[ShipType.HunterKiller] == 0 && fltSh[ShipType.Jumpship] == 0 && fltSh[ShipType.Jumptransport] == 0) {
+            if ((fltSh[ShipType.HunterKiller] == 0 && fltSh[ShipType.Jumpship] == 0 && fltSh[ShipType.Jumptransport] == 0)
+                || _fleetStates.Count >= NpeToolkit.MaxTrackedFleetsPerEmpire) {
                 continue;
             }
 

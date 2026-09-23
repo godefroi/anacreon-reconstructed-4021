@@ -1444,30 +1444,30 @@ world.
 
 World Class Table
 
-Symb Class Advantages Disadvantages
+|Symb|Class      |Advantages         |Disadvantages       |
+|:--:|:----------|:------------------|:-------------------|
+| A  |Ambrosia   |Bio                |Met/Tri             |
+| a  |Arid       |(None)             |Chem/Agrc           |
+| 0  |Artificial |Ships              |Chem/Met/Agrc/Tri   |
+| B  |Barren     |Met/Tri            |Chem/Agrc           |
+| j  |Class J    |Chem/Met           |Tri                 |
+| k  |Class K    |Met                |Chem                |
+| l  |Class L    |Tri                |Agrc                |
+| m  |Class M    |Agrc               |Trillum             |
+| D  |Desert     |Tri                |Chem/Met/Agrc       |
+| E  |Earth-Like |(None)             |(None)              |
+| F  |Forest     |Chem/Agrc          |(None)              |
+| G  |Gas Giant  |Chem/Ships         |Met/Agrc/Tri        |
+| h  |Hostile    |(None)             |(None)              |
+| I  |Ice        |(None)             |Chem/Met/Agrc/Tri   |
+| J  |Jungle     |Chem/Agrc          |(None)              |
+| O  |Ocean      |Chem/Agrc          |Met/Tri             |
+| 1  |Paradise   |Bio/Chem/          |Met/Agrc/Tri        |
+| P  |Poisonous  |Chem               |Met/Agrc/Tri        |
+| 2  |Ruins      |(None)             |(None)              |
+| U  |Underground|Met/Tri            |Agrc                |
+| V  |Volcanic   |Chem/Met/Tri       |Agrc                |
 
-A Ambrosia Bio Met/Tri\
-a Arid (None) Chem/Agrc\
-0 Artificial Ships Chem/Met/Agrc/Tri\
-B Barren Met/Tri Chem/Agrc\
-j Class J Chem/Met Tri\
-k Class K Met Chem\
-l Class L Tri Agrc\
-m Class M Agrc Trillum\
-D Desert Tri Chem/Met/Agrc\
-E Earth-Like (None) (None)\
-F Forest Chem/Agrc (None)\
-G Gas Giant Chem/Ships Met/Agrc/Tri\
-h Hostile (None) (None)\
-I Ice (None) Chem/Met/Agrc/Tri\
-J Jungle Chem/Agrc (None)\
-O Ocean Chem/Agrc Met/Tri\
-1 Paradise Bio/Chem/ (None)\
-Met/Agrc/Tri\
-P Poisonous Chem Met/Agrc/Tri\
-2 Ruins (None) (None)\
-U Underground Met/Tri Agrc\
-V Volcanic Chem/Met/Tri Agrc
 
 What if we want the ocean world to build ships? If the ocean world were
 designated to be a base planet or jumpship base it would build ships

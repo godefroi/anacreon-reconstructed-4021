@@ -181,6 +181,30 @@ public class FleetMovementHandlerTests
     }
 
     [Test]
+    public async Task JumpFleet_HitsEnemyMinefield_SurvivesDamagedAndRebalancesOverflowingCargo()
+    {
+        var victim = new Empire { Name = "Victim" };
+        var mineOwner = new Empire { Name = "MineOwner" };
+        var game = new Game(new Galaxy(size: 20));
+        game.Galaxy.SetMine(new Coordinate(1, 0), mineOwner);
+
+        var fleet = new Fleet { Owner = victim, Location = new Coordinate(0, 0), Destination = new Coordinate(5, 0), Fuel = 1000, Status = FleetStatus.Ready };
+        fleet.Ships.Jumptransports = 10;
+        fleet.Cargo.Trillum = 200; // exactly fills 10 jumptransports' worth of hold space (10*0.2*100).
+        game.Galaxy.Fleets.Add(fleet);
+
+        // Rnd(1,100) with FixedRandom(0) = 1; ProtecNeeded[Jumptransport]=50, so destroyed = min(10, 1 + PascalRound(10*0.7)) = 8, leaving 2 survivors.
+        // 2 jumptransports only hold 0.4 transport-equivalents, which BalanceFleet must trim the 200 trillum down to fit.
+        var handler = new FleetMovementHandler(new FixedRandom(0));
+        handler.AdvanceFleets(game, victim, new Empire { Name = "Other" });
+
+        await Assert.That(game.Galaxy.Fleets).Contains(fleet);
+        await Assert.That(fleet.Ships.Jumptransports).IsEqualTo(2);
+        await Assert.That(fleet.Cargo.Trillum).IsEqualTo(0);
+        await Assert.That(victim.News).Contains(n => n.Headline == NewsType.FleetDamagedByMines && n.OtherEmpire == mineOwner);
+    }
+
+    [Test]
     public async Task JumpFleet_HitsEnemyMinefield_DestroyedWhenNoShipsSurvive()
     {
         var victim = new Empire { Name = "Victim" };

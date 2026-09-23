@@ -91,6 +91,16 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     public bool ReEnterGame { get; set; }
 
     /// <summary>
+    /// Not a Pascal field — a port-only opt-in, off by default so every existing game/save keeps real
+    /// Pascal's own behavior byte-for-byte (same shape as <see cref="Combat.CombatResolution.NPEAttack"/>'s
+    /// own <c>smartRetreat</c> parameter). When on, <see cref="Npe.NpeToolkit.ImplementRefuelMSN"/>
+    /// redirects a Kingdom rescue fleet home instead of dissolving into its own stranded target if that
+    /// target died before the rescue arrived — see that method's own doc comment for why real Pascal
+    /// never guards against this.
+    /// </summary>
+    public bool RescueFleetReturnsHomeOnDeadTarget { get; set; }
+
+    /// <summary>
     /// Raw `.SAV` NPE-Data blobs for empires whose personality this port doesn't implement an
     /// <see cref="ITurnHandler"/> for (Pirate/Berserker/Guardian/Trader/unrecognized) — real
     /// scenarios routinely mix these with Kingdom empires (see `docs/ROADMAP.md`'s NPE reachability

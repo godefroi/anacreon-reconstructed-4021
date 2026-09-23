@@ -81,6 +81,39 @@ public class NpeToolkitDeployImplementTests
         await Assert.That(owner.ProbesInTransit).Count().IsEqualTo(4);
     }
 
+    /// <summary>Fills a fleet-tracking dictionary to <see cref="NpeToolkit.MaxTrackedFleetsPerEmpire"/> with dummy entries, none of which need to be real galaxy fleets — the deploy methods below only ever read the dictionary's <c>Count</c>.</summary>
+    private static Dictionary<Fleet, KingdomFleetState> FullFleetStates()
+    {
+        var fleetStates = new Dictionary<Fleet, KingdomFleetState>();
+        for (var i = 0; i < NpeToolkit.MaxTrackedFleetsPerEmpire; i++) {
+            fleetStates[new Fleet { Location = new Coordinate(0, 0) }] = new KingdomFleetState();
+        }
+
+        return fleetStates;
+    }
+
+    [Test]
+    public async Task DeployBattleFleet_AtFleetTrackingCap_AbortsAndDoesNotRecordState()
+    {
+        var (game, galaxy) = NewGame();
+        var owner = NewEmpire("Owner");
+        var enemy = NewEmpire("Enemy");
+        game.Empires.Add(owner);
+        game.Empires.Add(enemy);
+
+        var fromWorld = new Planet { Location = new Coordinate(0, 0), Owner = owner, Type = WorldType.Base };
+        fromWorld.Ships.Starships = 100;
+        var toTarget = new Planet { Location = new Coordinate(3, 0), Owner = enemy, Type = WorldType.Independent };
+        galaxy.Planets.Add(fromWorld);
+        galaxy.Planets.Add(toTarget);
+
+        var fleetStates = FullFleetStates();
+        NpeToolkit.DeployBattleFleet(owner, fleetStates, fromWorld, power: 100, gat: 0, NpeMissionType.Conquer, toTarget, game, new FixedRandom(0));
+
+        await Assert.That(fleetStates).Count().IsEqualTo(NpeToolkit.MaxTrackedFleetsPerEmpire);
+        await Assert.That(galaxy.Fleets).IsEmpty();
+    }
+
     [Test]
     public async Task DeployCargoFleet_LaunchesWithClampedCargoAndRecordsState()
     {
@@ -102,6 +135,25 @@ public class NpeToolkitDeployImplementTests
         var fleet = galaxy.Fleets[0];
         await Assert.That(fleet.Cargo.Metals).IsEqualTo(10); // clamped to what fromWorld actually had
         await Assert.That(fleetStates[fleet].Mission).IsEqualTo(NpeMissionType.Supply);
+    }
+
+    [Test]
+    public async Task DeployCargoFleet_AtFleetTrackingCap_AbortsAndDoesNotRecordState()
+    {
+        var (game, galaxy) = NewGame();
+        var owner = NewEmpire("Owner");
+        var fromWorld = new Planet { Location = new Coordinate(0, 0), Owner = owner, Type = WorldType.Base };
+        fromWorld.Ships.Transports = 50;
+        fromWorld.Cargo.Trillum = 1000; // enough range that DeployFleet's own EDA>Range abort check doesn't fire
+        var toTarget = new Planet { Location = new Coordinate(2, 0), Owner = owner, Type = WorldType.Base };
+        galaxy.Planets.Add(fromWorld);
+        galaxy.Planets.Add(toTarget);
+
+        var fleetStates = FullFleetStates();
+        NpeToolkit.DeployCargoFleet(owner, fleetStates, fromWorld, new CargoHold { Metals = 100 }, carryCargo: true, NpeMissionType.Supply, toTarget, game);
+
+        await Assert.That(fleetStates).Count().IsEqualTo(NpeToolkit.MaxTrackedFleetsPerEmpire);
+        await Assert.That(galaxy.Fleets).IsEmpty();
     }
 
     [Test]
@@ -325,6 +377,65 @@ public class NpeToolkitDeployImplementTests
 
         await Assert.That(galaxy.Fleets).DoesNotContain(fleet);
         await Assert.That(target.Fuel).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task ImplementRefuelMSN_TargetAlreadyDestroyed_NoFallback_DissolvesIntoOrphanTarget()
+    {
+        // Default (Game.RescueFleetReturnsHomeOnDeadTarget off, no fallbackHomeBase passed) — matches
+        // real Pascal exactly: no staleness check, the rescue fleet's fuel/cargo go into the target
+        // object regardless of whether it's still in the galaxy.
+        var (game, galaxy) = NewGame();
+        var owner = NewEmpire("Owner");
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = owner };
+        var target = new Fleet { Location = new Coordinate(0, 0), Owner = owner, Fuel = 0.0 }; // never added to galaxy.Fleets -- already "destroyed"
+        target.Ships.Starships = 10;
+        target.Cargo.Trillum = 1000;
+        galaxy.Fleets.Add(fleet);
+
+        NpeToolkit.ImplementRefuelMSN(fleet, target, game);
+
+        await Assert.That(galaxy.Fleets).DoesNotContain(fleet);
+        await Assert.That(target.Fuel).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task ImplementRefuelMSN_TargetAlreadyDestroyed_WithFallback_RedirectsFleetHomeInstead()
+    {
+        var (game, galaxy) = NewGame();
+        var owner = NewEmpire("Owner");
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = owner };
+        fleet.Cargo.Trillum = 500;
+        var target = new Fleet { Location = new Coordinate(0, 0), Owner = owner }; // never added to galaxy.Fleets -- already "destroyed"
+        var homeBase = new Planet { Location = new Coordinate(0, 0), Owner = owner, Type = WorldType.Base };
+        galaxy.Fleets.Add(fleet);
+        galaxy.Planets.Add(homeBase);
+
+        NpeToolkit.ImplementRefuelMSN(fleet, target, game, fallbackHomeBase: homeBase);
+
+        await Assert.That(galaxy.Fleets).DoesNotContain(fleet);
+        await Assert.That(homeBase.Cargo.Trillum).IsEqualTo(500); // rescue fleet's own cargo landed at home, not on the dead target
+        await Assert.That(target.Fuel).IsEqualTo(0); // orphan target untouched
+    }
+
+    [Test]
+    public async Task ImplementRefuelMSN_TargetStillAlive_FallbackPassedButUnused_StillRefuelsTarget()
+    {
+        var (game, galaxy) = NewGame();
+        var owner = NewEmpire("Owner");
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = owner };
+        var target = new Fleet { Location = new Coordinate(0, 0), Owner = owner, Fuel = 0.0 };
+        target.Ships.Starships = 10;
+        target.Cargo.Trillum = 1000;
+        var homeBase = new Planet { Location = new Coordinate(0, 0), Owner = owner, Type = WorldType.Base };
+        galaxy.Fleets.Add(fleet);
+        galaxy.Fleets.Add(target); // still alive
+        galaxy.Planets.Add(homeBase);
+
+        NpeToolkit.ImplementRefuelMSN(fleet, target, game, fallbackHomeBase: homeBase);
+
+        await Assert.That(target.Fuel).IsGreaterThan(0); // refueled normally, fallback only applies to a dead target
+        await Assert.That(homeBase.Cargo.Trillum).IsEqualTo(0);
     }
 
     [Test]
