@@ -359,8 +359,12 @@ public sealed class GalaxySetup(Random random)
     /// per cell is cheap here (unlike 2d's random-retry case, which needs a transient set instead).
     /// Deliberately does not check Galaxy.Fleets — real ObjectTypes includes Flt, but nothing in
     /// scenario loading (2e) ever creates one before this runs (confirmed: NEWGAME.PAS never spawns a
-    /// starting fleet, per this phase's own "explicitly out of scope" design note), so it can't be
-    /// reachably non-empty here.
+    /// starting fleet, per this phase's own "explicitly out of scope" design note). This port's own
+    /// guarantee is the same, not just inherited from Pascal's file format: <see cref="GalaxySetup"/>
+    /// has exactly two production callers, <c>ScenarioLoader</c> and <c>NewGameFlow.CompleteSetup</c>
+    /// (both pre-game setup, confirmed via a solution-wide reference search, not assumed), and neither
+    /// file contains a <c>Fleets.Add</c>/<c>new Fleet</c> anywhere — so Galaxy.Fleets can't be reachably
+    /// non-empty here regardless of which guarantee is doing the work.
     /// </summary>
     private static bool IsPhysicallyOccupied(Galaxy.Galaxy galaxy, Coordinate c) =>
         galaxy.Planets.Any(p => p.Location == c) || galaxy.Starbases.Any(s => s.Location == c) ||

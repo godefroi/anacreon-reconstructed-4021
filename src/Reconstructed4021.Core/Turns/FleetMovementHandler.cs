@@ -846,11 +846,10 @@ public sealed class FleetMovementHandler(Random random, bool useLegacyOrderResol
     /// MineFieldDamage (FLEET.PAS:705-746). Only HunterKiller/Jumpship/Jumptransport ships take damage
     /// (Pascal's <c>hkr TO jtn</c> range) — the only ship types a JumpFleet/HunterKillerFleet can ever
     /// carry in the first place (<see cref="Fleet.Type"/>'s own derivation), so checking just those
-    /// three for "anything left" is equivalent to Pascal's full <c>NoShips</c> scan here. BalanceFleet's
-    /// post-damage cargo rebalance isn't ported on the survives branch — this method only ever removes
-    /// ships, never cargo, so nothing here could exceed a capacity anyway. FleetNameDestruction needs
-    /// no equivalent here either, same reasoning as <see cref="Combat.CombatOutcome.AbortFleet"/>'s
-    /// own remarks.
+    /// three for "anything left" is equivalent to Pascal's full <c>NoShips</c> scan here. Jumptransport
+    /// losses shrink <see cref="FleetLogistics.FleetCargoSpace"/> without touching cargo, so the survives
+    /// branch rebalances the same way real Pascal does. FleetNameDestruction needs no equivalent here
+    /// either, same reasoning as <see cref="Combat.CombatOutcome.AbortFleet"/>'s own remarks.
     /// </summary>
     private bool ApplyMineFieldDamage(Fleet fleet, Empire minedBy, Game game)
     {
@@ -869,6 +868,8 @@ public sealed class FleetMovementHandler(Random random, bool useLegacyOrderResol
             foreach (var t in _mineableShipTypes) {
                 ships[t] -= destroyed[t];
             }
+
+            FleetLogistics.BalanceFleet(fleet.Ships, fleet.Cargo);
         } else {
             owner.AddNews(NewsType.FleetDestroyedByMines, fleet, otherEmpire: minedBy);
             CombatOutcome.DestroyFleet(fleet, game);

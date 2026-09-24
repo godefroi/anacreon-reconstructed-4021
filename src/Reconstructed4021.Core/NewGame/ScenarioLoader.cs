@@ -23,7 +23,7 @@ namespace Reconstructed4021.Core.NewGame;
 /// must share the same underlying <see cref="Random"/> instance, mirroring Pascal's single implicit
 /// global RNG. A caller that wants a specific .SCN file's own nonzero <c>Seed</c> to actually drive
 /// reproducibility has no way to get it through this API — the value is consumed by the tokenizer
-/// and never exposed (see docs/OPEN_GAPS.md).
+/// and never exposed (GitHub #68).
 ///
 /// Any parse/format error throws immediately (FormatException) rather than reproducing Pascal's
 /// ScenaError flag (print a message, keep going until the *next* dispatch-loop check) — this port has
@@ -471,9 +471,9 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random, INpeH
     /// CreatePlayerEmpire/CreateNPEmpire command in the file has actually run — both the objects and
     /// <see cref="_empireBySlot"/> are only fully populated by the time <see cref="Load"/> returns. A
     /// row whose object type isn't Pln/Base, or whose 1-based index is out of range, is silently
-    /// dropped — confirmed no real committed scenario ever references anything else
-    /// (docs/OPEN_GAPS.md notes the narrower gap this leaves for a hypothetical Con/Gate row, which
-    /// this port's own CloseUpWindow doesn't lay out background text for at all yet anyway).
+    /// dropped — confirmed no real committed scenario ever references anything else. A hypothetical
+    /// Con/Gate row would fall into that same drop; this port's own CloseUpWindow doesn't lay out
+    /// background text for those object types at all yet either (GitHub #80).
     /// </summary>
     private void ResolveWorldBackground(Galaxy.Galaxy galaxy, Game game)
     {

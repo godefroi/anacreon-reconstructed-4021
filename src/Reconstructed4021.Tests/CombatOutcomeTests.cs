@@ -104,6 +104,46 @@ public class CombatOutcomeTests
     }
 
     /// <summary>
+    /// ConquerEmpire's own <c>Booty</c> (ATTACK.PAS:1028,1048,1060): a world close to the conqueror's
+    /// own capital, far from the enemy's, and below the population roll joins the conqueror outright
+    /// (ATTACK.PAS:1044-1049) -- <see cref="CombatOutcome.ConquerEmpire"/> returns it so
+    /// <c>TacticalBattleScreen</c> can show the human attacker the same "the following worlds have
+    /// joined our empire" report <c>ATTCOMM.PAS</c>'s <c>EmpireConquestReport</c> shows there.
+    /// </summary>
+    [Test]
+    public async Task ConquerEmpire_WorldJoinsConqueror_ReturnsItAsBooty()
+    {
+        var galaxy = new Galaxy(size: 100);
+        var game = new Core.Game(galaxy);
+
+        var conqueror = EmpireFactory.CreateEmpire("Conqueror", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        conqueror.NpeType = NpeEmpireType.Pirate;
+        var conquerorCapital = new Planet { Location = new Coordinate(0, 0), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        conqueror.Capital = conquerorCapital;
+        galaxy.Planets.Add(conquerorCapital);
+
+        var enemy = EmpireFactory.CreateEmpire("Enemy", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        enemy.NpeType = NpeEmpireType.Pirate;
+        var enemyCapital = new Planet { Location = new Coordinate(90, 90), Owner = conqueror, Class = WorldClass.EarthLike, Type = WorldType.Independent, TechLevel = TechLevel.Jump };
+        enemy.Capital = enemyCapital;
+
+        // Close to the conqueror (distToConq<10), far from the enemy capital (dist>10), population
+        // below the Rnd(900,1100) roll (900 with FixedRandom(0)) -- ATTACK.PAS:1044's join branch.
+        var joiningWorld = new Planet { Location = new Coordinate(1, 1), Owner = enemy, Class = WorldClass.EarthLike, Type = WorldType.Agricultural, TechLevel = TechLevel.PreAtomic, Population = 100 };
+        galaxy.Planets.Add(joiningWorld);
+
+        game.Empires.Add(conqueror);
+        game.Empires.Add(enemy);
+        game.TurnHandlers[conqueror] = new NonHumanTurnHandler();
+        game.TurnHandlers[enemy] = new NonHumanTurnHandler();
+
+        var joined = CombatOutcome.ConquerEmpire(conqueror, enemy, game, new FixedRandom(0));
+
+        await Assert.That(joined).Contains(joiningWorld);
+        await Assert.That(joiningWorld.Owner).IsEqualTo(conqueror);
+    }
+
+    /// <summary>
     /// AbortFleet (FLEET.PAS:150-209), reached via <see cref="CombatOutcome.DestroyEmpire"/> (itself
     /// reached via <see cref="CombatOutcome.ConquerEmpire"/>'s NPE-destroyed branch — AbortFleet is
     /// <c>internal</c>, so this test goes through the same public entry point a real conquest would):

@@ -76,17 +76,22 @@ public static class CombatOutcome
     }
 
     /// <summary>
-    /// ConquerEmpire (ATTACK.PAS:985-1139). <c>Booty</c> (the set of world indices that joined the
-    /// conqueror) is declared and threaded through real Pascal's own NPEAttack call chain but never
-    /// read anywhere in it — dropped entirely, same "confirmed unused by reading" precedent as 5e's
-    /// <c>RetrIndex</c>. The starbase-recapture loop (ATTACK.PAS:1099-1118) is real Pascal's own dead
-    /// code, disabled with <c>(* ... *)</c> in source — not ported, matching that exact scoping.
+    /// ConquerEmpire (ATTACK.PAS:985-1139). Returns the worlds that joined the conqueror (real
+    /// Pascal's own <c>Booty</c>) so a human attacker's <c>TacticalBattleScreen</c> can show the same
+    /// "the following worlds have joined our empire" report <c>ATTCOMM.PAS</c>'s
+    /// <c>EmpireConquestReport</c> (:1528-1562) shows there — <c>Booty</c> is dead in the NPE attack
+    /// chain (<c>ATTNPE.PAS</c>'s own call site never reads it back), but <c>ATTCOMM.PAS</c>'s
+    /// interactive attack chain does, and this port's <see cref="ResolveAttack"/> is the one shared
+    /// implementation both chains call through. The starbase-recapture loop (ATTACK.PAS:1099-1118) is
+    /// real Pascal's own dead code, disabled with <c>(* ... *)</c> in source — not ported, matching
+    /// that exact scoping.
     /// </summary>
-    public static void ConquerEmpire(Empire conqueror, Empire enemyEmpire, Game game, Random random)
+    public static IReadOnlyList<Planet> ConquerEmpire(Empire conqueror, Empire enemyEmpire, Game game, Random random)
     {
         var enemyCapXY = enemyEmpire.Capital!.Location;
         var conquerorCapXY = conqueror.Capital!.Location;
         IEconomicWorld? newCapital = null;
+        var joined = new List<Planet>();
 
         foreach (var planet in game.Galaxy.Planets.Where(p => p.Owner == enemyEmpire).ToList()) {
             var dist = planet.Location.DistanceTo(enemyCapXY);
@@ -97,6 +102,7 @@ public static class CombatOutcome
             if (dist > 10 && distToConq < 10 && pop < Rnd(random, 900, 1100)) {
                 ConquerWorld(planet, conqueror, game, random);
                 enemyEmpire.AddNews(NewsType.WorldJoinedOtherEmpire, planet, otherEmpire: conqueror);
+                joined.Add(planet);
             } else if (pop > Rnd(random, 900, 1100) && revI > 50 && Rnd(random, 1, 100) < 75) {
                 ((IEconomicWorld)planet).Reassign(Empire.Independent);
                 planet.Type = WorldType.Independent;
@@ -104,6 +110,7 @@ public static class CombatOutcome
             } else if (distToConq < 10 && Rnd(random, 1, 100) < 60 && revI > 35) {
                 ConquerWorld(planet, conqueror, game, random);
                 enemyEmpire.AddNews(NewsType.WorldJoinedOtherEmpire, planet, otherEmpire: conqueror);
+                joined.Add(planet);
             } else if (newCapital is null) {
                 if (planet.TechLevel > TechLevel.Jump) {
                     newCapital = planet;
@@ -134,6 +141,8 @@ public static class CombatOutcome
             NewCapital(enemyEmpire, newCapital, random);
             enemyEmpire.AddNews(NewsType.WorldIsNowCapital, newCapital);
         }
+
+        return joined;
     }
 
     /// <summary>[BseTyp,BseSTyp,JmpTyp,JmpSTyp,StrTyp,StrSTyp] (ATTACK.PAS:1078,1083,1090) — every base/jumpship-base/starship-base designation, planet or starbase kind.</summary>
@@ -192,8 +201,13 @@ public static class CombatOutcome
         }
     }
 
-    /// <summary>ResolveAttack (ATTACK.PAS:1183-1299), including its own nested ReportLosses.</summary>
-    public static void ResolveAttack(
+    /// <summary>
+    /// ResolveAttack (ATTACK.PAS:1183-1299), including its own nested ReportLosses. Returns whatever
+    /// <see cref="ConquerEmpire"/> returns (empty unless <see cref="AttackResultType.DefenderConquered"/>
+    /// conquers the defender's whole empire) — see that method's own doc comment for why a caller might
+    /// care.
+    /// </summary>
+    public static IReadOnlyList<Planet> ResolveAttack(
         AttackResultType result, Fleet attackerFleet, object target,
         bool hkAttack, bool capture, AttackTally casualties, AttackTally killed,
         Game game, Random random)
@@ -203,6 +217,7 @@ public static class CombatOutcome
         var defender = subject.Owner;
         var empireConquered = false;
         var revChange = 0;
+        IReadOnlyList<Planet> joined = [];
 
         switch (result) {
             case AttackResultType.AttackerDestroyed:
@@ -288,7 +303,7 @@ public static class CombatOutcome
                 }
 
                 if (empireConquered) {
-                    ConquerEmpire(attacker, defender, game, random);
+                    joined = ConquerEmpire(attacker, defender, game, random);
                 }
                 break;
             }
@@ -297,6 +312,8 @@ public static class CombatOutcome
             // ATTACK.PAS/ATTNPE.PAS, and ResolveAttack's own real CASE has no branch for it either —
             // confirmed by reading. A genuine no-op, not a gap.
         }
+
+        return joined;
     }
 
     /// <summary>ResolveAttack's nested ReportLosses (ATTACK.PAS:1196-1204).</summary>

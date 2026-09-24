@@ -1,3 +1,4 @@
+using System.Reflection;
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.Entities;
 using Reconstructed4021.Core.Galaxy;
@@ -77,6 +78,48 @@ public class PirateTurnHandlerTests
         await Assert.That(fleet.Ships[ShipType.HunterKiller]).IsEqualTo(1500);
         await Assert.That(fleet.Ships[ShipType.Jumpship]).IsEqualTo(2500);
         await Assert.That(fleet.Ships[ShipType.Jumptransport]).IsEqualTo(4000);
+    }
+
+    [Test]
+    public async Task PlayTurn_AtFleetTrackingCap_SkipsBothRaiderAndPatrolDeploys()
+    {
+        // Same raider-gate setup as PlayTurn_DeploysRaiderFleetAtBestScoringTarget (also clears the
+        // patrol gate, NPE01.PAS:365) -- with 30 fleets already tracked, both DeployRaiders'
+        // pre-deploy Slot<>0 check (NPE01.PAS:335-337) and DeployNewFleets' own (NPE01.PAS:400-401)
+        // should skip this world entirely, matching real Pascal exactly rather than the previous
+        // deploy-then-count-past-the-30-slot-save-format bug.
+        var (game, galaxy) = NewGame();
+        var owner = EmpireFactory.CreateEmpire("Owner", null, isEmpress: false, TechLevel.Warp, restlessness: 0, centralModifier: false, foundingYear: 0);
+        game.Empires.Add(owner);
+
+        var home = new Planet { Location = new Coordinate(50, 50), Owner = owner, Type = WorldType.Capital, Class = WorldClass.EarthLike, TechLevel = TechLevel.Warp };
+        home.Ships[ShipType.HunterKiller] = 1501;
+        home.Ships[ShipType.Jumpship] = 2501;
+        home.Ships[ShipType.Jumptransport] = 4001;
+        home.Cargo[CargoType.Legion] = 2000;
+        owner.Capital = home;
+        galaxy.Planets.Add(home);
+
+        var target = new Planet { Location = new Coordinate(10, 10), Owner = Empire.Independent, Type = WorldType.Independent, Class = WorldClass.EarthLike, TechLevel = TechLevel.Atomic };
+        target.Cargo[CargoType.Chemicals] = 100;
+        target.Cargo[CargoType.Metals] = 100;
+        target.Cargo[CargoType.Trillum] = 50;
+        target.Cargo[CargoType.Supplies] = 200;
+        galaxy.Planets.Add(target);
+
+        var handler = new PirateTurnHandler(owner, new FixedRandom(0));
+        var fleetStatesField = typeof(PirateTurnHandler).GetField("_fleetStates", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var fleetStates = (Dictionary<Fleet, PirateFleetState>)fleetStatesField.GetValue(handler)!;
+        for (var i = 0; i < NpeToolkit.MaxTrackedFleetsPerEmpire; i++) {
+            var dummy = new Fleet { Location = new Coordinate(0, 0), Owner = owner };
+            galaxy.Fleets.Add(dummy);
+            fleetStates[dummy] = new PirateFleetState();
+        }
+
+        handler.PlayTurn(owner, game);
+
+        await Assert.That(galaxy.Fleets).Count().IsEqualTo(NpeToolkit.MaxTrackedFleetsPerEmpire);
+        await Assert.That(fleetStates).Count().IsEqualTo(NpeToolkit.MaxTrackedFleetsPerEmpire);
     }
 
     [Test]
@@ -236,5 +279,30 @@ public class PirateTurnHandlerTests
         handler.PlayTurn(owner, game);
 
         await Assert.That(galaxy.Fleets.Contains(fleet)).IsFalse();
+    }
+
+    [Test]
+    public async Task GetPatrolDestination_AllZeroHuntingGroundBlock_FallsBackToTopLeft()
+    {
+        // Reachable, not theoretical: a galaxy this small (Size<=9) collapses GetPatrolDestination's
+        // scan to a single cell (see that method's own doc comment), and this test drives that one
+        // cell to exactly 0 the same way real play would -- five ImplementWaitForTrnMSN give-ups,
+        // each decrementing it by 5 from its InitializePirateNPE seed of 25.
+        var galaxy = new Galaxy(size: 5);
+        var game = new Game(galaxy);
+        var owner = EmpireFactory.CreateEmpire("Owner", null, isEmpress: false, TechLevel.Warp, restlessness: 0, centralModifier: false, foundingYear: 0);
+        game.Empires.Add(owner);
+
+        var handler = new PirateTurnHandler(owner, new FixedRandom(0));
+        var huntingGroundField = typeof(PirateTurnHandler).GetField("_huntingGround", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var huntingGround = (byte[,])huntingGroundField.GetValue(handler)!;
+        huntingGround[0, 0] = 0;
+
+        var getPatrolDestination = typeof(PirateTurnHandler).GetMethod("GetPatrolDestination", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var (bx, by, xy) = ((int BX, int BY, Coordinate XY))getPatrolDestination.Invoke(handler, [game])!;
+
+        await Assert.That(bx).IsEqualTo(1);
+        await Assert.That(by).IsEqualTo(1);
+        await Assert.That(xy).IsEqualTo(new Coordinate(1, 1));
     }
 }

@@ -4,8 +4,8 @@ How this port of Anacreon got built, bottom-up: simulation core first, UI last. 
 not a status tracker — everything below without a note to the contrary is built and tested. The
 "why does the C# port look like this" design decisions live in [`PORT_DESIGN.md`](PORT_DESIGN.md);
 findings about the *original* Pascal source (dead code, quirks, bugs) live in
-[`PASCAL_ARCHITECTURE_NOTES.md`](PASCAL_ARCHITECTURE_NOTES.md); known limitations in this port live
-in [`OPEN_GAPS.md`](OPEN_GAPS.md). This doc links out to those where there's a real story rather than
+[`PASCAL_ARCHITECTURE_NOTES.md`](PASCAL_ARCHITECTURE_NOTES.md); known limitations in this port are
+tracked as GitHub issues. This doc links out to those where there's a real story rather than
 duplicating it; the git log is the record of exactly what changed, commit by commit.
 
 ## 1. Economy / annual tick
@@ -641,8 +641,12 @@ feature.
 - **7h, wrap-up.** Re-read every gap 7a-7g flagged along the way and confirmed each is accurately
   tracked, nothing silently closed or forgotten. `.SAV` write's scope (`SavGameWriter`, test-only,
   no fidelity effort beyond "real Pascal accepts it") stays as stated in this section's own intro —
-  nothing calls it a maintained feature anywhere. Order queues, messages, UI/session Environment
-  fields, and the untested `DefeatedBy` decode branch are tracked in `OPEN_GAPS.md`.
+  nothing calls it a maintained feature anywhere. Of the four gaps this section originally flagged:
+  order queues now have a real in-memory model (`FleetOrder`/`List<FleetOrder>`) that just isn't
+  written through this test-only writer; UI/session Environment fields are now fully modeled on
+  `Game` (`EmpiresToMove` stays deliberately dropped, redundant with `Game.CurrentEmpire`); and the
+  `DefeatedBy` decode branch now has an exercising test (`SavGameLoaderTests.
+  RoundTrips_PendingEliminationHumanEmpire`). Messages remain unbuilt (#73, #74).
 
 ## 8. Human interactive turn handler + Terminal.Gui UI
 
@@ -734,8 +738,8 @@ Direct2D) surfaced; see the README's Known Issues section.
     `ExitChoice.EndTurn`, rather than looping across empires itself. This is already
     `Status`/`ITurnHandler.IsHuman`-driven per empire, not hardcoded to one `Empire` reference, so a
     second human would already get its own greeting+`GameShell` cycle when its slot comes up — real
-    hotseat protection (password prompt, Capital Fallen Report/Empire Status Report) is still
-    missing, tracked in `docs/OPEN_GAPS.md`, since nothing exercises it yet.
+    hotseat protection (password prompt) is still missing, tracked in #67, since nothing exercises
+    it yet.
   - **`assets/saves/Border Skirmish.json`** — new sibling to `reference/saves/` (real captured
     `.SAV` fixtures) for port-authored content, matching the convention the unmerged
     `kdl-scenario-format` branch already started for scenarios. Built directly against the same Core
@@ -1029,7 +1033,7 @@ Direct2D) surfaced; see the README's Known Issues section.
     caller, `ATTCOMM.PAS: EnemyConquered`'s post-attack report (`conquer:true`) — `GameShell.Attack()`
     still shows its old generic `MessageBox`. Reproducing `EnemyConquered` properly also means
     `AskToCapture` (deciding whether to capture a defeated fleet's ships), an unrelated mechanic that
-    belongs with combat work, not visibility/redaction work (docs/OPEN_GAPS.md).
+    belongs with combat work, not visibility/redaction work — both since built (8m below).
 - **8l, nebula actually affects scouting.** `INTRFACE.PAS`'s three real `GetNebula` call sites in the
   visibility code (`Scout`, `ProbeScout`, `InRangeOfPlanet`) grepped and checked one by one;
   `ProbeScout`'s own dark-nebula exit was already ported, the other two weren't.
@@ -1116,10 +1120,11 @@ Direct2D) surfaced; see the README's Known Issues section.
   - **`OldShipsFound` built, `EmpireConquestReport` deliberately not** — asked the user how to
     handle two remaining real (Pascal-has-it-port-doesn't) gaps found while scoping this;
     `OldShipsFound` was cheap and directly adjacent to code already being touched, so built;
-    `EmpireConquestReport` (which would need `Booty` tracking un-dropped first) was tracked as an
-    `OPEN_GAPS.md` bullet instead. (The battle screen's own decorative art was in this same
-    "track instead of build" bucket at first too — see the correction entry below; it isn't
-    anymore.)
+    `EmpireConquestReport` (which needed `Booty` tracking un-dropped first) was tracked as a gap
+    instead, built later once issue #66's own review turned the drop back up (`CombatOutcome.
+    ConquerEmpire` now returns `Booty`, `TacticalBattleScreen.ShowConquestReport` shows it). (The
+    battle screen's own decorative art was in this same "track instead of build" bucket at first
+    too — see the correction entry below; it isn't anymore.)
   - **Capital Fallen Report** (`PROLOG.PAS: EmpireNews`) — genuinely independent of hotseat (unlike
     `GetPassword`, still deferred): the mechanical `PendingElimination`→`Eliminated` teardown was
     already fully ported and tested at the `TurnEngine`/`CombatOutcome` layer, only the narrative
@@ -1322,8 +1327,9 @@ Direct2D) surfaced; see the README's Known Issues section.
     headless, deterministic, exit code 0 — no pty, no external process.
 
 - **8s, the rest of the Fleet menu (Change Destination/SRM Sweep/Probe), plus contextual fleet
-  actions on the Sector Selected Popup and Close Up.** Picked this cluster out of `OPEN_GAPS.md`'s
-  "most of the menu bar is still stubs" bullet: all three live together in `FLTCOMM.PAS` right next
+  actions on the Sector Selected Popup and Close Up.** Picked this cluster out of the "most of the
+  menu bar is still stubs" gap (the remainder is now #71-77): all three live together in
+  `FLTCOMM.PAS` right next
   to Transfer/Abort-Join/Refuel (already done), and all three already had full Core support sitting
   unused before this — `FleetLifecycle.SetFleetDestination`, `Galaxy.GetMineOwner`/`ClearMine`/
   `ClearMineScouted` (built for scenario loading's `CreateSRMs`), and `Empire.TryLaunchProbe` (already
@@ -1406,9 +1412,9 @@ Direct2D) surfaced; see the README's Known Issues section.
   `ConstructionLacksRawMaterial` were passing this port's own bare `CargoType` ordinal into a table
   indexed by Pascal's combined `ResourceTypes` numbering, so a Metals shortfall rendered as "ion
   cannons" instead of "megatons of metals" (missing the same `+N` offset already applied correctly for
-  ships elsewhere). That fix is explicitly interim — see `OPEN_GAPS.md`; the real fix replaces the
-  ordinal arithmetic with nullable typed fields on `NewsItem`, matching `FleetOrder`'s own
-  `TransferShip`/`TransferCargo` split, deferred as a follow-up since it touches both save formats.
+  ships elsewhere). That fix was explicitly interim; the real fix — replacing the ordinal arithmetic
+  with a real typed field on `NewsItem` — landed later as `NewsItem.Resource` (`ResourceKind`, a
+  closed 3-case union rather than nullable fields per type).
 
 - **8u, the Build menu (`CONSTR.PAS: ConstructCommand`/`AbortConstructionCommand`/
   `ConstrStatusCommand`).** `ConstructionSite`/the tick's own `UpdateConstruction` (countdown +

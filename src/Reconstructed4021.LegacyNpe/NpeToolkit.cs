@@ -652,12 +652,23 @@ public static class NpeToolkit
     public const int MaxNoOfGuards = 3;
 
     /// <summary>
+    /// NoOfFleetsPerEmpire (NPETYPES.PAS:91's <c>FleetDataArray</c> bound) — how many fleets one NPE
+    /// empire's AI can track a mission for at once, real Pascal's own live in-memory limit (not just
+    /// an on-disk <c>.SAV</c> artifact: <c>FleetData</c> is this fixed size in
+    /// <c>Kingdom1DataRecord</c>/<c>PirateDataRecord</c>/<c>BerserkerDataRecord</c> alike). Each
+    /// <c>Deploy*Fleet</c> below checks this against its own tracking dictionary's count in place of
+    /// Pascal's <c>NextFleetDataSlot</c> slot scan — equivalent since every dictionary here is pruned
+    /// of dead fleets every turn (<see cref="EnforceNpeDataLinks"/> and its per-personality
+    /// equivalents), so the count always matches how many of Pascal's 30 slots would be occupied.
+    /// </summary>
+    public const int MaxTrackedFleetsPerEmpire = 30;
+
+    /// <summary>
     /// DeployBattleFleet (NPEINTR.PAS:505-559) — composes and launches a fleet from
     /// <paramref name="fromWorld"/> toward <paramref name="toTarget"/> for the given mission, aborting
-    /// it right back if it can't make the trip on the fuel it launched with. Real Pascal's own
-    /// "Slot=0" (fleet-data array full) arm can't happen with this port's Dictionary — dropped; the
-    /// EDA&gt;Range arm is the only one that ever fires here, and dropping the other half of an
-    /// already-false-short-circuited OR changes nothing observable (neither arm has a side effect).
+    /// it right back if it can't make the trip on the fuel it launched with, or if this empire is
+    /// already tracking <see cref="MaxTrackedFleetsPerEmpire"/> fleets (Pascal's "Slot=0" arm,
+    /// reunited with the EDA&gt;Range arm exactly as real Pascal's own single <c>OR</c> condition has it).
     /// </summary>
     public static void DeployBattleFleet(
         Empire emp, Dictionary<Fleet, KingdomFleetState> fleetStates,
@@ -667,7 +678,7 @@ public static class NpeToolkit
         var (ships, cargo) = GetFleetComposition(fromWorld, power, gat, newMission);
         var fleet = FleetLifecycle.DeployFleet(emp, fromWorld, ships, cargo, toTarget.Location, game);
 
-        if (FleetLifecycle.EstimatedDateOfArrival(fleet, game) > FleetLifecycle.EstimatedRange(fleet)) {
+        if (fleetStates.Count >= MaxTrackedFleetsPerEmpire || FleetLifecycle.EstimatedDateOfArrival(fleet, game) > FleetLifecycle.EstimatedRange(fleet)) {
             CombatOutcome.AbortFleet(fleet, fromWorld, report: true);
             CombatOutcome.DestroyFleet(fleet, game);
             return;
@@ -690,9 +701,9 @@ public static class NpeToolkit
     /// DeployCargoFleet (NPEINTR.PAS:561-628) — composes a jumptransport/transport-only fleet sized to
     /// carry <paramref name="cargo"/> (clamped to what's actually on <paramref name="fromWorld"/> when
     /// <paramref name="carryCargo"/> is true, zeroed otherwise — Pascal's own VAR in/out semantics on
-    /// <paramref name="cargo"/>, mutated in place here too), then launches it. Same EDA&gt;Range abort
-    /// check and dropped "Slot=0" arm as <see cref="DeployBattleFleet"/>; no probe launch here (real
-    /// Pascal doesn't send any for a cargo run).
+    /// <paramref name="cargo"/>, mutated in place here too), then launches it. Same EDA&gt;Range/
+    /// <see cref="MaxTrackedFleetsPerEmpire"/> abort check as <see cref="DeployBattleFleet"/>; no probe
+    /// launch here (real Pascal doesn't send any for a cargo run).
     /// </summary>
     public static void DeployCargoFleet(
         Empire emp, Dictionary<Fleet, KingdomFleetState> fleetStates,
@@ -729,7 +740,7 @@ public static class NpeToolkit
 
         var fleet = FleetLifecycle.DeployFleet(emp, fromWorld, ships, cargo, toTarget.Location, game);
 
-        if (FleetLifecycle.EstimatedDateOfArrival(fleet, game) > FleetLifecycle.EstimatedRange(fleet)) {
+        if (fleetStates.Count >= MaxTrackedFleetsPerEmpire || FleetLifecycle.EstimatedDateOfArrival(fleet, game) > FleetLifecycle.EstimatedRange(fleet)) {
             CombatOutcome.AbortFleet(fleet, fromWorld, report: true);
             CombatOutcome.DestroyFleet(fleet, game);
             return;
@@ -917,13 +928,24 @@ public static class NpeToolkit
     /// <summary>
     /// ImplementRefuelMSN (NPEINTR.PAS:1191-1209) — the fleet dissolves into <paramref name="target"/>
     /// (same as <see cref="ImplementReturnMSN"/>), which then converts as much of its own trillum into
-    /// fuel as it needs (capped at what's on hand). <paramref name="target"/>'s dynamic type is
-    /// ambiguous at this method's own source (depends on 6d-level mission-assignment logic not built
-    /// yet) — see <see cref="FleetLifecycle.RefuelFleet"/>'s own doc comment for what happens when it's
-    /// not a <see cref="Fleet"/>.
+    /// fuel as it needs (capped at what's on hand). <paramref name="target"/> can be an
+    /// <see cref="IEconomicWorld"/> or a <see cref="Fleet"/> — <see cref="SendRescueFleet"/> dispatches
+    /// this mission at a stranded Kingdom fleet directly, not just at a base — see
+    /// <see cref="FleetLifecycle.RefuelFleet"/>'s own doc comment for what happens when it's not a
+    /// <see cref="Fleet"/>. Real Pascal never checks whether <paramref name="target"/> is still around
+    /// by the time this runs (<c>DestroyFleet</c>, FLEET.PAS:211-236, never scrubs other fleets' own
+    /// stale <c>TargetID</c>s), so a rescue fleet arriving after the stranded fleet already died
+    /// dissolves into that now-orphaned <see cref="Fleet"/> object by default — ported as-is, not
+    /// "fixed." <paramref name="fallbackHomeBase"/> opts into redirecting home instead in that one case
+    /// (off by default, see <see cref="Game.RescueFleetReturnsHomeOnDeadTarget"/>).
     /// </summary>
-    public static void ImplementRefuelMSN(Fleet fleet, IShipCargoHolder target, Game game)
+    public static void ImplementRefuelMSN(Fleet fleet, IShipCargoHolder target, Game game, IEconomicWorld? fallbackHomeBase = null)
     {
+        if (fallbackHomeBase is not null && target is Fleet deadTarget && !game.Galaxy.Fleets.Contains(deadTarget)) {
+            ImplementReturnMSN(fleet, fallbackHomeBase, game);
+            return;
+        }
+
         CombatOutcome.AbortFleet(fleet, target, report: true);
         CombatOutcome.DestroyFleet(fleet, game);
 

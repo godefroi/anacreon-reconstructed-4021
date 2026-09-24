@@ -38,8 +38,8 @@ public sealed class TurnEngine(
     /// call and <see cref="EndTurn"/>: <see cref="BeginTurn"/> must run first so their map reflects
     /// fog-of-war as of the start of their turn, not whatever was left over from ending their last
     /// one (the human path used to defer this whole method into "End Turn", which showed them a map
-    /// stale by one full round of enemy movement — see docs/OPEN_GAPS.md for how this port's
-    /// fog-of-war work found and fixed that ordering bug).
+    /// stale by one full round of enemy movement — this port's own fog-of-war work found and fixed
+    /// that ordering bug).
     ///
     /// <see cref="IFleetMovementHandler.ResolveOrders"/> runs here too (<c>allowWait: true</c>) --
     /// this port's own addition, no Pascal equivalent -- right after the fog-of-war refresh and before

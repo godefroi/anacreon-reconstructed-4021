@@ -217,6 +217,7 @@
   "asyncTurns": false,
   "pauseActive": true,
   "reEnterGame": false,
+  "rescueFleetReturnsHomeOnDeadTarget": false,
   "currentEmpireId": 0,
   "realEmpireCount": 2,
   "empires": [

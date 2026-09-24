@@ -569,6 +569,17 @@ one," but that the real engine can never produce one in the first place, from an
 source tree — so a `.SAV`-format `IDNumber` (including a fleet order's `DestCOM` target) never
 legitimately needs to resolve to one.
 
+### `SpecialConditions`'s `Holocst`/`Plague`/`SelfSuff`/`Virgin` (`TYPES.PAS`) are confirmed dead code
+
+`PlanetRecord.Special` (`TYPES.PAS:107`) declares five flags — `AmbAddict`, `Holocst`, `Plague`,
+`SelfSuff`, `Virgin` — but only `AmbAddict` is ever read by `UPDATE.PAS`'s annual tick (§2.1 already
+notes this in passing; recorded here as its own finding since it's the same shape as the other
+confirmed-dead declarations in this section, not just a glossary aside). The other four are a real,
+if smaller, cut from the same mold as `TraderNPE`/`FleetDataRecord.Midway` below: fields the original
+developers declared and never wired into the live simulation. Not ported — `Planet.cs`'s own
+`IsAddictedToAmbrosia` is the only one of the five modeled here, with a doc comment pointing back to
+this finding.
+
 ### FreePascal's `Round` is banker's rounding, not Turbo Pascal's
 
 `PascalMath.PascalRound` was originally implemented as half-away-from-zero (matching an assumption

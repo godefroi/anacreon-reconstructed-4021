@@ -24,7 +24,17 @@ public static class ConstructionLifecycle
     /// (Pascal's own <c>ScoutedBy:=[Empr]; KnownBy:=[Empr]</c>) -- unnecessary here: <see cref="Game.Visible"/>/
     /// <see cref="Game.ScoutedOrOwned"/> already fall back to plain ownership, the same reason freshly
     /// created Starbases/Stargates (<c>AnnualTickHandler.Construction.cs</c>'s own
-    /// <c>CreateStarbase</c>/<c>CreateStargate</c>) don't mark it either -- confirmed no call site does.
+    /// <c>CreateStarbase</c>/<c>CreateStargate</c>) don't mark it either -- confirmed no call site
+    /// outside those two fallback methods reads <see cref="Empire.ConstructionSites"/>'s Known/Scouted
+    /// sets directly.
+    ///
+    /// The one place that does read them directly, <see cref="SaveFormat.GameJson"/>/
+    /// <see cref="SaveFormat.SavGameWriter"/>'s own visibility serialization, really does write an
+    /// empty Known/Scouted set for a freshly built site's own owner until <see cref="Turns.VisibilityHandler"/>
+    /// runs for them again -- but that's inert, not a bug: every read of the deserialized sets goes
+    /// back through <see cref="Game.Known"/>/<see cref="Game.Visible"/>'s ownership fallback, or through
+    /// <see cref="Turns.VisibilityHandler"/> itself, which rebuilds Known/Scouted from a fresh scan each
+    /// turn and ignores whatever a reload just populated.
     /// </summary>
     public static ConstructionSite StartConstruction(Game game, Empire owner, ConstructionType type, Coordinate location)
     {

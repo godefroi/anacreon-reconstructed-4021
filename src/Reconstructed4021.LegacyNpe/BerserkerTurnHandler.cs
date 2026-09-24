@@ -420,14 +420,15 @@ public sealed class BerserkerTurnHandler : ITurnHandler
     /// not assumed (it defines no composition/deployment logic of its own). Can't call
     /// <see cref="NpeToolkit.DeployBattleFleet"/> directly (hardcoded to <see cref="KingdomFleetState"/>);
     /// this reproduces its body against <see cref="_fleetStates"/> instead, including its probe-launch
-    /// tail, which fires exactly as often for a Berserker attack fleet as it would for Kingdom's.
+    /// tail (which fires exactly as often for a Berserker attack fleet as it would for Kingdom's) and
+    /// its <see cref="NpeToolkit.MaxTrackedFleetsPerEmpire"/> abort check.
     /// </summary>
     private void DeployBerserkerFleet(Empire empire, IEconomicWorld fromWorld, IEconomicWorld toTarget, long power, long gat, NpeMissionType mission, Game game)
     {
         var (ships, cargo) = NpeToolkit.GetFleetComposition(fromWorld, power, gat, mission);
         var fleet = FleetLifecycle.DeployFleet(empire, fromWorld, ships, cargo, toTarget.Location, game);
 
-        if (FleetLifecycle.EstimatedDateOfArrival(fleet, game) > FleetLifecycle.EstimatedRange(fleet)) {
+        if (_fleetStates.Count >= NpeToolkit.MaxTrackedFleetsPerEmpire || FleetLifecycle.EstimatedDateOfArrival(fleet, game) > FleetLifecycle.EstimatedRange(fleet)) {
             FleetLifecycle.AbortFleet(fleet, fromWorld, game);
             return;
         }

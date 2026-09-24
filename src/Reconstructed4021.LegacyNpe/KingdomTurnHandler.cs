@@ -164,7 +164,7 @@ public sealed class KingdomTurnHandler : ITurnHandler
 
                 case NpeMissionType.Refuel:
                     if (target is IShipCargoHolder refuelTarget) {
-                        NpeToolkit.ImplementRefuelMSN(fleet, refuelTarget, game);
+                        NpeToolkit.ImplementRefuelMSN(fleet, refuelTarget, game, game.RescueFleetReturnsHomeOnDeadTarget ? homeBase : null);
                     }
                     break;
 

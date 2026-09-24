@@ -932,9 +932,16 @@ internal sealed class TacticalBattleScreen : IScreen
 
     private void FinishAttackOutcome(bool hkSurprise, bool capture, string report)
     {
-        CombatOutcome.ResolveAttack(_state.Result, _attackerFleet, _target, hkSurprise, capture, _state.Casualties, _state.Killed, _game, _context.Random);
-        ShowInfoBox("Attack", report, () => NextScreen = new GalaxyMapScreen(_game, _player, _context));
+        var joined = CombatOutcome.ResolveAttack(_state.Result, _attackerFleet, _target, hkSurprise, capture, _state.Casualties, _state.Killed, _game, _context.Random);
+        void ToGalaxyMap() => NextScreen = new GalaxyMapScreen(_game, _player, _context);
+        Action continuation = joined.Count > 0 ? () => ShowConquestReport(joined, ToGalaxyMap) : ToGalaxyMap;
+        ShowInfoBox("Attack", report, continuation);
     }
+
+    // EmpireConquestReport (ATTCOMM.PAS:1528-1562): shown after the main outcome message, only when
+    // ConquerEmpire actually folded other worlds into the attacker's empire.
+    private void ShowConquestReport(IReadOnlyList<Planet> joined, Action continuation) =>
+        ShowInfoBox("Attack", $"{MyLord()}, the following worlds have joined our empire:\n{string.Join('\n', joined.Select(DisplayName))}", continuation);
 
     private string Retreated() => $"The attacking force has retreated, {MyLord()}.";
 
