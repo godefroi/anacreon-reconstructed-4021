@@ -43,10 +43,14 @@ public sealed class SavGameLoader : ISavRefResolver
     /// dictionary directly; see <see cref="_pendingOrderDestinations"/>. Not populated for object
     /// types this port has no representation of (`Con`'s own type tag aside, that one IS
     /// `ConstructionSite` — the ones genuinely missing are `BlkHl`/`Plsr`/`WrmHl`/`Wndr`/`ArtObj`).
-    /// Confirmed dead code in real Pascal, not just unexercised by this port's 13 reference saves --
-    /// no creation routine for any of the five exists in either the 1.31 or 2.0 source tree
-    /// (`docs/PASCAL_ARCHITECTURE_NOTES.md`'s own "Findings from porting" section), so no real
-    /// `.SAV` file, from any scenario, could ever contain a reference to one.
+    /// Confirmed dead code in real Pascal, not just unexercised by this port's 13 reference saves:
+    /// `ARTIFACT.PAS`'s `CreateArtifact` is a real, working routine, but the entire `Artifact` unit
+    /// is commented out of `NEWGAME.PAS`'s and `LOADSAVE.PAS`'s own `USES` clauses (and
+    /// `LOADSAVE.PAS`'s `InitializeArtifacts` call is commented out too) in both the 1.31 and 2.0
+    /// source trees — never linked into either compiled game, so it can never run. `BlkHl`/`WrmHl`/
+    /// `Wndr`/`Plsr` have no creation site anywhere in `GALAXY.PAS` or `NEWGAME.PAS` in either tree
+    /// either (`docs/PASCAL_ARCHITECTURE_NOTES.md`'s own "Findings from porting" section). No real
+    /// `.SAV` file, from any scenario, could ever contain a reference to one of the five.
     /// </summary>
     private readonly Dictionary<(SavObjectType, int), ISectorObject> _objectsById = new();
 
