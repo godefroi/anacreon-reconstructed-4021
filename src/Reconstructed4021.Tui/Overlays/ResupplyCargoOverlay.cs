@@ -46,7 +46,7 @@ internal sealed class ResupplyCargoOverlay : IOverlay
         _sourceName = sourceName;
         _onCommitted = onCommitted;
         var rows = Enum.GetValues<CargoType>().Select(t => new Row(t, source.Cargo[t],
-            Math.Max(0, Math.Min(Math.Min(FleetLogistics.FleetCargoSpaceFor(t, fleet.Ships, fleet.Cargo), PascalMath.MaxResources - fleet.Cargo[t]), source.Cargo[t])),
+            FleetLogistics.MaxPickupAmount(t, fleet.Ships, fleet.Cargo, source.Cargo[t]),
             destination.Cargo[t])).ToList();
         _list = new ListBox<Row>(rows, FormatRow);
     }

@@ -53,6 +53,11 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
             UpdateStarbase(starbase, game, newTotalRevIndex);
         }
 
+        // Auto-resupply (GitHub issue #85, no Pascal equivalent): after every planet/starbase has
+        // finished this tick's own economy pipeline, so a source's candidate destinations have final
+        // ShortfallsLastTick/starvation data to react to, not whatever was left over from last tick.
+        AutoResupply.Apply(game);
+
         // Snapshot: UpdateConstruction removes a completed site from this same list mid-iteration.
         foreach (var site in game.Galaxy.ConstructionSites.ToList()) {
             UpdateConstruction(site, game);
@@ -113,7 +118,7 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
         UpdateEfficiency(planet);
         UpdateTechLevel(planet);
         UpdatePopulation(planet);
-        UseUpFood(planet);
+        UseUpFood(planet, reportedShortfalls);
         UseUpAmbrosia(planet);
         UpdateMilitary(planet);
         UpdateDefenses(planet, reportedShortfalls);
@@ -147,7 +152,7 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
 
         if (isComplex) {
             UpdatePopulation(starbase);
-            UseUpFood(starbase);
+            UseUpFood(starbase, reportedShortfalls);
             UseUpAmbrosia(starbase);
             UpdateMilitary(starbase);
             UpdateRevolution(starbase, game, newTotalRevIndex);

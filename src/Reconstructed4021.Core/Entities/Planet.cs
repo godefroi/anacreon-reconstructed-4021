@@ -25,6 +25,9 @@ public sealed class Planet : IEconomicWorld
 
     /// <summary>See <see cref="SelfSufficiency"/>'s remarks.</summary>
     public RedirectionSettings Redirection { get; init; } = new();
+
+    /// <summary>See <see cref="SelfSufficiency"/>'s remarks.</summary>
+    public ResupplySettings Resupply { get; init; } = new();
     public TechLevel TechLevel { get; set; }
     public int Efficiency { get; set; }
     public int RevolutionIndex { get; set; }

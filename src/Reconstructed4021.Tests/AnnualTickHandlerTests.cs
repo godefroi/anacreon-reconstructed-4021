@@ -77,6 +77,7 @@ public class AnnualTickHandlerTests
         handler.RunAnnualTick(game);
 
         await Assert.That(planet.Population).IsEqualTo(513);
+        await Assert.That(planet.ShortfallsLastTick).DoesNotContain(CargoType.Supplies);
     }
 
     [Test]
@@ -126,8 +127,12 @@ public class AnnualTickHandlerTests
         handler.RunAnnualTick(game);
 
         await Assert.That(planet.Population).IsEqualTo(966);
+        // RevolutionIndex unchanged at 41 (not 42) confirms UseUpFood's own Supplies-shortfall signal
+        // (issue #85's AutoResupply) doesn't also call ReportResourceShortfall -- that would double the
+        // flat +1 bump on top of starvation's own much larger revInc=45.
         await Assert.That(planet.RevolutionIndex).IsEqualTo(41);
         await Assert.That(planet.ShortfallsLastTick).Contains(CargoType.Metals);
+        await Assert.That(planet.ShortfallsLastTick).Contains(CargoType.Supplies);
     }
 
 }

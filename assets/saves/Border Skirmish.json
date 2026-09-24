@@ -26,6 +26,11 @@
           "joinOnArrival": false,
           "preserveOverflowOnJoin": false
         },
+        "resupply": {
+          "enabled": false,
+          "maxAmount": 0,
+          "destinations": []
+        },
         "techLevel": "Bio",
         "efficiency": 80,
         "revolutionIndex": 0,
@@ -93,6 +98,11 @@
           "joinOnArrival": false,
           "preserveOverflowOnJoin": false
         },
+        "resupply": {
+          "enabled": false,
+          "maxAmount": 0,
+          "destinations": []
+        },
         "techLevel": "Bio",
         "efficiency": 20,
         "revolutionIndex": 0,
@@ -159,6 +169,11 @@
           "nextDispatchNumber": 1,
           "joinOnArrival": false,
           "preserveOverflowOnJoin": false
+        },
+        "resupply": {
+          "enabled": false,
+          "maxAmount": 0,
+          "destinations": []
         },
         "techLevel": "Bio",
         "efficiency": 15,

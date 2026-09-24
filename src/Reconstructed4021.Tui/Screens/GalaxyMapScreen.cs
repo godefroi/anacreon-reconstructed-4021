@@ -393,7 +393,7 @@ internal sealed class GalaxyMapScreen : IScreen
     {
         if (obj is IEconomicWorld ownWorld && ReferenceEquals(ownWorld.Owner, _player))
         {
-            _overlays.Add(new WorldInfoOverlay(ownWorld, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, GoToMapFromExamine, PickRedirectDestination, initialTab));
+            _overlays.Add(new WorldInfoOverlay(ownWorld, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, GoToMapFromExamine, PickRedirectDestination, PickResupplyDestination, initialTab));
             return;
         }
 
@@ -462,7 +462,7 @@ internal sealed class GalaxyMapScreen : IScreen
     {
         if (_objectsByLocation.TryGetValue(_cursor, out var obj) && obj is IEconomicWorld world && ReferenceEquals(world.Owner, _player))
         {
-            _overlays.Add(new WorldInfoOverlay(world, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, GoToMapFromExamine, PickRedirectDestination, tab));
+            _overlays.Add(new WorldInfoOverlay(world, _player, _game, _context.Random, Refresh, ShowInfo, _overlays.Add, DeployFleet, GoToMapFromExamine, PickRedirectDestination, PickResupplyDestination, tab));
             return;
         }
 
@@ -528,6 +528,19 @@ internal sealed class GalaxyMapScreen : IScreen
             planet.Redirection.Destination = destination;
             OpenExamine(planet, "Redirect");
         });
+
+    // WorldInfoOverlay's Resupply tab (its own F10): unlike Redirect's any-coordinate destination,
+    // a resupply destination must be a real Planet FleetOrderTemplates.Resupply can actually target
+    // (Fleet menu > Resupply's own PickResupplyDestination uses the same PickOwnPlanetOrRetry guard,
+    // :971), so this reuses that instead of taking whatever coordinate the cursor lands on.
+    private void PickResupplyDestination(Planet planet) =>
+        BeginPick("Resupply -- move cursor to destination, Enter: select, Esc: cancel", location =>
+            PickOwnPlanetOrRetry(location, "Resupply", () => PickResupplyDestination(planet),
+                destination =>
+                {
+                    planet.Resupply.Destinations.Add(destination.Location);
+                    OpenExamine(planet, "Resupply");
+                }));
 
     // IDParm2 (Question 8, "Where shall we deploy the fleet from?").
     private void PickDeploySource(Coordinate location, string fleetName)

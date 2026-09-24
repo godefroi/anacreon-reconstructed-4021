@@ -155,8 +155,17 @@ public sealed partial class AnnualTickHandler
         world.Population += PascalRound(increase);
     }
 
-    /// <summary>UPDATE.PAS:1130-1160 (nested in UpdateWorld). Fires <c>Starv</c> to the world's owner when starvation actually occurs.</summary>
-    private void UseUpFood(IEconomicWorld world)
+    /// <summary>
+    /// UPDATE.PAS:1130-1160 (nested in UpdateWorld). Fires <c>Starv</c> to the world's owner when
+    /// starvation actually occurs, and adds <see cref="CargoType.Supplies"/> to
+    /// <paramref name="reportedShortfalls"/> then too -- <see cref="AutoResupply"/>'s own port-only
+    /// Supplies-shortfall signal, riding the same per-tick <see cref="IEconomicWorld.ShortfallsLastTick"/>
+    /// set the production pipeline's raw-material shortfalls already use (not
+    /// <see cref="ReportResourceShortfall"/> itself -- that would double the news item and double the
+    /// flat +1 revolution-index bump; starvation already has its own, larger, population-scaled hit
+    /// below).
+    /// </summary>
+    private void UseUpFood(IEconomicWorld world, HashSet<CargoType> reportedShortfalls)
     {
         var foodNeeded = ClampResource((world.Population / 100.0) * SuppliesPerBillion);
 
@@ -173,6 +182,7 @@ public sealed partial class AnnualTickHandler
                     (int)(_starvationRevoltAdjustmentByTech[world.TechLevel] * (starve / 10.0)),
                     45);
                 ChangeRevIndex(world, revInc);
+                reportedShortfalls.Add(CargoType.Supplies);
             }
         } else {
             world.Cargo.Supplies -= foodNeeded;

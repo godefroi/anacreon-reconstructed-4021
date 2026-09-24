@@ -234,21 +234,7 @@ public static class FleetLifecycle
         switch (id) {
             case Fleet fleet: {
                 var destination = fleet.Destination ?? throw new InvalidOperationException("EstimatedDateOfArrival: fleet has no destination.");
-                if (FleetMovementHandler.IsPassingThroughGate(fleet, fleet.Location, destination, game)) {
-                    return 1;
-                }
-
-                var dist = fleet.Location.DistanceTo(destination);
-                if (FleetMovementHandler.IsAtFortress(fleet.Location, game)) {
-                    dist = Math.Max(dist - 4, 1);
-                }
-
-                var quadsPerYear = FleetLogistics.MovementRate(fleet.Type);
-                var eda = dist / quadsPerYear;
-                if (dist % quadsPerYear > 0) {
-                    eda++;
-                }
-                return eda;
+                return EstimatedDateOfArrival(fleet, destination, game);
             }
             case Starbase starbase: {
                 var destination = starbase.Destination ?? throw new InvalidOperationException("EstimatedDateOfArrival: starbase has no destination.");
@@ -257,6 +243,30 @@ public static class FleetLifecycle
             default:
                 throw new ArgumentException($"EstimatedDateOfArrival: expected a Fleet or Starbase, got {id.GetType()}.", nameof(id));
         }
+    }
+
+    /// <summary>
+    /// Same formula as the <see cref="Fleet"/> arm of <see cref="EstimatedDateOfArrival(object,Game)"/>,
+    /// for a caller (<see cref="AutoResupply"/>) that needs an ETA to a candidate destination before
+    /// ever setting <see cref="Fleet.Destination"/> -- one formula, not a second copy.
+    /// </summary>
+    public static int EstimatedDateOfArrival(Fleet fleet, Coordinate destination, Game game)
+    {
+        if (FleetMovementHandler.IsPassingThroughGate(fleet, fleet.Location, destination, game)) {
+            return 1;
+        }
+
+        var dist = fleet.Location.DistanceTo(destination);
+        if (FleetMovementHandler.IsAtFortress(fleet.Location, game)) {
+            dist = Math.Max(dist - 4, 1);
+        }
+
+        var quadsPerYear = FleetLogistics.MovementRate(fleet.Type);
+        var eda = dist / quadsPerYear;
+        if (dist % quadsPerYear > 0) {
+            eda++;
+        }
+        return eda;
     }
 
     /// <summary>

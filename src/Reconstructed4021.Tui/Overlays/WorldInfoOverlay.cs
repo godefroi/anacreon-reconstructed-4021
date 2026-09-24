@@ -30,7 +30,8 @@ internal sealed class WorldInfoOverlay : IOverlay
     private const ConsoleColor SelectedFg = ConsoleColor.Black; // SYSDispSelect = 112.
     private const ConsoleColor SelectedBg = ConsoleColor.Gray;
 
-    private enum TabKind { CloseUp, Production, Issp, Designate, Redirect }
+    private enum TabKind { CloseUp, Production, Issp, Designate, Redirect, Resupply }
+    private enum ResupplyFocus { Enabled, MaxAmount, Destinations }
 
     private readonly IEconomicWorld _world;
     private readonly Empire _viewer;
@@ -42,6 +43,7 @@ internal sealed class WorldInfoOverlay : IOverlay
     private readonly Action<IEconomicWorld> _deployFleet;
     private readonly Action<ISectorObject> _onGoToMap;
     private readonly Action<Planet> _pickRedirectDestination;
+    private readonly Action<Planet> _pickResupplyDestination;
 
     private readonly TabKind[] _tabKinds;
     private readonly TabFrame _frame;
@@ -49,6 +51,8 @@ internal sealed class WorldInfoOverlay : IOverlay
 
     private int _isspRow;
     private int _redirectRow;
+    private ResupplyFocus _resupplyFocus;
+    private ListBox<Coordinate>? _resupplyDestList;
 
     private WorldProductionPreview.Result? _productionCache;
     private bool _productionDirty = true;
@@ -56,7 +60,8 @@ internal sealed class WorldInfoOverlay : IOverlay
     public bool IsDismissed { get; private set; }
 
     public WorldInfoOverlay(IEconomicWorld world, Empire viewer, Game game, Random random,
-        Action refresh, Action<string, string> showInfo, Action<IOverlay> push, Action<IEconomicWorld> deployFleet, Action<ISectorObject> onGoToMap, Action<Planet> pickRedirectDestination, string initialTab = "Close Up")
+        Action refresh, Action<string, string> showInfo, Action<IOverlay> push, Action<IEconomicWorld> deployFleet, Action<ISectorObject> onGoToMap,
+        Action<Planet> pickRedirectDestination, Action<Planet> pickResupplyDestination, string initialTab = "Close Up")
     {
         _world = world;
         _viewer = viewer;
@@ -68,6 +73,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         _deployFleet = deployFleet;
         _onGoToMap = onGoToMap;
         _pickRedirectDestination = pickRedirectDestination;
+        _pickResupplyDestination = pickResupplyDestination;
 
         var isPlanet = world is Planet;
         List<TabKind> kinds = [TabKind.CloseUp, TabKind.Production];
@@ -82,9 +88,18 @@ internal sealed class WorldInfoOverlay : IOverlay
             kinds.Add(TabKind.Redirect);
         }
 
+        if (world is Planet resupplySource && ResupplySettings.EligibleCargo(resupplySource.Type).Count > 0)
+        {
+            kinds.Add(TabKind.Resupply);
+        }
+
         _tabKinds = [.. kinds];
         _frame = new TabFrame(_tabKinds.Select(TabLabel).ToArray());
         _designateList = BuildDesignateList();
+        if (world is Planet { } withResupply)
+        {
+            _resupplyDestList = BuildResupplyDestList(withResupply);
+        }
 
         var initialIndex = Array.IndexOf(_tabKinds, ParseInitialTab(initialTab));
         if (initialIndex >= 0)
@@ -100,6 +115,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         TabKind.Issp => "ISSP",
         TabKind.Designate => "Designate",
         TabKind.Redirect => "Redirect",
+        TabKind.Resupply => "Resupply",
         _ => kind.ToString(),
     };
 
@@ -110,6 +126,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         "ISSP" => TabKind.Issp,
         "Designate" => TabKind.Designate,
         "Redirect" => TabKind.Redirect,
+        "Resupply" => TabKind.Resupply,
         _ => TabKind.CloseUp,
     };
 
@@ -157,16 +174,21 @@ internal sealed class WorldInfoOverlay : IOverlay
 
         if (key.Key == ConsoleKey.F10)
         {
-            if (_tabKinds[_frame.ActiveIndex] == TabKind.Redirect)
+            switch (_tabKinds[_frame.ActiveIndex])
             {
-                IsDismissed = true;
-                _pickRedirectDestination((Planet)_world);
-                return;
+                case TabKind.Redirect:
+                    IsDismissed = true;
+                    _pickRedirectDestination((Planet)_world);
+                    return;
+                case TabKind.Resupply:
+                    IsDismissed = true;
+                    _pickResupplyDestination((Planet)_world);
+                    return;
+                default:
+                    IsDismissed = true;
+                    _onGoToMap(_world);
+                    return;
             }
-
-            IsDismissed = true;
-            _onGoToMap(_world);
-            return;
         }
 
         switch (_tabKinds[_frame.ActiveIndex])
@@ -179,6 +201,9 @@ internal sealed class WorldInfoOverlay : IOverlay
                 break;
             case TabKind.Redirect:
                 HandleRedirectKey(key);
+                break;
+            case TabKind.Resupply:
+                HandleResupplyKey(key);
                 break;
         }
     }
@@ -218,6 +243,9 @@ internal sealed class WorldInfoOverlay : IOverlay
                 break;
             case TabKind.Redirect:
                 DrawRedirect(fb, cx, cy, cw, ch);
+                break;
+            case TabKind.Resupply:
+                DrawResupply(fb, cx, cy, cw, ch);
                 break;
         }
     }
@@ -759,5 +787,131 @@ internal sealed class WorldInfoOverlay : IOverlay
 
         var next = ((current + direction) % cycle.Length + cycle.Length) % cycle.Length;
         row.Set(settings, cycle[next]);
+    }
+
+    // ResupplyTabView (issue #85) -- planet-only, shown only when WorldType is one of the seven
+    // ResupplySettings.EligibleCargo recognizes. Enabled/MaxAmount are two fixed header rows (cycled
+    // with Up/Down like the ISSP/Redirect rows above); Destinations is a ListBox<Coordinate> rebuilt
+    // from Planet.Resupply.Destinations every time it changes -- ListBox<T> itself has no add/remove/
+    // reorder API, it just renders whatever IReadOnlyList<T> it was built from.
+    private ListBox<Coordinate> BuildResupplyDestList(Planet planet) =>
+        new(planet.Resupply.Destinations, loc => DescribeResupplyDestination(planet, loc));
+
+    private string DescribeResupplyDestination(Planet planet, Coordinate loc)
+    {
+        var origin = _viewer.Capital?.Location ?? new Coordinate(0, 0);
+        var name = _game.Galaxy.GetObjectAt(loc) is { } obj ? DisplayName(obj) : "(empty space)";
+        return $"{name}  ({RelativeCoordinate.Format(loc, origin)})";
+    }
+
+    private void DrawResupply(FrameBuffer fb, int cx, int cy, int cw, int ch)
+    {
+        void At(int x, int y, string text) => DrawClipped(fb, cx, cy, cw, ch, x, y, text);
+        var planet = (Planet)_world;
+        var settings = planet.Resupply;
+
+        At(1, 0, "Auto-dispatches an idle cargo fleet here whenever a destination below comes up");
+        At(1, 1, "short -- the same order sequence the manual Resupply mission already builds.");
+
+        void Row(int y, string label, string value, ResupplyFocus focus)
+        {
+            var text = $"{label,-19}{value}";
+            var selected = _resupplyFocus == focus;
+            var visible = text.Length > cw - 1 ? text[..(cw - 1)] : text.PadRight(cw - 1);
+            fb.DrawText(cx + 1, cy + y, visible, selected ? SelectedFg : ContentFg, selected ? SelectedBg : ContentBg);
+        }
+
+        Row(3, "Enabled:", settings.Enabled ? "Yes" : "No", ResupplyFocus.Enabled);
+        Row(4, "Max per dispatch:", settings.MaxAmount > 0 ? settings.MaxAmount.ToString() : "unlimited", ResupplyFocus.MaxAmount);
+
+        At(1, 6, "Destinations (priority order; anything else eligible falls back to auto-ranking):");
+        var listHeight = Math.Max(1, ch - 8);
+        var listFg = _resupplyFocus == ResupplyFocus.Destinations ? SelectedFg : ContentFg;
+        var listBg = _resupplyFocus == ResupplyFocus.Destinations ? SelectedBg : ContentBg;
+        _resupplyDestList!.Draw(fb, cx + 1, cy + 7, cw - 2, listHeight, ContentFg, ContentBg, listFg, listBg);
+
+        At(1, ch - 1, "Up/Down: select   Left/Right: toggle/edit   +/-: reorder   Del: remove   F10: add   Esc: close");
+    }
+
+    private void HandleResupplyKey(ConsoleKeyInfo key)
+    {
+        var planet = (Planet)_world;
+        var settings = planet.Resupply;
+
+        switch (key.Key)
+        {
+            case ConsoleKey.UpArrow:
+                if (_resupplyFocus == ResupplyFocus.Destinations && _resupplyDestList!.SelectedIndex > 0)
+                {
+                    _resupplyDestList.HandleKey(key);
+                }
+                else
+                {
+                    _resupplyFocus = _resupplyFocus == ResupplyFocus.Enabled ? ResupplyFocus.Destinations : _resupplyFocus - 1;
+                }
+                return;
+            case ConsoleKey.DownArrow:
+                if (_resupplyFocus == ResupplyFocus.Destinations && _resupplyDestList!.SelectedIndex < settings.Destinations.Count - 1)
+                {
+                    _resupplyDestList.HandleKey(key);
+                }
+                else
+                {
+                    _resupplyFocus = _resupplyFocus == ResupplyFocus.Destinations ? ResupplyFocus.Enabled : _resupplyFocus + 1;
+                }
+                return;
+        }
+
+        switch (_resupplyFocus)
+        {
+            case ResupplyFocus.Enabled when key.Key is ConsoleKey.LeftArrow or ConsoleKey.RightArrow:
+                settings.Enabled = !settings.Enabled;
+                return;
+            case ResupplyFocus.MaxAmount when key.Key == ConsoleKey.Enter:
+                _push(new TextPromptOverlay("Max Per Dispatch", "Cargo cap per dispatch (blank/0 = unlimited):",
+                    settings.MaxAmount > 0 ? settings.MaxAmount.ToString() : string.Empty, text =>
+                    {
+                        settings.MaxAmount = int.TryParse(text, out var value) && value > 0 ? value : 0;
+                    }));
+                return;
+            case ResupplyFocus.Destinations:
+                HandleResupplyDestinationKey(key, planet, settings);
+                return;
+        }
+    }
+
+    private void HandleResupplyDestinationKey(ConsoleKeyInfo key, Planet planet, ResupplySettings settings)
+    {
+        if (settings.Destinations.Count == 0)
+        {
+            return;
+        }
+
+        var index = _resupplyDestList!.SelectedIndex;
+
+        if (key.Key == ConsoleKey.Delete || key.KeyChar is 'x' or 'X')
+        {
+            settings.Destinations.RemoveAt(index);
+            _resupplyDestList = BuildResupplyDestList(planet);
+            _resupplyDestList.MoveTo(Math.Min(index, settings.Destinations.Count - 1));
+            return;
+        }
+
+        var direction = key.KeyChar switch { '+' => -1, '-' => 1, _ => 0 };
+        if (direction == 0 && key.Key == ConsoleKey.PageUp) direction = -1;
+        if (direction == 0 && key.Key == ConsoleKey.PageDown) direction = 1;
+
+        if (direction != 0)
+        {
+            var newIndex = index + direction;
+            if (newIndex < 0 || newIndex >= settings.Destinations.Count)
+            {
+                return;
+            }
+
+            (settings.Destinations[index], settings.Destinations[newIndex]) = (settings.Destinations[newIndex], settings.Destinations[index]);
+            _resupplyDestList = BuildResupplyDestList(planet);
+            _resupplyDestList.MoveTo(newIndex);
+        }
     }
 }

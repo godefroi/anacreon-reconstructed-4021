@@ -26,6 +26,11 @@
           "joinOnArrival": false,
           "preserveOverflowOnJoin": false
         },
+        "resupply": {
+          "enabled": false,
+          "maxAmount": 0,
+          "destinations": []
+        },
         "techLevel": "Bio",
         "efficiency": 80,
         "revolutionIndex": 0,
