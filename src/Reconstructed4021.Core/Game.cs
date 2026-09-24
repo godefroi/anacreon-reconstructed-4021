@@ -287,7 +287,7 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     /// lines, <c>[C:id]</c>/<c>[N:id]</c> placeholders substituted for <paramref name="viewer"/>, or
     /// null if nothing matched (real Pascal's own <c>Found=False</c>). <c>CLSCOMM.PAS</c>'s own
     /// <c>CloseUpCom</c> call always passes <c>conquer:false</c>; <c>ATTCOMM.PAS</c>'s post-conquest
-    /// report (<c>conquer:true</c>) isn't wired to any caller yet (docs/OPEN_GAPS.md).
+    /// report (<c>conquer:true</c>) is <c>TacticalBattleScreen.FinishConquest</c>'s own caller.
     /// </summary>
     public static IReadOnlyList<string>? FindWorldBackgroundText(Game game, ISectorObject world, Empire viewer, bool conquer)
     {

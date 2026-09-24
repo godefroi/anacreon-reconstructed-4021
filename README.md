@@ -19,9 +19,8 @@ Core simulation (economy, galaxy/scenario setup, probes, news, combat), Kingdom 
 (DOS `.SAV` import plus a native JSON format) are done. The interactive UI
 (`src/Reconstructed4021.Tui`, built on `src/Reconstructed4021.Panemonde`, a from-scratch renderer —
 see `docs/PORT_DESIGN.md`) covers every menu command, F-key report window, save/load path, combat
-flow, and the pregame sequence; Status Hardcopy (a physical-printer command with no TUI equivalent)
-is the one remaining stub. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for how this was built, and
-[`docs/OPEN_GAPS.md`](docs/OPEN_GAPS.md) for known limitations in what exists so far.
+flow, and the pregame sequence; a handful of menu items remain stubs, tracked as GitHub issues. See
+[`docs/ROADMAP.md`](docs/ROADMAP.md) for how this was built.
 
 ## Building and testing
 
@@ -68,8 +67,6 @@ for how that comparison works and what it takes to add to it.
 - **[`docs/PASCAL_ARCHITECTURE_NOTES.md`](docs/PASCAL_ARCHITECTURE_NOTES.md)** — a map of the
   *original* Pascal source (file-by-file, subsystem-by-subsystem), plus findings turned up while
   porting: dead code, quirks, real bugs, and the scenario golden-file investigation.
-- **[`docs/OPEN_GAPS.md`](docs/OPEN_GAPS.md)** — known limitations in this port: places where the C#
-  doesn't yet do everything the original Pascal did.
 - **[`reference/verify/README.md`](reference/verify/README.md)** — how ground-truth (real, compiled
   Pascal output) is used to verify the port: what gets patched and why, the ground-truth domain
   catalog, known landmines. Read this before touching the harness itself.

@@ -604,9 +604,9 @@ public class SavGameLoaderTests
     }
 
     /// <summary>
-    /// Resolves docs/OPEN_GAPS.md's "SavGameLoader's DefeatedBy decode branch has no exercising
-    /// reference save" -- none of the 13 captured .SAV files include a defeated human empire, so
-    /// this exercises SavGameWriter's own encode of the human-defeat sentinel (ATTACK.PAS:1120-1131)
+    /// SavGameLoader's DefeatedBy decode branch has no exercising reference save -- none of the 13
+    /// captured .SAV files include a defeated human empire, so this exercises SavGameWriter's own
+    /// encode of the human-defeat sentinel (ATTACK.PAS:1120-1131)
     /// followed by this loader's decode of it, rather than a real DOS-captured file. Hand-built
     /// (matching GameJsonTests.RoundTrips_MinimalHandbuiltGame's style) rather than routed through
     /// CombatOutcome.ConquerEmpire, since ConquerEmpire's own logic is already covered by
