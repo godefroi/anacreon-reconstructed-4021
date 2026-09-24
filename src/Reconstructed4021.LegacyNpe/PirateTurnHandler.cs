@@ -248,9 +248,11 @@ public sealed class PirateTurnHandler : ITurnHandler
 
     /// <summary>
     /// GetPatrolDestination (NPE01.PAS:204-232) — a hunting-ground cell chosen by weighted random
-    /// draw (heavier cells more likely), then a random point inside that 5x5 galaxy block.
-    /// <see cref="Rnd"/> already returns its low bound when high&lt;low, so an all-zero grid (Total=0)
-    /// resolves to the first cell scanned rather than needing a special guard here.
+    /// draw (heavier cells more likely), then a random point inside that 5x5 galaxy block. When every
+    /// scanned cell is 0 (Total=0), <see cref="Rnd"/> returns its low bound (1) rather than 0, so
+    /// <c>rn(1) &lt;= cell(0)</c> is false for every cell -- the scan runs to completion without ever
+    /// matching, falling into this method's own trailing fallback below (see its own doc comment for
+    /// why that's reachable, not just a defensive guard).
     /// </summary>
     private (int BX, int BY, Coordinate XY) GetPatrolDestination(Game game)
     {
@@ -276,11 +278,14 @@ public sealed class PirateTurnHandler : ITurnHandler
             }
         }
 
-        // Unreached in practice for this port's reference scenarios (would need a grid so lopsided
-        // or a running total so far off from the fresh per-cell sum above that the scan exhausts
-        // without ever satisfying rn<=cell); real Pascal has no fallback here either (BX/BY/XY would
-        // be left undefined). Falls back to the galaxy's own top-left block rather than propagating
-        // an exception from ordinary turn processing.
+        // Reachable, not just a defensive guard: maxBX/maxBY collapse to 1x1 for any galaxy with
+        // Size<=9 (Math.Max(1, Math.Min(20, Size/5))), so the whole scan is a single cell -- and
+        // ImplementWaitForTrnMSN's own give-up path (below) decrements that cell by 5 every time a
+        // patrol finds no target, wrapping past 0 on a byte. A cell mid-decrement from 5 lands on
+        // exactly 0 for one call before the next give-up wraps it to 251, so Total=0 is a real,
+        // reachable state on a small galaxy, not a theoretical one. Real Pascal has no fallback here
+        // either (BX/BY/XY would be left undefined); this falls back to the galaxy's own top-left
+        // block instead, rather than propagating an exception from ordinary turn processing.
         return (1, 1, new Coordinate(1, 1));
     }
 

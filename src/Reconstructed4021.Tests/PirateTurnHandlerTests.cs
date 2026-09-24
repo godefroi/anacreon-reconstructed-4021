@@ -280,4 +280,29 @@ public class PirateTurnHandlerTests
 
         await Assert.That(galaxy.Fleets.Contains(fleet)).IsFalse();
     }
+
+    [Test]
+    public async Task GetPatrolDestination_AllZeroHuntingGroundBlock_FallsBackToTopLeft()
+    {
+        // Reachable, not theoretical: a galaxy this small (Size<=9) collapses GetPatrolDestination's
+        // scan to a single cell (see that method's own doc comment), and this test drives that one
+        // cell to exactly 0 the same way real play would -- five ImplementWaitForTrnMSN give-ups,
+        // each decrementing it by 5 from its InitializePirateNPE seed of 25.
+        var galaxy = new Galaxy(size: 5);
+        var game = new Game(galaxy);
+        var owner = EmpireFactory.CreateEmpire("Owner", null, isEmpress: false, TechLevel.Warp, restlessness: 0, centralModifier: false, foundingYear: 0);
+        game.Empires.Add(owner);
+
+        var handler = new PirateTurnHandler(owner, new FixedRandom(0));
+        var huntingGroundField = typeof(PirateTurnHandler).GetField("_huntingGround", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var huntingGround = (byte[,])huntingGroundField.GetValue(handler)!;
+        huntingGround[0, 0] = 0;
+
+        var getPatrolDestination = typeof(PirateTurnHandler).GetMethod("GetPatrolDestination", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var (bx, by, xy) = ((int BX, int BY, Coordinate XY))getPatrolDestination.Invoke(handler, [game])!;
+
+        await Assert.That(bx).IsEqualTo(1);
+        await Assert.That(by).IsEqualTo(1);
+        await Assert.That(xy).IsEqualTo(new Coordinate(1, 1));
+    }
 }

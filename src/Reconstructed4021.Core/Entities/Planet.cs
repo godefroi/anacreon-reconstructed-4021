@@ -32,7 +32,8 @@ public sealed class Planet : IEconomicWorld
     /// <summary>
     /// Pascal's PlanetRecord.Special also declares Holocst/Plague/SelfSuff/Virgin flags, confirmed
     /// dead (never read by the turn-loop) by the architecture research — only ambrosia addiction is
-    /// live, so that's the only one modeled here.
+    /// live, so that's the only one modeled here. See docs/PASCAL_ARCHITECTURE_NOTES.md's own
+    /// "SpecialConditions" finding for the full grep.
     /// </summary>
     public bool IsAddictedToAmbrosia { get; set; }
 

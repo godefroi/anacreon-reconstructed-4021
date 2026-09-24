@@ -1381,8 +1381,13 @@ internal sealed class GalaxyMapScreen : IScreen
         _overlays.Add(new ReadMessagesOverlay(messages, _player, message => MessageLifecycle.MarkRead(_game, message, _player)));
     }
 
-    // ResultMessage (ATTCOMM.PAS:1652-1686) -- only these three cases are ever reached (DefCapturedART
-    // is declared but never assigned anywhere in real Pascal, see CombatOutcome.cs's own note).
+    // ResultMessage (ATTCOMM.PAS:1652-1686) -- only these three cases are ever reached. Proven, not
+    // assumed: engagement.Result comes from CombatResolution.NPEAttack, whose FleetEngage/WorldEngage
+    // both loop `while (result == AttackResultType.None)` and only ever assign AttackerDestroyed/
+    // AttackerRetreats/DefenderConquered inside that loop, so None can never escape it; the
+    // ConstructionSite/Stargate early-return path returns DefenderConquered explicitly. DefenderCaptured
+    // is the other closed-set member -- declared but never assigned anywhere in real Pascal, see
+    // CombatOutcome.cs's own note.
     private string AutoAttackResultText(AttackResultType result, ISectorObject subject) => result switch
     {
         AttackResultType.AttackerDestroyed => $"I'm sorry, {MyLord()}, the entire attack force has been destroyed.",

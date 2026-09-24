@@ -131,7 +131,15 @@ public sealed class KingdomFleetState
     /// </summary>
     public object? Target { get; set; }
 
-    /// <summary>HomeBaseID — always a world (every real call site sources it from GetRegionalCapital, which only ever returns a base/capital planet).</summary>
+    /// <summary>
+    /// HomeBaseID — always an <see cref="IEconomicWorld"/>, but not always a base/capital:
+    /// <see cref="NpeToolkit.DeployBattleFleet"/>/<see cref="NpeToolkit.DeployCargoFleet"/> just store
+    /// whatever <c>fromWorld</c> their caller passes. <see cref="NpeToolkit.DefendEmpire"/> passes an
+    /// ordinary defending/reinforcing world at three of its own four call sites, and
+    /// <see cref="NpeToolkit.CargoSupplyFleet"/> passes whatever <c>GetClosestCargoWorld</c> finds —
+    /// neither goes through <c>GetRegionalCapital</c>. Only stored/serialized, never read back to make
+    /// an AI decision, so this doesn't affect behavior — just don't assume it names a capital.
+    /// </summary>
     public IEconomicWorld? HomeBase { get; set; }
 
     public int Waiting { get; set; }

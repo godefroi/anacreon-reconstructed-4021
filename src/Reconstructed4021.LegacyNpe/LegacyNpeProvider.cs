@@ -533,6 +533,15 @@ public sealed class LegacyNpeProvider : INpeHandlerProvider
             var aggressiveness = reader.ReadByte();
             var balance = reader.ReadInteger();
 
+            // Same precedent as the fleet-tracking loop just above (its own `if (index == 0) continue;`):
+            // a slot this Kingdom never wrote real data to decodes as PolicyType.None -- skip it here
+            // rather than materializing a record NpeToolkit.GetOrCreateState would otherwise never be
+            // able to fix (PolicyType.None is never assigned by anything ported, see that enum's own
+            // doc comment, so a frozen None record would stay frozen forever).
+            if (policy == PolicyType.None) {
+                continue;
+            }
+
             state[resolver.ResolveEmpire(i)] = new StateDeptRecord {
                 Policy = policy,
                 AttackChance = attackChance,
