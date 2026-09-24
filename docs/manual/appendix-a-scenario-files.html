@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Appendix A: Scenario Files · Anacreon Manual</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <header class="manual-header">
+    <div class="manual-header-inner">
+      <a href="../">Anacreon Reconstructed 4021</a>
+      <nav class="manual-links" aria-label="Site navigation">
+        <a href="../">Home</a>
+        <a href="../#screenshots">Screenshots</a>
+        <a href="index.html">Manual</a>
+        <a href="../#play">Play</a>
+      </nav>
+    </div>
+  </header>
+  <div class="manual-layout">
+    <aside class="manual-nav">
+      <p class="manual-nav-title">ANACREON MANUAL</p>
+      <a href="index.html">Contents</a>
+      <a href="preface.html">Preface</a>
+      <a href="words-of-thanks.html">Words of Thanks</a>
+      <a href="introduction.html">Introduction</a>
+      <a href="part-i-tutorial.html">Part I: Tutorial</a>
+      <a href="part-ii-the-discourses.html">Part II: The Discourses</a>
+      <a href="part-iii-reference.html">Part III: Reference</a>
+      <a href="glossary.html">Glossary</a>
+      <a href="appendix-a-scenario-files.html">Appendix A: Scenario Files</a>
+      <a href="appendix-b-questions-answers.html">Appendix B: Questions & Answers</a>
+      <a href="appendix-c-random-notes.html">Appendix C: Random Notes</a>
+      <a href="index-entries.html">Index</a>
+    </aside>
+    <main class="manual-content">
+      <section id="f-appendix-a-scenario-files" class="level1">
+<h1>Appendix A: Scenario Files</h1>
+<p>All scenarios in Anacreon are defined using a special format called a
+<em>Scenario Description File</em> (SDF) format. This format allows a
+player to create his or her own scenarios simply by editing a text
+file.</p>
+<section id="f-header-and-initial-text" class="level2">
+<h2>Header and Initial Text</h2>
+<p>All SDFs start with:</p>
+<p>ANACREON Version<br />
+Name<br />
+Variation<br />
+Min/Max Plyrs<br />
+Size<br />
+Planets<br />
+Diff<br />
+Min/Max Len<br />
+First Year</p>
+<p><em>Version</em>: The version number of the game that this scenario
+is written for. This is expressed as a whole number: 12 for version 1.2,
+21 for version 2.1, etc... The header ANACREON (which must appear in
+capital letters) and the version number must be on the first line of the
+file and must be alone.</p>
+<p><em>Name</em>: The name of the scenario. This may be more than one
+word, but it should not be more than 32 characters. If the name is more
+than one word, it should be enclosed in quotes.</p>
+<p><em>Variation</em>: Each scenario can be either random or set
+depending on the setting of this variable. If variation is 0, then all
+random elements in the scenario will change every time that the scenario
+is run. If variation is a positive number, then the scenario will be the
+same every time (as long as the number is the same.)</p>
+<p><em>Min/Max Players</em>: Two numbers (separated by a space)
+expressing the minimum and maximum number of players that can play this
+scenario. No more than 8 players may play a scenario.</p>
+<p><em>Size</em>: The size of the galaxy in sectors. The galaxy is
+always square, so this variable measures the length of one side. The
+galaxy should never be smaller than 21 sectors nor larger than 100. At
+21 sectors, the map displays the entire galaxy.</p>
+<p><em>Planets</em>: The number of planets in this scenario. This number
+must match the actual number of planets created by <em>CreateWorld</em>
+and <em>CreateRandomWorlds</em>. No more than 200 planets may be in the
+galaxy.</p>
+<p><em>Diff</em>: The difficulty of the scenario:</p>
+<p>0 Beginner<br />
+1 Intermediate<br />
+2 Advanced<br />
+3 Expert</p>
+<p>This variable is only used to give the player an idea of how
+complicated the scenario is. The actual play of the game is <em>not</em>
+affected. The scenario designer should insure that the scenario is
+accurately labeled.</p>
+<p>As a rough guideline, scenarios that are played in a small galaxy
+with few planets and without most of the advanced features of the game
+(i.e.Â gates, ambrosia) should be <em>Beginner</em>. Scenarios with some
+advanced concepts should be <em>Intermediate</em>. Scenarios that use a
+large map and/or most of the advanced features should be
+<em>Advanced</em> or <em>Expert</em>.</p>
+<p><em>Min/Max Length</em>: Two numbers (separated by a space)
+expressing the average length of one game in years. If the second number
+is 0, then it indicates an open-ended scenario. For instance: 10 20
+would be 10-20 years. 50 0 would be 50+ years.</p>
+<p><em>First Year</em>: The year in which the scenario starts out. For
+example, most introductory scenarios start at 4021.</p>
+<p>After the basic description, the file should contain the initial text
+description of the scenario. The text should begin with BEGINTEXT on its
+own line, and end with ENDTEXT, again on its own line. Page breaks are
+denoted by NEWPAGE.</p>
+</section>
+<section id="f-constants-and-tables" class="level2">
+<h2>Constants and Tables</h2>
+<p>Many commands require parameters such as tech levels or world class
+tables. The following charts specify the numbers that should be used and
+the order in which tables should be entered.</p>
+<p>World Class Table</p>
+<table>
+<thead>
+<tr>
+<th>Symb</th>
+<th>Class</th>
+<th>Advantages</th>
+<th>Disadvantages</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>Ambrosia</td>
+<td>Bio</td>
+<td>Met/Tri</td>
+</tr>
+<tr>
+<td>a</td>
+<td>Arid</td>
+<td>(None)</td>
+<td>Chem/Agrc</td>
+</tr>
+<tr>
+<td>0</td>
+<td>Artificial</td>
+<td>Ships</td>
+<td>Chem/Met/Agrc/Tri</td>
+</tr>
+<tr>
+<td>B</td>
+<td>Barren</td>
+<td>Met/Tri</td>
+<td>Chem/Agrc</td>
+</tr>
+<tr>
+<td>j</td>
+<td>Class J</td>
+<td>Chem/Met</td>
+<td>Tri</td>
+</tr>
+<tr>
+<td>k</td>
+<td>Class K</td>
+<td>Met</td>
+<td>Chem</td>
+</tr>
+<tr>
+<td>l</td>
+<td>Class L</td>
+<td>Tri</td>
+<td>Chem</td>
+</tr>
+<tr>
+<td>m</td>
+<td>Class M</td>
+<td>Agrc</td>
+<td>Trillum</td>
+</tr>
+<tr>
+<td>D</td>
+<td>Desert</td>
+<td>Tri</td>
+<td>Chem/Met/Agrc</td>
+</tr>
+<tr>
+<td>E</td>
+<td>Earth-Like</td>
+<td>(None)</td>
+<td>(None)</td>
+</tr>
+<tr>
+<td>F</td>
+<td>Forest</td>
+<td>Chem/Agrc</td>
+<td>(None)</td>
+</tr>
+<tr>
+<td>G</td>
+<td>Gas Giant</td>
+<td>Chem/Ships</td>
+<td>Met/Agrc/Tri</td>
+</tr>
+<tr>
+<td>h</td>
+<td>Hostile</td>
+<td>(None)</td>
+<td>(None)</td>
+</tr>
+<tr>
+<td>I</td>
+<td>Ice</td>
+<td>(None)</td>
+<td>Chem/Met/Agrc/Tri</td>
+</tr>
+<tr>
+<td>J</td>
+<td>Jungle</td>
+<td>Chem/Agrc</td>
+<td>(None)</td>
+</tr>
+<tr>
+<td>O</td>
+<td>Ocean</td>
+<td>Chem/Agrc</td>
+<td>Met/Tri</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Paradise</td>
+<td>Bio/Chem/Met/Agrc/Tri</td>
+<td>(None)</td>
+</tr>
+<tr>
+<td>P</td>
+<td>Poisonous</td>
+<td>Chem</td>
+<td>Met/Agrc/Tri</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Ruins</td>
+<td>(None)</td>
+<td>(None)</td>
+</tr>
+<tr>
+<td>U</td>
+<td>Underground</td>
+<td>Met/Tri</td>
+<td>Agrc</td>
+</tr>
+<tr>
+<td>V</td>
+<td>Volcanic</td>
+<td>Chem/Met/Tri</td>
+<td>Agrc</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="f-specifying-coordinates" class="level2">
+<h2>Specifying Coordinates</h2>
+<p>There are four ways of specifying coordinates: absolute, random,
+zone-relative, and point-relative coordinates.</p>
+<p><em>Absolute</em>: Absolute coordinates start at 1,1 at the top-left
+corner of the map, and increase to the right in the <em>x</em>
+direction, and down in the <em>y</em> direction. Absolute coordinates
+are always specified as a string of two numbers separated by a comma. No
+spaces are allowed in the string.</p>
+<p><em>Random</em>: Another way of specifying a random location is to
+use the syntax <em>R:x,y</em> where <em>x</em> and <em>y</em> are ranges
+separated by double periods. For example, <em>R:1..5,1..5</em>
+represents a random coordinate in the box from 1,1 to 5,5.
+<em>R:1..5,10</em> is a random coordinate from 1,10 to 5,10.</p>
+<p><em>Zone-Relative</em>: If you need a random location, you can use
+zone-relative coordinates to pick a random spot inside a zone. The
+syntax is <em>Z:n</em> where <em>n</em> is the number of the zone. For
+example, <em>Z:1</em> will return a random coordinate inside zone 1 (the
+entire galaxy). Again, no spaces are allowed in the syntax.</p>
+<p><em>Point-Relative</em>: The <em>DefineXY</em> command can be used to
+define a point in the galaxy and refer to it with an identifier. Once a
+point has been defined in this way, other coordinates can be specified
+as offsets from this point. The syntax is <em>point:x,y</em> where
+<em>point</em> is a defined point, and <em>x,y</em> is an offset. For
+example, if <em>Center</em> is a point previously defined, legal
+coordinates are: <em>Center:0,0</em> and <em>Center:-2,3</em>. Random
+ranges are allowed in the offsets, thus <em>Center:1..5,10</em> is a
+legal random coordinate.</p>
+<p><em>Note</em>: Since the <em>DefineZone</em> and <em>DefineXY</em>
+commands both take coordinates, it is very easy to combine the three
+types of coordinates to get interesting effects. For example, a point
+could be defined as a random coordinate within a zone, and other zones
+could be defined relative to it.</p>
+</section>
+<section id="f-comments" class="level2">
+<h2>Comments</h2>
+<p>A semi-colon (;) is used as a comment delimeter. Everything from the
+semi-colon to the end of the line is ignored. Comments may be placed
+anywhere in the file except inside a BEGINTEXT, ENDTEXT block.</p>
+</section>
+<section id="f-commands" class="level2">
+<h2>Commands</h2>
+<p>The actual commands to create the scenario follow the initial
+description. Each command is followed by any parameters required (see
+actual syntax). There is no expected format, as long as each of the
+parameters are listed in order.</p>
+<p>The scenario file must end with the command <em>EndScenario</em>.</p>
+<p>Below is a list of all legal commands.</p>
+<section id="f-classtable" class="level3">
+<h3>ClassTable</h3>
+<p>c1 c2 c3 ...</p>
+<p><em>ClassTable</em> defines the current class distribution table for
+any subsequent <em>CreateRandomWorlds</em> commands. <em>C1</em>,
+<em>c2</em>, etc are integer values expressing the (percent) chance that
+a world will be of that class. (<em>C1</em> is the value for ambrosia
+worlds, <em>c2</em> is the value for arid worlds, and so on, following
+the order given in the tables.) E.g. if the value for a barren world is
+10, then there is a 10% chance that a random world created by
+<em>CreateRandomWorlds</em> will be barren. The table is always defined
+in the order given in "Constants and Tables".</p>
+<p>A value is required for all classes, although 0 is a legal value. In
+any event, the values must add up to 100 or an error will result.</p>
+<p>The class table can be changed at any time by giving another
+<em>ClassTable</em> command. For example, a scenario which calls for
+areas with special worlds could be designed using alternate
+<em>ClassTable</em> and <em>CreateRandomWorlds</em> commands.</p>
+</section>
+<section id="f-createnebula" class="level3">
+<h3>CreateNebula</h3>
+<p>type xy1 xy2</p>
+<p>This command will cover the area from xy1 to xy2 with nebula of the
+given type. Types are as follows:</p>
+<p>1 Normal<br />
+2 Dark Nebula<br />
+3 Dense Nebula</p>
+<p>See: Specifying Coordinates.</p>
+<p><em>Example</em>:</p>
+<p>CreateNebula 2 3,4 5,6</p>
+<p>This command creates a square of dark nebula with coordinates 3,4 to
+5,6.</p>
+</section>
+<section id="f-createnpempire" class="level3">
+<h3>CreateNPEmpire</h3>
+<p>emp type name rev tech techs mods</p>
+<p>This command creates a non-player (computer controlled) empire with
+the following characteristics:</p>
+<p><em>Emp</em>: The number of the empire. See:
+<em>CreatePlayerEmpire</em>;</p>
+<p><em>Type</em>: The type of the empire:</p>
+<p>1 <em>Pirate</em>: This empire will send out battle fleets to all
+parts of the galaxy looking for undefended transport fleets;</p>
+<p>2 <em>Kingdom</em>: A defensive empire. Kingdoms will only attack if
+provoked;</p>
+<p>3 <em>Aggressor</em>: Aggressor empires will attempt to expand their
+dominion over independent worlds, and will occasionally attack other
+empires without provocation;</p>
+<p><em>Name</em>: The name of the non-player empire (RndName specifies a
+random name). If the name is more than one word, it should be enclosed
+in quotes;</p>
+<p><em>Rev</em>: This factor is a measure of the restlessness of the
+people in the empire. See: <em>CreatePlayerEmpire</em>;</p>
+<p><em>Tech</em>: The technology level of the empire. See:
+<em>CreatePlayerEmpire</em>;</p>
+<p><em>Modifiers</em>: Special modifiers for this empire. See:
+<em>CreatePlayerEmpire</em>.</p>
+<p><em>Example</em>:</p>
+<p>CreateNPEmpire 1<br />
+"Montressor" ; empire name<br />
+0 ; revolution fator<br />
+8 ; starship tech level<br />
+2 ; 2 technologies<br />
+10 ; starship tech<br />
+13 ; ninja tech<br />
+0 ; no modifiers</p>
+</section>
+<section id="f-createplayerempire" class="level3">
+<h3>CreatePlayerEmpire</h3>
+<p>emp rev tech techs mods</p>
+<p>This command creates a player empire with the following
+characteristics:</p>
+<p><em>Emp</em>: The number of the empire (starting from 0) that is to
+be created by this commands. Player empires should always be created
+first;</p>
+<p><em>Rev</em>: This factor is a measure of the restlessness of the
+people in the empire. The greater the value, the greater the yearly
+increase in revolution index. A value of 0 is standard. For example, an
+empire with a restlessness of 10 would have to be constantly conquering
+new worlds to prevent its own worlds from revolting. Values above 15
+should really not be used;</p>
+<p><em>Tech</em>: The technology level of the empire (see "Constants and
+Tables" for tech level values). This value is followed by the number of
+known technologies in the level, and then by a list of those
+technologies (See: "Technologies Table"). For example, if an empire is
+at bio-tech level and has developed hunter killers, the tech numbers
+would be 7 (bio-tech) followed by 1 (one technology) followed by 6
+(hunter-killers);</p>
+<p><em>Modifiers</em>: Modifiers are attributes of the empire that
+affect miscellaneous parts of the game. First the number of modifiers is
+given, followed by a list. Only one modifier is currently defined:</p>
+<p>CENTRAL: Empires with this modifier are highly dependent on the
+capital. If the capital of a centralized empire is conquered, the empire
+collapses instantly and all its worlds become independent. Normally, if
+the capital of an empire is conquered, a new capital is selected.</p>
+<p><em>Example</em>:</p>
+<p>CreateEmpire 1<br />
+0 ; revolution factor<br />
+9 ; pre-gate tech<br />
+0 ; 0 technologies<br />
+1 ; 1 modifier<br />
+CENTRAL ; centralized</p>
+<p>Because a scenario may have a variable number of players, all
+commands to create a player empire greater than the number of players
+will be ignored. For example, suppose that a scenario has from 1 to 3
+players. If only two players play, the third <em>CreatePlayerEmpire</em>
+command is ignored. The first two capitals are capitals of the empires,
+and the third is an independent world.</p>
+</section>
+<section id="f-createrandomnebula" class="level3">
+<h3>CreateRandomNebula</h3>
+<p>type min max</p>
+<p><em>CreateRandomNebula</em> will create a random number of nebulae of
+the given type. The number of nebulae will be between <em>min</em> and
+<em>max</em>. The following types are defined:</p>
+<p>1 <em>Band</em>: This is a strip of nebula about seven sectors wide
+and at a random angle up to 45 degrees (in either direction) from the
+vertical;</p>
+<p>2 <em>Patch</em>: A small patch of nebulae about ten sectors in size
+and in a random location.</p>
+</section>
+<section id="f-createrandomworlds" class="level3">
+<h3>CreateRandomWorlds</h3>
+<p>n zone</p>
+<p>This command will create n random worlds using the current tech and
+class tables. All worlds will be restricted to <em>zone</em>.</p>
+</section>
+<section id="f-createsrms" class="level3">
+<h3>CreateSRMs</h3>
+<p>emp xy1 xy2</p>
+<p>Creates an SRM area from <em>xy1</em> to <em>xy2</em>. Mines belong
+to <em>emp</em>.</p>
+</section>
+<section id="f-createstarbase" class="level3">
+<h3>CreateStarbase</h3>
+<p>n xy type<br />
+tech typ emp pop eff<br />
+LAM def GDM ion<br />
+fgt hkr jmp jtn pen str trn<br />
+men nnj amb che met sup tri</p>
+<p>This command creates a starbase (number <em>n</em>) at coordinates
+specified by <em>xy</em> (see: "Specifying Coordinates") and sets its
+attributes.</p>
+<p>The starbase may be one of the following types:</p>
+<p>20 command base<br />
+21 fortress<br />
+22 industrial complex<br />
+23 outpost</p>
+<p>All other characteristics are identical to those used in a
+<em>CreateWorld</em> command.</p>
+<p><em>Example</em>:</p>
+<p>CreateStarbase 1 3,3<br />
+22 ; industrial complex<br />
+9 ; pre-gate tech<br />
+2 ; base planet<br />
+1 ; empire 2<br />
+2200 ; 22 billion pop.<br />
+34 ; 34% efficiency<br />
+; LAM, def, GDM, and ion<br />
+0 1000 1000 2000<br />
+; fgt, hkr, jmp, jtn, pen, str, and trn<br />
+1000 1000 1000 1000 1000 1000 1000<br />
+; men, nnj, amb, che, met, sup, and tri<br />
+1000 1000 1000 1000 1000 1000 1000</p>
+</section>
+<section id="f-createworld" class="level3">
+<h3>CreateWorld</h3>
+<p>n xy cls tech typ emp pop eff res<br />
+LAM def GDM ion<br />
+fgt hkr jmp jtn pen str trn<br />
+men nnj amb che met sup tri</p>
+<p>This command creates a specific world (number <em>n</em>) at
+coordinates specified by xy (see: "Specifying Coordinates") and sets its
+attributes.</p>
+<p><em>Cls</em>: The class of the world. Use the constants given in
+"Constants and Tables" to determine class number. E.g. ambrosia worlds
+are class 0, ocean worlds are class 15.</p>
+<p><em>Tech</em>: The tech level of the world. Use the constants given
+in "Constants and Tables".</p>
+<p><em>Typ</em>: The type of the world. If the type is capital and the
+empire is not created, the world is left independent.</p>
+<p><em>Emp</em>: The empire to which it belongs:</p>
+<p>0 Empire1<br />
+1 Empire2<br />
+.<br />
+.<br />
+.<br />
+7 Empire8<br />
+8 Independent.</p>
+<p><em>Pop</em>: The nominal population of the world in hundreds of
+millions. The actual population of the world will vary by 15%.</p>
+<p><em>Eff</em>: The efficiency of the world.</p>
+<p><em>Res</em>: The amount of trillum reserves on the planet. Planets
+do not have an infinite supply of trillum. There is a maximum amount of
+trillum that can be mined from the surface. Trillum reserves range from
+0 to 100.</p>
+<p>The remainder of the parameters deal with the resources of the world,
+defense satellites, starships, etc. Numbers are not exact, however,
+varying by 20% in either direction.</p>
+<p><em>Example</em>:</p>
+<p>CreateStarbase 1 3,3<br />
+3 ; barren world<br />
+9 ; pre-gate tech<br />
+2 ; base planet<br />
+1 ; empire 2<br />
+2200 ; 22 billion pop.<br />
+34 ; 34% efficiency<br />
+50 ; trillum reserves<br />
+; LAM, def, GDM, and ion<br />
+0 1000 1000 2000<br />
+; fgt, hkr, jmp, jtn, pen, str, and trn<br />
+1000 1000 1000 1000 1000 1000 1000<br />
+; men, nnj, amb, che, met, sup, and tri<br />
+1000 1000 1000 1000 1000 1000 1000</p>
+</section>
+<section id="f-definexy" class="level3">
+<h3>DefineXY</h3>
+<p>point xy</p>
+<p>This command will define a certain point in space so that it may be
+referenced by other commands. <em>Point</em> is a unique label that is
+to be used to refer to the point. <em>Xy</em> is the coordinate of the
+point (see "Specifying Coordinates".)</p>
+<p><em>Example</em>:</p>
+<p>DefineXY Center 1,2</p>
+<p>This will define <em>Center</em> as 1,2. Now coordinates can be
+specified relative to <em>Center</em>, as in <em>Center:-2,1</em> or
+<em>Center:6,8</em></p>
+<p><em>Note</em>: it is legal to use defined points in both zone
+definitions, and other point definitions.</p>
+</section>
+<section id="f-definezone" class="level3">
+<h3>DefineZone</h3>
+<p>zone xy1 xy2</p>
+<p><em>DefineZone</em> will define a square area of the galaxy described
+by the two pairs of coordinates <em>xy1</em> (upper left) and
+<em>xy2</em> (lower right). <em>Zone</em> is a unique number from 2 to
+20 assigned to the zone and used to refer to it. Note: Zone 1 is
+pre-defined as the entire galaxy.</p>
+</section>
+<section id="f-report" class="level3">
+<h3>Report</h3>
+<p>string</p>
+<p>When this command is reached the computer will write the given
+string, which must be enclosed in quotes ("), on the screen.
+<em>Report</em> is mainly used for debugging a scenario, although it may
+be used to inform a player of the progress of the scenario creation.</p>
+</section>
+<section id="f-techtable" class="level3">
+<h3>TechTable</h3>
+<p>t1 t2 t3 ...</p>
+<p>This command defines the current technology levels table. All
+subsequent <em>CreateRandomWorlds</em> commands will use this table.
+This command operates much like <em>ClassTable</em>. The chance for each
+tech level must be given in the order given in "Tables and
+Constants".</p>
+<p>Like <em>ClassTable</em>, each value represents the percent chance
+that a random world will be of the given tech.</p>
+</section>
+</section>
+</section>
+
+      <nav class="page-nav" aria-label="Manual navigation">
+        <a href="glossary.html">← Previous</a>
+        <a href="appendix-b-questions-answers.html">Next →</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>
