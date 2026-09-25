@@ -29,7 +29,8 @@
         "resupply": {
           "enabled": false,
           "maxAmount": 0,
-          "destinations": []
+          "priority": [],
+          "never": []
         },
         "techLevel": "Bio",
         "efficiency": 80,

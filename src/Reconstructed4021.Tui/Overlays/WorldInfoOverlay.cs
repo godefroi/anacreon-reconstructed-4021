@@ -31,7 +31,7 @@ internal sealed class WorldInfoOverlay : IOverlay
     private const ConsoleColor SelectedBg = ConsoleColor.Gray;
 
     private enum TabKind { CloseUp, Production, Issp, Designate, Redirect, Resupply }
-    private enum ResupplyFocus { Enabled, MaxAmount, Destinations }
+    private enum ResupplyFocus { Enabled, MaxAmount, Priority, Never }
 
     private readonly IEconomicWorld _world;
     private readonly Empire _viewer;
@@ -43,7 +43,7 @@ internal sealed class WorldInfoOverlay : IOverlay
     private readonly Action<IEconomicWorld> _deployFleet;
     private readonly Action<ISectorObject> _onGoToMap;
     private readonly Action<Planet> _pickRedirectDestination;
-    private readonly Action<Planet> _pickResupplyDestination;
+    private readonly Action<Planet, ResupplyGroup> _pickResupplyDestination;
 
     private readonly TabKind[] _tabKinds;
     private readonly TabFrame _frame;
@@ -52,7 +52,8 @@ internal sealed class WorldInfoOverlay : IOverlay
     private int _isspRow;
     private int _redirectRow;
     private ResupplyFocus _resupplyFocus;
-    private ListBox<Coordinate>? _resupplyDestList;
+    private ListBox<Coordinate>? _priorityList;
+    private ListBox<Coordinate>? _neverList;
 
     private WorldProductionPreview.Result? _productionCache;
     private bool _productionDirty = true;
@@ -61,7 +62,7 @@ internal sealed class WorldInfoOverlay : IOverlay
 
     public WorldInfoOverlay(IEconomicWorld world, Empire viewer, Game game, Random random,
         Action refresh, Action<string, string> showInfo, Action<IOverlay> push, Action<IEconomicWorld> deployFleet, Action<ISectorObject> onGoToMap,
-        Action<Planet> pickRedirectDestination, Action<Planet> pickResupplyDestination, string initialTab = "Close Up")
+        Action<Planet> pickRedirectDestination, Action<Planet, ResupplyGroup> pickResupplyDestination, string initialTab = "Close Up")
     {
         _world = world;
         _viewer = viewer;
@@ -98,7 +99,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         _designateList = BuildDesignateList();
         if (world is Planet { } withResupply)
         {
-            _resupplyDestList = BuildResupplyDestList(withResupply);
+            RebuildDestLists(withResupply);
         }
 
         var initialIndex = Array.IndexOf(_tabKinds, ParseInitialTab(initialTab));
@@ -182,7 +183,7 @@ internal sealed class WorldInfoOverlay : IOverlay
                     return;
                 case TabKind.Resupply:
                     IsDismissed = true;
-                    _pickResupplyDestination((Planet)_world);
+                    _pickResupplyDestination((Planet)_world, _resupplyFocus == ResupplyFocus.Never ? ResupplyGroup.Never : ResupplyGroup.Priority);
                     return;
                 default:
                     IsDismissed = true;
@@ -791,11 +792,20 @@ internal sealed class WorldInfoOverlay : IOverlay
 
     // ResupplyTabView (issue #85) -- planet-only, shown only when WorldType is one of the seven
     // ResupplySettings.EligibleCargo recognizes. Enabled/MaxAmount are two fixed header rows (cycled
-    // with Up/Down like the ISSP/Redirect rows above); Destinations is a ListBox<Coordinate> rebuilt
-    // from Planet.Resupply.Destinations every time it changes -- ListBox<T> itself has no add/remove/
-    // reorder API, it just renders whatever IReadOnlyList<T> it was built from.
-    private ListBox<Coordinate> BuildResupplyDestList(Planet planet) =>
-        new(planet.Resupply.Destinations, loc => DescribeResupplyDestination(planet, loc));
+    // with Up/Down like the ISSP/Redirect rows above); Priority/Never are each a ListBox<Coordinate>
+    // rebuilt from the matching Planet.Resupply list every time it changes -- ListBox<T> itself has no
+    // add/remove/reorder API, it just renders whatever IReadOnlyList<T> it was built from. "Everything
+    // else" (the third, implicit group) has no list of its own -- it's simply every eligible
+    // destination not on either hand-managed list, ranked by population (AutoResupply's own doc
+    // comment), so there's nothing here for the player to edit.
+    private ListBox<Coordinate> BuildDestList(Planet planet, List<Coordinate> destinations) =>
+        new(destinations, loc => DescribeResupplyDestination(planet, loc));
+
+    private void RebuildDestLists(Planet planet)
+    {
+        _priorityList = BuildDestList(planet, planet.Resupply.Priority);
+        _neverList = BuildDestList(planet, planet.Resupply.Never);
+    }
 
     private string DescribeResupplyDestination(Planet planet, Coordinate loc)
     {
@@ -804,14 +814,18 @@ internal sealed class WorldInfoOverlay : IOverlay
         return $"{name}  ({RelativeCoordinate.Format(loc, origin)})";
     }
 
+    private bool ResupplyFocusIsList => _resupplyFocus is ResupplyFocus.Priority or ResupplyFocus.Never;
+    private ListBox<Coordinate> ActiveDestBox() => _resupplyFocus == ResupplyFocus.Priority ? _priorityList! : _neverList!;
+    private List<Coordinate> ActiveDestList(ResupplySettings settings) => _resupplyFocus == ResupplyFocus.Priority ? settings.Priority : settings.Never;
+
     private void DrawResupply(FrameBuffer fb, int cx, int cy, int cw, int ch)
     {
         void At(int x, int y, string text) => DrawClipped(fb, cx, cy, cw, ch, x, y, text);
         var planet = (Planet)_world;
         var settings = planet.Resupply;
 
-        At(1, 0, "Auto-dispatches an idle cargo fleet here whenever a destination below comes up");
-        At(1, 1, "short -- the same order sequence the manual Resupply mission already builds.");
+        At(1, 0, "Auto-dispatches an idle cargo fleet here whenever a destination below comes up short --");
+        At(1, 1, "the same order sequence the manual Resupply mission already builds.");
 
         void Row(int y, string label, string value, ResupplyFocus focus)
         {
@@ -824,13 +838,22 @@ internal sealed class WorldInfoOverlay : IOverlay
         Row(3, "Enabled:", settings.Enabled ? "Yes" : "No", ResupplyFocus.Enabled);
         Row(4, "Max per dispatch:", settings.MaxAmount > 0 ? settings.MaxAmount.ToString() : "unlimited", ResupplyFocus.MaxAmount);
 
-        At(1, 6, "Destinations (priority order; anything else eligible falls back to auto-ranking):");
-        var listHeight = Math.Max(1, ch - 8);
-        var listFg = _resupplyFocus == ResupplyFocus.Destinations ? SelectedFg : ContentFg;
-        var listBg = _resupplyFocus == ResupplyFocus.Destinations ? SelectedBg : ContentBg;
-        _resupplyDestList!.Draw(fb, cx + 1, cy + 7, cw - 2, listHeight, ContentFg, ContentBg, listFg, listBg);
+        void DestList(int headerY, string header, ListBox<Coordinate> box, int listHeight, ResupplyFocus focus)
+        {
+            At(1, headerY, header);
+            var selected = _resupplyFocus == focus;
+            box.Draw(fb, cx + 1, cy + headerY + 1, cw - 2, listHeight, ContentFg, ContentBg, selected ? SelectedFg : ContentFg, selected ? SelectedBg : ContentBg);
+        }
 
-        At(1, ch - 1, "Up/Down: select   Left/Right: toggle/edit   +/-: reorder   Del: remove   F10: add   Esc: close");
+        const int priorityHeight = 6;
+        DestList(6, "Priority (hand order, always dispatched to first):", _priorityList!, priorityHeight, ResupplyFocus.Priority);
+
+        var neverHeaderY = 6 + 1 + priorityHeight + 1;
+        var neverHeight = Math.Max(1, ch - neverHeaderY - 3);
+        DestList(neverHeaderY, "Never (excluded, even from starvation):", _neverList!, neverHeight, ResupplyFocus.Never);
+
+        At(1, ch - 2, "Everything else eligible falls back to auto-ranking by population.");
+        At(1, ch - 1, "Up/Down: select  Left/Right: toggle/edit  +/-: reorder  Del: remove  F10: add to selected list");
     }
 
     private void HandleResupplyKey(ConsoleKeyInfo key)
@@ -841,23 +864,23 @@ internal sealed class WorldInfoOverlay : IOverlay
         switch (key.Key)
         {
             case ConsoleKey.UpArrow:
-                if (_resupplyFocus == ResupplyFocus.Destinations && _resupplyDestList!.SelectedIndex > 0)
+                if (ResupplyFocusIsList && ActiveDestBox().SelectedIndex > 0)
                 {
-                    _resupplyDestList.HandleKey(key);
+                    ActiveDestBox().HandleKey(key);
                 }
                 else
                 {
-                    _resupplyFocus = _resupplyFocus == ResupplyFocus.Enabled ? ResupplyFocus.Destinations : _resupplyFocus - 1;
+                    _resupplyFocus = _resupplyFocus == ResupplyFocus.Enabled ? ResupplyFocus.Never : _resupplyFocus - 1;
                 }
                 return;
             case ConsoleKey.DownArrow:
-                if (_resupplyFocus == ResupplyFocus.Destinations && _resupplyDestList!.SelectedIndex < settings.Destinations.Count - 1)
+                if (ResupplyFocusIsList && ActiveDestBox().SelectedIndex < ActiveDestList(settings).Count - 1)
                 {
-                    _resupplyDestList.HandleKey(key);
+                    ActiveDestBox().HandleKey(key);
                 }
                 else
                 {
-                    _resupplyFocus = _resupplyFocus == ResupplyFocus.Destinations ? ResupplyFocus.Enabled : _resupplyFocus + 1;
+                    _resupplyFocus = _resupplyFocus == ResupplyFocus.Never ? ResupplyFocus.Enabled : _resupplyFocus + 1;
                 }
                 return;
         }
@@ -874,26 +897,29 @@ internal sealed class WorldInfoOverlay : IOverlay
                         settings.MaxAmount = int.TryParse(text, out var value) && value > 0 ? value : 0;
                     }));
                 return;
-            case ResupplyFocus.Destinations:
-                HandleResupplyDestinationKey(key, planet, settings);
+            case ResupplyFocus.Priority:
+            case ResupplyFocus.Never:
+                HandleResupplyDestinationKey(key, planet);
                 return;
         }
     }
 
-    private void HandleResupplyDestinationKey(ConsoleKeyInfo key, Planet planet, ResupplySettings settings)
+    private void HandleResupplyDestinationKey(ConsoleKeyInfo key, Planet planet)
     {
-        if (settings.Destinations.Count == 0)
+        var settings = planet.Resupply;
+        var list = ActiveDestList(settings);
+        if (list.Count == 0)
         {
             return;
         }
 
-        var index = _resupplyDestList!.SelectedIndex;
+        var index = ActiveDestBox().SelectedIndex;
 
         if (key.Key == ConsoleKey.Delete || key.KeyChar is 'x' or 'X')
         {
-            settings.Destinations.RemoveAt(index);
-            _resupplyDestList = BuildResupplyDestList(planet);
-            _resupplyDestList.MoveTo(Math.Min(index, settings.Destinations.Count - 1));
+            list.RemoveAt(index);
+            RebuildDestLists(planet);
+            ActiveDestBox().MoveTo(Math.Min(index, list.Count - 1));
             return;
         }
 
@@ -904,14 +930,14 @@ internal sealed class WorldInfoOverlay : IOverlay
         if (direction != 0)
         {
             var newIndex = index + direction;
-            if (newIndex < 0 || newIndex >= settings.Destinations.Count)
+            if (newIndex < 0 || newIndex >= list.Count)
             {
                 return;
             }
 
-            (settings.Destinations[index], settings.Destinations[newIndex]) = (settings.Destinations[newIndex], settings.Destinations[index]);
-            _resupplyDestList = BuildResupplyDestList(planet);
-            _resupplyDestList.MoveTo(newIndex);
+            (list[index], list[newIndex]) = (list[newIndex], list[index]);
+            RebuildDestLists(planet);
+            ActiveDestBox().MoveTo(newIndex);
         }
     }
 }

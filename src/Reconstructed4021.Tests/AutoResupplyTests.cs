@@ -55,7 +55,7 @@ public class AutoResupplyTests
     }
 
     [Test]
-    public async Task Apply_StarvationOutranksTierOneAndTierTwo_OnlyOneFleetAvailable()
+    public async Task Apply_StarvationOutranksPriorityAndNormal_OnlyOneFleetAvailable()
     {
         var (game, galaxy, owner) = NewGame();
         var source = NewSource(owner, WorldType.Capital, new Coordinate(0, 0));
@@ -63,14 +63,14 @@ public class AutoResupplyTests
         source.Cargo.Metals = 1000;
         source.Resupply.Enabled = true;
 
-        var tier1 = NewDestination(owner, new Coordinate(1, 0));
-        tier1.ShortfallsLastTick = [CargoType.Metals];
-        source.Resupply.Destinations.Add(tier1.Location);
+        var priority = NewDestination(owner, new Coordinate(1, 0));
+        priority.ShortfallsLastTick = [CargoType.Metals];
+        source.Resupply.Priority.Add(priority.Location);
 
         var starving = NewDestination(owner, new Coordinate(2, 0));
         starving.ShortfallsLastTick = [CargoType.Supplies];
 
-        galaxy.Planets.AddRange([source, tier1, starving]);
+        galaxy.Planets.AddRange([source, priority, starving]);
         galaxy.Fleets.Add(NewIdleTransportFleet(owner, source.Location));
 
         AutoResupply.Apply(game);
@@ -82,32 +82,32 @@ public class AutoResupplyTests
     }
 
     [Test]
-    public async Task Apply_TierOneOutranksTierTwo_OnlyOneFleetAvailable()
+    public async Task Apply_PriorityGroupOutranksNormalGroup_OnlyOneFleetAvailable()
     {
         var (game, galaxy, owner) = NewGame();
         var source = NewSource(owner, WorldType.Mine, new Coordinate(0, 0));
         source.Cargo.Metals = 1000;
         source.Resupply.Enabled = true;
 
-        var tier2 = NewDestination(owner, new Coordinate(1, 0));
-        tier2.ShortfallsLastTick = [CargoType.Metals];
+        var normal = NewDestination(owner, new Coordinate(1, 0));
+        normal.ShortfallsLastTick = [CargoType.Metals];
 
-        var tier1 = NewDestination(owner, new Coordinate(2, 0));
-        tier1.ShortfallsLastTick = [CargoType.Metals];
-        source.Resupply.Destinations.Add(tier1.Location);
+        var priority = NewDestination(owner, new Coordinate(2, 0));
+        priority.ShortfallsLastTick = [CargoType.Metals];
+        source.Resupply.Priority.Add(priority.Location);
 
-        galaxy.Planets.AddRange([source, tier2, tier1]);
+        galaxy.Planets.AddRange([source, normal, priority]);
         galaxy.Fleets.Add(NewIdleTransportFleet(owner, source.Location));
 
         AutoResupply.Apply(game);
 
         var fleet = galaxy.Fleets.Single();
         await Assert.That(fleet.NextOrder).IsEqualTo(1);
-        await Assert.That(fleet.Orders[2].DestinationObject).IsEqualTo(tier1);
+        await Assert.That(fleet.Orders[2].DestinationObject).IsEqualTo(priority);
     }
 
     [Test]
-    public async Task Apply_TierOneRespectsListOrder()
+    public async Task Apply_PriorityGroupRespectsListOrder()
     {
         var (game, galaxy, owner) = NewGame();
         var source = NewSource(owner, WorldType.Mine, new Coordinate(0, 0));
@@ -120,8 +120,8 @@ public class AutoResupplyTests
         first.ShortfallsLastTick = [CargoType.Metals];
 
         // List order is the priority, not declaration order: "first" is listed second.
-        source.Resupply.Destinations.Add(second.Location);
-        source.Resupply.Destinations.Insert(0, first.Location);
+        source.Resupply.Priority.Add(second.Location);
+        source.Resupply.Priority.Insert(0, first.Location);
 
         galaxy.Planets.AddRange([source, second, first]);
         galaxy.Fleets.Add(NewIdleTransportFleet(owner, source.Location));
@@ -133,7 +133,7 @@ public class AutoResupplyTests
     }
 
     [Test]
-    public async Task Apply_TierTwoRanksByPopulationDescending()
+    public async Task Apply_NormalGroupRanksByPopulationDescending()
     {
         var (game, galaxy, owner) = NewGame();
         var source = NewSource(owner, WorldType.Mine, new Coordinate(0, 0));
@@ -155,7 +155,58 @@ public class AutoResupplyTests
     }
 
     [Test]
-    public async Task Apply_GlobalMaxAmountCapsEveryDispatchRegardlessOfTier()
+    public async Task Apply_NeverGroupIsExcludedEvenFromStarvation()
+    {
+        var (game, galaxy, owner) = NewGame();
+        var source = NewSource(owner, WorldType.Capital, new Coordinate(0, 0));
+        source.Cargo.Supplies = 1000;
+        source.Resupply.Enabled = true;
+
+        var never = NewDestination(owner, new Coordinate(1, 0), population: 5000);
+        never.ShortfallsLastTick = [CargoType.Supplies];
+        source.Resupply.Never.Add(never.Location);
+
+        var normal = NewDestination(owner, new Coordinate(2, 0), population: 10);
+        normal.ShortfallsLastTick = [CargoType.Supplies];
+
+        galaxy.Planets.AddRange([source, never, normal]);
+        galaxy.Fleets.Add(NewIdleTransportFleet(owner, source.Location));
+
+        AutoResupply.Apply(game);
+
+        // "never" outranks "normal" by population and even carries a starvation shortfall, but the
+        // Never group is an absolute exclusion -- "normal" gets served instead.
+        var fleet = galaxy.Fleets.Single();
+        await Assert.That(fleet.NextOrder).IsEqualTo(1);
+        await Assert.That(fleet.Orders[2].DestinationObject).IsEqualTo(normal);
+    }
+
+    [Test]
+    public async Task Apply_PruneLostWorlds_RemovesConqueredCoordinateFromPriorityAndNever()
+    {
+        var (game, galaxy, owner) = NewGame();
+        var otherEmpire = new Empire { Name = "Other" };
+        game.Empires.Add(otherEmpire);
+
+        var source = NewSource(owner, WorldType.Mine, new Coordinate(0, 0));
+        var lostLocation = new Coordinate(1, 0);
+        source.Resupply.Priority.Add(lostLocation);
+        source.Resupply.Never.Add(new Coordinate(2, 0));
+
+        // The world at lostLocation now belongs to a different empire -- conquered since these lists
+        // were last edited.
+        var conquered = new Planet { Location = lostLocation, Owner = otherEmpire, Type = WorldType.Base };
+        var stillOwned = new Planet { Location = new Coordinate(2, 0), Owner = owner, Type = WorldType.Base };
+        galaxy.Planets.AddRange([source, conquered, stillOwned]);
+
+        AutoResupply.Apply(game);
+
+        await Assert.That(source.Resupply.Priority).IsEmpty();
+        await Assert.That(source.Resupply.Never).IsEquivalentTo([new Coordinate(2, 0)]);
+    }
+
+    [Test]
+    public async Task Apply_GlobalMaxAmountCapsEveryDispatchRegardlessOfGroup()
     {
         var (game, galaxy, owner) = NewGame();
         var source = NewSource(owner, WorldType.Mine, new Coordinate(0, 0));
@@ -165,7 +216,7 @@ public class AutoResupplyTests
 
         var destination = NewDestination(owner, new Coordinate(1, 0));
         destination.ShortfallsLastTick = [CargoType.Metals];
-        source.Resupply.Destinations.Add(destination.Location);
+        source.Resupply.Priority.Add(destination.Location);
 
         galaxy.Planets.AddRange([source, destination]);
         // Plenty of ships -> plenty of cargo room, so the cap (not fleet capacity) is the binding limit.
@@ -278,9 +329,9 @@ public class AutoResupplyTests
 
         AutoResupply.Apply(game);
 
-        // "bigger" is served first (tier-2 population ranking) and takes the whole 100 available;
-        // "smaller"'s own dispatch then sees 0 left reserved and is skipped, even though a second idle
-        // fleet was still sitting right there.
+        // "bigger" is served first (normal-group population ranking) and takes the whole 100
+        // available; "smaller"'s own dispatch then sees 0 left reserved and is skipped, even though a
+        // second idle fleet was still sitting right there.
         var dispatched = galaxy.Fleets.Where(f => f.NextOrder != 0).ToList();
         await Assert.That(dispatched).Count().IsEqualTo(1);
         await Assert.That(dispatched.Single().Orders[2].DestinationObject).IsEqualTo(bigger);

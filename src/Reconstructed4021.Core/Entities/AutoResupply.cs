@@ -27,6 +27,8 @@ public static class AutoResupply
     public static void Apply(Game game)
     {
         foreach (var source in game.Galaxy.Planets) {
+            PruneLostWorlds(source, game);
+
             if (!source.Resupply.Enabled) {
                 continue;
             }
@@ -49,18 +51,39 @@ public static class AutoResupply
     }
 
     /// <summary>
+    /// Drops any <see cref="ResupplySettings.Priority"/>/<see cref="ResupplySettings.Never"/> entry
+    /// that no longer resolves to a <see cref="Planet"/> this source's own owner still holds --
+    /// conquered, or otherwise lost, per the user's own "obviously" (no issue precedent; this repo's
+    /// planets are never destroyed, only reassigned, so an owner mismatch is the only way a coordinate
+    /// goes stale). Runs for every planet regardless of <see cref="ResupplySettings.Enabled"/> -- it's
+    /// general data hygiene on the settings themselves, not part of the dispatch logic below, and an
+    /// empty list costs nothing extra to check.
+    /// </summary>
+    private static void PruneLostWorlds(Planet source, Game game)
+    {
+        bool StillOwned(Coordinate loc) => game.Galaxy.GetObjectAt(loc) is Planet p && ReferenceEquals(p.Owner, source.Owner);
+
+        source.Resupply.Priority.RemoveAll(loc => !StillOwned(loc));
+        source.Resupply.Never.RemoveAll(loc => !StillOwned(loc));
+    }
+
+    /// <summary>
     /// One source's own ranked shortfall list for this tick: starvation (any eligible destination
     /// whose <see cref="Planet.ShortfallsLastTick"/> contains <see cref="CargoType.Supplies"/>, ranked
-    /// by population) first, then tier-1 destinations (<see cref="ResupplySettings.Destinations"/>) in
-    /// list order, then every other eligible same-owner destination (tier 2), ranked by population.
+    /// by population) first, then <see cref="ResupplySettings.Priority"/> destinations in list order,
+    /// then every other eligible same-owner destination ("everything else," never hand-managed),
+    /// ranked by population. <see cref="ResupplySettings.Never"/> destinations are excluded from all
+    /// three -- an absolute exclusion, not merely deprioritized, so they're filtered out of
+    /// <c>candidates</c> before any bucket is built.
     /// </summary>
     private static List<Shortfall> BuildShortfallList(Planet source, IReadOnlyList<CargoType> eligibleCargo, Game game)
     {
+        var neverSet = source.Resupply.Never.ToHashSet();
         var candidates = game.Galaxy.Planets
-            .Where(p => !ReferenceEquals(p, source) && ReferenceEquals(p.Owner, source.Owner))
+            .Where(p => !ReferenceEquals(p, source) && ReferenceEquals(p.Owner, source.Owner) && !neverSet.Contains(p.Location))
             .ToList();
 
-        var tier1Set = source.Resupply.Destinations.ToHashSet();
+        var prioritySet = source.Resupply.Priority.ToHashSet();
 
         var starving = eligibleCargo.Contains(CargoType.Supplies)
             ? candidates
@@ -69,17 +92,17 @@ public static class AutoResupply
                 .Select(p => new Shortfall(p, CargoType.Supplies))
             : [];
 
-        var tier1 = source.Resupply.Destinations
+        var priority = source.Resupply.Priority
             .Select(loc => candidates.FirstOrDefault(p => p.Location == loc))
             .Where(p => p is not null)
             .SelectMany(p => NonSupplyShortfalls(p!, eligibleCargo));
 
-        var tier2 = candidates
-            .Where(p => !tier1Set.Contains(p.Location))
+        var normal = candidates
+            .Where(p => !prioritySet.Contains(p.Location))
             .OrderByDescending(p => p.Population)
             .SelectMany(p => NonSupplyShortfalls(p, eligibleCargo));
 
-        return [.. starving, .. tier1, .. tier2];
+        return [.. starving, .. priority, .. normal];
     }
 
     private static IEnumerable<Shortfall> NonSupplyShortfalls(Planet destination, IReadOnlyList<CargoType> eligibleCargo) =>

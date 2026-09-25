@@ -532,13 +532,25 @@ internal sealed class GalaxyMapScreen : IScreen
     // WorldInfoOverlay's Resupply tab (its own F10): unlike Redirect's any-coordinate destination,
     // a resupply destination must be a real Planet FleetOrderTemplates.Resupply can actually target
     // (Fleet menu > Resupply's own PickResupplyDestination uses the same PickOwnPlanetOrRetry guard,
-    // :971), so this reuses that instead of taking whatever coordinate the cursor lands on.
-    private void PickResupplyDestination(Planet planet) =>
+    // :971), so this reuses that instead of taking whatever coordinate the cursor lands on. Adding to
+    // one hand-managed group always removes the same coordinate from the other -- a destination is
+    // never Priority and Never at once (ResupplySettings.Never's own doc comment).
+    private void PickResupplyDestination(Planet planet, ResupplyGroup group) =>
         BeginPick("Resupply -- move cursor to destination, Enter: select, Esc: cancel", location =>
-            PickOwnPlanetOrRetry(location, "Resupply", () => PickResupplyDestination(planet),
+            PickOwnPlanetOrRetry(location, "Resupply", () => PickResupplyDestination(planet, group),
                 destination =>
                 {
-                    planet.Resupply.Destinations.Add(destination.Location);
+                    var settings = planet.Resupply;
+                    var (target, other) = group == ResupplyGroup.Priority
+                        ? (settings.Priority, settings.Never)
+                        : (settings.Never, settings.Priority);
+
+                    other.Remove(destination.Location);
+                    if (!target.Contains(destination.Location))
+                    {
+                        target.Add(destination.Location);
+                    }
+
                     OpenExamine(planet, "Resupply");
                 }));
 
