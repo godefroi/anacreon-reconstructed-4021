@@ -53,12 +53,13 @@ public class AutoResupplyIntegrationTests
 
         await Assert.That(starving.ShortfallsLastTick).Contains(CargoType.Supplies);
         await Assert.That(idleFleet.NextOrder).IsEqualTo(1);
-        await Assert.That(idleFleet.Orders).Count().IsEqualTo(6); // FleetOrderTemplates.Resupply's own DEST/TRAN/DEST/TRAN/DEST/REFU shape
+        await Assert.That(idleFleet.Orders).Count().IsEqualTo(5); // FleetOrderTemplates.Resupply's own DEST/TRAN/DEST/TRAN/DEST shape -- no trailing Refuel
         await Assert.That(idleFleet.Orders[0].Type).IsEqualTo(CommandType.Destination);
         await Assert.That(idleFleet.Orders[0].DestinationObject).IsEqualTo(capital);
         await Assert.That(idleFleet.Orders[1].TransferCargo).IsEqualTo(CargoType.Supplies);
         await Assert.That(idleFleet.Orders[1].TransferAmount).IsGreaterThan(0);
         await Assert.That(idleFleet.Orders[2].DestinationObject).IsEqualTo(starving);
-        await Assert.That(idleFleet.Orders[5].Type).IsEqualTo(CommandType.Refuel);
+        await Assert.That(idleFleet.Orders[4].Type).IsEqualTo(CommandType.Destination);
+        await Assert.That(idleFleet.Orders[4].DestinationObject).IsEqualTo(capital);
     }
 }

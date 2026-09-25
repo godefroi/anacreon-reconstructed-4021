@@ -171,8 +171,9 @@ public static class AutoResupply
     /// list. "Idle" is <see cref="FleetStatus.Ready"/> with an empty order queue (no existing helper
     /// combines these two checks). The fuel-range gate (<see cref="FleetLifecycle.EstimatedRange"/>
     /// against twice the one-way ETA) has no Pascal or issue precedent -- added because the order
-    /// template only refuels at the very end of the round trip, so an ungated dispatch could strand a
-    /// fleet with no fuel to get home.
+    /// template's own transfers only ever refuel from whatever trillum happens to be sitting at the
+    /// pickup/drop-off stops (<see cref="FleetOrderTemplates.Resupply"/>'s own doc comment), never
+    /// guaranteed, so an ungated dispatch could strand a fleet with no fuel to get home.
     /// </summary>
     private static Fleet? PickFleet(Planet source, Shortfall shortfall, Game game)
     {

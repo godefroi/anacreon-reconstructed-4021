@@ -295,7 +295,6 @@ public class AutoResupplyTests
                 new FleetOrder(CommandType.Destination, DestinationObject: destination),
                 new FleetOrder(CommandType.Transfer, TransferCargo: CargoType.Metals, TransferAmount: -100),
                 new FleetOrder(CommandType.Destination, DestinationObject: source),
-                new FleetOrder(CommandType.Refuel),
             ],
         };
         galaxy.Fleets.Add(enRoute);

@@ -946,7 +946,7 @@ internal sealed class GalaxyMapScreen : IScreen
     // (FleetOrderTemplates' own doc comment): pick a fleet, a source world, a destination world, then
     // a cargo type and amount, and commit the generated orders directly (matching how Refuel/Change
     // Destination commit immediately, no editor preview step). Both worlds must be the player's own --
-    // FleetOrderTemplates.Resupply's DEST/TRAN/REFU sequence only ever touches ground the fleet
+    // FleetOrderTemplates.Resupply's DEST/TRAN sequence only ever touches ground the fleet
     // actually owns, so an unowned source/destination would just silently no-op every step.
     private void ResupplyMission() => PickOwnFleetAtCursor("Resupply", PickResupplySource);
 
