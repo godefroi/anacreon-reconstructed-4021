@@ -840,23 +840,34 @@ internal sealed class WorldInfoOverlay : IOverlay
         Row(1, "Max per dispatch:", settings.MaxAmount > 0 ? settings.MaxAmount.ToString() : "unlimited", ResupplyFocus.MaxAmount);
 
         const int panelTop = 3;
-        var listHeight = Math.Max(1, ch - panelTop - 3);
+        var listHeight = Math.Max(1, ch - panelTop - 4);
         var colWidth = (cw - 2) / 3;
+        var divider1X = colWidth;
+        var divider2X = 2 * colWidth + 1;
 
         // The header itself carries the focus highlight, not just the selected row inside it -- an
         // empty panel has no row to highlight at all, which was the original complaint (no visible
-        // indication of which panel had focus).
+        // indication of which panel had focus). The underline right below it is a second, redundant
+        // cue at the user's own request: solid for the focused panel, dashed for the other two.
         void Panel(int col, string header, ListBox<Planet> box, ResupplyPanel panel)
         {
             var x = col * (colWidth + 1);
             var focused = _resupplyFocus == ResupplyFocus.Panels && _resupplyPanel == panel;
             fb.DrawText(cx + x, cy + panelTop, header.PadRight(colWidth), focused ? SelectedFg : ConsoleColor.White, focused ? SelectedBg : ContentBg, maxWidth: colWidth);
-            box.Draw(fb, cx + x, cy + panelTop + 1, colWidth, listHeight, ContentFg, ContentBg, focused ? SelectedFg : ContentFg, focused ? SelectedBg : ContentBg);
+            fb.DrawText(cx + x, cy + panelTop + 1, new string(focused ? '─' : '┄', colWidth), ContentFg, ContentBg);
+            box.Draw(fb, cx + x, cy + panelTop + 2, colWidth, listHeight, ContentFg, ContentBg, focused ? SelectedFg : ContentFg, focused ? SelectedBg : ContentBg);
         }
 
         Panel(0, "Priority", _priorityList!, ResupplyPanel.Priority);
         Panel(1, "Normal (auto-ranked)", _normalList!, ResupplyPanel.Normal);
         Panel(2, "Never", _neverList!, ResupplyPanel.Never);
+
+        // Vertical dividers in the gap column between panels, spanning header+underline+every list row.
+        for (var row = panelTop; row < panelTop + 2 + listHeight; row++)
+        {
+            At(divider1X, row, "│");
+            At(divider2X, row, "│");
+        }
 
         At(1, ch - 2, "glyph  world (name or coords)   population");
         At(1, ch - 1, "L/R:panel  U/D:select  Ctrl+L/R:move  Ctrl+U/D:reorder  Esc:close");
