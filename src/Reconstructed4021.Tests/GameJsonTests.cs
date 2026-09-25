@@ -389,6 +389,68 @@ public class GameJsonTests
         await Assert.That(roundTrippedPlanet.Redirection.Destination).IsNull();
     }
 
+    /// <summary><see cref="Planet.Resupply"/> (GitHub issue #85) round-trips its Enabled/MaxAmount/Priority/Never exactly like any other plain settings object -- same reflection-based path <see cref="RedirectionSettings"/> already exercises, no dedicated converter needed.</summary>
+    [Test]
+    public async Task RoundTrips_PlanetResupplySettings()
+    {
+        var galaxy = new Galaxy(10);
+        var game = new Game(galaxy);
+
+        var empire = new Empire { Name = "Test Empire" };
+        game.Empires.Add(empire);
+        game.CurrentEmpire = empire;
+        game.TurnHandlers[empire] = new HumanTurnHandler();
+
+        var planet = new Planet { Location = new Coordinate(1, 1), Owner = empire };
+        planet.Resupply.Enabled = true;
+        planet.Resupply.MaxAmount = 250;
+        planet.Resupply.Priority.Add(new Coordinate(3, 3));
+        planet.Resupply.Priority.Add(new Coordinate(-4, 2));
+        planet.Resupply.Never.Add(new Coordinate(9, 9));
+        galaxy.Planets.Add(planet);
+
+        var json = GameJson.Serialize(game);
+        var roundTripped = GameJson.Deserialize(json, new Random(0));
+        var roundTrippedPlanet = roundTripped.Galaxy.Planets.Single();
+
+        await Assert.That(roundTrippedPlanet.Resupply.Enabled).IsTrue();
+        await Assert.That(roundTrippedPlanet.Resupply.MaxAmount).IsEqualTo(250);
+        await Assert.That(roundTrippedPlanet.Resupply.Priority).IsEquivalentTo([new Coordinate(3, 3), new Coordinate(-4, 2)]);
+        await Assert.That(roundTrippedPlanet.Resupply.Never).IsEquivalentTo([new Coordinate(9, 9)]);
+    }
+
+    /// <summary>
+    /// A save written before <see cref="Planet.Resupply"/> existed (GitHub issue #85) has no
+    /// <c>resupply</c> key at all -- confirms it still loads, defaulting to a fresh
+    /// <see cref="ResupplySettings"/> (disabled, uncapped, no priority/never destinations), same
+    /// precedent as <see cref="Deserialize_PlanetWithoutRedirectionKey_DefaultsToRedirectionOff"/>.
+    /// </summary>
+    [Test]
+    public async Task Deserialize_PlanetWithoutResupplyKey_DefaultsToResupplyOff()
+    {
+        var galaxy = new Galaxy(10);
+        var game = new Game(galaxy);
+
+        var empire = new Empire { Name = "Test Empire" };
+        game.Empires.Add(empire);
+        game.CurrentEmpire = empire;
+        game.TurnHandlers[empire] = new HumanTurnHandler();
+
+        var planet = new Planet { Location = new Coordinate(1, 1), Owner = empire };
+        galaxy.Planets.Add(planet);
+
+        var node = System.Text.Json.Nodes.JsonNode.Parse(GameJson.Serialize(game))!;
+        node["galaxy"]!["planets"]![0]!.AsObject().Remove("resupply");
+
+        var roundTripped = GameJson.Deserialize(node.ToJsonString(), new Random(0));
+        var roundTrippedPlanet = roundTripped.Galaxy.Planets.Single();
+
+        await Assert.That(roundTrippedPlanet.Resupply.Enabled).IsFalse();
+        await Assert.That(roundTrippedPlanet.Resupply.MaxAmount).IsEqualTo(0);
+        await Assert.That(roundTrippedPlanet.Resupply.Priority).IsEmpty();
+        await Assert.That(roundTrippedPlanet.Resupply.Never).IsEmpty();
+    }
+
     /// <summary>
     /// <see cref="TechCatalog.TechGrantIdentity"/>'s own JSON shape switched from writing the bare
     /// <c>Ordinal</c> int to the type's own name (<see cref="ShipType"/>/<see cref="DefenseType"/>/

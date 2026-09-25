@@ -126,6 +126,16 @@ public static class FleetLogistics
         FleetCargoSpace(ships, cargo) * CargoSpacePerUnit[type];
 
     /// <summary>
+    /// Max tons of <paramref name="type"/> a fleet could pick up right now: bounded by the fleet's own
+    /// free space (<see cref="FleetCargoSpaceFor"/>), how much more of that type it could hold before
+    /// hitting <see cref="PascalMath.MaxResources"/>, and how much <paramref name="sourceAvailable"/>
+    /// actually has on hand. Shared by the manual Resupply mission's own cargo-and-amount picker
+    /// (<c>ResupplyCargoOverlay</c>) and <see cref="AutoResupply"/> -- one formula, not two copies.
+    /// </summary>
+    public static int MaxPickupAmount(CargoType type, ShipCounts fleetShips, CargoHold fleetCargo, int sourceAvailable) =>
+        Math.Max(0, Math.Min(Math.Min(FleetCargoSpaceFor(type, fleetShips, fleetCargo), PascalMath.MaxResources - fleetCargo[type]), sourceAvailable));
+
+    /// <summary>
     /// BalanceFleet (MISC.PAS:431-465) — trims cargo in priority order (chemicals, supplies, metals,
     /// legions, ninja legions, trillum, ambrosia) until the fleet's cargo fits its ship capacity again,
     /// partially restoring the last type trimmed to exactly zero out the remaining deficit. Assumes (as

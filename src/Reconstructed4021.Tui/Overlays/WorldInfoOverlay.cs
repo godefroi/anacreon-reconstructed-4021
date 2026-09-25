@@ -6,6 +6,7 @@ using Reconstructed4021.Core.Turns;
 using Reconstructed4021.Core.Types;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Panemonde.Widgets;
+using Screens = Reconstructed4021.Tui.Screens;
 
 
 namespace Reconstructed4021.Tui.Overlays;
@@ -30,7 +31,9 @@ internal sealed class WorldInfoOverlay : IOverlay
     private const ConsoleColor SelectedFg = ConsoleColor.Black; // SYSDispSelect = 112.
     private const ConsoleColor SelectedBg = ConsoleColor.Gray;
 
-    private enum TabKind { CloseUp, Production, Issp, Designate, Redirect }
+    private enum TabKind { CloseUp, Production, Issp, Designate, Redirect, Resupply }
+    private enum ResupplyFocus { Enabled, MaxAmount, Panels }
+    private enum ResupplyPanel { Priority, Normal, Never }
 
     private readonly IEconomicWorld _world;
     private readonly Empire _viewer;
@@ -49,6 +52,11 @@ internal sealed class WorldInfoOverlay : IOverlay
 
     private int _isspRow;
     private int _redirectRow;
+    private ResupplyFocus _resupplyFocus;
+    private ResupplyPanel _resupplyPanel;
+    private ListBox<Planet>? _priorityList;
+    private ListBox<Planet>? _normalList;
+    private ListBox<Planet>? _neverList;
 
     private WorldProductionPreview.Result? _productionCache;
     private bool _productionDirty = true;
@@ -56,7 +64,8 @@ internal sealed class WorldInfoOverlay : IOverlay
     public bool IsDismissed { get; private set; }
 
     public WorldInfoOverlay(IEconomicWorld world, Empire viewer, Game game, Random random,
-        Action refresh, Action<string, string> showInfo, Action<IOverlay> push, Action<IEconomicWorld> deployFleet, Action<ISectorObject> onGoToMap, Action<Planet> pickRedirectDestination, string initialTab = "Close Up")
+        Action refresh, Action<string, string> showInfo, Action<IOverlay> push, Action<IEconomicWorld> deployFleet, Action<ISectorObject> onGoToMap,
+        Action<Planet> pickRedirectDestination, string initialTab = "Close Up")
     {
         _world = world;
         _viewer = viewer;
@@ -82,9 +91,18 @@ internal sealed class WorldInfoOverlay : IOverlay
             kinds.Add(TabKind.Redirect);
         }
 
+        if (world is Planet resupplySource && ResupplySettings.EligibleCargo(resupplySource.Type).Count > 0)
+        {
+            kinds.Add(TabKind.Resupply);
+        }
+
         _tabKinds = [.. kinds];
         _frame = new TabFrame(_tabKinds.Select(TabLabel).ToArray());
         _designateList = BuildDesignateList();
+        if (world is Planet { } withResupply)
+        {
+            RebuildDestLists(withResupply);
+        }
 
         var initialIndex = Array.IndexOf(_tabKinds, ParseInitialTab(initialTab));
         if (initialIndex >= 0)
@@ -100,6 +118,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         TabKind.Issp => "ISSP",
         TabKind.Designate => "Designate",
         TabKind.Redirect => "Redirect",
+        TabKind.Resupply => "Resupply",
         _ => kind.ToString(),
     };
 
@@ -110,6 +129,7 @@ internal sealed class WorldInfoOverlay : IOverlay
         "ISSP" => TabKind.Issp,
         "Designate" => TabKind.Designate,
         "Redirect" => TabKind.Redirect,
+        "Resupply" => TabKind.Resupply,
         _ => TabKind.CloseUp,
     };
 
@@ -157,16 +177,17 @@ internal sealed class WorldInfoOverlay : IOverlay
 
         if (key.Key == ConsoleKey.F10)
         {
-            if (_tabKinds[_frame.ActiveIndex] == TabKind.Redirect)
+            switch (_tabKinds[_frame.ActiveIndex])
             {
-                IsDismissed = true;
-                _pickRedirectDestination((Planet)_world);
-                return;
+                case TabKind.Redirect:
+                    IsDismissed = true;
+                    _pickRedirectDestination((Planet)_world);
+                    return;
+                default:
+                    IsDismissed = true;
+                    _onGoToMap(_world);
+                    return;
             }
-
-            IsDismissed = true;
-            _onGoToMap(_world);
-            return;
         }
 
         switch (_tabKinds[_frame.ActiveIndex])
@@ -179,6 +200,9 @@ internal sealed class WorldInfoOverlay : IOverlay
                 break;
             case TabKind.Redirect:
                 HandleRedirectKey(key);
+                break;
+            case TabKind.Resupply:
+                HandleResupplyKey(key);
                 break;
         }
     }
@@ -218,6 +242,9 @@ internal sealed class WorldInfoOverlay : IOverlay
                 break;
             case TabKind.Redirect:
                 DrawRedirect(fb, cx, cy, cw, ch);
+                break;
+            case TabKind.Resupply:
+                DrawResupply(fb, cx, cy, cw, ch);
                 break;
         }
     }
@@ -759,5 +786,238 @@ internal sealed class WorldInfoOverlay : IOverlay
 
         var next = ((current + direction) % cycle.Length + cycle.Length) % cycle.Length;
         row.Set(settings, cycle[next]);
+    }
+
+    // ResupplyTabView (issue #85) -- planet-only, shown only when WorldType is one of the seven
+    // ResupplySettings.EligibleCargo recognizes. Enabled/MaxAmount are two fixed header rows (cycled
+    // with Up/Down like the ISSP/Redirect rows above); below them, three side-by-side panels --
+    // Priority (settings.Priority, hand order), Normal ("everything else," never hand-managed), Never
+    // (settings.Never) -- mirror AutoResupply.Groups exactly, so what the player sees here is what the
+    // dispatch algorithm actually sees. Every owned world always shows up in exactly one panel (moved
+    // in/out via Ctrl+Left/Right below), so there's no separate "add a destination" flow to begin with
+    // -- replacing the previous F10 map-cursor-pick (issue feedback: picking one world at a time was
+    // tedious, and an empty list gave no visual indication which panel had focus at all).
+    private void RebuildDestLists(Planet planet)
+    {
+        var (priority, normal, never) = AutoResupply.Groups(planet, _game);
+        _priorityList = new ListBox<Planet>(priority, FormatResupplyRow);
+        _normalList = new ListBox<Planet>(normal, FormatResupplyRow);
+        _neverList = new ListBox<Planet>(never, FormatResupplyRow);
+    }
+
+    // Glyph column reuses GalaxyMapScreen's own DATACNST.PAS-derived table (WorldTypeGlyphs) rather
+    // than a second copy; name/coordinate reuses DisplayName, same fallback CloseUpOverlay's own
+    // several inline uses already share.
+    private string FormatResupplyRow(Planet p)
+    {
+        var glyph = Screens.GalaxyMapScreen.WorldTypeGlyphs[(int)p.Type];
+        var name = DisplayName(p);
+        return $"{glyph} {name,-14} {p.Population,6}";
+    }
+
+    private ListBox<Planet> ActiveResupplyBox() => _resupplyPanel switch
+    {
+        ResupplyPanel.Priority => _priorityList!,
+        ResupplyPanel.Normal => _normalList!,
+        _ => _neverList!,
+    };
+
+    private void DrawResupply(FrameBuffer fb, int cx, int cy, int cw, int ch)
+    {
+        void At(int x, int y, string text) => DrawClipped(fb, cx, cy, cw, ch, x, y, text);
+        var planet = (Planet)_world;
+        var settings = planet.Resupply;
+
+        void Row(int y, string label, string value, ResupplyFocus focus)
+        {
+            var text = $"{label,-19}{value}";
+            var selected = _resupplyFocus == focus;
+            var visible = text.Length > cw - 1 ? text[..(cw - 1)] : text.PadRight(cw - 1);
+            fb.DrawText(cx + 1, cy + y, visible, selected ? SelectedFg : ContentFg, selected ? SelectedBg : ContentBg);
+        }
+
+        Row(0, "Enabled:", settings.Enabled ? "Yes" : "No", ResupplyFocus.Enabled);
+        Row(1, "Max per dispatch:", settings.MaxAmount > 0 ? settings.MaxAmount.ToString() : "unlimited", ResupplyFocus.MaxAmount);
+
+        const int panelTop = 3;
+        var listHeight = Math.Max(1, ch - panelTop - 4);
+        var colWidth = (cw - 2) / 3;
+        var divider1X = colWidth;
+        var divider2X = 2 * colWidth + 1;
+
+        // The header itself carries the focus highlight, not just the selected row inside it -- an
+        // empty panel has no row to highlight at all, which was the original complaint (no visible
+        // indication of which panel had focus). The underline right below it is a second, redundant
+        // cue at the user's own request: solid for the focused panel, dashed for the other two.
+        void Panel(int col, string header, ListBox<Planet> box, ResupplyPanel panel)
+        {
+            var x = col * (colWidth + 1);
+            var focused = _resupplyFocus == ResupplyFocus.Panels && _resupplyPanel == panel;
+            fb.DrawText(cx + x, cy + panelTop, header.PadRight(colWidth), focused ? SelectedFg : ConsoleColor.White, focused ? SelectedBg : ContentBg, maxWidth: colWidth);
+            fb.DrawText(cx + x, cy + panelTop + 1, new string(focused ? '─' : '┄', colWidth), ContentFg, ContentBg);
+            box.Draw(fb, cx + x, cy + panelTop + 2, colWidth, listHeight, ContentFg, ContentBg, focused ? SelectedFg : ContentFg, focused ? SelectedBg : ContentBg);
+        }
+
+        Panel(0, "Priority", _priorityList!, ResupplyPanel.Priority);
+        Panel(1, "Normal (auto-ranked)", _normalList!, ResupplyPanel.Normal);
+        Panel(2, "Never", _neverList!, ResupplyPanel.Never);
+
+        // Vertical dividers in the gap column between panels, spanning header+underline+every list row.
+        for (var row = panelTop; row < panelTop + 2 + listHeight; row++)
+        {
+            At(divider1X, row, "│");
+            At(divider2X, row, "│");
+        }
+
+        At(1, ch - 2, "glyph  world (name or coords)   population");
+        At(1, ch - 1, "L/R:panel  U/D:select  Ctrl+L/R:move  Ctrl+U/D:reorder  Esc:close");
+    }
+
+    private void HandleResupplyKey(ConsoleKeyInfo key)
+    {
+        var planet = (Planet)_world;
+        var settings = planet.Resupply;
+
+        if (_resupplyFocus == ResupplyFocus.Panels)
+        {
+            if (key.Modifiers.HasFlag(ConsoleModifiers.Control))
+            {
+                switch (key.Key)
+                {
+                    case ConsoleKey.LeftArrow:
+                        MoveSelectedResupplyWorld(planet, -1);
+                        return;
+                    case ConsoleKey.RightArrow:
+                        MoveSelectedResupplyWorld(planet, 1);
+                        return;
+                    case ConsoleKey.UpArrow:
+                        ReorderPriority(planet, -1);
+                        return;
+                    case ConsoleKey.DownArrow:
+                        ReorderPriority(planet, 1);
+                        return;
+                }
+                return;
+            }
+
+            switch (key.Key)
+            {
+                case ConsoleKey.LeftArrow:
+                    if (_resupplyPanel > ResupplyPanel.Priority)
+                    {
+                        _resupplyPanel--;
+                    }
+                    return;
+                case ConsoleKey.RightArrow:
+                    if (_resupplyPanel < ResupplyPanel.Never)
+                    {
+                        _resupplyPanel++;
+                    }
+                    return;
+                case ConsoleKey.UpArrow:
+                    if (ActiveResupplyBox().SelectedIndex > 0)
+                    {
+                        ActiveResupplyBox().HandleKey(key);
+                    }
+                    else
+                    {
+                        _resupplyFocus = ResupplyFocus.MaxAmount;
+                    }
+                    return;
+                case ConsoleKey.DownArrow:
+                    ActiveResupplyBox().HandleKey(key);
+                    return;
+            }
+            return;
+        }
+
+        switch (key.Key)
+        {
+            case ConsoleKey.UpArrow:
+                if (_resupplyFocus == ResupplyFocus.MaxAmount)
+                {
+                    _resupplyFocus = ResupplyFocus.Enabled;
+                }
+                return;
+            case ConsoleKey.DownArrow:
+                _resupplyFocus = _resupplyFocus == ResupplyFocus.Enabled ? ResupplyFocus.MaxAmount : ResupplyFocus.Panels;
+                return;
+            case ConsoleKey.LeftArrow:
+            case ConsoleKey.RightArrow:
+                if (_resupplyFocus == ResupplyFocus.Enabled)
+                {
+                    settings.Enabled = !settings.Enabled;
+                }
+                return;
+            case ConsoleKey.Enter when _resupplyFocus == ResupplyFocus.MaxAmount:
+                _push(new TextPromptOverlay("Max Per Dispatch", "Cargo cap per dispatch (blank/0 = unlimited):",
+                    settings.MaxAmount > 0 ? settings.MaxAmount.ToString() : string.Empty, text =>
+                    {
+                        settings.MaxAmount = int.TryParse(text, out var value) && value > 0 ? value : 0;
+                    }));
+                return;
+        }
+    }
+
+    // Ctrl+Left/Right (issue feedback): the three panels sit left-to-right Priority/Normal/Never, so
+    // "move" is always one column over -- Priority has nowhere further left, Never nowhere further
+    // right. The moved world leaves the active panel; the cursor stays put (clamped) rather than
+    // following it into its new column.
+    private void MoveSelectedResupplyWorld(Planet planet, int direction)
+    {
+        var box = ActiveResupplyBox();
+        if (box.SelectedItem is not { } selected)
+        {
+            return;
+        }
+
+        ResupplyPanel? target = (_resupplyPanel, direction) switch
+        {
+            (ResupplyPanel.Priority, > 0) => ResupplyPanel.Normal,
+            (ResupplyPanel.Normal, < 0) => ResupplyPanel.Priority,
+            (ResupplyPanel.Normal, > 0) => ResupplyPanel.Never,
+            (ResupplyPanel.Never, < 0) => ResupplyPanel.Normal,
+            _ => null,
+        };
+        if (target is not { } destinationPanel)
+        {
+            return;
+        }
+
+        var settings = planet.Resupply;
+        settings.Priority.Remove(selected.Location);
+        settings.Never.Remove(selected.Location);
+        if (destinationPanel == ResupplyPanel.Priority)
+        {
+            settings.Priority.Add(selected.Location);
+        }
+        else if (destinationPanel == ResupplyPanel.Never)
+        {
+            settings.Never.Add(selected.Location);
+        }
+
+        var oldIndex = box.SelectedIndex;
+        RebuildDestLists(planet);
+        ActiveResupplyBox().MoveTo(oldIndex);
+    }
+
+    private void ReorderPriority(Planet planet, int direction)
+    {
+        if (_resupplyPanel != ResupplyPanel.Priority)
+        {
+            return;
+        }
+
+        var list = planet.Resupply.Priority;
+        var index = _priorityList!.SelectedIndex;
+        var newIndex = index + direction;
+        if (list.Count == 0 || newIndex < 0 || newIndex >= list.Count)
+        {
+            return;
+        }
+
+        (list[index], list[newIndex]) = (list[newIndex], list[index]);
+        RebuildDestLists(planet);
+        _priorityList!.MoveTo(newIndex);
     }
 }

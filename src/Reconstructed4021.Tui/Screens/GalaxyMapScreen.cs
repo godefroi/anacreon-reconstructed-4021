@@ -33,7 +33,9 @@ internal sealed class GalaxyMapScreen : IScreen
 
     // DATACNST.PAS's TypeStr/BaseTypeData/GateTypeData/NebulaChar, indexed by the matching enum's
     // ordinal -- same tables GalaxyView already verified against source.
-    private const string WorldTypeGlyphs = "aAbBCcijJmNorRsStTUXz";
+    // Not private: WorldInfoOverlay's own Resupply tab reuses this same table for its per-world glyph
+    // column rather than a second copy.
+    internal const string WorldTypeGlyphs = "aAbBCcijJmNorRsStTUXz";
     private const string StarbaseGlyphs = "■≡πo";
     private const string StargateGlyphs = "↕↑@";
     private const string NebulaGlyphs = " ▒░░";
@@ -944,7 +946,7 @@ internal sealed class GalaxyMapScreen : IScreen
     // (FleetOrderTemplates' own doc comment): pick a fleet, a source world, a destination world, then
     // a cargo type and amount, and commit the generated orders directly (matching how Refuel/Change
     // Destination commit immediately, no editor preview step). Both worlds must be the player's own --
-    // FleetOrderTemplates.Resupply's DEST/TRAN/REFU sequence only ever touches ground the fleet
+    // FleetOrderTemplates.Resupply's DEST/TRAN sequence only ever touches ground the fleet
     // actually owns, so an unowned source/destination would just silently no-op every step.
     private void ResupplyMission() => PickOwnFleetAtCursor("Resupply", PickResupplySource);
 

@@ -7,7 +7,7 @@ namespace Reconstructed4021.Tests;
 public class FleetOrderTemplatesTests
 {
     [Test]
-    public async Task Resupply_BuildsTheSixCommandShuttleSequence()
+    public async Task Resupply_BuildsTheFiveCommandShuttleSequence()
     {
         var owner = new Empire { Name = "Owner" };
         var source = new Planet { Location = new Coordinate(1, 1), Owner = owner, Class = WorldClass.EarthLike, Type = WorldType.Base };
@@ -15,7 +15,7 @@ public class FleetOrderTemplatesTests
 
         var orders = FleetOrderTemplates.Resupply(source, destination, CargoType.Supplies, 200);
 
-        await Assert.That(orders).Count().IsEqualTo(6);
+        await Assert.That(orders).Count().IsEqualTo(5);
 
         await Assert.That(orders[0].Type).IsEqualTo(CommandType.Destination);
         await Assert.That(orders[0].DestinationObject).IsEqualTo(source);
@@ -33,7 +33,5 @@ public class FleetOrderTemplatesTests
 
         await Assert.That(orders[4].Type).IsEqualTo(CommandType.Destination);
         await Assert.That(orders[4].DestinationObject).IsEqualTo(source);
-
-        await Assert.That(orders[5].Type).IsEqualTo(CommandType.Refuel);
     }
 }
