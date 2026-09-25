@@ -176,10 +176,11 @@ public static class CombatOutcome
     }
 
     /// <summary>
-    /// RestoreCombatant (ATTACK.PAS:1141-1181). The Fleet branch's own FleetCargoSpace/BalanceFleet/
-    /// FuelCapacity clamp isn't called here, though all three exist in <see cref="FleetLogistics"/> —
-    /// structurally unreachable regardless: this method only ever subtracts casualties (fewer
-    /// ships/cargo), which can only free up space, never exceed it.
+    /// RestoreCombatant (ATTACK.PAS:1141-1181). Ship and legion casualties come from independent
+    /// tallies, so losing transports doesn't guarantee losing the legions they carried: the Fleet
+    /// branch reruns Pascal's own post-casualty checks, <see cref="FleetLogistics.BalanceFleet"/> if
+    /// cargo now exceeds the reduced ship capacity and a fuel clamp to the reduced
+    /// <see cref="FleetLogistics.FuelCapacity"/> (issue #65).
     /// </summary>
     public static void RestoreCombatant(object combatant, AttackTally casualties)
     {
@@ -197,6 +198,15 @@ public static class CombatOutcome
         if (combatant is IEconomicWorld world) {
             foreach (var t in Enum.GetValues<DefenseType>()) {
                 world.Defenses[t] = Math.Max(0, world.Defenses[t] - casualties[t.ToAttackType()]);
+            }
+        } else if (combatant is Fleet fleet) {
+            if (FleetLogistics.FleetCargoSpace(ships, cargo) < 0) {
+                FleetLogistics.BalanceFleet(ships, cargo);
+            }
+
+            var fuelCap = FleetLogistics.FuelCapacity(ships);
+            if (fleet.Fuel > fuelCap) {
+                fleet.Fuel = fuelCap;
             }
         }
     }

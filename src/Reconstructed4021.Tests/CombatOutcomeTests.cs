@@ -304,4 +304,28 @@ public class CombatOutcomeTests
         await Assert.That(conqueredNews.Position).IsEqualTo(targetLocation);
         await Assert.That(conqueredNews.OtherEmpire).IsEqualTo(attacker);
     }
+
+    /// <summary>
+    /// GitHub #65: RestoreCombatant's Fleet branch reruns ATTACK.PAS:1141-1181's own post-casualty
+    /// checks. Ship and legion casualties come from independent tallies, so losing 2 of 50 transports
+    /// (5 legions/transport, exactly at capacity beforehand) while losing only 4 of 250 legions leaves
+    /// cargo over the new, smaller capacity -- BalanceFleet must trim it back down. The same casualty
+    /// also has to reclamp Fuel, left at the old (50-transport) capacity, down to the new one.
+    /// </summary>
+    [Test]
+    public async Task RestoreCombatant_FleetOverCapacityAfterCasualties_RebalancesCargoAndClampsFuel()
+    {
+        var owner = EmpireFactory.CreateEmpire("Owner", null, isEmpress: false, TechLevel.Jump, restlessness: 0, centralModifier: false, foundingYear: 0);
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = owner, Fuel = FleetLogistics.FuelCapacity(new ShipCounts { Transports = 50 }) };
+        fleet.Ships.Transports = 50;
+        fleet.Cargo.Legions = 250; // Exactly at capacity: 50 transports * 5 legions/transport.
+
+        var casualties = new AttackTally { [AttackType.Transport] = 2, [AttackType.Legion] = 4 };
+        CombatOutcome.RestoreCombatant(fleet, casualties);
+
+        await Assert.That(fleet.Ships.Transports).IsEqualTo(48);
+        await Assert.That(fleet.Cargo.Legions).IsEqualTo(240); // BalanceFleet trims back to the new capacity.
+        await Assert.That(FleetLogistics.FleetCargoSpace(fleet.Ships, fleet.Cargo)).IsEqualTo(0);
+        await Assert.That(fleet.Fuel).IsEqualTo(FleetLogistics.FuelCapacity(fleet.Ships)); // Reclamped, not left at the 50-transport figure.
+    }
 }
