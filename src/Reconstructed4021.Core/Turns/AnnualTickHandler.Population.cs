@@ -158,12 +158,15 @@ public sealed partial class AnnualTickHandler
     /// <summary>
     /// UPDATE.PAS:1130-1160 (nested in UpdateWorld). Fires <c>Starv</c> to the world's owner when
     /// starvation actually occurs, and adds <see cref="CargoType.Supplies"/> to
-    /// <paramref name="reportedShortfalls"/> then too -- <see cref="AutoResupply"/>'s own port-only
-    /// Supplies-shortfall signal, riding the same per-tick <see cref="IEconomicWorld.ShortfallsLastTick"/>
-    /// set the production pipeline's raw-material shortfalls already use (not
-    /// <see cref="ReportResourceShortfall"/> itself -- that would double the news item and double the
-    /// flat +1 revolution-index bump; starvation already has its own, larger, population-scaled hit
-    /// below).
+    /// <paramref name="reportedShortfalls"/> whenever Supplies ran short this tick -- <see
+    /// cref="AutoResupply"/>'s own port-only Supplies-shortfall signal, riding the same per-tick
+    /// <see cref="IEconomicWorld.ShortfallsLastTick"/> set the production pipeline's raw-material
+    /// shortfalls already use (not <see cref="ReportResourceShortfall"/> itself -- that would double
+    /// the news item and double the flat +1 revolution-index bump; starvation already has its own,
+    /// larger, population-scaled hit below). This is intentionally independent of whether <c>starve</c>
+    /// rounds to a nonzero population loss (integer division on <c>lack/6</c> and <c>Population/10</c>
+    /// truncates most real shortfalls to 0) -- che/met/tri report on the shortfall itself, not on some
+    /// downstream effect of it, and Supplies should match (GitHub issue #82).
     /// </summary>
     private void UseUpFood(IEconomicWorld world, HashSet<CargoType> reportedShortfalls)
     {
@@ -172,6 +175,7 @@ public sealed partial class AnnualTickHandler
         if (foodNeeded > world.Cargo.Supplies) {
             var lack = foodNeeded - world.Cargo.Supplies;
             world.Cargo.Supplies = 0;
+            reportedShortfalls.Add(CargoType.Supplies);
 
             var starve = Math.Min(lack / 6, world.Population / 10);
             world.Population -= starve;
@@ -182,7 +186,6 @@ public sealed partial class AnnualTickHandler
                     (int)(_starvationRevoltAdjustmentByTech[world.TechLevel] * (starve / 10.0)),
                     45);
                 ChangeRevIndex(world, revInc);
-                reportedShortfalls.Add(CargoType.Supplies);
             }
         } else {
             world.Cargo.Supplies -= foodNeeded;

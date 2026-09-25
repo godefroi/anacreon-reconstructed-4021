@@ -106,17 +106,17 @@ public static class AutoResupply
     }
 
     /// <summary>
-    /// One source's own ranked shortfall list for this tick: starvation (any eligible destination
-    /// whose <see cref="Planet.ShortfallsLastTick"/> contains <see cref="CargoType.Supplies"/>, ranked
-    /// by population) first, then <see cref="Groups"/>'s own Priority destinations in list order, then
-    /// its Normal destinations, ranked by population. Its Never destinations are excluded from all
+    /// One source's own ranked shortfall list for this tick: Supplies-short destinations (any eligible
+    /// destination whose <see cref="Planet.ShortfallsLastTick"/> contains <see cref="CargoType.Supplies"/>,
+    /// ranked by population) first, then <see cref="Groups"/>'s own Priority destinations in list order,
+    /// then its Normal destinations, ranked by population. Its Never destinations are excluded from all
     /// three -- an absolute exclusion, not merely deprioritized.
     /// </summary>
     private static List<Shortfall> BuildShortfallList(Planet source, IReadOnlyList<CargoType> eligibleCargo, Game game)
     {
         var (priorityPlanets, normalPlanets, _) = Groups(source, game);
 
-        var starving = eligibleCargo.Contains(CargoType.Supplies)
+        var suppliesShort = eligibleCargo.Contains(CargoType.Supplies)
             ? priorityPlanets.Concat(normalPlanets)
                 .Where(p => p.ShortfallsLastTick.Contains(CargoType.Supplies))
                 .OrderByDescending(p => p.Population)
@@ -126,7 +126,7 @@ public static class AutoResupply
         var priority = priorityPlanets.SelectMany(p => NonSupplyShortfalls(p, eligibleCargo));
         var normal = normalPlanets.SelectMany(p => NonSupplyShortfalls(p, eligibleCargo));
 
-        return [.. starving, .. priority, .. normal];
+        return [.. suppliesShort, .. priority, .. normal];
     }
 
     private static IEnumerable<Shortfall> NonSupplyShortfalls(Planet destination, IReadOnlyList<CargoType> eligibleCargo) =>

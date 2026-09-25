@@ -135,6 +135,33 @@ public class AnnualTickHandlerTests
         await Assert.That(planet.ShortfallsLastTick).Contains(CargoType.Supplies);
     }
 
+    [Test]
+    public async Task SmallSupplyShortfallIsReportedEvenWithoutStarvation()
+    {
+        // GitHub issue #82: che/met/tri report a shortfall the moment production can't cover demand,
+        // but Supplies used to piggyback on starvation's own starve>0 gate -- and starve=min(lack/6,
+        // Population/10) truncates any lack<6 to 0, so a small shortfall like this one never got
+        // reported even though it's real. Same setup as PopulationGrowsExponentiallyBelowBasePop
+        // (Population 500->513, exponential branch, no RNG) but with Supplies=125: foodNeeded=
+        // ThgLmt(513/100*25)=128, lack=3 -> starve=min(3/6, 513/10)=min(0,51)=0, so no population loss
+        // and no Starv news, but Supplies should still land in ShortfallsLastTick.
+        var planet = new Planet {
+            Location = new Coordinate(0, 0),
+            Owner = new Empire { Name = "Test" },
+            Population = 500,
+            Class = WorldClass.ClassM,
+            TechLevel = TechLevel.Warp,
+        };
+        planet.Cargo.Supplies = 125;
+        var game = BuildGame(planet);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(planet.Population).IsEqualTo(513);
+        await Assert.That(planet.ShortfallsLastTick).Contains(CargoType.Supplies);
+    }
+
 }
 
 /// <summary>
