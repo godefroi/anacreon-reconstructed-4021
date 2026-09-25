@@ -38,14 +38,16 @@ internal sealed class FleetOverlay : IOverlay
 
     private const int PosWidth = 8;
     private const int DesWidth = 8;
-    private const int StatusWidth = 16;
+    private const int StatusWidth = 32; // was 16; +16 fits "at destination [orders pending]" with 1 col to spare in an 80-wide box.
     private const int RangeWidth = 5;
 
     // Where the Range field starts within FormatPositionStatus's own row string -- everything before
-    // it (name, a separating space, then each of Pos/Des/Status plus its own separating space).
-    private const int RangeColumnStart = NameColumnWidth + 1 + PosWidth + 1 + DesWidth + 1 + StatusWidth + 1;
+    // it (name, a separating space, then Pos/Des plus its own separating space). Range sits right
+    // after Des, not at the row's own end -- Status widened to fit "[orders pending]" would otherwise
+    // push Range past the visible edge of an 80-column terminal.
+    private const int RangeColumnStart = NameColumnWidth + 1 + PosWidth + 1 + DesWidth + 1;
 
-    private static readonly string PositionHeader = $"{"Fleet",-NameColumnWidth} {"Pos",-PosWidth} {"Des",-DesWidth} {"Status",-StatusWidth} {"Range",RangeWidth}";
+    private static readonly string PositionHeader = $"{"Fleet",-NameColumnWidth} {"Pos",-PosWidth} {"Des",-DesWidth} {"Range",RangeWidth} {"Status",-StatusWidth}";
 
     // Ship and cargo metrics (7 columns each, matching ShipType/CargoType's own real counts) no longer
     // share one row -- 14 side by side needed 70 columns on top of the name, more than an 80-wide box
@@ -111,7 +113,7 @@ internal sealed class FleetOverlay : IOverlay
         var owned = ReferenceEquals(obj.Owner, _viewer);
         var range = owned ? FleetLifecycle.EstimatedRange(obj).ToString() : "(unknown)";
 
-        return $"{name} {pos,-PosWidth} {des,-DesWidth} {status,-StatusWidth} {range,RangeWidth}";
+        return $"{name} {pos,-PosWidth} {des,-DesWidth} {range,RangeWidth} {status,-StatusWidth}";
     }
 
     // Whether obj's own remaining range (INTRFACE.PAS's EstimatedRange -- years of fuel/trillum left)
@@ -149,13 +151,21 @@ internal sealed class FleetOverlay : IOverlay
         _ => "",
     };
 
+    // Same "orders pending" addition as ObjectPickerOverlay's own FleetStatusTag (see its doc comment)
+    // -- appended here rather than folded into DescribeFleetStatus itself, since CloseUpOverlay shares
+    // that method and mirrors real Pascal's own CLSCOMM.PAS screen exactly, which never showed this.
     private string FormatStatus(ISectorObject obj) => obj switch
     {
-        Fleet fleet => CloseUpWindowText.DescribeFleetStatus(fleet, _viewer, _game),
+        Fleet fleet => CloseUpWindowText.DescribeFleetStatus(fleet, _viewer, _game) + OrdersPendingTag(fleet),
         Starbase { Status: FleetStatus.InTransit } starbase => $"In transit ({FleetLifecycle.EstimatedDateOfArrival(starbase, _game)})",
         Starbase starbase => CloseUpWindowText.FleetStatusNames[(int)starbase.Status],
         _ => "",
     };
+
+    private string OrdersPendingTag(Fleet fleet) =>
+        fleet.Status != FleetStatus.InTransit && ReferenceEquals(fleet.Owner, _viewer) && fleet.NextOrder > 0
+            ? " [orders pending]"
+            : "";
 
     private string FormatMetrics(ISectorObject obj)
     {
