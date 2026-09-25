@@ -4,9 +4,6 @@ using Reconstructed4021.Core.Types;
 
 namespace Reconstructed4021.Core.Entities;
 
-/// <summary>The two hand-managed destination groups a Tui picker can add a world to -- <see cref="ResupplySettings.Priority"/> or <see cref="ResupplySettings.Never"/>. The third group ("everything else") is never explicitly assigned, so it has no member here.</summary>
-public enum ResupplyGroup { Priority, Never }
-
 /// <summary>
 /// Per-planet "auto-resupply" dial (GitHub issue #85) -- no Pascal equivalent, same shape as
 /// <see cref="RedirectionSettings"/> (issue #8): a plain settings object <see cref="AutoResupply"/>

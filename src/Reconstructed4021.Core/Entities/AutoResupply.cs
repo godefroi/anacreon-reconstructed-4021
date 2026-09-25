@@ -68,39 +68,63 @@ public static class AutoResupply
     }
 
     /// <summary>
+    /// This source's own three groups, exactly as <see cref="Apply"/> sees them -- Priority
+    /// (<see cref="ResupplySettings.Priority"/>, in list order), Normal ("everything else": every
+    /// other same-owner planet, never hand-managed, ranked by population descending), and Never
+    /// (<see cref="ResupplySettings.Never"/>, excluded from dispatch but still returned here so a
+    /// caller -- <c>WorldInfoOverlay</c>'s own Resupply tab -- can show it and let the player move a
+    /// world back out). One source of truth for "what's in each group," shared with
+    /// <see cref="BuildShortfallList"/> rather than a second copy of the same candidate query.
+    /// </summary>
+    public static (IReadOnlyList<Planet> Priority, IReadOnlyList<Planet> Normal, IReadOnlyList<Planet> Never) Groups(Planet source, Game game)
+    {
+        var neverSet = source.Resupply.Never.ToHashSet();
+        var prioritySet = source.Resupply.Priority.ToHashSet();
+
+        var allOwned = game.Galaxy.Planets
+            .Where(p => !ReferenceEquals(p, source) && ReferenceEquals(p.Owner, source.Owner))
+            .ToList();
+
+        var priority = source.Resupply.Priority
+            .Select(loc => allOwned.FirstOrDefault(p => p.Location == loc))
+            .Where(p => p is not null)
+            .Select(p => p!)
+            .ToList();
+
+        var never = source.Resupply.Never
+            .Select(loc => allOwned.FirstOrDefault(p => p.Location == loc))
+            .Where(p => p is not null)
+            .Select(p => p!)
+            .ToList();
+
+        var normal = allOwned
+            .Where(p => !prioritySet.Contains(p.Location) && !neverSet.Contains(p.Location))
+            .OrderByDescending(p => p.Population)
+            .ToList();
+
+        return (priority, normal, never);
+    }
+
+    /// <summary>
     /// One source's own ranked shortfall list for this tick: starvation (any eligible destination
     /// whose <see cref="Planet.ShortfallsLastTick"/> contains <see cref="CargoType.Supplies"/>, ranked
-    /// by population) first, then <see cref="ResupplySettings.Priority"/> destinations in list order,
-    /// then every other eligible same-owner destination ("everything else," never hand-managed),
-    /// ranked by population. <see cref="ResupplySettings.Never"/> destinations are excluded from all
-    /// three -- an absolute exclusion, not merely deprioritized, so they're filtered out of
-    /// <c>candidates</c> before any bucket is built.
+    /// by population) first, then <see cref="Groups"/>'s own Priority destinations in list order, then
+    /// its Normal destinations, ranked by population. Its Never destinations are excluded from all
+    /// three -- an absolute exclusion, not merely deprioritized.
     /// </summary>
     private static List<Shortfall> BuildShortfallList(Planet source, IReadOnlyList<CargoType> eligibleCargo, Game game)
     {
-        var neverSet = source.Resupply.Never.ToHashSet();
-        var candidates = game.Galaxy.Planets
-            .Where(p => !ReferenceEquals(p, source) && ReferenceEquals(p.Owner, source.Owner) && !neverSet.Contains(p.Location))
-            .ToList();
-
-        var prioritySet = source.Resupply.Priority.ToHashSet();
+        var (priorityPlanets, normalPlanets, _) = Groups(source, game);
 
         var starving = eligibleCargo.Contains(CargoType.Supplies)
-            ? candidates
+            ? priorityPlanets.Concat(normalPlanets)
                 .Where(p => p.ShortfallsLastTick.Contains(CargoType.Supplies))
                 .OrderByDescending(p => p.Population)
                 .Select(p => new Shortfall(p, CargoType.Supplies))
             : [];
 
-        var priority = source.Resupply.Priority
-            .Select(loc => candidates.FirstOrDefault(p => p.Location == loc))
-            .Where(p => p is not null)
-            .SelectMany(p => NonSupplyShortfalls(p!, eligibleCargo));
-
-        var normal = candidates
-            .Where(p => !prioritySet.Contains(p.Location))
-            .OrderByDescending(p => p.Population)
-            .SelectMany(p => NonSupplyShortfalls(p, eligibleCargo));
+        var priority = priorityPlanets.SelectMany(p => NonSupplyShortfalls(p, eligibleCargo));
+        var normal = normalPlanets.SelectMany(p => NonSupplyShortfalls(p, eligibleCargo));
 
         return [.. starving, .. priority, .. normal];
     }
