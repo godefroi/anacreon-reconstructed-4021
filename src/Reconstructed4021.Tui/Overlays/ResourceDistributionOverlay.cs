@@ -36,6 +36,7 @@ internal sealed class ResourceDistributionOverlay : IOverlay
     private readonly CargoHold _groundCargo;
     private readonly bool _groundIsPlayerOwned;
     private readonly bool _groundIsAFleet;
+    private readonly int _groundInitialDeficit;
     private readonly Action _onCommitted;
 
     private int _pointIndex;
@@ -54,6 +55,7 @@ internal sealed class ResourceDistributionOverlay : IOverlay
         _groundCargo = groundCargo;
         _groundIsPlayerOwned = groundIsPlayerOwned;
         _groundIsAFleet = groundIsAFleet;
+        _groundInitialDeficit = groundIsAFleet ? Math.Min(0, FleetLogistics.FleetCargoSpace(groundShips, groundCargo)) : 0;
         _onCommitted = onCommitted;
     }
 
@@ -211,16 +213,23 @@ internal sealed class ResourceDistributionOverlay : IOverlay
             return;
         }
 
-        if (_groundIsAFleet && FleetLogistics.FleetCargoSpace(_groundShips, _groundCargo) < 0)
+        if (_groundIsAFleet)
         {
-            if (!_groundIsPlayerOwned)
+            var groundSpace = FleetLogistics.FleetCargoSpace(_groundShips, _groundCargo);
+            if (groundSpace < 0)
             {
-                FleetLogistics.BalanceFleet(_groundShips, _groundCargo);
-            }
-            else
-            {
-                _error = "There aren't enough transports left in the fleet.";
-                return;
+                if (!_groundIsPlayerOwned)
+                {
+                    FleetLogistics.BalanceFleet(_groundShips, _groundCargo);
+                }
+                else if (groundSpace < _groundInitialDeficit)
+                {
+                    // This transfer made an already-overloaded fleet worse -- block until it's undone.
+                    _error = "There aren't enough transports left in the fleet.";
+                    return;
+                }
+                // else: the fleet was already over capacity before this dialog opened (issue #65) --
+                // not something this transfer caused or can fix, so don't trap the player behind Esc.
             }
         }
 
