@@ -526,15 +526,13 @@ public class AnnualTickHandlerHostileLifeTests
 /// UpdateWorld (GoldenFileTests; see ProductionCases's doc comment for the harness bugs that migration
 /// caught), not the old isolated FullPipeline transcription and not hand-typed.
 ///
-/// Cargo.Supplies, Cargo.Ambrosia, Cargo.Legions, Cargo.Chemicals, and Cargo.Metals are excluded from
-/// that comparison — each is mutated by a real UpdateWorld step this tick that runs on different
-/// (post-growth) state: UseUpFood/UseUpAmbrosia/UpdateMilitary all act on post-growth Population
-/// (and, for Legions, world Type). Cargo.Chemicals/Metals stay excluded for a real, still-open reason
-/// (GitHub #79): a small residual mismatch remains even though UpdateDefenses is fully
-/// ported and runs here via RunAnnualTick. See NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction
-/// for the one case that actually exercises the Ambrosia gap. None of ProductionCases's cases exercise
-/// a defense type that would touch Cargo.Trillum the same way (UpdateDefenses's raw-material loop
-/// also covers tri), so Cargo.Trillum stays asserted — revisit this exclusion list if a future case does.
+/// Cargo.Supplies, Cargo.Ambrosia, and Cargo.Legions are excluded from that comparison — each is
+/// mutated by a real UpdateWorld step this tick that runs on different (post-growth) state:
+/// UseUpFood/UseUpAmbrosia/UpdateMilitary all act on post-growth Population (and, for Legions, world
+/// Type). See NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction for the one case that actually
+/// exercises the Ambrosia gap. Cargo.Chemicals/Metals/Trillum are asserted: UpdateDefenses spends
+/// them later in the same tick, so the owner gets every defense researched to match the Pascal
+/// harness's full Technology set.
 /// </summary>
 public class AnnualTickHandlerProductionTests
 {
@@ -588,12 +586,16 @@ public class AnnualTickHandlerProductionTests
         var owner = new Empire { Name = "Test" };
         if (c.AllShipsUnlocked)
             owner.Technology.Ships.UnionWith(Enum.GetValues<ShipType>());
+        owner.Technology.Defenses.UnionWith(Enum.GetValues<DefenseType>());
         var planet = MakePlanet(c, owner);
         var game = BuildGame(planet);
         game.Empires.Add(owner);
         var handler = new AnnualTickHandler(new FixedRandom(0));
 
         handler.RunAnnualTick(game);
+
+        await Assert.That(planet.Cargo.Chemicals).IsEqualTo(int.Parse(expected["cargoche"]));
+        await Assert.That(planet.Cargo.Metals).IsEqualTo(int.Parse(expected["cargomet"]));
 
         await Assert.That(planet.Industry.Bioindustry).IsEqualTo(int.Parse(expected["bio"]));
         await Assert.That(planet.Industry.Chemical).IsEqualTo(int.Parse(expected["che"]));
@@ -637,6 +639,77 @@ public class AnnualTickHandlerProductionTests
         handler.RunAnnualTick(game);
 
         await Assert.That(planet.Cargo.Ambrosia).IsEqualTo(0);
+    }
+}
+
+/// <summary>
+/// Runs a real played world through <see cref="PascalGroundTruth.MaturationCase.Years"/> annual
+/// ticks and compares the end state against reference/verify/golden/maturation.golden. See
+/// MaturationCases' doc comment for why these cases exist alongside ProductionCases' single tick.
+/// </summary>
+public class AnnualTickHandlerMaturationTests
+{
+    [Test]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [MethodDataSource(typeof(PascalGroundTruth.MaturationCases), nameof(PascalGroundTruth.MaturationCases.AsDataSource))]
+    public async Task MatchesGoldenFile(PascalGroundTruth.MaturationCase c)
+    {
+        var expected = PascalGroundTruth.GoldenFile.Load("maturation.golden")[c.Name];
+
+        // Matches the harness's full Technology set, and a capital that is the world itself so
+        // UpdateTechLevel has nothing to chase.
+        var owner = new Empire { Name = "Test", TechnologyLevel = c.Tech };
+        owner.Technology.Ships.UnionWith(Enum.GetValues<ShipType>());
+        owner.Technology.Defenses.UnionWith(Enum.GetValues<DefenseType>());
+        var planet = new Planet {
+            Location = new Coordinate(0, 0),
+            Owner = owner,
+            Class = c.Class,
+            Type = c.Type,
+            TechLevel = c.Tech,
+            Efficiency = c.Efficiency,
+            Population = c.Population,
+            TrillumReserve = c.TrillumReserve,
+        };
+        var industries = Enum.GetValues<IndustryType>();
+        for (var i = 0; i < industries.Length; i++)
+            planet.Industry[industries[i]] = c.Industry[i];
+        CargoType[] cargoOrder = [CargoType.Legion, CargoType.NinjaLegion, CargoType.Ambrosia, CargoType.Chemicals, CargoType.Metals, CargoType.Supplies, CargoType.Trillum];
+        for (var i = 0; i < cargoOrder.Length; i++)
+            planet.Cargo[cargoOrder[i]] = c.Cargo[i];
+        planet.SelfSufficiency.Chemical = c.Issp[0];
+        planet.SelfSufficiency.Metal = c.Issp[1];
+        planet.SelfSufficiency.Supply = c.Issp[2];
+        planet.SelfSufficiency.Trillum = c.Issp[3];
+        DefenseType[] defenseOrder = [DefenseType.Lam, DefenseType.DefenseSatellite, DefenseType.Gdm, DefenseType.IonCannon];
+        for (var i = 0; i < defenseOrder.Length; i++)
+            planet.Defenses[defenseOrder[i]] = c.Defenses[i];
+
+        var game = new Game(new Core.Galaxy.Galaxy(size: 20));
+        game.Galaxy.Planets.Add(planet);
+        game.Empires.Add(owner);
+        owner.Capital = planet;
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        for (var year = 0; year < PascalGroundTruth.MaturationCase.Years; year++)
+            handler.RunAnnualTick(game);
+
+        var actual = new Dictionary<string, int> {
+            ["pop"] = planet.Population, ["eff"] = planet.Efficiency, ["tech"] = (int)planet.TechLevel, ["revindex"] = planet.RevolutionIndex,
+            ["bio"] = planet.Industry.Bioindustry, ["che"] = planet.Industry.Chemical, ["min"] = planet.Industry.Mining,
+            ["syg"] = planet.Industry.ShipyardGeneral, ["syj"] = planet.Industry.ShipyardJump, ["sys"] = planet.Industry.ShipyardStarship,
+            ["syt"] = planet.Industry.ShipyardTransport, ["sup"] = planet.Industry.Supply, ["tri"] = planet.Industry.TrillumMining,
+            ["fgt"] = planet.Ships.Fighters, ["hkr"] = planet.Ships.HunterKillers, ["jmp"] = planet.Ships.Jumpships,
+            ["jtn"] = planet.Ships.Jumptransports, ["pen"] = planet.Ships.Penetrators, ["ssp"] = planet.Ships.Starships,
+            ["trn"] = planet.Ships.Transports,
+            ["cargomen"] = planet.Cargo.Legions, ["cargoche"] = planet.Cargo.Chemicals, ["cargomet"] = planet.Cargo.Metals,
+            ["cargosup"] = planet.Cargo.Supplies, ["cargotri"] = planet.Cargo.Trillum, ["trillumreserve"] = planet.TrillumReserve,
+            ["lam"] = planet.Defenses.Lams, ["def"] = planet.Defenses.DefenseSatellites, ["gdm"] = planet.Defenses.Gdms,
+            ["ion"] = planet.Defenses.IonCannons,
+        };
+        var expectedValues = expected.Where(kv => kv.Key != "case").ToDictionary(kv => kv.Key, kv => int.Parse(kv.Value));
+
+        await Assert.That(actual).IsEquivalentTo(expectedValues);
     }
 }
 
@@ -886,6 +959,9 @@ public class AnnualTickHandlerDefensesTests
         await Assert.That(planet.Defenses.DefenseSatellites).IsEqualTo(int.Parse(expected["def"]));
         await Assert.That(planet.Defenses.Gdms).IsEqualTo(int.Parse(expected["gdm"]));
         await Assert.That(planet.Defenses.IonCannons).IsEqualTo(int.Parse(expected["ion"]));
+        await Assert.That(planet.Cargo.Chemicals).IsEqualTo(int.Parse(expected["cargoche"]));
+        await Assert.That(planet.Cargo.Metals).IsEqualTo(int.Parse(expected["cargomet"]));
+        await Assert.That(planet.Cargo.Trillum).IsEqualTo(int.Parse(expected["cargotri"]));
 
         if (c.Name == "RawMaterialShortageClampsBuildInLoopOrder") {
             await Assert.That(owner.News.Select(n => n.Headline)).Contains(NewsType.DefensesLackResources);

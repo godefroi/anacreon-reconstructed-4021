@@ -91,27 +91,22 @@ public sealed partial class AnnualTickHandler
             var maxBuild = Math.Max(ClampResource(buildRate * _defenseBuildRate[defenseType]), 1);
             var build = Math.Min(optimumDef - world.Defenses[defenseType], maxBuild);
             var rawMaterialCost = _rawMaterialForDefenses[defenseType];
-            var rawNeeded = new Dictionary<CargoType, int>();
 
             foreach (var cargoType in _rawMaterialCargoTypes) {
-                if (!rawMaterialCost.TryGetValue(cargoType, out var costPer100)) {
-                    rawNeeded[cargoType] = 0;
+                if (!rawMaterialCost.TryGetValue(cargoType, out var costPer100))
                     continue;
-                }
-
-                var needed = ClampResource(build * (costPer100 / 100.0));
-                if (needed > world.Cargo[cargoType]) {
+                if (ClampResource(build * (costPer100 / 100.0)) > world.Cargo[cargoType]) {
                     build = ClampResource(world.Cargo[cargoType] / (double)costPer100 * 100);
-                    needed = ClampResource(build * (costPer100 / 100.0));
                     ReportResourceShortfall(world, cargoType, NewsType.DefensesLackResources, reportedShortfalls);
                 }
-                rawNeeded[cargoType] = needed;
             }
 
-            foreach (var cargoType in _rawMaterialCargoTypes) {
-                var used = Math.Min(world.Cargo[cargoType], rawNeeded[cargoType]);
-                world.Cargo[cargoType] -= used;
-            }
+            // Charged from the final build, after every material has had its chance to throttle it
+            // (UPDATE.PAS:1340-1345). Unlike Production's ApplyRawMaterialConstraint, which keeps each
+            // material's pre-throttle need, so a trillum-limited ion cannon build here would otherwise
+            // still pay chemicals/metals for the full unthrottled build.
+            foreach (var (cargoType, costPer100) in rawMaterialCost)
+                world.Cargo[cargoType] -= Math.Min(world.Cargo[cargoType], ClampResource(build * (costPer100 / 100.0)));
 
             world.Defenses[defenseType] = ClampResource(world.Defenses[defenseType] + build);
         }

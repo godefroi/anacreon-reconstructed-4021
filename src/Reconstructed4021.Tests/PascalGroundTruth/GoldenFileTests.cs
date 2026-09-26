@@ -84,6 +84,12 @@ public class GoldenFileTests
                  $"{c.CargoMen},{c.CargoNnj},{c.CargoAmb},{c.CargoChe},{c.CargoMet},{c.CargoSup},{c.CargoTri},{c.TrillumReserve}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "production", .. args.Skip(1)]));
 
+        GoldenFile.Regenerate("maturation", MaturationCases.All,
+            c => string.Join(",", new[] { (int)c.Class, (int)c.Type, c.Population, c.Efficiency, (int)c.Tech, 0 }
+                .Concat(c.Industry).Concat(c.Cargo).Append(c.TrillumReserve).Concat(c.Issp).Concat(c.Defenses)
+                .Append(MaturationCase.Years)),
+            args => PatchHarness.CompileAndRun("runworld", ["case", "maturation", .. args.Skip(1)]));
+
         GoldenFile.Regenerate("empire", EmpireCases.All,
             c => $"{(int)c.TechLevel},{c.TechnologyBitmask},{c.RngFixedValue}," +
                  $"{(c.Planet1 is not null ? 1 : 0)},{(int)(c.Planet1?.Type ?? 0)},{(int)(c.Planet1?.Class ?? 0)},{(int)(c.Planet1?.Tech ?? 0)},{c.Planet1?.Efficiency ?? 0}," +
