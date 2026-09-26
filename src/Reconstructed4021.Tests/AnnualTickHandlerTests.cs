@@ -187,7 +187,7 @@ public class AnnualTickHandlerRevolutionTests
     }
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.RevolutionCases), nameof(PascalGroundTruth.RevolutionCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.RevolutionCase c)
     {
@@ -576,7 +576,7 @@ public class AnnualTickHandlerProductionTests
     }
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.ProductionCases), nameof(PascalGroundTruth.ProductionCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.ProductionCase c)
     {
@@ -650,7 +650,7 @@ public class AnnualTickHandlerProductionTests
 public class AnnualTickHandlerMaturationTests
 {
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.MaturationCases), nameof(PascalGroundTruth.MaturationCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.MaturationCase c)
     {
@@ -759,7 +759,7 @@ public class AnnualTickHandlerAmbrosiaTests
     };
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.AmbrosiaCases), nameof(PascalGroundTruth.AmbrosiaCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.AmbrosiaCase c)
     {
@@ -860,7 +860,7 @@ public class AnnualTickHandlerMilitaryTests
     }
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.MilitaryCases), nameof(PascalGroundTruth.MilitaryCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.MilitaryCase c)
     {
@@ -921,7 +921,7 @@ public class AnnualTickHandlerDefensesTests
     }
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.DefensesCases), nameof(PascalGroundTruth.DefensesCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.DefensesCase c)
     {
@@ -1125,7 +1125,7 @@ public class AnnualTickHandlerTechLevelTests
     };
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.TechLevelCases), nameof(PascalGroundTruth.TechLevelCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.TechLevelCase c)
     {
@@ -1244,7 +1244,7 @@ public class AnnualTickHandlerEmpireTests
     }
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.EmpireCases), nameof(PascalGroundTruth.EmpireCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.EmpireCase c)
     {
@@ -1391,7 +1391,7 @@ public class AnnualTickHandlerStarbaseTests
     };
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.StarbaseCases), nameof(PascalGroundTruth.StarbaseCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.StarbaseCase c)
     {
@@ -1564,7 +1564,7 @@ public class AnnualTickHandlerConstructionTests
     };
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.ConstructionCases), nameof(PascalGroundTruth.ConstructionCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.ConstructionCase c)
     {

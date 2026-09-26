@@ -33,10 +33,26 @@ dotnet test src/Reconstructed4021.Tests
 ```
 
 Most tests run against the C# port alone. A subset compares against real compiled Pascal output
-and needs [FreePascal](https://www.freepascal.org/) (`fpc`) and `git` on `PATH` — those tests skip
-themselves automatically (with a clear reason) when either tool isn't available, so `dotnet test`
-still runs cleanly without them. See [`reference/verify/README.md`](reference/verify/README.md)
-for how that comparison works and what it takes to add to it.
+through committed golden files under `reference/verify/golden/`. With
+[FreePascal](https://www.freepascal.org/) (`fpc`) and `git` on `PATH`, a test run regenerates those
+files from the real Pascal first. Without them, the regeneration test skips (naming the missing
+tool), the comparisons run against the committed files, and the few tests that call Pascal directly
+skip too. See [`reference/verify/README.md`](reference/verify/README.md) for how that comparison
+works and what it takes to add to it.
+
+### Investigation scripts
+
+Two scripts help check the simulation against real play (both read the JSON saves the Tui writes
+under `saves/` and `saves/auto/`):
+
+- `scripts/saves.ps1 -Empire <name>` prints one CSV row per planet the empire owns per save year:
+  population, industry, cargo, defenses, shortfalls, and so on. Narrow it with `-Location x,y`,
+  `-Year`, and `-Columns` (wildcards, such as `industry.*`). See `Get-Help ./scripts/saves.ps1 -Examples`.
+- `dotnet run scripts/WorldDiff.cs -- <save.json> <x,y> [years] [--all]` runs one planet through
+  both the real Pascal `UpdateWorld` and the port for several years, and reports the first year and
+  fields that differ. It needs `fpc` and `git`, and builds the Pascal harness when it's out of date.
+  It models the world alone and fully researched, so it checks the per-world economy tick, not the
+  whole game.
 
 ## Repository layout
 

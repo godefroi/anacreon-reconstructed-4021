@@ -452,7 +452,7 @@ public class GalaxySetupTests
     }
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.TrillumReservesCases), nameof(PascalGroundTruth.TrillumReservesCases.AsDataSource))]
     public async Task RandomTrillumReserves_MatchesGoldenFile(PascalGroundTruth.TrillumReservesCase c)
     {
@@ -469,7 +469,7 @@ public class GalaxySetupTests
     }
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.RandomPlanetCases), nameof(PascalGroundTruth.RandomPlanetCases.AsDataSource))]
     public async Task CreateRndPlanet_MatchesGoldenFile(PascalGroundTruth.RandomPlanetCase c)
     {
@@ -502,7 +502,7 @@ public class GalaxySetupTests
 
     /// <summary>Compares the whole painted grid as one string rather than per-cell asserts, so a mismatch shows a clear diff of both grids.</summary>
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.NebulaCases), nameof(PascalGroundTruth.NebulaCases.AsDataSource))]
     public async Task Nebula_MatchesGoldenFile(PascalGroundTruth.NebulaCase c)
     {

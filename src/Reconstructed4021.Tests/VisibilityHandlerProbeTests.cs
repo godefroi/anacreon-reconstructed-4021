@@ -271,7 +271,7 @@ public class VisibilityHandlerProbeTests
     }
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.ProbeScoutCases), nameof(PascalGroundTruth.ProbeScoutCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.ProbeScoutCase c)
     {

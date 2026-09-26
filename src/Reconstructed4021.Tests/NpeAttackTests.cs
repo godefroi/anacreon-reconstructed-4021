@@ -27,7 +27,7 @@ public class NpeAttackTests
     }
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.NpeAttackCases), nameof(PascalGroundTruth.NpeAttackCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.NpeAttackCase c)
     {

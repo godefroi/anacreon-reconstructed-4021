@@ -62,7 +62,7 @@ namespace Reconstructed4021.Tests;
 public class ScenarioLoaderGoldenTests
 {
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.ScenarioCases), nameof(PascalGroundTruth.ScenarioCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.ScenarioCase c)
     {

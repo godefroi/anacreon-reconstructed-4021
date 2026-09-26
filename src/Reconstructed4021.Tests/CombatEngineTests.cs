@@ -18,7 +18,7 @@ namespace Reconstructed4021.Tests;
 public class CombatEngineTests
 {
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.CombatCases), nameof(PascalGroundTruth.CombatCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.CombatCase c)
     {
