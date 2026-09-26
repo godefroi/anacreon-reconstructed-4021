@@ -9,12 +9,13 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// Runs in the default `dotnet test` suite, not gated behind [Explicit]: each committed .golden file
 /// is a cache, refreshed here once per test run when fpc and git are both on PATH
 /// (RequiresFpcAttribute/RequiresGitAttribute dynamically skip this test otherwise, with a clear
-/// reason — see PascalHarness/PatchHarness). Every AnnualTickHandler*Tests.MatchesGoldenFile test
-/// depends on this one via [DependsOn] alone — TUnit skips a test whose dependency was itself skipped
-/// ("Skipped due to failed dependencies", confirmed empirically), so a run either verifies fully
-/// against live Pascal or visibly skips that coverage, never silently trusting a possibly-stale
-/// committed snapshot. No need to repeat RequiresFpc/RequiresGit on every dependent — that would just
-/// be two independent claims about the same missing tool that could drift apart.
+/// reason — see PascalHarness/PatchHarness). Every golden-comparing test depends on this one with
+/// [DependsOn(..., ProceedOnFailure = true)], which orders it after this one but still runs it when
+/// this one is skipped: without fpc the comparisons run against the committed golden files, and this
+/// test's own skip (naming the missing tool) is what shows the files weren't refreshed. Without
+/// ProceedOnFailure TUnit skips every dependent instead ("Skipped due to failed dependencies",
+/// confirmed empirically). A DependsOnAttribute subclass bundling the two would be tidier, but
+/// TUnit's analyzer misreads it as a dependency on the test's own class (TUnit0033).
 ///
 /// Always regenerates unconditionally, every run — no change-detection (hashing patches, checking git
 /// log, etc.) to skip regeneration when nothing changed. Not worth the complexity yet.

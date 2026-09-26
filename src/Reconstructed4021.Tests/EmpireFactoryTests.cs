@@ -134,7 +134,7 @@ public class EmpireFactoryTests
     }
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.EmpireFactoryCases), nameof(PascalGroundTruth.EmpireFactoryCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.EmpireFactoryCase c)
     {

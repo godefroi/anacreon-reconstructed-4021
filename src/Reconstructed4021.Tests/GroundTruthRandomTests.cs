@@ -4,7 +4,7 @@ namespace Reconstructed4021.Tests;
 public class GroundTruthRandomTests
 {
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.GroundTruthRngCases), nameof(PascalGroundTruth.GroundTruthRngCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.GroundTruthRngCase c)
     {

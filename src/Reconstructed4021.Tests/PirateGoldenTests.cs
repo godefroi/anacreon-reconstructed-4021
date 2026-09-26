@@ -68,7 +68,7 @@ public class PirateGoldenTests
             .GetField("_huntingGround", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(handler)!;
 
     [Test]
-    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles))]
+    [DependsOn<PascalGroundTruth.GoldenFileTests>(nameof(PascalGroundTruth.GoldenFileTests.RegenerateAllGoldenFiles), ProceedOnFailure = true)]
     [MethodDataSource(typeof(PascalGroundTruth.PirateCases), nameof(PascalGroundTruth.PirateCases.AsDataSource))]
     public async Task MatchesGoldenFile(PascalGroundTruth.PirateCase c)
     {
