@@ -328,7 +328,7 @@ public sealed class GalaxySetup(Random random)
         for (var x = upperLeft.X; x <= lowerRight.X; x++)
         for (var y = upperLeft.Y; y <= lowerRight.Y; y++) {
             var location = new Coordinate(x, y);
-            if (IsInGalaxy(galaxy, location) && !IsPhysicallyOccupied(galaxy, location))
+            if (galaxy.Contains(location) && !IsPhysicallyOccupied(galaxy, location))
                 galaxy.SetMine(location, owner);
         }
     }
@@ -339,18 +339,10 @@ public sealed class GalaxySetup(Random random)
         for (var x = upperLeft.X; x <= lowerRight.X; x++)
         for (var y = upperLeft.Y; y <= lowerRight.Y; y++) {
             var location = new Coordinate(x, y);
-            if (IsInGalaxy(galaxy, location))
+            if (galaxy.Contains(location))
                 galaxy.SetNebula(location, type);
         }
     }
-
-    /// <summary>
-    /// MISC.PAS:111-117 (InGalaxy), adapted to this port's already-established 0-based [0,Size) bounds
-    /// convention (e.g. <see cref="Turns.AnnualTickHandler._eightNeighborOffsets"/>'s own bounds
-    /// check) rather than Pascal's 1-based [1,SizeOfGalaxy].
-    /// </summary>
-    private static bool IsInGalaxy(Galaxy.Galaxy galaxy, Coordinate c) =>
-        c.X >= 0 && c.X < galaxy.Size && c.Y >= 0 && c.Y < galaxy.Size;
 
     /// <summary>
     /// GetObject(XY,ObjID).ObjTyp&lt;&gt;Void — no permanent occupancy index exists (Galaxy's own doc

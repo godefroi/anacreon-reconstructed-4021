@@ -194,7 +194,7 @@ public static class FleetOrderCompiler
             && int.TryParse(text[..comma], out var relativeX)
             && int.TryParse(text[(comma + 1)..], out var relativeY)) {
             var coordinate = RelativeCoordinate.ToAbsolute(relativeX, relativeY, Origin(game, owner));
-            if (coordinate.X >= 1 && coordinate.X <= game.Galaxy.Size && coordinate.Y >= 1 && coordinate.Y <= game.Galaxy.Size) {
+            if (game.Galaxy.Contains(coordinate)) {
                 destinationObject = game.Galaxy.GetObjectAt(coordinate);
                 destinationPosition = destinationObject is null ? coordinate : null;
                 return true;

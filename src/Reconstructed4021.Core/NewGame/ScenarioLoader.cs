@@ -507,8 +507,6 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random, INpeH
         return (low, high);
     }
 
-    private bool IsInGalaxy(int size, int x, int y) => x >= 0 && x < size && y >= 0 && y < size;
-
     /// <summary>
     /// NEWGAME.PAS:292-421 (GetNextXY) — four token shapes: "Z:&lt;zone&gt;" (random point in a
     /// predefined zone), "R:&lt;x1..x2&gt;,&lt;y1..y2&gt;" (random point in an explicit range),
@@ -539,7 +537,7 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random, INpeH
             var (x1, x2) = GetRandomRange(token[2..commaPos]);
             var (y1, y2) = GetRandomRange(token[(commaPos + 1)..]);
             x1--; x2--; y1--; y2--;
-            if (!IsInGalaxy(galaxy.Size, x1, y1) || !IsInGalaxy(galaxy.Size, x2, y2))
+            if (!galaxy.Contains(new Coordinate(x1, y1)) || !galaxy.Contains(new Coordinate(x2, y2)))
                 throw new FormatException($"ERROR: Illegal random coordinates \"{token}\"");
             return galaxySetup.GetRandomXY(galaxy, new Coordinate(x1, y1), new Coordinate(x2, y2), checkWorlds);
         }
@@ -552,7 +550,7 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random, INpeH
                 throw new FormatException($"ERROR: XYPoint not found \"{name}\"");
             var x1 = point.X + dx1; var x2 = point.X + dx2;
             var y1 = point.Y + dy1; var y2 = point.Y + dy2;
-            if (!IsInGalaxy(galaxy.Size, x1, y1) || !IsInGalaxy(galaxy.Size, x2, y2))
+            if (!galaxy.Contains(new Coordinate(x1, y1)) || !galaxy.Contains(new Coordinate(x2, y2)))
                 throw new FormatException("ERROR: Relative coordinates outside of galaxy.");
             return galaxySetup.GetRandomXY(galaxy, new Coordinate(x1, y1), new Coordinate(x2, y2), checkWorlds);
         }
@@ -560,7 +558,7 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random, INpeH
         if (commaPos >= 0) {
             var x = int.Parse(token[..commaPos]) - 1;
             var y = int.Parse(token[(commaPos + 1)..]) - 1;
-            if (!IsInGalaxy(galaxy.Size, x, y))
+            if (!galaxy.Contains(new Coordinate(x, y)))
                 throw new FormatException("ERROR: Absolute coordinates outside of galaxy.");
             return new Coordinate(x, y);
         }
