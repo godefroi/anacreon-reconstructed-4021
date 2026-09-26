@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="What this reconstruction adds beyond the original 1988 DOS Anacreon.">
+  <title>Features Beyond the Original — Anacreon Reconstructed 4021</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="features.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="./">Anacreon <span>4021</span></a>
+      <nav aria-label="Main navigation">
+        <a href="./">Home</a>
+        <a href="./#screenshots">Screenshots</a>
+        <a href="features.html">Features</a>
+        <a href="manual/">Manual</a>
+        <a href="./#play">Play</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="section">
+      <div class="container">
+        <p class="eyebrow">Not a port of everything</p>
+        <h2>Beyond the original</h2>
+        <p class="section-lead">
+          The core of Anacreon Reconstructed 4021 is a faithful rebuild of the 1988 DOS game — same
+          economy, same combat, same AI. This page describes the parts that aren't a port of anything:
+          systems and windows added to this reconstruction with no Pascal source behind them.
+        </p>
+
+        <div class="feature-grid">
+          <article class="feature">
+            <span class="feature-number">01</span>
+            <h3>Production redirection</h3>
+            <p>Send a planet's newly produced ships and cargo to a chosen destination automatically each turn, instead of dispatching every shipment by hand.</p>
+          </article>
+          <article class="feature">
+            <span class="feature-number">02</span>
+            <h3>Resupply missions</h3>
+            <p>A fleet-order template: choose a fleet, a source world, a cargo type and amount, and a destination, and the game installs a one-shot pickup/deliver/return/refuel order sequence.</p>
+          </article>
+          <article class="feature">
+            <span class="feature-number">03</span>
+            <h3>Automatic resupply</h3>
+            <p>Built on the resupply mission above: mark raw-material worlds Priority, Normal, or Never, and worlds that come up short get resupplied from the right sources each turn, no manual orders required.</p>
+          </article>
+          <article class="feature">
+            <span class="feature-number">04</span>
+            <h3>Self-resolving orders</h3>
+            <p>Queued fleet orders resolve on arrival and at the start of each turn, not only while you're actively taking that empire's turn.</p>
+          </article>
+          <article class="feature">
+            <span class="feature-number">05</span>
+            <h3>Autosaves</h3>
+            <p>The game saves itself at intervals as you play, separate from the manual save/load you control directly.</p>
+          </article>
+          <article class="feature">
+            <span class="feature-number">06</span>
+            <h3>A native save format</h3>
+            <p>Games save to a JSON format built for this port. Original DOS <code>.SAV</code> files can still be loaded in.</p>
+          </article>
+          <article class="feature">
+            <span class="feature-number">07</span>
+            <h3>Searchable help</h3>
+            <p>Pressing <code>/</code> in the help screen searches across every help topic instead of paging through them in order.</p>
+          </article>
+          <article class="feature">
+            <span class="feature-number">08</span>
+            <h3>A stable game ID</h3>
+            <p>Every save and autosave from one playthrough carries the same ID, so they can be correlated back to a single game later.</p>
+          </article>
+          <article class="feature">
+            <a class="feature-link" href="#closeup-window">
+              <span class="feature-number">09</span>
+              <h3>The Close Up window</h3>
+            </a>
+            <p>A location picker and a tabbed info/control window, with different tabs depending on what's selected and who owns it. Detailed below.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-dark" id="closeup-window">
+      <div class="container">
+        <p class="eyebrow">Feature detail</p>
+        <h2>The Close Up window</h2>
+        <p class="section-lead">
+          The original's Close Up command opened one fixed display for whatever was selected. This
+          port replaces that with a picker for locations holding more than one object, feeding a
+          tabbed window whose contents depend on what's selected and who owns it.
+        </p>
+
+        <div class="closeup-variant">
+          <h3>Picking what to look at</h3>
+          <p>
+            Moving the cursor onto a location and pressing Enter (or using <em>Worlds &gt; Close
+            Up</em>) opens that location's Close Up window directly if there's exactly one object
+            there. If there are several — a fleet parked over a world, several fleets sharing a
+            cell — a picker lists them first.
+          </p>
+          <figure class="shot-figure">
+            <img class="shot" tabindex="0" role="button" src="screenshots/object_picker_120x50.png" alt="A picker overlay listing several objects sharing one location">
+            <figcaption>Several objects at one location, listed before either opens.</figcaption>
+          </figure>
+        </div>
+
+        <div class="closeup-variant">
+          <h3>Anything you don't own, or a fleet you do</h3>
+          <p>
+            <strong>Close Up</strong> tab — always present. For a world: class, tech level,
+            population, efficiency, ambrosia addiction, revolution index, cargo, ships, troops, and
+            defenses, plus scenario flavor text once it's been scouted. For a fleet: position,
+            status, destination, range, ships, and cargo. Fields are redacted to <code>????</code>
+            unless you own the object or have scouted it.
+          </p>
+          <p>
+            <strong>Orders</strong> tab — added only for a fleet you own. An editor for the fleet
+            order language (<code>DESTination</code>, <code>TRANsfer</code>, <code>REPEat</code>,
+            <code>WAIT</code>, <code>REFUel</code>, <code>JOIN</code>), with a marker for which
+            order runs next and inline compile-error feedback before anything commits. The original
+            had no way to mark a specific order as next-up.
+          </p>
+          <figure class="shot-figure">
+            <img class="shot" tabindex="0" role="button" src="screenshots/close_up_orders_120x50.png" alt="The Close Up window's Orders tab, editing a fleet's order queue">
+            <figcaption>A fleet's order queue, with the next order marked.</figcaption>
+          </figure>
+        </div>
+
+        <div class="closeup-variant">
+          <h3>A world you own</h3>
+          <p>
+            Opens a larger window with up to six tabs, each a control surface rather than a
+            read-only report:
+          </p>
+          <dl class="tab-list">
+            <dt>Close Up</dt>
+            <dd>The same summary as above, plus its current redirection destination if one is set.</dd>
+            <dt>Production</dt>
+            <dd>A table of ISSP target, class suitability, this tick's output share, and optimal/current/projected-next-tick levels for every industry, ship type, and cargo type, with shortfalls highlighted.</dd>
+            <dt>ISSP</dt>
+            <dd>Planets only. The self-sufficiency dial for chemical, mining, supply, and trillum industries, from 1% (import almost everything) to 500% (export most of production).</dd>
+            <dt>Designate</dt>
+            <dd>Re-designates the world's type from a full list with per-type suitability shown, gated by tech and class, with the same risk warnings the original raised before a risky change.</dd>
+            <dt>Redirect</dt>
+            <dd>Planets only. Sets where newly produced ships, legions, and ninjas are sent automatically, with per-ship-type control and a join-on-arrival option.</dd>
+            <dt>Resupply</dt>
+            <dd>Planets only, and only for worlds that produce raw materials. Sorts which worlds this one resupplies into Priority / Normal / Never panels.</dd>
+          </dl>
+          <div class="closeup-shots">
+            <figure class="shot-figure">
+              <img class="shot" tabindex="0" role="button" src="screenshots/production_tab_120x50.png" alt="The Production tab showing industry, ship, and cargo projections">
+              <figcaption>Production: this tick's numbers and next tick's projection, side by side.</figcaption>
+            </figure>
+            <figure class="shot-figure">
+              <img class="shot" tabindex="0" role="button" src="screenshots/redirect_tab_120x50.png" alt="The Redirect tab showing auto-dispatch settings for new production">
+              <figcaption>Redirect: where new production is sent, per ship type.</figcaption>
+            </figure>
+            <figure class="shot-figure">
+              <img class="shot" tabindex="0" role="button" src="screenshots/resupply_tab_120x50.png" alt="The Resupply tab showing Priority, Normal, and Never panels of worlds">
+              <figcaption>Resupply: which worlds are covered, and in what order.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <span>Anacreon Reconstructed 4021</span>
+      <a href="https://github.com/godefroi/anacreon-reconstructed-4021">Open source on GitHub</a>
+    </div>
+  </footer>
+
+  <dialog id="lightbox" aria-label="Screenshot preview">
+    <img id="lightbox-img" alt="">
+  </dialog>
+  <script>
+    (function () {
+      var dialog = document.getElementById('lightbox');
+      var img = document.getElementById('lightbox-img');
+
+      function open(el) {
+        img.src = el.src;
+        img.alt = el.alt;
+        dialog.showModal();
+      }
+
+      document.querySelectorAll('.shot').forEach(function (el) {
+        el.addEventListener('click', function () { open(el); });
+        el.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open(el);
+          }
+        });
+      });
+
+      dialog.addEventListener('click', function (e) {
+        if (e.target === dialog) {
+          dialog.close();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
