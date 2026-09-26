@@ -367,6 +367,9 @@ procedure RunDefensesCase(const arg: String);
    Universe^.Planet[1].Cargo[met]:=parts[7];
    Universe^.Planet[1].Cargo[tri]:=parts[8];
    Universe^.Planet[1].Emp:=Empire1;
+   Universe^.Planet[1].ImpExp:=DefaultISSP;  { same reason as RunProductionCase: a zero-filled ImpExp reads as
+                                               ISSP index 0 (1%), which shifts UpdateIndustry's metal spend
+                                               whenever metals run short before UpdateDefenses sees them. }
 
    SetOfActivePlanets:=[1];
    SetOfPlanetsOf[Empire1]:=[1];
@@ -389,7 +392,10 @@ procedure RunDefensesCase(const arg: String);
    WriteLn('lam=',Universe^.Planet[1].Defns[LAM],
            ';def=',Universe^.Planet[1].Defns[def],
            ';gdm=',Universe^.Planet[1].Defns[GDM],
-           ';ion=',Universe^.Planet[1].Defns[ion]);
+           ';ion=',Universe^.Planet[1].Defns[ion],
+           ';cargoche=',Universe^.Planet[1].Cargo[che],
+           ';cargomet=',Universe^.Planet[1].Cargo[met],
+           ';cargotri=',Universe^.Planet[1].Cargo[tri]);
 
    Dispose(Universe);
    end;
@@ -1040,6 +1046,87 @@ procedure RunProductionCase(const arg: String);
            ';efficiency=',Universe^.Planet[1].Eff,
            ';techlevel=',Ord(Universe^.Planet[1].Tech),
            ';revindex=',Universe^.Planet[1].RevIndex);
+
+   Dispose(Universe);
+   end;
+
+procedure RunMaturationCase(const arg: String);
+   { RunProductionCase's setup, plus the four ISSP dials (Che/Min/Sup/Tri, packed into ImpExp the
+     way GetISSP unpacks them, PRIMINTR.PAS:519-522) and starting Defns, then UpdateWorld called
+     parts[31] times in a row -- a world maturing over several ticks, not a single tick. Reports
+     only the final state: any per-year divergence compounds into it. }
+   var
+      parts: array[0..31] of LongInt;
+      ID, CapID: IDNumber;
+      Year: Integer;
+   begin
+   ParseFields(arg,parts);
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   NoOfPlanets:=1;
+
+   Universe^.Planet[1].Cls:=WorldClass(parts[0]);
+   Universe^.Planet[1].Typ:=WorldTypes(parts[1]);
+   Universe^.Planet[1].Pop:=parts[2];
+   Universe^.Planet[1].Eff:=parts[3];
+   Universe^.Planet[1].Tech:=TechLevel(parts[4]);
+   if parts[5]<>0 then
+      Universe^.Planet[1].Special:=[AmbAddict]
+   else
+      Universe^.Planet[1].Special:=[];
+
+   Universe^.Planet[1].Indus[BioInd]:=parts[6];
+   Universe^.Planet[1].Indus[CheInd]:=parts[7];
+   Universe^.Planet[1].Indus[MinInd]:=parts[8];
+   Universe^.Planet[1].Indus[SYGInd]:=parts[9];
+   Universe^.Planet[1].Indus[SYJInd]:=parts[10];
+   Universe^.Planet[1].Indus[SYSInd]:=parts[11];
+   Universe^.Planet[1].Indus[SYTInd]:=parts[12];
+   Universe^.Planet[1].Indus[SupInd]:=parts[13];
+   Universe^.Planet[1].Indus[TriInd]:=parts[14];
+
+   Universe^.Planet[1].Cargo[men]:=parts[15];
+   Universe^.Planet[1].Cargo[nnj]:=parts[16];
+   Universe^.Planet[1].Cargo[amb]:=parts[17];
+   Universe^.Planet[1].Cargo[che]:=parts[18];
+   Universe^.Planet[1].Cargo[met]:=parts[19];
+   Universe^.Planet[1].Cargo[sup]:=parts[20];
+   Universe^.Planet[1].Cargo[tri]:=parts[21];
+
+   Universe^.Planet[1].TriReserve:=parts[22];
+   Universe^.Planet[1].ImpExp:=parts[23] + 16*parts[24] + 256*parts[25] + 4096*parts[26];
+
+   Universe^.Planet[1].Defns[LAM]:=parts[27];
+   Universe^.Planet[1].Defns[def]:=parts[28];
+   Universe^.Planet[1].Defns[GDM]:=parts[29];
+   Universe^.Planet[1].Defns[ion]:=parts[30];
+
+   Universe^.Planet[1].Emp:=Empire1;
+   SetOfActivePlanets:=[1];
+   SetOfPlanetsOf[Empire1]:=[1];
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire1].IsAPlayer:=False;
+   CapID.ObjTyp:=Pln;  CapID.Index:=1;
+   Universe^.EmpireData[Empire1].Capital:=CapID;
+   Universe^.EmpireData[Empire1].Technology:=[Low(TechnologyTypes)..High(TechnologyTypes)];
+
+   ForcedRandomValue:=0;
+   ID.ObjTyp:=Pln;  ID.Index:=1;
+
+   for Year:=1 to parts[31] do
+      UpdateWorld(ID);
+
+   with Universe^.Planet[1] do
+      WriteLn('pop=',Pop,';eff=',Eff,';tech=',Ord(Tech),';revindex=',RevIndex,
+              ';bio=',Indus[BioInd],';che=',Indus[CheInd],';min=',Indus[MinInd],';syg=',Indus[SYGInd],
+              ';syj=',Indus[SYJInd],';sys=',Indus[SYSInd],';syt=',Indus[SYTInd],
+              ';sup=',Indus[SupInd],';tri=',Indus[TriInd],
+              ';fgt=',Ships[fgt],';hkr=',Ships[hkr],';jmp=',Ships[jmp],';jtn=',Ships[jtn],
+              ';pen=',Ships[pen],';ssp=',Ships[ssp],';trn=',Ships[trn],
+              ';cargomen=',Cargo[men],';cargoche=',Cargo[che],';cargomet=',Cargo[met],
+              ';cargosup=',Cargo[sup],';cargotri=',Cargo[tri],';trillumreserve=',TriReserve,
+              ';lam=',Defns[LAM],';def=',Defns[def],';gdm=',Defns[GDM],';ion=',Defns[ion]);
 
    Dispose(Universe);
    end;
@@ -2161,6 +2248,8 @@ procedure RunCaseMode;
          RunRevolutionCase(ParamStr(i))
       else if domain='production' then
          RunProductionCase(ParamStr(i))
+      else if domain='maturation' then
+         RunMaturationCase(ParamStr(i))
       else if domain='empire' then
          RunEmpireCase(ParamStr(i))
       else if domain='empirecreate' then

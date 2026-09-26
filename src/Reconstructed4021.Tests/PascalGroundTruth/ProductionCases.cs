@@ -15,9 +15,6 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// settlement, PRIMINTR.PAS:631, which GetIndustrialDistribution's sqrt-based formulas are sensitive
 /// to), matching what any reachable game state actually has.
 ///
-/// Cargo.Chemicals/Metals stay outside this domain's own golden comparison for a real, still-open
-/// reason — see AnnualTickHandlerProductionTests's own doc comment and GitHub #79.
-///
 /// Every case here has at most one developed industry within BioInd..SYTInd at a time; no case
 /// exercises two simultaneously-developed industries under scarce raw materials at once, which would
 /// exercise Production's own single loop more thoroughly.

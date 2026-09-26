@@ -73,6 +73,14 @@ internal static class DefensesCases
             Legions: 100, NinjaLegions: 0, Type: WorldType.Capital, Efficiency: 50,
             CargoChe: 1, CargoMet: 1, CargoTri: 1,
             TechnologyBitmask: AllFourDefensesResearched, RngFixedValue: 0),
+
+        // Plenty of che/met but almost no trillum: trillum (last in che..tri order) throttles each
+        // build after che/met already passed their checks, so the leftover che/met shows whether
+        // they were charged for the final throttled build (UPDATE.PAS:1340-1345) or the planned one.
+        new(Name: "TrillumThrottlesBuildAfterChemicalsAndMetalsChecked", PlanetPop: 20000, Tech: TechLevel.Starship,
+            Legions: 100, NinjaLegions: 0, Type: WorldType.Capital, Efficiency: 50,
+            CargoChe: 5000, CargoMet: 5000, CargoTri: 5,
+            TechnologyBitmask: AllFourDefensesResearched, RngFixedValue: 0),
     ];
 
     /// <summary>MethodDataSource shape for AnnualTickHandlerDefensesTests.MatchesGoldenFile.</summary>

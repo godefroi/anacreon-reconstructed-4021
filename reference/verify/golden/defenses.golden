@@ -1,5 +1,6 @@
-case=AllResearchedAmpleMaterialsGrowsAllFour;lam=4640;def=1054;gdm=5273;ion=2003
-case=LamZeroedOnNonBaseCapitalWorld;lam=0;def=51;gdm=256;ion=97
-case=NothingResearchedStaysZero;lam=0;def=0;gdm=0;ion=0
-case=WorldTechLevelBelowThresholdBlocksDespiteResearch;lam=0;def=0;gdm=5273;ion=2003
-case=RawMaterialShortageClampsBuildInLoopOrder;lam=4;def=0;gdm=0;ion=0
+case=AllResearchedAmpleMaterialsGrowsAllFour;lam=4640;def=1054;gdm=5273;ion=2003;cargoche=7496;cargomet=3538;cargotri=9252
+case=LamZeroedOnNonBaseCapitalWorld;lam=0;def=51;gdm=256;ion=97;cargoche=9935;cargomet=9732;cargotri=9975
+case=NothingResearchedStaysZero;lam=0;def=0;gdm=0;ion=0;cargoche=9999;cargomet=9999;cargotri=9999
+case=WorldTechLevelBelowThresholdBlocksDespiteResearch;lam=0;def=0;gdm=5273;ion=2003;cargoche=8972;cargomet=5941;cargotri=9694
+case=RawMaterialShortageClampsBuildInLoopOrder;lam=4;def=0;gdm=0;ion=0;cargoche=0;cargomet=0;cargotri=1
+case=TrillumThrottlesBuildAfterChemicalsAndMetalsChecked;lam=100;def=0;gdm=0;ion=0;cargoche=4975;cargomet=4210;cargotri=0
