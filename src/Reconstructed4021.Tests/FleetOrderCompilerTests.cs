@@ -98,6 +98,32 @@ public class FleetOrderCompilerTests
     }
 
     [Test]
+    public async Task Compile_Destination_CoordinateOnTheGalaxysZeroEdge_Resolves()
+    {
+        // Regression for issue #93: the galaxy's own Coordinate range is 0-based [0,Size), so its
+        // near edge is X/Y==0, not X/Y==1. Origin falls back to the galaxy center (10,10) -- "-10,10"
+        // resolves to (0,0), a real, in-bounds cell that a stale 1-based bounds check used to reject.
+        var (game, owner) = NewGame();
+
+        var result = FleetOrderCompiler.Compile(game, owner, ["DEST -10,10"]);
+
+        await Assert.That(result.ErrorMessage).IsNull();
+        await Assert.That(result.Orders[0].DestinationPosition).IsEqualTo(new Coordinate(0, 0));
+    }
+
+    [Test]
+    public async Task Compile_Destination_CoordinateOnePastTheGalaxysFarEdge_Errors()
+    {
+        // The opposite edge: Galaxy.Size itself (20 here) is one past the last valid index (19), so
+        // it must still be rejected -- guards against widening the bounds check too far the other way.
+        var (game, owner) = NewGame();
+
+        var result = FleetOrderCompiler.Compile(game, owner, ["DEST 10,-10"]);
+
+        await Assert.That(result.ErrorMessage).IsEqualTo("Unknown destination in line");
+    }
+
+    [Test]
     public async Task Compile_Transfer_ShipType()
     {
         var (game, owner) = NewGame();

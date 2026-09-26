@@ -19,6 +19,14 @@ public sealed class Galaxy(int size)
 {
     public int Size { get; } = size;
 
+    /// <summary>
+    /// MISC.PAS:111-117 (InGalaxy), adapted to this port's 0-based <c>[0, Size)</c> <see cref="Coordinate"/>
+    /// convention rather than Pascal's 1-based <c>[1, SizeOfGalaxy]</c>. The one shared bounds check for
+    /// every caller that needs it (order-destination resolution, galaxy-generation painting, scenario
+    /// coordinate validation) instead of each keeping its own copy.
+    /// </summary>
+    public bool Contains(Coordinate c) => c.X >= 0 && c.X < Size && c.Y >= 0 && c.Y < Size;
+
     private readonly Dictionary<Coordinate, NebulaType> _nebulae = [];
     private readonly Dictionary<Coordinate, Empire> _minefields = [];
     private readonly Dictionary<Coordinate, HashSet<Empire>> _mineScoutedBy = [];
