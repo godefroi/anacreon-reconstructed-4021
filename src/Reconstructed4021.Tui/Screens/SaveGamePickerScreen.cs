@@ -54,17 +54,17 @@ public sealed class SaveGamePickerScreen : IScreen
         {
             case ConsoleKey.Enter:
                 var game = GameJson.Deserialize(File.ReadAllText(_list.SelectedItem!.Path), _context.Random, _context.NpeProvider);
-                if (game.CurrentEmpire is null)
-                {
-                    throw new InvalidOperationException("Save has no CurrentEmpire set -- nothing to drive.");
-                }
 
-                // TurnLoop.Start, not a direct GalaxyMapScreen: Reconstructed4021.Tui's own Program.cs
-                // routes a loaded save through the exact same RunGame loop as a fresh game (its Load Game
-                // branch and --load flag both call RunGame(loadedGame)) -- so the loaded empire's turn
-                // start greeting and status report show again here too, same as they would on any other
-                // entry into that empire's turn.
-                NextScreen = TurnLoop.Start(game, _context);
+                // Bootstrap.CreateGalaxyMapScreen, not TurnLoop.Start: a save only ever captures a human
+                // mid-turn (the one time Save Game is reachable), so that turn's own BeginTurn already ran
+                // before the save was made. Re-entering through TurnLoop.Start would call BeginTurn a
+                // second time for the same turn, and BeginTurn resolves each fleet's queued orders
+                // (IFleetMovementHandler.ResolveOrders, allowWait: true) -- which would flip a fleet the
+                // player had merely queued orders for (still Ready, "orders pending") into InTransit
+                // before they ever saw their turn again (issue #59). Matches
+                // Reconstructed4021.TuiDriver's own --load flag, which already goes straight to
+                // GalaxyMapScreen the same way.
+                NextScreen = Bootstrap.CreateGalaxyMapScreen(_context.RepoRoot, game);
                 return;
             case ConsoleKey.Escape:
                 NextScreen = _context.MakeTitleScreen();
