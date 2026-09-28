@@ -54,6 +54,7 @@ internal sealed class WorldInfoOverlay : IOverlay
     private int _redirectRow;
     private ResupplyFocus _resupplyFocus;
     private ResupplyPanel _resupplyPanel;
+    private int _resupplyCargoIndex;
     private ListBox<Planet>? _priorityList;
     private ListBox<Planet>? _normalList;
     private ListBox<Planet>? _neverList;
@@ -837,7 +838,20 @@ internal sealed class WorldInfoOverlay : IOverlay
         }
 
         Row(0, "Enabled:", settings.Enabled ? "Yes" : "No", ResupplyFocus.Enabled);
-        Row(1, "Max per dispatch:", settings.MaxAmount > 0 ? settings.MaxAmount.ToString() : "unlimited", ResupplyFocus.MaxAmount);
+        // One cell per cargo this world type may ship, side by side; Left/Right picks the cell.
+        const string MaxLabel = "Max per dispatch:";
+        var maxRowFocused = _resupplyFocus == ResupplyFocus.MaxAmount;
+        fb.DrawText(cx + 1, cy + 1, MaxLabel.PadRight(cw - 1), ContentFg, ContentBg, maxWidth: cw - 1);
+        var cellX = 1 + MaxLabel.Length + 2;
+        var eligible = ResupplySettings.EligibleCargo(planet.Type);
+        for (var i = 0; i < eligible.Count; i++)
+        {
+            var cap = settings.MaxFor(eligible[i]);
+            var cell = $"{eligible[i]}: {(cap > 0 ? cap.ToString() : "any")}";
+            var cellSelected = maxRowFocused && i == _resupplyCargoIndex;
+            fb.DrawText(cx + cellX, cy + 1, cell, cellSelected ? SelectedFg : ContentFg, cellSelected ? SelectedBg : ContentBg, maxWidth: Math.Max(0, cw - cellX));
+            cellX += cell.Length + 2;
+        }
 
         const int panelTop = 3;
         var listHeight = Math.Max(1, ch - panelTop - 4);
@@ -948,12 +962,21 @@ internal sealed class WorldInfoOverlay : IOverlay
                 {
                     settings.Enabled = !settings.Enabled;
                 }
+                else if (_resupplyFocus == ResupplyFocus.MaxAmount)
+                {
+                    var count = ResupplySettings.EligibleCargo(planet.Type).Count;
+                    var step = key.Key == ConsoleKey.LeftArrow ? -1 : 1;
+                    _resupplyCargoIndex = Math.Clamp(_resupplyCargoIndex + step, 0, count - 1);
+                }
                 return;
             case ConsoleKey.Enter when _resupplyFocus == ResupplyFocus.MaxAmount:
-                _push(new TextPromptOverlay("Max Per Dispatch", "Cargo cap per dispatch (blank/0 = unlimited):",
-                    settings.MaxAmount > 0 ? settings.MaxAmount.ToString() : string.Empty, text =>
+                var eligible = ResupplySettings.EligibleCargo(planet.Type);
+                var cargo = eligible[Math.Min(_resupplyCargoIndex, eligible.Count - 1)];
+                var current = settings.MaxFor(cargo);
+                _push(new TextPromptOverlay($"Max {cargo} Per Dispatch", $"{cargo} cap per dispatch (blank/0 = unlimited):",
+                    current > 0 ? current.ToString() : string.Empty, text =>
                     {
-                        settings.MaxAmount = int.TryParse(text, out var value) && value > 0 ? value : 0;
+                        settings.SetMax(cargo, int.TryParse(text, out var value) ? value : 0);
                     }));
                 return;
         }

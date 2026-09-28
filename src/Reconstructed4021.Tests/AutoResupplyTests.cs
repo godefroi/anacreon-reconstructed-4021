@@ -206,13 +206,13 @@ public class AutoResupplyTests
     }
 
     [Test]
-    public async Task Apply_GlobalMaxAmountCapsEveryDispatchRegardlessOfGroup()
+    public async Task Apply_MaxAmountCapsEveryDispatchOfThatCargoRegardlessOfGroup()
     {
         var (game, galaxy, owner) = NewGame();
         var source = NewSource(owner, WorldType.Mine, new Coordinate(0, 0));
         source.Cargo.Metals = 1000;
         source.Resupply.Enabled = true;
-        source.Resupply.MaxAmount = 50;
+        source.Resupply.SetMax(CargoType.Metals, 50);
 
         var destination = NewDestination(owner, new Coordinate(1, 0));
         destination.ShortfallsLastTick = [CargoType.Metals];
@@ -227,6 +227,28 @@ public class AutoResupplyTests
         var fleet = galaxy.Fleets.Single();
         await Assert.That(fleet.Orders[1].TransferAmount).IsEqualTo(50);
         await Assert.That(fleet.Orders[3].TransferAmount).IsEqualTo(-50);
+    }
+
+    /// <summary>Issue #99: a cap on one cargo (Trillum, say) must not throttle a different cargo's dispatch.</summary>
+    [Test]
+    public async Task Apply_MaxAmountForOneCargoDoesNotCapAnother()
+    {
+        var (game, galaxy, owner) = NewGame();
+        var source = NewSource(owner, WorldType.Mine, new Coordinate(0, 0));
+        source.Cargo.Metals = 1000;
+        source.Resupply.Enabled = true;
+        source.Resupply.SetMax(CargoType.Trillum, 50);
+
+        var destination = NewDestination(owner, new Coordinate(1, 0));
+        destination.ShortfallsLastTick = [CargoType.Metals];
+        source.Resupply.Priority.Add(destination.Location);
+
+        galaxy.Planets.AddRange([source, destination]);
+        galaxy.Fleets.Add(NewIdleTransportFleet(owner, source.Location, transports: 500));
+
+        AutoResupply.Apply(game);
+
+        await Assert.That(galaxy.Fleets.Single().Orders[1].TransferAmount).IsGreaterThan(50);
     }
 
     [Test]

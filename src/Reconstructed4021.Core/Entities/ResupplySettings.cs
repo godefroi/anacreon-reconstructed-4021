@@ -13,8 +13,25 @@ public sealed class ResupplySettings
 {
     public bool Enabled { get; set; }
 
-    /// <summary>Caps every dispatch this source makes, regardless of which group the destination came from -- 0 means uncapped, matching <see cref="ResupplyCargoOverlay"/>'s own "blank = max" convention.</summary>
-    public int MaxAmount { get; set; }
+    /// <summary>
+    /// Per-cargo cap on a single dispatch, regardless of which group the destination came from. A
+    /// missing entry means uncapped; a cap on one cargo (say, keeping some Trillum back for fuel) says
+    /// nothing about the others. Read through <see cref="MaxFor"/>.
+    /// </summary>
+    public Dictionary<CargoType, int> MaxAmounts { get; init; } = [];
+
+    /// <summary>The cap for <paramref name="cargo"/>, or 0 when it's uncapped.</summary>
+    public int MaxFor(CargoType cargo) => MaxAmounts.GetValueOrDefault(cargo);
+
+    /// <summary>Sets the cap for <paramref name="cargo"/>; 0 (or less) removes it.</summary>
+    public void SetMax(CargoType cargo, int amount)
+    {
+        if (amount > 0) {
+            MaxAmounts[cargo] = amount;
+        } else {
+            MaxAmounts.Remove(cargo);
+        }
+    }
 
     /// <summary>
     /// Hand-managed, ordered destinations that always take precedence over the implicit "everything

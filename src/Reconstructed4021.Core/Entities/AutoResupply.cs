@@ -150,8 +150,8 @@ public static class AutoResupply
         }
 
         var amount = FleetLogistics.MaxPickupAmount(shortfall.Cargo, fleet.Ships, fleet.Cargo, available);
-        if (source.Resupply.MaxAmount > 0) {
-            amount = Math.Min(amount, source.Resupply.MaxAmount);
+        if (source.Resupply.MaxFor(shortfall.Cargo) is > 0 and var cap) {
+            amount = Math.Min(amount, cap);
         }
 
         if (amount <= 0) {

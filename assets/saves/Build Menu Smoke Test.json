@@ -28,7 +28,7 @@
         },
         "resupply": {
           "enabled": false,
-          "maxAmount": 0,
+          "maxAmounts": {},
           "priority": [],
           "never": []
         },
