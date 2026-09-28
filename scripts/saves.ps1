@@ -4,7 +4,8 @@ Dumps one empire's planets across JSON saves as CSV, one row per planet per save
 
 .DESCRIPTION
 Reads every *.json save under saves/ and saves/auto/ (or -Path), keeps the newest file for each
-year, and flattens each owned planet into one row: its scalar fields, plus each nested object's
+year, and flattens each owned planet into one row: loc (relative to the empire's capital, as the
+game displays it), abs (raw galaxy coordinates), its scalar fields, plus each nested object's
 fields as <object>.<field> (industry.chemical, cargo.metals, ...). Objects nested deeper than that
 (redirection, resupply) and empty arrays are left out; other arrays are joined with '/'. Column
 names come from the save itself, so they follow whatever the save format currently holds.
@@ -16,15 +17,15 @@ names come from the save itself, so they follow whatever the save format current
 ./scripts/saves.ps1 -Empire 'Dol Parem' -Year 4077 -Columns loc,type,population,industry.*,cargo.*,shortfallsLastTick | Format-Table
 
 .EXAMPLE
-./scripts/saves.ps1 -Empire 'Dol Parem' -Location 7,8 -AsObject | Format-Table year,population,industry.mining,cargo.metals
+./scripts/saves.ps1 -Empire 'Dol Parem' -Location 1,-5 -AsObject | Format-Table year,population,industry.mining,cargo.metals
 #>
 param(
     [Parameter(Mandatory)] [string] $Empire,
     [string[]] $Path,
     [int[]] $Year,
-    # A world as x,y (quoted or not); omit for every world the empire owns.
+    # A world as capital-relative x,y, as the game shows it (quote negatives: '1,-5'); omit for every world the empire owns.
     [string[]] $Location,
-    # Wildcard patterns for the columns to keep, in order; year and loc are always first.
+    # Wildcard patterns for the columns to keep, in order; year, loc and abs are always first.
     [string[]] $Columns,
     # Emit objects instead of CSV text, for piping into Format-Table/Where-Object.
     [switch] $AsObject
@@ -57,12 +58,17 @@ function Format-Value($v) {
 
 $rows = foreach ($y in ($byYear.Keys | Sort-Object)) {
     $entry = $byYear[$y]
+    # Same convention as RelativeCoordinate.Format: capital is 0,0 and Y is flipped. Read per save,
+    # since the capital can move. No capital (or a dangling reference) leaves loc blank.
+    $capRef = $entry.Json.empires[$entry.EmpireIndex].capital
+    $capital = if ($capRef) { @($entry.Json.galaxy."$($capRef.kind.ToLower())s")[$capRef.id].location }
     foreach ($p in $entry.Json.galaxy.planets) {
         if ($p.owner -ne $entry.EmpireIndex) { continue }
-        $loc = "$($p.location.x),$($p.location.y)"
+        $abs = "$($p.location.x),$($p.location.y)"
+        $loc = if ($capital) { "$($p.location.x - $capital.x),$($capital.y - $p.location.y)" } else { '' }
         if ($Location -and $loc -ne $Location) { continue }
 
-        $row = [ordered]@{ year = $y; loc = $loc }
+        $row = [ordered]@{ year = $y; loc = $loc; abs = $abs }
         foreach ($prop in $p.PSObject.Properties) {
             if ($prop.Name -eq 'location') { continue }
             $v = $prop.Value
@@ -82,7 +88,7 @@ $rows = foreach ($y in ($byYear.Keys | Sort-Object)) {
 
 if ($Columns) {
     $all = @($rows | Select-Object -First 1 | ForEach-Object { $_.PSObject.Properties.Name })
-    $keep = @('year', 'loc') + @(foreach ($pattern in $Columns) { $all | Where-Object { $_ -like $pattern -and $_ -notin 'year', 'loc' } })
+    $keep = @('year', 'loc', 'abs') + @(foreach ($pattern in $Columns) { $all | Where-Object { $_ -like $pattern -and $_ -notin 'year', 'loc', 'abs' } })
     $rows = $rows | Select-Object ($keep | Select-Object -Unique)
 }
 
