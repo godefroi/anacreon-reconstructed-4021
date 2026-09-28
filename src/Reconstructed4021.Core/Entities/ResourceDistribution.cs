@@ -102,8 +102,9 @@ public static class ResourceDistribution
             return false;
         }
 
-        column.Set(fleetShips, fleetCargo, inFleet + amount);
-        column.Set(groundShips, groundCargo, onGround - amount);
+        // ThgLmt on both sides (FLTCOMM.PAS:337-338): whatever a side can't hold past MaxResources is destroyed.
+        column.Set(fleetShips, fleetCargo, ClampResource(inFleet + amount));
+        column.Set(groundShips, groundCargo, ClampResource(onGround - amount));
         error = "";
         return true;
     }

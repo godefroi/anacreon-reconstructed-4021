@@ -69,6 +69,32 @@ public class ResourceDistributionTests
     }
 
     [Test]
+    public async Task TryTransfer_DropOverflowingGround_ClampsAtMaxResourcesAndDestroysTheRest()
+    {
+        var fltCr = new CargoHold { Trillum = 5000 };
+        var grnCr = new CargoHold { Trillum = 8000 };
+
+        var ok = ResourceDistribution.TryTransfer(ResourceColumn.All[13], new ShipCounts(), fltCr, new ShipCounts(), grnCr, groundIsPlayerOwned: true, amount: -5000, out _);
+
+        await Assert.That(ok).IsTrue();
+        await Assert.That(fltCr.Trillum).IsEqualTo(0);
+        await Assert.That(grnCr.Trillum).IsEqualTo(ResourceDistribution.MaxResources);
+    }
+
+    [Test]
+    public async Task TryTransfer_PickupOverflowingFleet_ClampsAtMaxResourcesAndDestroysTheRest()
+    {
+        var fltSh = new ShipCounts { Fighters = 8000 };
+        var grnSh = new ShipCounts { Fighters = 5000 };
+
+        var ok = ResourceDistribution.TryTransfer(Fighters, fltSh, new CargoHold(), grnSh, new CargoHold(), groundIsPlayerOwned: true, amount: 5000, out _);
+
+        await Assert.That(ok).IsTrue();
+        await Assert.That(fltSh.Fighters).IsEqualTo(ResourceDistribution.MaxResources);
+        await Assert.That(grnSh.Fighters).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task TryTransfer_FailsWhenBeyondTheMaxResourcesBound()
     {
         var ok = ResourceDistribution.TryTransfer(Fighters, new ShipCounts(), new CargoHold(), new ShipCounts { Fighters = ResourceDistribution.MaxResources * 2 }, new CargoHold(), true, amount: ResourceDistribution.MaxResources + 1, out var error);
