@@ -103,6 +103,9 @@ internal sealed class GalaxyMapScreen : IScreen
     // Enter confirms at the current cursor location, Esc cancels with no callback.
     private (string Prompt, Action<Coordinate> OnConfirm)? _pendingPick;
 
+    // The Fn report window that was open when a pick began; see BeginPick.
+    private IOverlay? _suspendedFKeyOverlay;
+
     public IScreen? NextScreen { get; private set; }
 
     public GalaxyMapScreen(Game game, Empire player, NewGameContext context)
@@ -326,9 +329,11 @@ internal sealed class GalaxyMapScreen : IScreen
                 case ConsoleKey.Enter:
                     _pendingPick = null;
                     pick.OnConfirm(_cursor);
+                    RestoreSuspendedFKeyOverlay();
                     return;
                 case ConsoleKey.Escape:
                     _pendingPick = null;
+                    RestoreSuspendedFKeyOverlay();
                     return;
             }
 
@@ -362,7 +367,32 @@ internal sealed class GalaxyMapScreen : IScreen
     // AddModal disabling the map underneath a still-open panel, which this engine's overlay stack has
     // no equivalent of -- an overlay that wants a pick already dismissed itself (by reference removal,
     // immediately) before calling this, so the stack is already empty by the time the next key arrives.
-    private void BeginPick(string prompt, Action<Coordinate> onConfirm) => _pendingPick = (prompt, onConfirm);
+    //
+    // The one overlay that can still be on the stack is the Fn report window (Status, Fleet, ...) the
+    // player drilled in from: it sits at the root, so it would keep drawing over the map and swallow
+    // the pick's keys (issue #88). It's set aside here and put back once the pick ends.
+    private void BeginPick(string prompt, Action<Coordinate> onConfirm)
+    {
+        var root = _overlays.FindIndex(IsFKeyOverlay);
+        if (root >= 0)
+        {
+            _suspendedFKeyOverlay = _overlays[root];
+            _overlays.RemoveAt(root);
+        }
+
+        _pendingPick = (prompt, onConfirm);
+    }
+
+    // Put back at the root after OnConfirm has run, so anything it stacked (the deploy distribution
+    // editor, a Close Up reopened by Redirect) sits above it, same as before the pick began.
+    private void RestoreSuspendedFKeyOverlay()
+    {
+        if (_suspendedFKeyOverlay is { } overlay && _pendingPick is null)
+        {
+            _overlays.Insert(0, overlay);
+            _suspendedFKeyOverlay = null;
+        }
+    }
 
     /// <summary>
     /// Enter on the map, or Worlds menu &gt; Close Up (MAPWIND.PAS: GetMapObject/SelectPoint feeding

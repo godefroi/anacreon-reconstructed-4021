@@ -88,7 +88,9 @@ Most harness disagreements turn out to be setup differences, not formula bugs. C
 
 - **`scripts/saves.ps1 -Empire <name>`** prints one CSV row per owned planet per save year (the
   newest file wins when a year has several). Nested save objects become `<object>.<field>` columns,
-  named from the save itself. `-Location x,y`, `-Year`, and `-Columns` (wildcards, such as
+  named from the save itself. `loc` is capital-relative (Y flipped), as the game displays it and
+  as players quote it; `abs` is the raw galaxy coordinate that `WorldDiff.cs` takes.
+  `-Location x,y` (relative), `-Year`, and `-Columns` (wildcards, such as
   `industry.*`) narrow it down; `-AsObject` emits objects for `Format-Table`/`Where-Object`.
   Run `Get-Help ./scripts/saves.ps1 -Examples` for usage.
 - **`dotnet run scripts/WorldDiff.cs -- <save.json> <x,y> [years] [--all]`** runs one planet from
