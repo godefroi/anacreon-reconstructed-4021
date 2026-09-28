@@ -403,7 +403,8 @@ public class GameJsonTests
 
         var planet = new Planet { Location = new Coordinate(1, 1), Owner = empire };
         planet.Resupply.Enabled = true;
-        planet.Resupply.MaxAmount = 250;
+        planet.Resupply.SetMax(CargoType.Metals, 250);
+        planet.Resupply.SetMax(CargoType.Trillum, 40);
         planet.Resupply.Priority.Add(new Coordinate(3, 3));
         planet.Resupply.Priority.Add(new Coordinate(-4, 2));
         planet.Resupply.Never.Add(new Coordinate(9, 9));
@@ -414,7 +415,9 @@ public class GameJsonTests
         var roundTrippedPlanet = roundTripped.Galaxy.Planets.Single();
 
         await Assert.That(roundTrippedPlanet.Resupply.Enabled).IsTrue();
-        await Assert.That(roundTrippedPlanet.Resupply.MaxAmount).IsEqualTo(250);
+        await Assert.That(roundTrippedPlanet.Resupply.MaxFor(CargoType.Metals)).IsEqualTo(250);
+        await Assert.That(roundTrippedPlanet.Resupply.MaxFor(CargoType.Trillum)).IsEqualTo(40);
+        await Assert.That(roundTrippedPlanet.Resupply.MaxFor(CargoType.Chemicals)).IsEqualTo(0);
         await Assert.That(roundTrippedPlanet.Resupply.Priority).IsEquivalentTo([new Coordinate(3, 3), new Coordinate(-4, 2)]);
         await Assert.That(roundTrippedPlanet.Resupply.Never).IsEquivalentTo([new Coordinate(9, 9)]);
     }
@@ -446,7 +449,7 @@ public class GameJsonTests
         var roundTrippedPlanet = roundTripped.Galaxy.Planets.Single();
 
         await Assert.That(roundTrippedPlanet.Resupply.Enabled).IsFalse();
-        await Assert.That(roundTrippedPlanet.Resupply.MaxAmount).IsEqualTo(0);
+        await Assert.That(roundTrippedPlanet.Resupply.MaxAmounts).IsEmpty();
         await Assert.That(roundTrippedPlanet.Resupply.Priority).IsEmpty();
         await Assert.That(roundTrippedPlanet.Resupply.Never).IsEmpty();
     }
