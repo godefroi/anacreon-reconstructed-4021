@@ -1641,10 +1641,12 @@ internal sealed class GalaxyMapScreen : IScreen
     // TurnEngine.BeginTurn (fog-of-war refresh) already ran before this screen was even shown, so
     // ending a turn here only needs TurnEngine.EndTurn's own half: erase news, move fleets, and hand
     // the game off to the next empire. TurnLoop.Start then decides what (if anything) runs next.
+    // AutoSave runs first so the file captures this player mid-turn, same as a manual save; after
+    // EndTurn, CurrentEmpire is already the next empire, and loading that save would hand the map to it.
     private void EndTurn()
     {
-        _context.TurnEngine.EndTurn(_game);
         AutoSave();
+        _context.TurnEngine.EndTurn(_game);
         NextScreen = TurnLoop.Start(_game, _context);
     }
 
