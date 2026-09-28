@@ -51,9 +51,12 @@
                 caller-supplied
      lamattack  TargetIsFleet(0=Planet[1]'s Defns,1=Fleet[1]'s Ships),LAMToUse,
                 Fgt,Hkr,Pen,Trn(Fleet[1]'s ship counts, ignored when TargetIsFleet=0),
-                Lam,Def,Gdm,Ion(Planet[1]'s defense counts, ignored when TargetIsFleet=1)
+                Lam,Def,Gdm,Ion(Planet[1]'s defense counts, ignored when TargetIsFleet=1),
+                Men,Che(Fleet[1]'s cargo, ignored when TargetIsFleet=0)
                 -> "shipsdest_fgt=<v>;shipsdest_hkr=<v>;shipsdest_pen=<v>;shipsdest_trn=<v>;
-                    defnsdest_lam=<v>;defnsdest_def=<v>;defnsdest_gdm=<v>;defnsdest_ion=<v>" --
+                    defnsdest_lam=<v>;defnsdest_def=<v>;defnsdest_gdm=<v>;defnsdest_ion=<v>;
+                    fleetcargo_men=<v>;fleetcargo_che=<v>" (fleetcargo_* is the surviving fleet's
+                cargo after the strike, 0 if the fleet was destroyed) --
                 real ATTACK.PAS's own LAMAttack called directly (not through NPEAttack -- LAMAttack
                 has no Rnd calls at all, so no RngFixedValue field here), see RunLamAttackCase's own
                 comment. Both target and player are always Empire2/Empire1 respectively; DestroyFleet
@@ -686,12 +689,13 @@ procedure RunLamAttackCase(const arg: String);
      domain reports LAMAttack's own ShipsDest/DefnsDest VAR out-params directly, not whatever state
      those stand-ins would have left behind. }
    var
-      parts: array[0..9] of LongInt;
+      parts: array[0..11] of LongInt;
       TargetIsFleet: Boolean;
       LAMToUse: Resources;
       TargetID: IDNumber;
       ShipsDest: ShipArray;
       DefnsDest: DefnsArray;
+      fleetMen,fleetChe: LongInt;
    begin
    ParseFields(arg,parts);
    TargetIsFleet:=parts[0]<>0;
@@ -717,6 +721,8 @@ procedure RunLamAttackCase(const arg: String);
       Universe^.Fleet[1]^.Ships[hkr]:=parts[3];
       Universe^.Fleet[1]^.Ships[pen]:=parts[4];
       Universe^.Fleet[1]^.Ships[trn]:=parts[5];
+      Universe^.Fleet[1]^.Cargo[men]:=parts[10];
+      Universe^.Fleet[1]^.Cargo[che]:=parts[11];
       SetOfActiveFleets:=[1];
       TargetID.ObjTyp:=Flt;  TargetID.Index:=1;
       end
@@ -739,10 +745,19 @@ procedure RunLamAttackCase(const arg: String);
 
    LAMAttack(Empire1,LAMToUse,TargetID,ShipsDest,DefnsDest);
 
+   { A destroyed fleet is already Disposed, so its cargo reads as 0 rather than touching freed memory. }
+   fleetMen:=0;  fleetChe:=0;
+   if TargetIsFleet and (1 in SetOfActiveFleets) then
+      begin
+      fleetMen:=Universe^.Fleet[1]^.Cargo[men];
+      fleetChe:=Universe^.Fleet[1]^.Cargo[che];
+      end;
+
    WriteLn('shipsdest_fgt=',ShipsDest[fgt],';shipsdest_hkr=',ShipsDest[hkr],
            ';shipsdest_pen=',ShipsDest[pen],';shipsdest_trn=',ShipsDest[trn],
            ';defnsdest_lam=',DefnsDest[LAM],';defnsdest_def=',DefnsDest[def],
-           ';defnsdest_gdm=',DefnsDest[GDM],';defnsdest_ion=',DefnsDest[ion]);
+           ';defnsdest_gdm=',DefnsDest[GDM],';defnsdest_ion=',DefnsDest[ion],';fleetcargo_men=',
+           fleetMen,';fleetcargo_che=',fleetChe);
 
    { PATCH-note: same double-dispose fix as RunNpeAttackCase's own cleanup -- real DestroyFleet may
      already have Disposed Fleet[1] during LAMAttack's own resolution. }

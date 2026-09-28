@@ -147,7 +147,10 @@ public static class FleetLogistics
         var priorityIndex = 0;
         var spaceLeft = FleetCargoSpace(ships, cargo);
 
-        while (spaceLeft < 0) {
+        // The priorityIndex bound isn't Pascal (ship counts are unsigned Words there, so ships alone can't
+        // overflow): it stops a fleet with an already-negative ship count (#42/#44) from running off the
+        // end of the priority list once all cargo is zeroed and space is still negative.
+        while (spaceLeft < 0 && priorityIndex < _balancePriority.Length) {
             var t = _balancePriority[priorityIndex];
             cargo[t] = 0;
 
