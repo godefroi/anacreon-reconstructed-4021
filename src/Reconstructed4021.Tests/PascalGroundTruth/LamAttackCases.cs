@@ -16,7 +16,8 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 public sealed record LamAttackCase(
     string Name, bool TargetIsFleet, int LamToUse,
     int Fgt = 0, int Hkr = 0, int Pen = 0, int Trn = 0,
-    int Lam = 0, int Def = 0, int Gdm = 0, int Ion = 0) : INamedCase;
+    int Lam = 0, int Def = 0, int Gdm = 0, int Ion = 0,
+    int Men = 0, int Che = 0) : INamedCase;
 
 internal static class LamAttackCases
 {
@@ -40,6 +41,12 @@ internal static class LamAttackCases
         // a world with no defenses at all takes a strike and nothing happens, confirming the fallback
         // doesn't crash or destroy phantom defenses.
         new(Name: "WorldNoDefenses", TargetIsFleet: false, LamToUse: 100),
+
+        // Transports carrying cargo right at capacity (100 transports = 100 units; 400 legions at 5 per
+        // unit plus 60 chemicals at 3 per unit fills all of it). The strike destroys some transports
+        // but not the legions on board, so the survivors are over capacity until BalanceFleet trims
+        // (ATTACK.PAS:1668-1674, issue #104).
+        new(Name: "FleetTransportsLoseCargoCapacity", TargetIsFleet: true, LamToUse: 40, Fgt: 20, Trn: 100, Men: 400, Che: 60),
     ];
 
     /// <summary>MethodDataSource shape for LamAttackTests.MatchesGoldenFile.</summary>

@@ -68,7 +68,7 @@ public class GoldenFileTests
             args => PatchHarness.CompileAndRun("runworld", ["case", "npeattack", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("lamattack", LamAttackCases.All,
-            c => $"{(c.TargetIsFleet ? 1 : 0)},{c.LamToUse},{c.Fgt},{c.Hkr},{c.Pen},{c.Trn},{c.Lam},{c.Def},{c.Gdm},{c.Ion}",
+            c => $"{(c.TargetIsFleet ? 1 : 0)},{c.LamToUse},{c.Fgt},{c.Hkr},{c.Pen},{c.Trn},{c.Lam},{c.Def},{c.Gdm},{c.Ion},{c.Men},{c.Che}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "lamattack", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("techlevel", TechLevelCases.All,

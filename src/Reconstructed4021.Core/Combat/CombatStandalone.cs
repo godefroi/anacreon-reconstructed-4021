@@ -33,9 +33,8 @@ public static class CombatStandalone
     /// or an <see cref="IEconomicWorld"/> (planet or starbase) — LAMs are never launched at a
     /// construction site or stargate.
     ///
-    /// BalanceFleet's post-damage cargo rebalance isn't called here (it exists in
-    /// <see cref="FleetLogistics"/>) — moot regardless, since LAMs only ever destroy ships/defenses,
-    /// never cargo, so there's nothing to rebalance. FleetNameDestruction's naming-system call needs
+    /// A surviving fleet has its cargo trimmed to its reduced capacity by
+    /// <see cref="FleetLogistics.BalanceFleet"/>. FleetNameDestruction's naming-system call needs
     /// no equivalent here, same reasoning as <see cref="CombatOutcome.AbortFleet"/>'s own remarks:
     /// <paramref name="target"/>'s own <see cref="ISectorObject.Names"/> simply goes with it once
     /// <see cref="CombatOutcome.DestroyFleet"/> removes it from the galaxy.
@@ -77,6 +76,9 @@ public static class CombatStandalone
                 foreach (var t in Enum.GetValues<ShipType>()) {
                     ships[t] -= shipsDestroyed[t];
                 }
+
+                // Lost transports shrink capacity but the cargo stays aboard (ATTACK.PAS:1668-1674).
+                FleetLogistics.BalanceFleet(ships, fleet.Cargo);
             }
 
             foreach (var t in Enum.GetValues<ShipType>()) {

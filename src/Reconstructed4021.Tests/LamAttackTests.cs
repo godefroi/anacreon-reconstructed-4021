@@ -38,6 +38,8 @@ public class LamAttackTests
             fleet.Ships.HunterKillers = c.Hkr;
             fleet.Ships.Penetrators = c.Pen;
             fleet.Ships.Transports = c.Trn;
+            fleet.Cargo.Legions = c.Men;
+            fleet.Cargo.Chemicals = c.Che;
             galaxy.Fleets.Add(fleet);
             target = fleet;
         } else {
@@ -56,6 +58,10 @@ public class LamAttackTests
         await Assert.That(shipsDestroyed[ShipType.HunterKiller]).IsEqualTo(int.Parse(expected["shipsdest_hkr"]));
         await Assert.That(shipsDestroyed[ShipType.Penetrator]).IsEqualTo(int.Parse(expected["shipsdest_pen"]));
         await Assert.That(shipsDestroyed[ShipType.Transport]).IsEqualTo(int.Parse(expected["shipsdest_trn"]));
+        // A destroyed fleet leaves the galaxy; the harness reports 0 cargo for it.
+        var survivor = target as Fleet is { } f && galaxy.Fleets.Contains(f) ? f : null;
+        await Assert.That(survivor?.Cargo.Legions ?? 0).IsEqualTo(int.Parse(expected["fleetcargo_men"]));
+        await Assert.That(survivor?.Cargo.Chemicals ?? 0).IsEqualTo(int.Parse(expected["fleetcargo_che"]));
         await Assert.That(defensesDestroyed[DefenseType.Lam]).IsEqualTo(int.Parse(expected["defnsdest_lam"]));
         await Assert.That(defensesDestroyed[DefenseType.DefenseSatellite]).IsEqualTo(int.Parse(expected["defnsdest_def"]));
         await Assert.That(defensesDestroyed[DefenseType.Gdm]).IsEqualTo(int.Parse(expected["defnsdest_gdm"]));
