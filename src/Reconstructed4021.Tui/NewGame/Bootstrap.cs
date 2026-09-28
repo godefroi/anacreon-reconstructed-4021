@@ -1,6 +1,7 @@
 using Reconstructed4021.Core;
 using Reconstructed4021.Core.NewGame;
 using Reconstructed4021.Core.Turns;
+using Reconstructed4021.Core.Types;
 using Reconstructed4021.LegacyNpe;
 using Reconstructed4021.Panemonde;
 using Reconstructed4021.Tui.Screens;
@@ -29,7 +30,16 @@ public static class Bootstrap
     public static IScreen CreateGalaxyMapScreen(string repoRoot, Game game)
     {
         var player = game.CurrentEmpire ?? throw new InvalidOperationException("Save has no CurrentEmpire set -- nothing to drive.");
-        return new GalaxyMapScreen(game, player, CreateContext(repoRoot));
+        var context = CreateContext(repoRoot);
+
+        // A save whose current empire isn't an active human was taken between turns, before that
+        // empire's BeginTurn ran, so TurnLoop plays forward to the next human's turn start instead.
+        if (!game.TurnHandlers[player].IsHuman || player.Status != EmpireStatus.Active)
+        {
+            return TurnLoop.Start(game, context);
+        }
+
+        return new GalaxyMapScreen(game, player, context);
     }
 
     private static NewGameContext CreateContext(string repoRoot)
