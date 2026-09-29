@@ -14,9 +14,9 @@ namespace Reconstructed4021.Tui.Screens;
 
 
 // Engage (ATTCOMM.PAS:220-635) -- the Tactical Battle Display: a full IScreen (not an overlay --
-// IOverlay has no Update hook, and the warp-free message flash below needs Update's own real-elapsed-
-// time parameter), fixed at 80x28 centered over whatever terminal size is available, same convention
-// CloseUpOverlay/ResourceDistributionOverlay already established.
+// IOverlay has no Update hook, and the message flash and animation queue below need Update's own
+// real-elapsed-time parameter), fixed at 80x28 centered over whatever terminal size is available, same
+// convention CloseUpOverlay/ResourceDistributionOverlay already established.
 //
 // Ported from Reconstructed4021.Tui's own TacticalBattleDisplayWindow. Move ('M') and Target ('T')
 // adopt that file's own freely-navigable-list enhancement over GroupMove/GroupTarget's real Pascal
@@ -27,12 +27,21 @@ namespace Reconstructed4021.Tui.Screens;
 // screen's own custom Up/Down rule (skip header rows, reset state when crossing the MoveAllItem
 // boundary) can drive selection directly instead of ListBox's own plain wrap-around Up/Down.
 //
-// The WarpIn slide-in reveal and DrawStars' decorative starfield (100 Rnd(1,720) draws, consumed only
-// for RNG-stream fidelity with a display nothing reads back) are both dropped: no golden file or replay
-// test compares this screen's own visual output against real Pascal, so there is no fidelity contract
-// to keep here, and the drop costs nothing but a bit of visual polish. The Planet/Starbase target's own
-// range-grid + ASCII silhouette (deterministic, no RNG) is kept -- it's the one real visual difference
-// between the "planet" and "deep space" (Fleet target) scenarios, which is worth keeping.
+// WarpIn/WarpOut/GroupsDestroyedSFX/the retreat sweep (ATTCOMM.PAS:91-147,293-322,487-503) run as a queue
+// of AnimSteps drained by Update; any key skips the rest of the queue straight to its end state. The
+// core has already finished the round by the time the queue is built, so _shown holds the pre-round
+// picture for whichever groups are still mid-animation. The queue ends with the outcome box instead
+// of a blocking Delay.
+//
+// DrawStars' decorative starfield (100 Rnd(1,720) draws, consumed only for RNG-stream fidelity with a
+// display nothing reads back) is dropped: no golden file or replay test compares this screen's own
+// visual output against real Pascal, so there is no fidelity contract to keep here, and the drop
+// costs nothing but a bit of visual polish. The Planet/Starbase target's own range-grid + ASCII
+// silhouette (deterministic, no RNG) is kept -- it's the one real visual difference between the
+// "planet" and "deep space" (Fleet target) scenarios, which is worth keeping.
+//
+// Ground-shell markers are drawn here but not in Pascal (DrawGroupShips skips Grnd): a group on the
+// ground would otherwise vanish from the map the moment its warp sweep ends.
 internal sealed class TacticalBattleScreen : IScreen
 {
     private const int FrameWidth = 80;
@@ -97,6 +106,21 @@ internal sealed class TacticalBattleScreen : IScreen
     private static readonly int[] DispOrbit = [10, 4, 2, 2, 0, 0, 0, 2, 2, 4, 10];
     private static readonly int[] Disp2 = [0, 10, 14, 16, 16, 16, 14, 10, 0];
 
+    // EdgeOfScreen (ATTCOMM.PAS:46, offset 968): where a group warps in from and a retreat sweeps off to.
+    private const int EdgeColumn = 4;
+    private const double DeepSpaceWarpSecondsPerCell = 0.015; // WarpIn/retreat sweep Delay(15).
+    private const double ShellWarpSecondsPerCell = 0.040; // Delay(40).
+
+    // GroupsDestroyedSFX's blink (ATTCOMM.PAS:312-318): 10 on/off pairs, each half Delay((11-j)*10), so
+    // frame f (0-based, even = on) lasts (10 - f/2) * 10ms -- 100ms down to 10ms.
+    private const int BlinkFrames = 20;
+    private static double BlinkFrameSeconds(int frame) => (10 - frame / 2) * 0.010;
+
+    // One queued animation step: Frames frames, frame i lasting FrameSeconds(i), OnFrame(i) drawing it
+    // and OnFinish setting the end state. Skipping runs each remaining step's first frame and then its
+    // OnFinish back to back, so the screen lands in the same state whether or not the player watched.
+    private sealed record AnimStep(int Frames, Func<int, double> FrameSeconds, Action<int> OnFrame, Action OnFinish);
+
     private readonly Game _game;
     private readonly Empire _player;
     private readonly NewGameContext _context;
@@ -109,6 +133,21 @@ internal sealed class TacticalBattleScreen : IScreen
     private string _message = "";
     private double _messageSeconds;
     private int? _highlightedGroupIndex;
+
+    private readonly Queue<AnimStep> _steps = new();
+    private AnimStep? _step;
+    private int _stepFrame;
+    private double _stepClock;
+    private Action? _afterAnimation;
+
+    // Groups whose marker should show something other than their real Pos/Sta right now: mid-warp,
+    // not yet warped in, or destroyed but still blinking. Each step's OnFinish removes its own entry.
+    private readonly Dictionary<GroupRecord, (ShellPosition Pos, bool Visible)> _shown = [];
+    private (int Row, int Col)? _sweep;
+
+    // The enemy table/ship glyphs update once per round, after the warps (EnemyStatus, ATTCOMM.PAS:335),
+    // though the core has already applied the round: non-null while the pre-round counts should show.
+    private int[,]? _enemyShown;
 
     // Move/Target's own list mode (see this class's own doc comment): non-null in place of
     // _commandLines while either flow is open. _listHint is pinned above the scrolling list itself
@@ -139,18 +178,35 @@ internal sealed class TacticalBattleScreen : IScreen
         _state = state;
 
         ShowCommandMenu();
-        // DrawScreen's own opening flavor line (ATTCOMM.PAS:1192-1196) -- WarpIn's own reveal animation
-        // is dropped, see this class's own doc comment.
-        FlashMessage(PascalMath.Rnd(_context.Random, 1, 3) switch
+
+        // DrawScreen (ATTCOMM.PAS:1192-1201): the flavor line, then each group warps in one at a time.
+        var flavor = PascalMath.Rnd(_context.Random, 1, 3) switch
         {
             1 => "Fleet entering real space...",
             2 => "Fleet now coming out of hyperspace...",
             _ => "Fleet in combat status...",
-        });
+        };
+        foreach (var g in state.Groups)
+        {
+            _shown[g] = (g.Pos, false);
+        }
+        EnqueueMessage(flavor, keep: true);
+        for (var i = 0; i < state.Groups.Count; i++)
+        {
+            EnqueueSweep(state.Groups[i], i, EdgeColumn, ShellColumn[(int)ShellPosition.DeepSpace], DeepSpaceWarpSecondsPerCell, state.Groups[i].Pos, gone: false);
+        }
+        EnqueueMessage("", keep: false);
+        StartNext();
     }
 
     public void HandleKey(ConsoleKeyInfo key)
     {
+        if (_step is not null)
+        {
+            SkipAnimation();
+            return;
+        }
+
         if (_infoKeyHandler is { } infoHandler)
         {
             infoHandler(key);
@@ -200,6 +256,11 @@ internal sealed class TacticalBattleScreen : IScreen
 
     public void Update(TimeSpan elapsed)
     {
+        if (_step is not null)
+        {
+            AdvanceAnimation(elapsed.TotalSeconds);
+        }
+
         if (_messageSeconds <= 0)
         {
             return;
@@ -212,6 +273,195 @@ internal sealed class TacticalBattleScreen : IScreen
             _message = "";
         }
     }
+
+    // ---- animation queue ----
+
+    private void Enqueue(int frames, Func<int, double> frameSeconds, Action<int> onFrame, Action onFinish) =>
+        _steps.Enqueue(new AnimStep(frames, frameSeconds, onFrame, onFinish));
+
+    private void Enqueue(int frames, double frameSeconds, Action<int> onFrame, Action onFinish) =>
+        Enqueue(frames, _ => frameSeconds, onFrame, onFinish);
+
+    // AttReport (ATTCOMM.PAS:70-89): centered text, held for a second. keep leaves it up afterward
+    // (the opening flavor line stays through the warp-ins); an empty text is AttReport('')'s clear.
+    private void EnqueueMessage(string text, bool keep) =>
+        Enqueue(1, text.Length > 0 ? 1.0 : 0.0,
+            _ => { _message = text; _messageSeconds = 0; },
+            () => { _message = keep ? text : ""; });
+
+    // WarpIn/WarpOut/the retreat sweep: a glyph runs from fromCol to toCol inclusive on the group's own
+    // row, the group's marker hidden while it does. gone leaves it hidden afterward (retreated off screen).
+    private void EnqueueSweep(GroupRecord g, int groupIndex, int fromCol, int toCol, double secondsPerCell, ShellPosition shownAt, bool gone)
+    {
+        var (rowOffset, colOffset) = PlayerOffset[groupIndex % PlayerOffset.Length];
+        var direction = Math.Sign(toCol - fromCol);
+        Enqueue(Math.Abs(toCol - fromCol) + 1, secondsPerCell,
+            i =>
+            {
+                _shown[g] = (shownAt, false);
+                _sweep = (CenterRow + rowOffset, fromCol + direction * i + colOffset);
+            },
+            () =>
+            {
+                _sweep = null;
+                if (gone)
+                {
+                    _shown[g] = (shownAt, false);
+                }
+                else
+                {
+                    _shown.Remove(g);
+                }
+            });
+    }
+
+    private void StartNext()
+    {
+        _stepFrame = 0;
+        _stepClock = 0;
+        if (_steps.TryDequeue(out var next))
+        {
+            _step = next;
+            next.OnFrame(0);
+            return;
+        }
+
+        _step = null;
+        var after = _afterAnimation;
+        _afterAnimation = null;
+        after?.Invoke();
+    }
+
+    private void AdvanceAnimation(double seconds)
+    {
+        _stepClock += seconds;
+        while (_step is { } step && _stepClock >= step.FrameSeconds(_stepFrame))
+        {
+            _stepClock -= step.FrameSeconds(_stepFrame);
+            if (++_stepFrame < step.Frames)
+            {
+                step.OnFrame(_stepFrame);
+                continue;
+            }
+
+            step.OnFinish();
+            var carry = _stepClock;
+            StartNext();
+            _stepClock = carry;
+        }
+    }
+
+    private void SkipAnimation()
+    {
+        while (_step is { } step)
+        {
+            step.OnFinish();
+            StartNext();
+        }
+    }
+
+    // Runs one core round (already applied when round() returns) and queues what Pascal's GroupEngage
+    // (ATTCOMM.PAS:325-350) showed for it, in order: each shell's destroyed groups, the advance/retreat
+    // warps, the enemy table update, the end-of-round report, and (full retreat) the sweep off screen.
+    // The outcome box waits for the queue.
+    private void PlayRound(Action round, bool retreating = false)
+    {
+        var before = _state.Groups.Select(g => (g.Pos, g.Sta)).ToArray();
+        _enemyShown = SnapshotEnemy();
+        if (retreating)
+        {
+            EnqueueMessage("ALL GROUPS RETREATING", keep: false);
+        }
+
+        round();
+
+        var groups = _state.Groups;
+        foreach (var shell in AllShellPositions)
+        {
+            for (var i = 0; i < groups.Count; i++)
+            {
+                var g = groups[i];
+                if (before[i].Sta == GroupStatus.Destroyed || g.Sta != GroupStatus.Destroyed || g.Pos != shell)
+                {
+                    continue;
+                }
+
+                // GroupsDestroyedSFX: a destroyed group never moves, so its Pos is the shell it died at.
+                _shown[g] = (shell, true);
+                EnqueueMessage($"Group {i + 1,2} destroyed.", keep: true);
+                if (shell != ShellPosition.Ground)
+                {
+                    Enqueue(BlinkFrames, BlinkFrameSeconds, f => _shown[g] = (shell, f % 2 == 0), () => { });
+                }
+                Enqueue(1, 0, _ => { }, () =>
+                {
+                    _shown.Remove(g);
+                    _message = "";
+                });
+            }
+        }
+
+        for (var i = 0; i < groups.Count; i++)
+        {
+            var g = groups[i];
+            var (oldPos, oldSta) = before[i];
+            if (g.Sta == GroupStatus.Destroyed || g.Pos == oldPos || oldSta is not (GroupStatus.Advancing or GroupStatus.Retreating))
+            {
+                continue;
+            }
+
+            _shown[g] = (oldPos, true);
+            EnqueueSweep(g, i, ShellColumn[(int)oldPos], ShellColumn[(int)g.Pos], ShellWarpSecondsPerCell, oldPos, gone: false);
+        }
+
+        Enqueue(1, 0, _ => { }, () => _enemyShown = null);
+
+        if (_state.Result == AttackResultType.AttackerDestroyed)
+        {
+            EnqueueMessage("ALL GROUPS DESTROYED", keep: false);
+        }
+        else if (_state.Result == AttackResultType.DefenderConquered)
+        {
+            EnqueueMessage("THE ENEMY HAS SURRENDERED", keep: false);
+        }
+
+        if (retreating)
+        {
+            for (var i = 0; i < groups.Count; i++)
+            {
+                if (groups[i].Sta != GroupStatus.Destroyed)
+                {
+                    EnqueueSweep(groups[i], i, ShellColumn[(int)groups[i].Pos], EdgeColumn, DeepSpaceWarpSecondsPerCell, groups[i].Pos, gone: true);
+                }
+            }
+        }
+
+        _afterAnimation = () =>
+        {
+            if (_state.IsOver)
+            {
+                BeginOutcome();
+            }
+        };
+        StartNext();
+    }
+
+    private int[,] SnapshotEnemy()
+    {
+        var snapshot = new int[AllShellPositions.Length, AllAttackTypes.Length];
+        foreach (var pos in AllShellPositions)
+        {
+            foreach (var type in AllAttackTypes)
+            {
+                snapshot[(int)pos, (int)type] = _state.Enemy[pos, type];
+            }
+        }
+
+        return snapshot;
+    }
+
+    private int EnemyCount(ShellPosition pos, AttackType type) =>
+        _enemyShown is { } shown ? shown[(int)pos, (int)type] : _state.Enemy[pos, type];
 
     // Menu (ATTCOMM.PAS:232-245): the standard command list, redrawn every time control returns to top level.
     private void ShowCommandMenu()
@@ -236,9 +486,7 @@ internal sealed class TacticalBattleScreen : IScreen
             return;
         }
 
-        var wasDestroyed = _state.Groups.Select(g => g.Sta == GroupStatus.Destroyed).ToArray();
-        _state.Engage(_context.Random);
-        AfterRound(wasDestroyed);
+        PlayRound(() => _state.Engage(_context.Random));
         ShowCommandMenu();
     }
 
@@ -261,9 +509,7 @@ internal sealed class TacticalBattleScreen : IScreen
 
             if (ch == 'Y')
             {
-                var wasDestroyed = _state.Groups.Select(g => g.Sta == GroupStatus.Destroyed).ToArray();
-                _state.Retreat(_context.Random);
-                AfterRound(wasDestroyed, retreated: true);
+                PlayRound(() => _state.Retreat(_context.Random), retreating: true);
             }
 
             ShowCommandMenu();
@@ -274,40 +520,6 @@ internal sealed class TacticalBattleScreen : IScreen
     {
         _state.AutoTarget = !_state.AutoTarget;
         FlashMessage(_state.AutoTarget ? "Auto-targeting ON." : "Auto-targeting OFF.");
-    }
-
-    // BuildRoundMessage/AttReport's own priority (ATTCOMM.PAS:326-350,483).
-    private void AfterRound(bool[] wasDestroyed, bool retreated = false)
-    {
-        string message;
-        if (_state.Result == AttackResultType.AttackerDestroyed)
-        {
-            message = "ALL GROUPS DESTROYED";
-        }
-        else if (_state.Result == AttackResultType.DefenderConquered)
-        {
-            message = "THE ENEMY HAS SURRENDERED";
-        }
-        else
-        {
-            var destroyedNow = Enumerable.Range(0, _state.Groups.Count)
-                .Where(i => !wasDestroyed[i] && _state.Groups[i].Sta == GroupStatus.Destroyed)
-                .Select(i => i + 1)
-                .ToList();
-            message = destroyedNow.Count switch
-            {
-                0 when retreated => "ALL GROUPS RETREATING",
-                0 => "",
-                1 => $"Group {destroyedNow[0]} destroyed.",
-                _ => $"Groups {string.Join(", ", destroyedNow)} destroyed.",
-            };
-        }
-
-        FlashMessage(message);
-        if (_state.IsOver)
-        {
-            BeginOutcome();
-        }
     }
 
     // No Pascal equivalent -- the row types behind _activeList, shared by HandleMove's per-group list,
@@ -637,9 +849,7 @@ internal sealed class TacticalBattleScreen : IScreen
 
             if (ch == 'Y')
             {
-                var wasDestroyed = _state.Groups.Select(g => g.Sta == GroupStatus.Destroyed).ToArray();
-                _state.Engage(_context.Random);
-                AfterRound(wasDestroyed);
+                PlayRound(() => _state.Engage(_context.Random));
             }
             else
             {
@@ -805,21 +1015,23 @@ internal sealed class TacticalBattleScreen : IScreen
         _ => pos.ToString(),
     };
 
-    // EnemyStatus/UpdateEnemyWindow (ATTCOMM.PAS:149-186): only rows with anything present are worth a line.
+    // InitializeEnemyWindow/UpdateEnemyWindow (ATTCOMM.PAS:149-186,1078-1091): the seven ship rows are
+    // always drawn, zeros included, so nothing reflows as forces die; each is labeled with its Target
+    // key. Defenses and ground troops are single counts (each lives at exactly one shell), not grid rows.
+    // Counts start at column 18 rather than Pascal's 24 to fit the 42 columns left beside the command box.
     private IEnumerable<string> EnemyTableLines()
     {
-        yield return "Enemy forces:";
-        yield return "                    Deep  High  Orbt  SubO  Grnd";
-        foreach (var type in AllAttackTypes)
+        yield return $"{"",18}Deep/High/Orbt/SubO/Grnd";
+        foreach (var type in ShipAndTransportTypes.Select(t => t.ToAttackType()))
         {
-            var counts = AllShellPositions.Select(pos => _state.Enemy[pos, type]).ToArray();
-            if (counts.All(c => c == 0))
-            {
-                continue;
-            }
-
-            yield return $"{TypeName(type),16}{string.Concat(counts.Select(c => $"{c,6}"))}";
+            var key = Array.Find(TargetChoices, c => c.Type == type).Key;
+            var counts = AllShellPositions.Select(pos => $"{EnemyCount(pos, type),4}");
+            yield return $"{$"<{key}> {TypeName(type)}",-18}{string.Join(' ', counts)}";
         }
+
+        yield return "";
+        yield return $"<G> GDM {EnemyCount(ShellPosition.SubOrbit, AttackType.Gdm),4}  <D> def {EnemyCount(ShellPosition.Orbit, AttackType.DefenseSatellite),4}  <I> ion {EnemyCount(ShellPosition.SubOrbit, AttackType.IonCannon),4}";
+        yield return $"<M> men {EnemyCount(ShellPosition.Ground, AttackType.Legion),4}  <N> nnj {EnemyCount(ShellPosition.Ground, AttackType.NinjaLegion),4}  <L> LAM {EnemyCount(ShellPosition.SubOrbit, AttackType.Lam),4}";
     }
 
     // ---- post-battle outcome (CleanUp, ATTCOMM.PAS:1564-1588) ----
@@ -1207,7 +1419,7 @@ internal sealed class TacticalBattleScreen : IScreen
 
         foreach (var pos in new[] { ShellPosition.DeepSpace, ShellPosition.HighOrbit, ShellPosition.Orbit, ShellPosition.SubOrbit })
         {
-            var total = ShipAndTransportTypes.Sum(t => _state.Enemy[pos, t.ToAttackType()]);
+            var total = ShipAndTransportTypes.Sum(t => EnemyCount(pos, t.ToAttackType()));
             if (total <= 0)
             {
                 continue;
@@ -1229,18 +1441,24 @@ internal sealed class TacticalBattleScreen : IScreen
         for (var i = 0; i < _state.Groups.Count; i++)
         {
             var g = _state.Groups[i];
-            if (g.Sta == GroupStatus.Destroyed)
+            var (pos, visible) = _shown.TryGetValue(g, out var shown) ? shown : (g.Pos, g.Sta != GroupStatus.Destroyed);
+            if (!visible)
             {
                 continue;
             }
 
             var (rowDelta, colDelta) = PlayerOffset[i % PlayerOffset.Length];
             var row = CenterRow + rowDelta;
-            var col = ShellColumn[(int)g.Pos] + colDelta;
+            var col = ShellColumn[(int)pos] + colDelta;
             if (row >= 0 && row < h && col >= 0 && col < w)
             {
                 fb.Set(x + col, y + row, new Cell(new Rune('►'), i == _highlightedGroupIndex ? HighlightFg : AttackFg, Bg));
             }
+        }
+
+        if (_sweep is { } sweep && sweep.Row >= 0 && sweep.Row < h && sweep.Col >= 0 && sweep.Col < w)
+        {
+            fb.Set(x + sweep.Col, y + sweep.Row, new Cell(new Rune('►'), AttackFg, Bg));
         }
     }
 
