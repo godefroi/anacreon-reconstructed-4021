@@ -23,7 +23,8 @@ public sealed record NpeAttackCase(
     string Name, TechLevel DefenderTech, WorldClass DefenderClass, bool AttackerCarriesTroops,
     int DefenderFgt, int DefenderHkr, int DefenderMen, AttackIntentionType Intent, bool TargetIsFleet, int RngFixedValue,
     bool Planet3Present = false, int Planet3X = 0, int Planet3Y = 0, int Planet3Population = 0,
-    int Planet3RevIndex = 0, TechLevel Planet3Tech = TechLevel.PreTech, int DefenderEff = 0) : INamedCase;
+    int Planet3RevIndex = 0, TechLevel Planet3Tech = TechLevel.PreTech, int DefenderEff = 0,
+    int DefenderCargo = 0) : INamedCase;
 
 internal static class NpeAttackCases
 {
@@ -103,6 +104,15 @@ internal static class NpeAttackCases
         new(Name: "StrongDefenderWithEfficiencyAndRng", DefenderTech: TechLevel.Bio, DefenderClass: WorldClass.Ocean,
             AttackerCarriesTroops: false, DefenderFgt: 150, DefenderHkr: 150, DefenderMen: 300,
             Intent: AttackIntentionType.Conquer, TargetIsFleet: false, RngFixedValue: 13, DefenderEff: 90),
+
+        // A stocked defender world (DefenderCargo seeds ambrosia, chemicals, metals, supplies and
+        // trillum), conquered and held. ConquerWorld transfers the world with that cargo untouched.
+        new(Name: "ConquestOfStockedWorld", DefenderTech: TechLevel.Jump, DefenderClass: WorldClass.EarthLike,
+            AttackerCarriesTroops: true, DefenderFgt: 10, DefenderHkr: 10, DefenderMen: 50,
+            Intent: AttackIntentionType.Conquer, TargetIsFleet: false, RngFixedValue: 0, DefenderEff: 60, DefenderCargo: 3000),
+        new(Name: "StockedWorldHoldsOut", DefenderTech: TechLevel.Jump, DefenderClass: WorldClass.EarthLike,
+            AttackerCarriesTroops: false, DefenderFgt: 200, DefenderHkr: 200, DefenderMen: 500,
+            Intent: AttackIntentionType.Conquer, TargetIsFleet: false, RngFixedValue: 0, DefenderEff: 60, DefenderCargo: 3000),
     ];
 
     /// <summary>MethodDataSource shape for NpeAttackTests.MatchesGoldenFile.</summary>

@@ -39,12 +39,13 @@
                 Planet3Present(0/1 -- a second Empire2 world, positioned/populated by the next 5
                 fields, letting a case drive ConquerEmpire's per-planet cascade once Planet[2]'s
                 capital falls; ignored/all-zero when 0),Planet3X,Planet3Y,Planet3Pop,Planet3RevIndex,
-                Planet3TechOrd,DefenderEff
+                Planet3TechOrd,DefenderEff,DefenderCargo (seeds Planet[2]'s amb/che/met/sup/tri)
                 -> "result=<AttackResultTypes ordinal>;cas_fgt=<v>;cas_hkr=<v>;cas_jtn=<v>;cas_nnj=<v>;
                     kill_fgt=<v>;kill_hkr=<v>;kill_men=<v>;def_owner=<Empire ordinal>;def_eff=<v>;
                     def_rev=<v>;def_type=<WorldTypes ordinal>[;p3_owner=<v>;p3_eff=<v>;p3_rev=<v>;
                     p3_type=<v> -- only when Planet3Present];newcap_idx=<Empire2's post-attack capital
                     Planet index, 0 if none>;def_fgt=<v>;def_hkr=<v>;def_men=<v>;def_nnj=<v>;
+                    def_amb=<v>;def_che=<v>;def_met=<v>;def_sup=<v>;def_tri=<v>;
                     att_active=<0|1>;att_fgt=<v>;att_hkr=<v>;att_jtn=<v>;att_nnj=<v>;att_men=<v>;
                     att_fuel=<v>;tgt_active=<0|1>;tgt_fgt=<v>;tgt_hkr=<v>;rev1=<v>;rev2=<v>;
                     inuse2=<0|1>" (att_* is Fleet[1], tgt_* is Fleet[2] -- both 0 when that fleet is
@@ -608,7 +609,7 @@ procedure RunNpeAttackCase(const arg: String);
      branches (immediate conquest / forced independence / distance-conquest / new-capital-candidate)
      deliberately -- see NpeAttackCases.cs's own doc comment for which case drives which branch. }
    var
-      parts: array[0..15] of LongInt;
+      parts: array[0..16] of LongInt;
       AttackerCapID, DefenderCapID, TargetID, FltID, Planet2ID, Planet3ID, NewCapID: IDNumber;
       Result: AttackResultTypes;
       Killed, Casualties: AttackArray;
@@ -640,6 +641,11 @@ procedure RunNpeAttackCase(const arg: String);
    Universe^.Planet[2].Typ:=CapTyp;
    Universe^.Planet[2].Tech:=TechLevel(parts[0]);
    Universe^.Planet[2].Eff:=parts[15];
+   Universe^.Planet[2].Cargo[amb]:=parts[16];
+   Universe^.Planet[2].Cargo[che]:=parts[16];
+   Universe^.Planet[2].Cargo[met]:=parts[16];
+   Universe^.Planet[2].Cargo[sup]:=parts[16];
+   Universe^.Planet[2].Cargo[tri]:=parts[16];
    Universe^.Planet[2].Ships[fgt]:=parts[3];
    Universe^.Planet[2].Ships[hkr]:=parts[4];
    Universe^.Planet[2].Cargo[men]:=parts[5];
@@ -743,7 +749,10 @@ procedure RunNpeAttackCase(const arg: String);
       Write(';newcap_idx=0');
 
    Write(';def_fgt=',Universe^.Planet[2].Ships[fgt],';def_hkr=',Universe^.Planet[2].Ships[hkr],
-         ';def_men=',Universe^.Planet[2].Cargo[men],';def_nnj=',Universe^.Planet[2].Cargo[nnj]);
+         ';def_men=',Universe^.Planet[2].Cargo[men],';def_nnj=',Universe^.Planet[2].Cargo[nnj],
+         ';def_amb=',Universe^.Planet[2].Cargo[amb],';def_che=',Universe^.Planet[2].Cargo[che],
+         ';def_met=',Universe^.Planet[2].Cargo[met],';def_sup=',Universe^.Planet[2].Cargo[sup],
+         ';def_tri=',Universe^.Planet[2].Cargo[tri]);
 
    { A destroyed fleet is already Disposed, so it prints as all zeros rather than reading freed memory. }
    if 1 in SetOfActiveFleets then

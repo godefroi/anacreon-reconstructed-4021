@@ -68,6 +68,11 @@ public class NpeAttackTests
         defenderPlanet2.Ships.Fighters = c.DefenderFgt;
         defenderPlanet2.Ships.HunterKillers = c.DefenderHkr;
         defenderPlanet2.Cargo.Legions = c.DefenderMen;
+        defenderPlanet2.Cargo.Ambrosia = c.DefenderCargo;
+        defenderPlanet2.Cargo.Chemicals = c.DefenderCargo;
+        defenderPlanet2.Cargo.Metals = c.DefenderCargo;
+        defenderPlanet2.Cargo.Supplies = c.DefenderCargo;
+        defenderPlanet2.Cargo.Trillum = c.DefenderCargo;
         defender.Capital = defenderPlanet2;
         galaxy.Planets.Add(defenderPlanet2);
 
@@ -131,6 +136,11 @@ public class NpeAttackTests
         await Assert.That(defenderPlanet2.Ships.HunterKillers).IsEqualTo(int.Parse(expected["def_hkr"]));
         await Assert.That(defenderPlanet2.Cargo.Legions).IsEqualTo(int.Parse(expected["def_men"]));
         await Assert.That(defenderPlanet2.Cargo.NinjaLegions).IsEqualTo(int.Parse(expected["def_nnj"]));
+        await Assert.That(defenderPlanet2.Cargo.Ambrosia).IsEqualTo(int.Parse(expected["def_amb"]));
+        await Assert.That(defenderPlanet2.Cargo.Chemicals).IsEqualTo(int.Parse(expected["def_che"]));
+        await Assert.That(defenderPlanet2.Cargo.Metals).IsEqualTo(int.Parse(expected["def_met"]));
+        await Assert.That(defenderPlanet2.Cargo.Supplies).IsEqualTo(int.Parse(expected["def_sup"]));
+        await Assert.That(defenderPlanet2.Cargo.Trillum).IsEqualTo(int.Parse(expected["def_tri"]));
 
         // The harness prints a destroyed fleet as all zeros.
         var attackerAlive = galaxy.Fleets.Contains(fleet);
