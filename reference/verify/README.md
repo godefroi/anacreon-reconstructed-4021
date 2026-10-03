@@ -357,18 +357,12 @@ Cross-cutting lessons, not specific to one domain — read before touching *any*
   forever — a future domain with its own borderline `Real` expression could still get different
   ground truth under it than under `fpc`'s default, so don't assume float-precision issues are
   categorically solved just because this flag is set.
-- **Not every field a real Pascal procedure produces is safe to exact-match against a C#-side
-  golden-file comparison, even when it looks deterministic.** Once a case chains through several
-  real `Rnd()` draws (a genuine `.SCN` file load is the extreme example), *any* single
-  `Trunc`/`Round` anywhere upstream landing on a different side of an exact-integer boundary
-  changes how many draws that call consumes — desyncing the shared RNG stream for every later
-  draw in the same run, even fields that come from an explicit file command rather than a random
-  formula (confirmed concretely: a scenario's starbase population desynced from just its 10
-  preceding explicit `CreateWorld` commands, well before any actual random placement ran). This
-  is not corruption and not fixable by matching floating-point precision — two independently
-  written formulas under identical precision can still differ by an ULP. See
-  `ScenarioLoaderGoldenTests.cs`'s own doc comment for the full list of fields this affects and
-  why only genuinely draw-independent fields are exact-matched there.
+- **Draw-count drift cascades.** Once a case chains through many real `Rnd()` draws (a `.SCN`
+  load is the extreme example), one extra or missing draw anywhere shifts every later draw in the
+  run, including fields that come from an explicit file command. `INT.PAS`'s `Rnd(Min,Max)` skips
+  the draw when `Max<=Min`, so even a `Trunc`/`Round` landing on the other side of an integer
+  boundary changes the count. Both sides must run every routine that draws: the scenario test
+  loads with `LegacyNpeProvider` because Pascal always runs `InitializeNPE`.
 
 ## Domain catalog
 

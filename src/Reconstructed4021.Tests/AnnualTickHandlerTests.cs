@@ -526,13 +526,10 @@ public class AnnualTickHandlerHostileLifeTests
 /// UpdateWorld (GoldenFileTests; see ProductionCases's doc comment for the harness bugs that migration
 /// caught), not the old isolated FullPipeline transcription and not hand-typed.
 ///
-/// Cargo.Supplies, Cargo.Ambrosia, and Cargo.Legions are excluded from that comparison — each is
-/// mutated by a real UpdateWorld step this tick that runs on different (post-growth) state:
-/// UseUpFood/UseUpAmbrosia/UpdateMilitary all act on post-growth Population (and, for Legions, world
-/// Type). See NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction for the one case that actually
-/// exercises the Ambrosia gap. Cargo.Chemicals/Metals/Trillum are asserted: UpdateDefenses spends
-/// them later in the same tick, so the owner gets every defense researched to match the Pascal
-/// harness's full Technology set.
+/// The harness runs the whole UpdateWorld, so every printed field reflects the full tick, including
+/// UseUpFood/UseUpAmbrosia/UpdateMilitary and UpdateDefenses. The owner gets every defense
+/// researched to match the Pascal harness's full Technology set, since UpdateDefenses spends
+/// chemicals, metals, and trillum.
 /// </summary>
 public class AnnualTickHandlerProductionTests
 {
@@ -618,20 +615,25 @@ public class AnnualTickHandlerProductionTests
         await Assert.That(planet.Ships.Starships).IsEqualTo(int.Parse(expected["ssp"]));
         await Assert.That(planet.Ships.Transports).IsEqualTo(int.Parse(expected["trn"]));
 
+        await Assert.That(planet.Cargo.Legions).IsEqualTo(int.Parse(expected["cargomen"]));
         await Assert.That(planet.Cargo.NinjaLegions).IsEqualTo(int.Parse(expected["cargonnj"]));
+        await Assert.That(planet.Cargo.Ambrosia).IsEqualTo(int.Parse(expected["cargoamb"]));
+        await Assert.That(planet.Cargo.Supplies).IsEqualTo(int.Parse(expected["cargosup"]));
         await Assert.That(planet.Cargo.Trillum).IsEqualTo(int.Parse(expected["cargotri"]));
         await Assert.That(planet.TrillumReserve).IsEqualTo(int.Parse(expected["trillumreserve"]));
+
+        await Assert.That(planet.Population).IsEqualTo(int.Parse(expected["population"]));
+        await Assert.That(planet.Efficiency).IsEqualTo(int.Parse(expected["efficiency"]));
+        await Assert.That((int)planet.TechLevel).IsEqualTo(int.Parse(expected["techlevel"]));
     }
 
     [Test]
     public async Task NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction()
     {
-        // Same setup as the "NinjaProductionThrottledByScarceAmbrosia" golden case, checking the one
-        // field production.pas can't ground-truth (see this class's header comment): Cargo.Ambrosia
-        // ends the tick at 0, not because production touched it (golden's cargoamb stays 5, unchanged
-        // from what this case starts with), but because UseUpAmbrosia (population upkeep, running
-        // later in the same UpdateWorld) needs ThgLmt((1000/100)*11.5)=115 for 1000 population against
-        // only 5 in stock -- nowhere near enough, so it's fully drained (halved-need branch: 115/2=57>5).
+        // Same setup as the "NinjaProductionThrottledByScarceAmbrosia" golden case: Cargo.Ambrosia
+        // ends the tick at 0 because UseUpAmbrosia (population upkeep, running after production in
+        // the same UpdateWorld) needs ThgLmt((1000/100)*11.5)=115 for 1000 population against only 5
+        // in stock, so it's fully drained (halved-need branch: 115/2=57>5).
         var c = PascalGroundTruth.ProductionCases.All.Single(x => x.Name == "NinjaProductionThrottledByScarceAmbrosia");
         var owner = new Empire { Name = "Test" };
         var planet = MakePlanet(c, owner);
@@ -1611,13 +1613,17 @@ public class AnnualTickHandlerConstructionTests
         await Assert.That(fleet2?.Cargo.Metals ?? 0).IsEqualTo(int.Parse(expected["fleet2met"]));
         await Assert.That(fleet2?.Cargo.Trillum ?? 0).IsEqualTo(int.Parse(expected["fleet2tri"]));
 
+        // EnemyMine returns the mine's empire, or Indep (ordinal 8) when there is none. The site's
+        // owner is the harness's Empire1 (ordinal 0).
+        var mineOwner = game.Galaxy.GetMineOwner(SiteLocation);
+        await Assert.That(mineOwner is null ? 8 : mineOwner == owner ? 0 : -1).IsEqualTo(int.Parse(expected["mineowner"]));
+
         if (!active) {
             switch (c.Building) {
                 case ConstructionType.Minefield:
-                    await Assert.That(game.Galaxy.GetMineOwner(SiteLocation)).IsEqualTo(owner);
+                    // Checked by mineowner above; without this arm, default expects a starbase.
                     break;
                 case ConstructionType.Gate or ConstructionType.WarpLink or ConstructionType.Disrupter:
-                    await Assert.That(game.Galaxy.GetMineOwner(SiteLocation)).IsNull();
                     var stargate = game.Galaxy.Stargates.Single();
                     // Pascal's StargateTypes ordinals are gte=24,lnk=25,dis=26 (TechnologyTypes'
                     // own numbering); StargateKind.Gate=0 aligns with gte=24, so +24 converts.
@@ -1625,7 +1631,6 @@ public class AnnualTickHandlerConstructionTests
                     await Assert.That(stargate.LinkedTo).IsNull();
                     break;
                 default:
-                    await Assert.That(game.Galaxy.GetMineOwner(SiteLocation)).IsNull();
                     var starbase = game.Galaxy.Starbases.Single();
                     // Pascal's StarbaseTypes ordinals are cmm=20,frt=21,cmp=22,out=23 (TechnologyTypes'
                     // own numbering); StarbaseKind.CommandBase=0 aligns with cmm=20, so +20 converts.

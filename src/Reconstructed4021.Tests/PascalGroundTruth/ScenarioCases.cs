@@ -8,9 +8,8 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// <see cref="GroundTruthRandom"/>/<c>GroundTruthSeed</c> value on both sides so <c>CREATERANDOMWORLDS</c>'
 /// collision-retry loop — unreachable under every other domain's <c>ForcedRandomValue</c> convention —
 /// finally gets exercised against a real, non-degenerate RNG sequence. <c>RunScenarioCase</c> emits an
-/// aggregate checksum over the whole loaded Universe^, but <c>ScenarioLoaderGoldenTests.MatchesGoldenFile</c>
-/// only asserts a subset of it — see that class's own doc comment for why every RNG-derived field, not
-/// just the obviously-randomized ones, had to be dropped from exact-match comparison.
+/// aggregate checksum over the whole loaded Universe^, which <c>ScenarioLoaderGoldenTests.MatchesGoldenFile</c>
+/// asserts exactly.
 ///
 /// <c>dos_131</c> has 12 files; 11 are covered here. <c>PRINCES.SCN</c> is deliberately excluded: its
 /// first <c>CREATESTARBASE</c> command has one extra integer field that matches neither this 1.31
@@ -26,8 +25,8 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// <c>AWAKEN.SCN</c>, still included below, carries a milder version of the same category of defect
 /// — it creates more planets than <c>TYPES.PAS</c>'s <c>MaxNoOfPlanets</c> allows, silently
 /// corrupting two starbases' stats via an out-of-bounds array write real DOS Turbo Pascal would
-/// reproduce too (range checking is off by default) — see <c>ScenarioLoaderGoldenTests</c>' own doc
-/// comment on <c>sumstarbaseeff</c> for the full trace.
+/// reproduce too (range checking is off by default) — see <c>ScenarioLoaderGoldenTests</c>' doc
+/// comment for which fields that skips.
 ///
 /// Player identity is a fixed "PlayerN"/"pwN"/not-an-empress convention on both sides — RunScenarioCase
 /// hard-codes the identical scheme (a name string can't round-trip through this domain's otherwise

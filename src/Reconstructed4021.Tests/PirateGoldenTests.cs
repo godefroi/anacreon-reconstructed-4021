@@ -240,9 +240,11 @@ public class PirateGoldenTests
             await Assert.That(HuntingGroundOf(handler)[state.BlockX - 1, state.BlockY - 1]).IsEqualTo(byte.Parse(golden["hgvalue"]));
         }
 
-        // targetowner=8 is Pascal's Indep ordinal (Empire1..Empire8 are 0..7) -- Mode 5 only.
+        // The harness's pirate is Empire1 (ordinal 0), the enemy Empire2 (1), and Indep is 8. Only
+        // Modes 5 and 6 build a target world.
         if (targetWorld is not null) {
-            await Assert.That(targetWorld.Owner.IsIndependent).IsEqualTo(int.Parse(golden["targetowner"]) == 8);
+            var targetOwner = targetWorld.Owner.IsIndependent ? 8 : targetWorld.Owner == owner ? 0 : targetWorld.Owner == enemy ? 1 : -1;
+            await Assert.That(targetOwner).IsEqualTo(int.Parse(golden["targetowner"]));
         }
     }
 }
