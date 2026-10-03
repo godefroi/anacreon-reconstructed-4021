@@ -35,17 +35,17 @@ public class GoldenFileTests
     public void RegenerateAllGoldenFiles()
     {
         GoldenFile.Regenerate("ambrosia", AmbrosiaCases.All,
-            c => $"{(c.StartAddicted ? 1 : 0)},{c.StartAmbrosia},{c.RngFixedValue}",
+            c => $"{(c.StartAddicted ? 1 : 0)},{c.StartAmbrosia},{c.RngFixedValue},{c.PlanetPop},{(int)c.Tech},{c.Efficiency}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "ambrosia", .. args.Skip(1)]));
 
         // RngFixedValue is always 0 here, matching AnnualTickHandlerRevolutionTests.MatchesGoldenFile's
         // own hardcoded FixedRandom(0) — RevolutionCase has no per-case field for it.
         GoldenFile.Regenerate("revolution", RevolutionCases.All,
-            c => $"{c.PlanetPop},{(int)c.Class},{(int)c.Tech},{c.Efficiency},{c.RevIndex},{c.Legions},0",
+            c => $"{c.PlanetPop},{(int)c.Class},{(int)c.Tech},{c.Efficiency},{c.RevIndex},{c.Legions},0,{(int)c.Type}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "revolution", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("military", MilitaryCases.All,
-            c => $"{c.PlanetPop},{(int)c.Tech},{c.Legions},{(int)c.Type},{c.RngFixedValue}",
+            c => $"{c.PlanetPop},{(int)c.Tech},{c.Legions},{(int)c.Type},{c.RngFixedValue},{(int)c.Class}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "military", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("defenses", DefensesCases.All,

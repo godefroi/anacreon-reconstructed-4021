@@ -263,6 +263,17 @@ in-transit probe in one call, so "in transit" reduces to just a list of destinat
 `PASCAL_ARCHITECTURE_NOTES.md` for the dead-code investigation) — `Status` was fully derivable from
 `Destination`'s nullability, and slot identity had no observable meaning.
 
+## Entity counts: no fixed-size arrays
+
+Pascal stores planets and starbases in fixed arrays (`MaxNoOfPlanets = 200`, `MaxNoOfStarbases =
+100`, `TYPES.PAS`) with range checking off. The port keeps them in lists with no cap, so a scenario
+that exceeds a Pascal limit loads as its author wrote it instead of overrunning into the next array.
+`AWAKEN.SCN` is the real case: it creates 212 planets, and in Pascal the last 12 overwrite both
+starbases' records (see `PASCAL_ARCHITECTURE_NOTES.md`). The C# loader creates all 212 planets and
+both starbases with the stats in the file. This is a deliberate divergence, so
+`ScenarioLoaderGoldenTests` skips Awaken's starbase-derived fields rather than matching Pascal's
+corrupted values. Don't add a cap to match Pascal.
+
 ## Ground-truth harness generation
 
 Two ways to get real-Pascal ground truth for a C# behavior, so a check can't silently agree with the

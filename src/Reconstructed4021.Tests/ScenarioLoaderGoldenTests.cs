@@ -77,6 +77,63 @@ public class ScenarioLoaderGoldenTests
             await Assert.That($"{starbases.Sum(s => s.Population)}").IsEqualTo(golden["sumstarbasepop"]);
             await Assert.That($"{starbases.Sum(s => s.Efficiency)}").IsEqualTo(golden["sumstarbaseeff"]);
         }
+
+        await Assert.That($"{planets.Sum(p => (int)p.Type)}").IsEqualTo(golden["sumtype"]);
+        await Assert.That($"{planets.Sum(p => Enum.GetValues<IndustryType>().Sum(i => p.Industry[i]))}").IsEqualTo(golden["sumindus"]);
+        await Assert.That($"{planets.Sum(p => (int)p.SelfSufficiency.Chemical + (int)p.SelfSufficiency.Metal + (int)p.SelfSufficiency.Supply + (int)p.SelfSufficiency.Trillum)}")
+            .IsEqualTo(golden["sumissp"]);
+        await Assert.That($"{planets.Count(p => p.Owner.IsIndependent)}").IsEqualTo(golden["indepplanets"]);
+
+        // The harness lists per-empire values sorted, since its empire slots follow the .SCN's empire
+        // numbers and Game.Empires doesn't.
+        await Assert.That(SortedList(game.Empires.Select(TechMask))).IsEqualTo(golden["techmasks"]);
+        await Assert.That(SortedList(game.Empires.Select(e => planets.Count(p => p.Owner == e)))).IsEqualTo(golden["planetcounts"]);
+        await Assert.That(SortedList(game.Empires.Select(e => e.Capital switch {
+            Planet p => planets.IndexOf(p) + 1,
+            Starbase s => 1000 + starbases.IndexOf(s) + 1,
+            _ => 0,
+        }))).IsEqualTo(golden["capitals"]);
+    }
+
+    private static string SortedList(IEnumerable<int> values) => string.Join(",", values.Order());
+
+    /// <summary>
+    /// The empire's technology as Pascal's TechnologySet bitmask (bit n = TechnologyTypes ordinal n,
+    /// TYPES.PAS:63-66). The ordinals are written out here rather than taken from ScenarioLoader's
+    /// grant table, so a wrong entry in that table can't cancel itself out.
+    /// </summary>
+    private static int TechMask(Empire e)
+    {
+        var mask = 0;
+        void Set(int ordinal) => mask |= 1 << ordinal;
+        var t = e.Technology;
+        if (t.Defenses.Contains(DefenseType.Lam)) Set(1);
+        if (t.Defenses.Contains(DefenseType.DefenseSatellite)) Set(2);
+        if (t.Defenses.Contains(DefenseType.Gdm)) Set(3);
+        if (t.Defenses.Contains(DefenseType.IonCannon)) Set(4);
+        if (t.Ships.Contains(ShipType.Fighter)) Set(5);
+        if (t.Ships.Contains(ShipType.HunterKiller)) Set(6);
+        if (t.Ships.Contains(ShipType.Jumpship)) Set(7);
+        if (t.Ships.Contains(ShipType.Jumptransport)) Set(8);
+        if (t.Ships.Contains(ShipType.Penetrator)) Set(9);
+        if (t.Ships.Contains(ShipType.Starship)) Set(10);
+        if (t.Ships.Contains(ShipType.Transport)) Set(11);
+        if (t.Resources.Contains(CargoType.Legion)) Set(12);
+        if (t.Resources.Contains(CargoType.NinjaLegion)) Set(13);
+        if (t.Resources.Contains(CargoType.Ambrosia)) Set(14);
+        if (t.Resources.Contains(CargoType.Chemicals)) Set(15);
+        if (t.Resources.Contains(CargoType.Metals)) Set(16);
+        if (t.Resources.Contains(CargoType.Supplies)) Set(17);
+        if (t.Resources.Contains(CargoType.Trillum)) Set(18);
+        if (t.Constructions.Contains(ConstructionType.Minefield)) Set(19);
+        if (t.Constructions.Contains(ConstructionType.CommandBase)) Set(20);
+        if (t.Constructions.Contains(ConstructionType.Fortress)) Set(21);
+        if (t.Constructions.Contains(ConstructionType.IndustrialComplex)) Set(22);
+        if (t.Constructions.Contains(ConstructionType.Outpost)) Set(23);
+        if (t.Constructions.Contains(ConstructionType.Gate)) Set(24);
+        if (t.Constructions.Contains(ConstructionType.WarpLink)) Set(25);
+        if (t.Constructions.Contains(ConstructionType.Disrupter)) Set(26);
+        return mask;
     }
 
     private static int SumShips(Planet p) =>

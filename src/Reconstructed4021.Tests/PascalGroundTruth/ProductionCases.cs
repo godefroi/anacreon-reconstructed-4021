@@ -19,14 +19,11 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// exercises two simultaneously-developed industries under scarce raw materials at once, which would
 /// exercise Production's own single loop more thoroughly.
 ///
-/// AllShipsUnlocked doesn't reach the harness — it isn't a Pascal concept, it's the C# port's
-/// per-empire ship-research gate (ShipTechAvailable), needed only so Owner.Technology.Ships can be
-/// populated before RunAnnualTick; runworld.pas's Technology set is unconditionally the full
-/// TechnologyTypes range (reducing to TechDev[Tech] once intersected), regardless of this flag.
+/// runworld.pas grants the full Technology set, so the C# test unlocks every ship and defense.
 /// </summary>
 public sealed record ProductionCase(
     string Name, WorldClass Class, WorldType Type, int Population, int Efficiency, TechLevel Tech,
-    bool AmbAddict, bool AllShipsUnlocked,
+    bool AmbAddict,
     int IndusBio, int IndusChe, int IndusMin, int IndusSYG, int IndusSYJ, int IndusSYS, int IndusSYT,
     int IndusSup, int IndusTri,
     int CargoMen, int CargoNnj, int CargoAmb, int CargoChe, int CargoMet, int CargoSup, int CargoTri,
@@ -39,7 +36,7 @@ internal static class ProductionCases
         // on the Industry level set here, not on anything GetIndustrialDistribution/UpdateIndustry
         // compute afterward for this tick.
         new(Name: "TrillumDrawsDownReserves", Class: WorldClass.EarthLike, Type: WorldType.TrillumMine,
-            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false, AllShipsUnlocked: false,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false,
             IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
             IndusSup: 0, IndusTri: 100,
             CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 1000, CargoTri: 0,
@@ -50,7 +47,7 @@ internal static class ProductionCases
         // Population=0 kept tiny (TotalProd treats Pop<=0 as 1) so it can't perturb Cargo.Supplies via
         // UseUpFood in the always-on test's full RunAnnualTick.
         new(Name: "PreTechOnlyProducesSupplies", Class: WorldClass.EarthLike, Type: WorldType.TrillumMine,
-            Population: 0, Efficiency: 100, Tech: TechLevel.PreTech, AmbAddict: false, AllShipsUnlocked: false,
+            Population: 0, Efficiency: 100, Tech: TechLevel.PreTech, AmbAddict: false,
             IndusBio: 0, IndusChe: 100, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
             IndusSup: 100, IndusTri: 100,
             CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 0, CargoTri: 0,
@@ -60,7 +57,7 @@ internal static class ProductionCases
         // Gamma/Beta cascade (Capital has a principal industry, so it takes the non-PI-less branch)
         // and Production building all seven ship types from one developed ShipyardGeneral level.
         new(Name: "FullPipelineCapitalWorld", Class: WorldClass.EarthLike, Type: WorldType.Capital,
-            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false, AllShipsUnlocked: true,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false,
             IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 100, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
             IndusSup: 0, IndusTri: 100,
             CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 5000, CargoMet: 5000, CargoSup: 5000, CargoTri: 5000,
@@ -72,7 +69,7 @@ internal static class ProductionCases
         // AnnualTickHandlerProductionTests.NinjaWorldAmbrosiaIsDrainedByUseUpAmbrosiaNotProduction for
         // why Cargo.Ambrosia isn't part of this case's golden-checked fields.
         new(Name: "NinjaProductionThrottledByScarceAmbrosia", Class: WorldClass.EarthLike, Type: WorldType.NinjaWorld,
-            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false, AllShipsUnlocked: false,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false,
             IndusBio: 100, IndusChe: 0, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
             IndusSup: 0, IndusTri: 0,
             CargoMen: 0, CargoNnj: 0, CargoAmb: 5, CargoChe: 5000, CargoMet: 5000, CargoSup: 5000, CargoTri: 5000,
@@ -82,13 +79,13 @@ internal static class ProductionCases
         // (UPDATE.PAS:905) and industry growth reports IndLack (UPDATE.PAS:971). ReportPlanetLack only
         // bumps RevIndex for an owned world (UPDATE.PAS:46-47); the independent twin must stay at 0.
         new(Name: "ShortfallRaisesRevIndexForEmpireWorld", Class: WorldClass.EarthLike, Type: WorldType.Capital,
-            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false, AllShipsUnlocked: true,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false,
             IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 100, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
             IndusSup: 0, IndusTri: 100,
             CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 5000, CargoTri: 5000,
             TrillumReserve: 5000, RevIndex: 50),
         new(Name: "ShortfallLeavesRevIndexAloneForIndependentWorld", Class: WorldClass.EarthLike, Type: WorldType.Capital,
-            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false, AllShipsUnlocked: true,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false,
             IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 100, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
             IndusSup: 0, IndusTri: 100,
             CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 5000, CargoTri: 5000,

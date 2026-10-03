@@ -304,5 +304,7 @@ public class VisibilityHandlerProbeTests
         var expected = golden[c.Name];
         await Assert.That(human.Planets.Scouted.Contains(destPlanet) ? 1 : 0).IsEqualTo(int.Parse(expected["destscouted"]));
         await Assert.That(human.Planets.Scouted.Contains(ringCell) ? 1 : 0).IsEqualTo(int.Parse(expected["ringscouted"]));
+        await Assert.That(human.Planets.Known.Contains(destPlanet) ? 1 : 0).IsEqualTo(int.Parse(expected["destknown"]));
+        await Assert.That(human.Planets.Known.Contains(ringCell) ? 1 : 0).IsEqualTo(int.Parse(expected["ringknown"]));
     }
 }

@@ -581,9 +581,10 @@ public class AnnualTickHandlerProductionTests
         var golden = PascalGroundTruth.GoldenFile.Load("production.golden");
         var expected = golden[c.Name];
 
-        var owner = c.Independent ? Empire.Independent : new Empire { Name = "Test" };
-        if (c.AllShipsUnlocked)
-            owner.Technology.Ships.UnionWith(Enum.GetValues<ShipType>());
+        // A local independent rather than the shared Empire.Independent, so granting technology here
+        // can't leak into other tests. The harness grants the full Technology set.
+        var owner = c.Independent ? new Empire { Name = "Independent", IsIndependent = true } : new Empire { Name = "Test" };
+        owner.Technology.Ships.UnionWith(Enum.GetValues<ShipType>());
         owner.Technology.Defenses.UnionWith(Enum.GetValues<DefenseType>());
         var planet = MakePlanet(c, owner);
         var game = BuildGame(planet);
@@ -707,10 +708,14 @@ public class AnnualTickHandlerMaturationTests
             ["fgt"] = planet.Ships.Fighters, ["hkr"] = planet.Ships.HunterKillers, ["jmp"] = planet.Ships.Jumpships,
             ["jtn"] = planet.Ships.Jumptransports, ["pen"] = planet.Ships.Penetrators, ["ssp"] = planet.Ships.Starships,
             ["trn"] = planet.Ships.Transports,
-            ["cargomen"] = planet.Cargo.Legions, ["cargoche"] = planet.Cargo.Chemicals, ["cargomet"] = planet.Cargo.Metals,
+            ["cargomen"] = planet.Cargo.Legions, ["cargonnj"] = planet.Cargo.NinjaLegions, ["cargoamb"] = planet.Cargo.Ambrosia,
+            ["cargoche"] = planet.Cargo.Chemicals, ["cargomet"] = planet.Cargo.Metals,
             ["cargosup"] = planet.Cargo.Supplies, ["cargotri"] = planet.Cargo.Trillum, ["trillumreserve"] = planet.TrillumReserve,
             ["lam"] = planet.Defenses.Lams, ["def"] = planet.Defenses.DefenseSatellites, ["gdm"] = planet.Defenses.Gdms,
             ["ion"] = planet.Defenses.IonCannons,
+            ["ambaddict"] = planet.IsAddictedToAmbrosia ? 1 : 0, ["type"] = (int)planet.Type,
+            // Empire1 is ordinal 0 and Indep is 8.
+            ["owner"] = planet.Owner == owner ? 0 : planet.Owner.IsIndependent ? 8 : -1,
         };
         var expectedValues = expected.Where(kv => kv.Key != "case").ToDictionary(kv => kv.Key, kv => int.Parse(kv.Value));
 
@@ -772,6 +777,7 @@ public class AnnualTickHandlerAmbrosiaTests
 
         var owner = new Empire { Name = "Test" };
         var planet = MakeCapital(c.PlanetPop, c.Tech, owner);
+        planet.Efficiency = c.Efficiency;
         planet.Cargo.Supplies = 9999;
         planet.Cargo.Ambrosia = c.StartAmbrosia;
         planet.IsAddictedToAmbrosia = c.StartAddicted;

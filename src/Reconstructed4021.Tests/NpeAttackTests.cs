@@ -38,7 +38,7 @@ public class NpeAttackTests
         var game = new Core.Game(galaxy);
 
         var attacker = new Empire { Name = "Attacker" };
-        var attackerCapital = new Planet { Location = new Coordinate(0, 0), Owner = attacker, Class = WorldClass.EarthLike, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
+        var attackerCapital = new Planet { Location = new Coordinate(0, 0), Owner = attacker, Class = WorldClass.ClassM, Type = WorldType.Capital, TechLevel = TechLevel.Jump };
         attacker.Capital = attackerCapital;
         galaxy.Planets.Add(attackerCapital);
 
@@ -62,37 +62,30 @@ public class NpeAttackTests
         game.TurnHandlers[attacker] = new NonHumanTurnHandler();
         game.TurnHandlers[defender] = new NonHumanTurnHandler();
 
-        object target;
-        Planet defenderPlanet2;
+        // Planet[2] is Empire2's capital whatever the target is, and the harness stocks it with the
+        // defender's ships and legions either way.
+        var defenderPlanet2 = new Planet { Location = new Coordinate(50, 50), Owner = defender, Class = c.DefenderClass, Type = WorldType.Capital, TechLevel = c.DefenderTech };
+        defenderPlanet2.Ships.Fighters = c.DefenderFgt;
+        defenderPlanet2.Ships.HunterKillers = c.DefenderHkr;
+        defenderPlanet2.Cargo.Legions = c.DefenderMen;
+        defender.Capital = defenderPlanet2;
+        galaxy.Planets.Add(defenderPlanet2);
+
+        // Fleet[2] sits with the attacker at (5,5), same strength as Planet[2].
+        Fleet? targetFleet = null;
         if (c.TargetIsFleet) {
-            var targetFleet = new Fleet { Location = new Coordinate(50, 50), Owner = defender };
+            targetFleet = new Fleet { Location = new Coordinate(5, 5), Owner = defender };
             targetFleet.Ships.Fighters = c.DefenderFgt;
             targetFleet.Ships.HunterKillers = c.DefenderHkr;
             galaxy.Fleets.Add(targetFleet);
-            target = targetFleet;
-
-            // ConquerEmpire never runs for a Fleet target (only a conquered Capital world triggers it),
-            // so the defender still needs a real capital of its own for GetCapital/GetCoord's sake --
-            // matching this domain's own Pascal harness, which always creates Planet[2] as Empire2's
-            // capital regardless of TargetIsFleet.
-            defenderPlanet2 = new Planet { Location = new Coordinate(50, 50), Owner = defender, Class = c.DefenderClass, Type = WorldType.Capital, TechLevel = c.DefenderTech };
-            defender.Capital = defenderPlanet2;
-            galaxy.Planets.Add(defenderPlanet2);
-        } else {
-            defenderPlanet2 = new Planet { Location = new Coordinate(50, 50), Owner = defender, Class = c.DefenderClass, Type = WorldType.Capital, TechLevel = c.DefenderTech };
-            defenderPlanet2.Ships.Fighters = c.DefenderFgt;
-            defenderPlanet2.Ships.HunterKillers = c.DefenderHkr;
-            defenderPlanet2.Cargo.Legions = c.DefenderMen;
-            defender.Capital = defenderPlanet2;
-            galaxy.Planets.Add(defenderPlanet2);
-            target = defenderPlanet2;
         }
+        object target = targetFleet is not null ? targetFleet : defenderPlanet2;
 
         Planet? planet3 = null;
         if (c.Planet3Present) {
             planet3 = new Planet {
                 Location = new Coordinate(c.Planet3X, c.Planet3Y), Owner = defender,
-                Class = WorldClass.EarthLike, Type = WorldType.Agricultural, TechLevel = c.Planet3Tech,
+                Class = WorldClass.ClassM, Type = WorldType.Agricultural, TechLevel = c.Planet3Tech,
                 Population = c.Planet3Population, RevolutionIndex = c.Planet3RevIndex,
             };
             galaxy.Planets.Add(planet3);
@@ -133,6 +126,30 @@ public class NpeAttackTests
             _ => -1,
         };
         await Assert.That(newCapitalIndex).IsEqualTo(int.Parse(expected["newcap_idx"]));
+
+        await Assert.That(defenderPlanet2.Ships.Fighters).IsEqualTo(int.Parse(expected["def_fgt"]));
+        await Assert.That(defenderPlanet2.Ships.HunterKillers).IsEqualTo(int.Parse(expected["def_hkr"]));
+        await Assert.That(defenderPlanet2.Cargo.Legions).IsEqualTo(int.Parse(expected["def_men"]));
+        await Assert.That(defenderPlanet2.Cargo.NinjaLegions).IsEqualTo(int.Parse(expected["def_nnj"]));
+
+        // The harness prints a destroyed fleet as all zeros.
+        var attackerAlive = galaxy.Fleets.Contains(fleet);
+        await Assert.That(attackerAlive ? 1 : 0).IsEqualTo(int.Parse(expected["att_active"]));
+        await Assert.That(attackerAlive ? fleet.Ships.Fighters : 0).IsEqualTo(int.Parse(expected["att_fgt"]));
+        await Assert.That(attackerAlive ? fleet.Ships.HunterKillers : 0).IsEqualTo(int.Parse(expected["att_hkr"]));
+        await Assert.That(attackerAlive ? fleet.Ships.Jumptransports : 0).IsEqualTo(int.Parse(expected["att_jtn"]));
+        await Assert.That(attackerAlive ? fleet.Cargo.NinjaLegions : 0).IsEqualTo(int.Parse(expected["att_nnj"]));
+        await Assert.That(attackerAlive ? fleet.Cargo.Legions : 0).IsEqualTo(int.Parse(expected["att_men"]));
+        await Assert.That(attackerAlive ? (int)fleet.Fuel : 0).IsEqualTo(int.Parse(expected["att_fuel"]));
+
+        var targetAlive = targetFleet is not null && galaxy.Fleets.Contains(targetFleet);
+        await Assert.That(targetAlive ? 1 : 0).IsEqualTo(int.Parse(expected["tgt_active"]));
+        await Assert.That(targetAlive ? targetFleet!.Ships.Fighters : 0).IsEqualTo(int.Parse(expected["tgt_fgt"]));
+        await Assert.That(targetAlive ? targetFleet!.Ships.HunterKillers : 0).IsEqualTo(int.Parse(expected["tgt_hkr"]));
+
+        await Assert.That(attacker.TotalRevolutionIndex).IsEqualTo(int.Parse(expected["rev1"]));
+        await Assert.That(defender.TotalRevolutionIndex).IsEqualTo(int.Parse(expected["rev2"]));
+        await Assert.That(defender.Status == EmpireStatus.Eliminated ? 0 : 1).IsEqualTo(int.Parse(expected["inuse2"]));
     }
 
     /// <summary>Matches the Pascal harness's own Empire ordinal (Empire1=0,Empire2=1,...,Indep=8) for the two empires this domain ever uses as an owner.</summary>
