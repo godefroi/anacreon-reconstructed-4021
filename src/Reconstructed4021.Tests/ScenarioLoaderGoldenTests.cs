@@ -93,6 +93,16 @@ public class ScenarioLoaderGoldenTests
             Starbase s => 1000 + starbases.IndexOf(s) + 1,
             _ => 0,
         }))).IsEqualTo(golden["capitals"]);
+
+        // Kingdom NPE personas, packed base 128 the way the harness packs them.
+        var personas = game.TurnHandlers.Values.OfType<LegacyNpe.KingdomTurnHandler>()
+            .Select(h => (LegacyNpe.NpeCharacter)typeof(LegacyNpe.KingdomTurnHandler)
+                .GetField("_persona", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(h)!)
+            .ToList();
+        await Assert.That(SortedList(personas.Select(p => ((p.ImperialistGene * 128 + p.DefensiveGene) * 128 + p.OffensiveGene) * 128 + p.Provoke)))
+            .IsEqualTo(golden["kingdomgenes"]);
+        await Assert.That(SortedList(personas.Select(p => (p.WorldPower * 128 + p.SphereX) * 128 + p.Offset)))
+            .IsEqualTo(golden["kingdomtraits"]);
     }
 
     private static string SortedList(IEnumerable<int> values) => string.Join(",", values.Order());

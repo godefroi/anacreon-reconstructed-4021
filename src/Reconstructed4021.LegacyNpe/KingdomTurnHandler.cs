@@ -44,6 +44,8 @@ public sealed class KingdomTurnHandler : ITurnHandler
             _persona.FactorGene = 25;
             _persona.RandomGene = 50;
             _persona.Provoke = Rnd(random, 50, 100);
+            // WorldPower before SphereX, matching Pascal's draw order (NPE02.PAS:175-177).
+            _persona.WorldPower = Rnd(random, 25, 75);
             _persona.SphereX = Rnd(random, 25, 100);
         } else {
             _defaultPolicy = PolicyType.Neutral;
@@ -53,6 +55,8 @@ public sealed class KingdomTurnHandler : ITurnHandler
             _persona.FactorGene = 15;
             _persona.RandomGene = 50;
             _persona.Provoke = 75;
+            // WorldPower before SphereX, matching Pascal's draw order (NPE02.PAS:130-132).
+            _persona.WorldPower = Rnd(random, 25, 75);
             _persona.SphereX = Rnd(random, 25, 75);
         }
 
@@ -60,7 +64,6 @@ public sealed class KingdomTurnHandler : ITurnHandler
         _persona.Offensive = _persona.OffensiveGene;
         _persona.Techno = 50;
         _persona.Imperialist = _persona.ImperialistGene;
-        _persona.WorldPower = Rnd(random, 25, 75);
         _persona.Honorable = 50;
         _persona.Clock = 0;
         _persona.Offset = Rnd(random, 1, 10);

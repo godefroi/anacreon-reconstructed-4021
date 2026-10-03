@@ -167,7 +167,10 @@
                 perturbs at least one of these sums, which is what a golden-file regression actually
                 needs to catch. Also sumtype, sumindus, sumissp, indepplanets, and three sorted
                 per-empire lists: techmasks (TechnologySet as a bitmask, bit n = TechnologyTypes
-                ordinal n), planetcounts, and capitals (planet index, or 1000+index for a starbase).
+                ordinal n), planetcounts, and capitals (planet index, or 1000+index for a starbase);
+                and two sorted per-kingdom-NPE lists of persona draws packed base 128:
+                kingdomgenes (ImpGene,DefGene,OffGene,Provoke) and kingdomtraits
+                (WorldPower,SphereX,Offset).
                 ScenarioLoaderGoldenTests.MatchesGoldenFile asserts all of them exactly, except
                 AWAKEN.SCN's starbase fields (see that test's doc comment).
    One output line per case, in order, to stdout -- consumed by PatchHarness
@@ -1772,6 +1775,8 @@ procedure RunScenarioCase(const arg: String);
       SumType,SumIndus,SumIssp,IndepCount: LongInt;
       TechMasks,PlanetCounts,Capitals: array[0..7] of LongInt;
       NEmp: Integer;
+      KingdomGenes,KingdomTraits: array[0..7] of LongInt;
+      NKingdom: Integer;
 
    begin
    { Path,Seed,NumPlayers -- Path may itself contain no commas (a plain relative path), so this is
@@ -1926,6 +1931,23 @@ procedure RunScenarioCase(const arg: String);
    WriteSortedList('techmasks',TechMasks,NEmp);
    WriteSortedList('planetcounts',PlanetCounts,NEmp);
    WriteSortedList('capitals',Capitals,NEmp);
+
+   { Each kingdom NPE's Rnd-drawn persona fields (NPE02.PAS's InitializeKingdom1NPE/2NPE), packed
+     base 128 (every field is at most 100): genes = ImpGene,DefGene,OffGene,Provoke; traits =
+     WorldPower,SphereX,Offset. NPEData is a unit global, so only this scenario's NPEs (in use, not
+     players) are read. }
+   NKingdom:=0;
+   for Emp:=Empire1 to Empire8 do
+      if Universe^.EmpireData[Emp].InUse and (not Universe^.EmpireData[Emp].IsAPlayer)
+         and (NPEData[Emp].Typ in [Kingdom1NPE,Kingdom2NPE]) then
+         with Kingdom1DataPtr(NPEData[Emp].Data)^.Persona do
+            begin
+            KingdomGenes[NKingdom]:=((LongInt(ImpGene)*128+DefGene)*128+OffGene)*128+Provoke;
+            KingdomTraits[NKingdom]:=(LongInt(WorldPower)*128+SphereX)*128+Offset;
+            Inc(NKingdom);
+            end;
+   WriteSortedList('kingdomgenes',KingdomGenes,NKingdom);
+   WriteSortedList('kingdomtraits',KingdomTraits,NKingdom);
    WriteLn;
 
    Dispose(Universe);
