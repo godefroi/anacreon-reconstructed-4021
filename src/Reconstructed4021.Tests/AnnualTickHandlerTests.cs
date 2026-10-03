@@ -1400,8 +1400,12 @@ public class AnnualTickHandlerStarbaseTests
         var owner = new Empire { Name = "Test" };
         var starbase = MakeComplex(new Coordinate(5, 5), owner);
         starbase.Cargo.Chemicals = c.StarbaseChemicals;
-        var neighbor = MakeRawMaterialPlanet(new Coordinate(5, 6), owner, chemicals: c.NeighborChemicals);
-        var game = BuildGame(starbase, neighbor);
+        // SE of the starbase, matching runworld.pas's starbase domain exactly.
+        var neighbor = MakeRawMaterialPlanet(new Coordinate(6, 6), owner, chemicals: c.NeighborChemicals);
+        var neighbor2 = c.SecondNeighborChemicals is { } second
+            ? MakeRawMaterialPlanet(new Coordinate(4, 4), owner, chemicals: second)
+            : null;
+        var game = BuildGame(starbase, neighbor2 is null ? [neighbor] : [neighbor, neighbor2]);
         game.Empires.Add(owner);
         var handler = new AnnualTickHandler(new FixedRandom(c.RngFixedValue));
 
@@ -1410,6 +1414,9 @@ public class AnnualTickHandlerStarbaseTests
         var expected = golden[c.Name];
         await Assert.That(starbase.Cargo.Chemicals).IsEqualTo(int.Parse(expected["starbaseChe"]));
         await Assert.That(neighbor.Cargo.Chemicals).IsEqualTo(int.Parse(expected["neighborChe"]));
+        if (neighbor2 is not null) {
+            await Assert.That(neighbor2.Cargo.Chemicals).IsEqualTo(int.Parse(expected["neighbor2Che"]));
+        }
     }
 
     [Test]

@@ -257,9 +257,9 @@ public sealed partial class AnnualTickHandler
         WorldType.Agricultural, WorldType.Chemical, WorldType.Mine, WorldType.RawMaterialMine, WorldType.TrillumMine,
     }.ToFrozenSet();
 
-    /// <summary>The 8 compass directions (DirX/DirY, DATACNST.PAS), excluding the center — SupplyLink/SurplusLink never transfer with a starbase's own sector.</summary>
+    /// <summary>The 8 compass directions in Pascal's visit order N, NE, E, SE, S, SW, W, NW (DirX/DirY, DATACNST.PAS:561-564, indices 1..8), excluding the center — SupplyLink/SurplusLink never transfer with a starbase's own sector. Order matters: SurplusLink hands the surplus to the first eligible neighbor with room.</summary>
     private static readonly (int dx, int dy)[] _eightNeighborOffsets = [
-        (-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1),
+        (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1),
     ];
 
     // Loop ranges matching Pascal's subrange FOR loops, in enum declaration order.

@@ -63,7 +63,8 @@
                 is the same no-op stand-in ATTACK.PAS.patch already carries for 5f, so this domain
                 only asserts LAMAttack's own ShipsDest/DefnsDest VAR out-params, not whether a
                 totally-destroyed fleet was actually removed.
-     starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue  -> "starbaseChe=<v>;neighborChe=<v>"
+     starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue,Neighbor2Chemicals (-1 = no second neighbor)
+                -> "starbaseChe=<v>;neighborChe=<v>;neighbor2Che=<v>"
      ambrosia   Addicted,Ambrosia,RngFixedValue                    -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
      revolution PlanetPop,ClassOrd,TechOrd,Efficiency,RevIndex,Legions,RngFixedValue
                 -> "rebelled=<TRUE|FALSE>;legions=<v>;ninja=<v>;population=<v>;efficiency=<v>;revindex=<v>;total_rev_delta=<v>"
@@ -788,8 +789,8 @@ procedure RunStarbaseCase(const arg: String);
      as the GlobalSets note above: stay on the real standalone state this
      driver already owns, not a heavier unit pulled in for one write). }
    var
-      parts: array[0..2] of LongInt;
-      ID, PlanetID: IDNumber;
+      parts: array[0..3] of LongInt;
+      ID, PlanetID, Planet2ID: IDNumber;
    begin
    ParseFields(arg,parts);
 
@@ -807,6 +808,26 @@ procedure RunStarbaseCase(const arg: String);
 
    PlanetID.ObjTyp:=Pln;  PlanetID.Index:=1;
    Sector[6]^[6].Obj:=PlanetID;
+   SetOfActivePlanets:=[1];
+   SetOfPlanetsOf[Empire1]:=[1];
+
+   { Optional second neighbor at (4,4), the NW diagonal opposite planet 1's SE (6,6):
+     Pascal's N,NE,E,SE,S,SW,W,NW visit order reaches SE first, a lexicographic (dx,dy)
+     walk reaches NW first, so which one absorbs SurplusLink's surplus exposes the order. }
+   if parts[3]>=0 then
+      begin
+      NoOfPlanets:=2;
+      Universe^.Planet[2].XY.x:=4;  Universe^.Planet[2].XY.y:=4;
+      Universe^.Planet[2].Emp:=Empire1;
+      Universe^.Planet[2].Cls:=ClsM;
+      Universe^.Planet[2].Typ:=AgrTyp;
+      Universe^.Planet[2].Pop:=0;
+      Universe^.Planet[2].Cargo[che]:=parts[3];
+      Planet2ID.ObjTyp:=Pln;  Planet2ID.Index:=2;
+      Sector[4]^[4].Obj:=Planet2ID;
+      SetOfActivePlanets:=[1,2];
+      SetOfPlanetsOf[Empire1]:=[1,2];
+      end;
 
    Universe^.Starbase[1].XY.x:=5;  Universe^.Starbase[1].XY.y:=5;
    Universe^.Starbase[1].Emp:=Empire1;
@@ -817,8 +838,6 @@ procedure RunStarbaseCase(const arg: String);
    Universe^.Starbase[1].Pop:=0;
    Universe^.Starbase[1].Cargo[che]:=parts[0];
 
-   SetOfActivePlanets:=[1];
-   SetOfPlanetsOf[Empire1]:=[1];
    SetOfActiveStarbases:=[1];
    SetOfStarbasesOf[Empire1]:=[1];
    Universe^.EmpireData[Empire1].InUse:=True;
@@ -831,7 +850,8 @@ procedure RunStarbaseCase(const arg: String);
    UpdateWorld(ID);
 
    WriteLn('starbaseChe=',Universe^.Starbase[1].Cargo[che],
-           ';neighborChe=',Universe^.Planet[1].Cargo[che]);
+           ';neighborChe=',Universe^.Planet[1].Cargo[che],
+           ';neighbor2Che=',Universe^.Planet[2].Cargo[che]);
 
    Dispose(Universe);
    end;
