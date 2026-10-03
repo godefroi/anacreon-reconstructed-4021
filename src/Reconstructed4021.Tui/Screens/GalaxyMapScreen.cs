@@ -1066,6 +1066,14 @@ internal sealed class GalaxyMapScreen : IScreen
     // Attack confirmation Ministry of War's own menu item shows.
     private void BeginAttack(Fleet attacker, ISectorObject target)
     {
+        // AttackCommand sends a Con/Gate target straight to TakeOverConOrGate (ATTCOMM.PAS:1633-1634),
+        // before any battle configuration; neither type is an IShipCargoHolder, so there's nothing to fight.
+        if (target is ConstructionSite or Stargate)
+        {
+            TakeOverConOrGate(attacker, target);
+            return;
+        }
+
         _overlays.Add(new AttackConfigPromptOverlay(choice =>
         {
             switch (choice)
@@ -1082,6 +1090,16 @@ internal sealed class GalaxyMapScreen : IScreen
                     return;
             }
         }));
+    }
+
+    // TakeOverConOrGate (ATTCOMM.PAS:759-775). The name is read before the object is removed.
+    private void TakeOverConOrGate(Fleet attacker, ISectorObject target)
+    {
+        var name = DisplayName(target);
+        var hkSurprise = CombatEngine.ForcesUnknown(attacker, target.Owner);
+        CombatStandalone.DestroyConstructionOrGate(_player, hkSurprise, target, _game, _context.Random);
+        Refresh();
+        ShowInfo("Attack", $"{name} has been destroyed.");
     }
 
     // AttackCommand's own IF NoOfGroups>0 (ATTCOMM.PAS:1619) -- zero groups skips the battle entirely,
