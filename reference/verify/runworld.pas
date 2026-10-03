@@ -67,8 +67,9 @@
                 real ATTACK.PAS's own LAMAttack called directly (not through NPEAttack -- LAMAttack
                 has no Rnd calls at all, so no RngFixedValue field here), see RunLamAttackCase's own
                 comment. Both target and player are always Empire2/Empire1 respectively.
-     starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue,Neighbor2Chemicals (-1 = no second neighbor)
-                -> "starbaseChe=<v>;neighborChe=<v>;neighbor2Che=<v>"
+     starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue,Neighbor2Chemicals (-1 = no second neighbor),
+                StarbaseTechOrd,Legions,TechnologyBitmask,MetalsAndTrillum
+                -> "starbaseChe=<v>;neighborChe=<v>;neighbor2Che=<v>;techlevel=<v>;lam=<v>;def=<v>;gdm=<v>;ion=<v>"
      ambrosia   Addicted,Ambrosia,RngFixedValue,PlanetPop,TechOrd,Efficiency
                 -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
      revolution PlanetPop,ClassOrd,TechOrd,Efficiency,RevIndex,Legions,RngFixedValue,TypOrd
@@ -137,10 +138,9 @@
                 news=<Empire1's NewsTypes ordinals>" -- calls the already-exported ProbeScout (INTRFACE.PAS:1289-1344)
                 directly against one planet at the probe's destination (5,5) and one at the very next
                 ring cell in Pascal's fixed offset order, (5,4). Covers ISqrt(Cargo[men]) and the
-                Rnd(1,100)<ChanceToDestroy threshold plus its Exit-before-ScoutObject sequencing -- ring
-                ordering/early-exit control flow itself is hardcoded-tested on the C# side
-                (VisibilityHandlerProbeTests), since there's no separate Pascal formula to cross-check
-                there.
+                Rnd(1,100)<ChanceToDestroy threshold plus its Exit-before-ScoutObject sequencing, and
+                the Dark Nebula early exit when DestDarkNebula is set. Further ring-ordering cases are
+                hardcoded on the C# side (VisibilityHandlerProbeTests).
      groundtruthrng Seed,Range,Count -> "values=<Count comma-joined GroundTruthNextU32-scaled draws
                 after GroundTruthSeed:=Seed>;reals=<Count comma-joined GroundTruthRandomReal draws,
                 seed reset to Seed first>" -- not a UpdateWorld/GalaxySetup domain; a standing
@@ -235,8 +235,8 @@ procedure ParseFields(const arg: String; var parts: array of LongInt);
 
 procedure ResetGlobalSets;
    { The active/owned-object sets are standalone globals (TYPES.PAS:180-188), not part of Universe^,
-     so FillChar(Universe^) leaves the previous case's members behind. A domain whose routine
-     allocates a slot from them (NextStarbaseSlot and friends) must clear them per case. }
+     so FillChar(Universe^) leaves the previous case's members behind. RunCaseMode clears them
+     before every case. }
    var
       Emp: Empire;
    begin
@@ -877,10 +877,18 @@ procedure RunStarbaseCase(const arg: String);
      GetObject, unlike techlevel/military's own scenarios, which never call
      it. Never route through Intrface's PutObject for this (same reasoning
      as the GlobalSets note above: stay on the real standalone state this
-     driver already owns, not a heavier unit pulled in for one write). }
+     driver already owns, not a heavier unit pulled in for one write).
+
+     StarbaseTechOrd, Legions, TechnologyBitmask and MetalsAndTrillum (parts[4..7]; bitmask bit i =
+     TechnologyTypes(i+1), as in the defenses domain) set the complex's tech, troops, the empire's
+     researched defenses, and the metals and trillum defenses are built from.
+     The capital (neighbor planet 1) is PreTech, so UpdateTechLevel's regression roll can lower the
+     starbase's tech this tick, which checks which tech level gates its defenses. }
    var
-      parts: array[0..3] of LongInt;
+      parts: array[0..7] of LongInt;
       ID, PlanetID, Planet2ID: IDNumber;
+      i: Integer;
+      techSet: TechnologySet;
    begin
    ParseFields(arg,parts);
 
@@ -923,16 +931,25 @@ procedure RunStarbaseCase(const arg: String);
    Universe^.Starbase[1].Emp:=Empire1;
    Universe^.Starbase[1].STyp:=cmp;
    Universe^.Starbase[1].Typ:=BseSTyp;
-   Universe^.Starbase[1].Tech:=WrpTchLvl;
+   Universe^.Starbase[1].Tech:=TechLevel(parts[4]);
    Universe^.Starbase[1].Eff:=100;
    Universe^.Starbase[1].Pop:=0;
    Universe^.Starbase[1].Cargo[che]:=parts[0];
+   Universe^.Starbase[1].Cargo[men]:=parts[5];
+   Universe^.Starbase[1].Cargo[met]:=parts[7];
+   Universe^.Starbase[1].Cargo[tri]:=parts[7];
 
    SetOfActiveStarbases:=[1];
    SetOfStarbasesOf[Empire1]:=[1];
    Universe^.EmpireData[Empire1].InUse:=True;
    Universe^.EmpireData[Empire1].IsAPlayer:=False;
    Universe^.EmpireData[Empire1].Capital:=PlanetID;
+
+   techSet:=[];
+   for i:=0 to 25 do
+      if ((parts[6] shr i) and 1)=1 then
+         techSet:=techSet+[TechnologyTypes(i+1)];
+   Universe^.EmpireData[Empire1].Technology:=techSet;
 
    ForcedRandomValue:=parts[2];
 
@@ -941,7 +958,10 @@ procedure RunStarbaseCase(const arg: String);
 
    WriteLn('starbaseChe=',Universe^.Starbase[1].Cargo[che],
            ';neighborChe=',Universe^.Planet[1].Cargo[che],
-           ';neighbor2Che=',Universe^.Planet[2].Cargo[che]);
+           ';neighbor2Che=',Universe^.Planet[2].Cargo[che],
+           ';techlevel=',Ord(Universe^.Starbase[1].Tech),
+           ';lam=',Universe^.Starbase[1].Defns[LAM],';def=',Universe^.Starbase[1].Defns[def],
+           ';gdm=',Universe^.Starbase[1].Defns[GDM],';ion=',Universe^.Starbase[1].Defns[ion]);
 
    Dispose(Universe);
    end;
@@ -1421,7 +1441,8 @@ procedure RunConstructionCase(const arg: String);
      MaxNoOfStargates (INTRFACE.PAS:359-368,399-408); starting with zero active starbases/gates
      means a completion always lands at exactly MaxNoOfStarbases/MaxNoOfStargates, so those two
      fixed slots are read back unconditionally below regardless of what this case actually built.
-     ResetGlobalSets keeps an earlier case's completed starbase or gate from occupying that slot. }
+     RunCaseMode's per-case ResetGlobalSets keeps an earlier case's completed starbase or gate from
+     occupying that slot. }
    var
       parts: array[0..11] of LongInt;
    begin
@@ -1429,7 +1450,6 @@ procedure RunConstructionCase(const arg: String);
 
    New(Universe);
    FillChar(Universe^,SizeOf(Universe^),0);
-   ResetGlobalSets;
    InitializeSector(20); { required before any Sector[x]^[y] access -- PutMine/EnemyMine/
                            CreateStarbase/CreateStargate all touch it (same requirement as
                            RunStarbaseCase's own InitializeSector call). }
@@ -2031,9 +2051,9 @@ procedure RunProbeScoutCase(const arg: String);
      owner/legions/already-scouted, and one at the very next ring cell in Pascal's fixed offset order,
      (5,4) -- (dx,dy)=(0,-1) -- used purely as a "did the scan continue past the destination" signal;
      its own owner (Empire2) and legions (0) never vary. Covers ISqrt(Cargo[men]) and the
-     Rnd(1,100)<ChanceToDestroy threshold plus its Exit-before-ScoutObject sequencing -- ring
-     ordering/early-exit control flow itself is hardcoded-tested on the C# side
-     (VisibilityHandlerProbeTests), since there's no separate Pascal formula to cross-check there.
+     Rnd(1,100)<ChanceToDestroy threshold plus its Exit-before-ScoutObject sequencing, and the Dark
+     Nebula early exit (DestDarkNebula). Further ring-ordering cases are hardcoded on the C# side
+     (VisibilityHandlerProbeTests).
 
      Requires InitializeSector plus direct Sector[x]^[y].Obj writes for both planets -- ProbeScout
      resolves them via GetObject, same requirement as the starbase/construction domains. }
@@ -2450,6 +2470,9 @@ procedure RunCaseMode;
    begin
    domain:=ParamStr(2);
    for i:=3 to ParamCount do
+      begin
+      { Every case starts from empty object sets, whatever the previous case left behind. }
+      ResetGlobalSets;
       if domain='techlevel' then
          RunTechLevelCase(ParamStr(i))
       else if domain='military' then
@@ -2501,6 +2524,7 @@ procedure RunCaseMode;
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');
          Halt(1);
          end;
+      end;
    end;
 
 begin

@@ -17,8 +17,14 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// distance 1, Warp-tech BaseStarbase complex) — only the two Chemicals seed values and RngFixedValue
 /// vary per case, since Cargo.Chemicals is the one field neither UpdateIndustry's Metal-only growth
 /// cost nor Production's ship-tech-gated builds can touch (see the driver's own doc comment).
+///
+/// The empire's capital is the neighbor planet, at PreTech, so the starbase's tech can regress this
+/// tick. StarbaseTech, Legions, TechnologyBitmask (bit i = TechnologyTypes(i+1); bits 0-3 are
+/// LAM,def,GDM,ion) and MetalsAndTrillum (seeds both cargoes) let a case check which tech level gates
+/// the starbase's defenses.
 /// </summary>
-public sealed record StarbaseCase(string Name, int StarbaseChemicals, int NeighborChemicals, int RngFixedValue, int? SecondNeighborChemicals = null) : INamedCase;
+public sealed record StarbaseCase(string Name, int StarbaseChemicals, int NeighborChemicals, int RngFixedValue, int? SecondNeighborChemicals = null,
+    Core.Types.TechLevel StarbaseTech = Core.Types.TechLevel.Warp, int Legions = 0, int TechnologyBitmask = 0, int MetalsAndTrillum = 0) : INamedCase;
 
 internal static class StarbaseCases
 {
@@ -35,6 +41,13 @@ internal static class StarbaseCases
         // Min(9999-250, 10001) = 9749, leaving 252 for NW. A lexicographic walk visits NW first and
         // swaps the two results.
         new(Name: "SurplusLinkTwoNeighborsOrder", StarbaseChemicals: 20000, NeighborChemicals: 250, RngFixedValue: 0, SecondNeighborChemicals: 250),
+
+        // The PreTech capital's Rnd(1,15)=1 regression roll drops the starbase Jump->Warp this tick,
+        // below IonCannon's Jump threshold. UpdateWorld gates the starbase's defenses on the Technology
+        // set from the tick-start Jump tech (UPDATE.PAS:1396-1401, 1429), so ion cannons still build
+        // (issue #103).
+        new(Name: "TechRegressesAcrossThresholdUsesTickStartTech", StarbaseChemicals: 5000, NeighborChemicals: 250, RngFixedValue: 0,
+            StarbaseTech: Core.Types.TechLevel.Jump, Legions: 2000, TechnologyBitmask: 0b1111, MetalsAndTrillum: 5000),
     ];
 
     /// <summary>MethodDataSource shape for AnnualTickHandlerStarbaseTests.MatchesGoldenFile — one Func

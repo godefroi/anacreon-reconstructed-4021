@@ -252,6 +252,15 @@ patch pattern.
 
 Cross-cutting lessons, not specific to one domain — read before touching *any* patch.
 
+- **Some game state lives outside `Universe^`, so `FillChar(Universe^)` doesn't reset it between
+  cases.** Every domain runs all its cases in one process. The active/owned-object sets
+  (`SetOfActiveFleets` and the rest, `TYPES.PAS:180-188`) are standalone globals: a construction
+  case once found an earlier case's completed starbase still occupying the slot it expected.
+  `RunCaseMode` now calls `ResetGlobalSets` before every case. News is the other example: it lives
+  in `NEWS.PAS`'s unit-global per-empire list, and `AddNews` drops it unless the empire is
+  `InUse`. A domain that prints news uses `WriteNews`, which prints an empire's headline ordinals
+  and then erases them.
+
 - **A Pascal `ABSOLUTE` overlay across two separately-declared globals compiles but can lie under
   `fpc`.** `DATASTRC.PAS` used to declare `GlobalSets: GlobalSetsRecord ABSOLUTE
   SetOfActiveFleets` — aliasing a 9-field record onto a var block actually declared in a
@@ -412,8 +421,9 @@ own header comment, not repeated here.
   hand-reimplementation of its parsing loop — see below for why that distinction matters). Output
   is an aggregate checksum over the whole loaded `Universe^`, not a per-entity dump — a real
   `dos_131` file has up to ~200 worlds, and a mismatch anywhere perturbs at least one sum. The C#
-  side (`ScenarioLoaderGoldenTests.MatchesGoldenFile`) only exact-matches fields with no `Rnd()`
-  dependency anywhere in their computation, for the reason explained in Landmines above.
+  side (`ScenarioLoaderGoldenTests.MatchesGoldenFile`) asserts every field exactly, loading with
+  `LegacyNpeProvider` so its RNG draws match Pascal's `InitializeNPE`. The one exception is
+  `AWAKEN.SCN`'s starbase-derived fields, which its 212-planet overrun corrupts.
 
   **`LoadScenario` is called directly**, not reimplemented, via `NEWGAME.PAS`'s `TestNumPlayers`
   test-only override (category 4 above). Two real UI touchpoints needed bypassing:

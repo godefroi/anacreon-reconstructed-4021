@@ -1426,8 +1426,15 @@ public class AnnualTickHandlerStarbaseTests
         var golden = PascalGroundTruth.GoldenFile.Load("starbase.golden");
 
         var owner = new Empire { Name = "Test" };
+        foreach (var type in Enum.GetValues<DefenseType>())
+            if ((c.TechnologyBitmask & (1 << (int)type)) != 0)
+                owner.Technology.Defenses.Add(type);
         var starbase = MakeComplex(new Coordinate(5, 5), owner);
+        starbase.TechLevel = c.StarbaseTech;
         starbase.Cargo.Chemicals = c.StarbaseChemicals;
+        starbase.Cargo.Legions = c.Legions;
+        starbase.Cargo.Metals = c.MetalsAndTrillum;
+        starbase.Cargo.Trillum = c.MetalsAndTrillum;
         // SE of the starbase, matching runworld.pas's starbase domain exactly.
         var neighbor = MakeRawMaterialPlanet(new Coordinate(6, 6), owner, chemicals: c.NeighborChemicals);
         var neighbor2 = c.SecondNeighborChemicals is { } second
@@ -1435,11 +1442,18 @@ public class AnnualTickHandlerStarbaseTests
             : null;
         var game = BuildGame(starbase, neighbor2 is null ? [neighbor] : [neighbor, neighbor2]);
         game.Empires.Add(owner);
+        // The harness's capital is the PreTech neighbor planet.
+        owner.Capital = neighbor;
         var handler = new AnnualTickHandler(new FixedRandom(c.RngFixedValue));
 
         handler.RunAnnualTick(game);
 
         var expected = golden[c.Name];
+        await Assert.That((int)starbase.TechLevel).IsEqualTo(int.Parse(expected["techlevel"]));
+        await Assert.That(starbase.Defenses.Lams).IsEqualTo(int.Parse(expected["lam"]));
+        await Assert.That(starbase.Defenses.DefenseSatellites).IsEqualTo(int.Parse(expected["def"]));
+        await Assert.That(starbase.Defenses.Gdms).IsEqualTo(int.Parse(expected["gdm"]));
+        await Assert.That(starbase.Defenses.IonCannons).IsEqualTo(int.Parse(expected["ion"]));
         await Assert.That(starbase.Cargo.Chemicals).IsEqualTo(int.Parse(expected["starbaseChe"]));
         await Assert.That(neighbor.Cargo.Chemicals).IsEqualTo(int.Parse(expected["neighborChe"]));
         if (neighbor2 is not null) {

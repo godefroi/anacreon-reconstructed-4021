@@ -79,7 +79,8 @@ public class GoldenFileTests
             args => PatchHarness.CompileAndRun("runworld", ["case", "techlevel", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("starbase", StarbaseCases.All,
-            c => $"{c.StarbaseChemicals},{c.NeighborChemicals},{c.RngFixedValue},{c.SecondNeighborChemicals ?? -1}",
+            c => $"{c.StarbaseChemicals},{c.NeighborChemicals},{c.RngFixedValue},{c.SecondNeighborChemicals ?? -1}," +
+                 $"{(int)c.StarbaseTech},{c.Legions},{c.TechnologyBitmask},{c.MetalsAndTrillum}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "starbase", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("production", ProductionCases.All,

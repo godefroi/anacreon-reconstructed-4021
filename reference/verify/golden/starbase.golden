@@ -1,3 +1,4 @@
-case=SupplyLinkPull;starbaseChe=800;neighborChe=200;neighbor2Che=0
-case=SurplusLinkPush;starbaseChe=9999;neighborChe=301;neighbor2Che=0
-case=SurplusLinkTwoNeighborsOrder;starbaseChe=9999;neighborChe=9999;neighbor2Che=502
+case=SupplyLinkPull;starbaseChe=800;neighborChe=200;neighbor2Che=0;techlevel=4;lam=0;def=0;gdm=0;ion=0
+case=SurplusLinkPush;starbaseChe=9999;neighborChe=301;neighbor2Che=0;techlevel=4;lam=0;def=0;gdm=0;ion=0
+case=SurplusLinkTwoNeighborsOrder;starbaseChe=9999;neighborChe=9999;neighbor2Che=502;techlevel=4;lam=0;def=0;gdm=0;ion=0
+case=TechRegressesAcrossThresholdUsesTickStartTech;starbaseChe=4928;neighborChe=250;neighbor2Che=0;techlevel=5;lam=0;def=0;gdm=375;ion=142
