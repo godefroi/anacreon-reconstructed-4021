@@ -12,3 +12,38 @@
  {$IFDEF Overlay}
  {$F+}
  {$ENDIF}
+@@ -34,6 +39,11 @@ VAR
+ 	InCommand: Boolean;
+ 	InProcess: Boolean;
+ 
++   { PATCH (test hook): see GetCharacter. }
++   ScriptedActive: Boolean;
++   ScriptedKeys: String;
++   ScriptedPos: Integer;
++
+ PROCEDURE ActivateLatestStatusWindow;
+ PROCEDURE AddToInputStream(Line: LineStr);
+ PROCEDURE CloseAllWindows;
+@@ -282,7 +292,21 @@ PROCEDURE GetCharacter(LegalSet: CharSet; Mode: Boolean; var Ch: Char);
+ 
+    begin
+    repeat
+-      GetKeyPressed(Ch);
++      { PATCH (test hook): ScriptedActive=False (the default) is exactly the real call below.
++        When a harness sets it, keys come from ScriptedKeys instead of the keyboard; running out
++        halts loudly rather than blocking on a keypress that can never arrive. }
++      IF ScriptedActive THEN
++         BEGIN
++         IF ScriptedPos>=Length(ScriptedKeys) THEN
++            BEGIN
++            WriteLn('GetCharacter: scripted key queue exhausted.');
++            Halt(1);
++            END;
++         Inc(ScriptedPos);
++         Ch:=ScriptedKeys[ScriptedPos];
++         END
++      ELSE
++         GetKeyPressed(Ch);
+       if NOT Mode then
+          Ch:=UpCase(Ch);
+    until Ch in LegalSet;

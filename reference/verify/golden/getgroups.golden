@@ -1,0 +1,6 @@
+case=LoadAllTransportsThenLegions;ngroups=1;g1_typ=11;g1_num=10;g1_gat=50;g1_gattyp=12
+case=ShrinkLoadedTransportGroup;ngroups=1;g1_typ=11;g1_num=2;g1_gat=10;g1_gattyp=12
+case=GrowLoadedTransportGroup;ngroups=1;g1_typ=11;g1_num=10;g1_gat=50;g1_gattyp=12
+case=SwitchLoadedGroupType;ngroups=1;g1_typ=10;g1_num=3;g1_gat=0;g1_gattyp=12
+case=FinalPassPrefersLegions;ngroups=1;g1_typ=11;g1_num=4;g1_gat=15;g1_gattyp=12
+case=FinalPassCompactsAndLoads;ngroups=2;g1_typ=5;g1_num=5;g1_gat=0;g1_gattyp=0;g2_typ=11;g2_num=3;g2_gat=15;g2_gattyp=12

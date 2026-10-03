@@ -71,6 +71,11 @@ public class GoldenFileTests
             c => $"{(c.TargetIsFleet ? 1 : 0)},{c.LamToUse},{c.Fgt},{c.Hkr},{c.Pen},{c.Trn},{c.Lam},{c.Def},{c.Gdm},{c.Ion},{c.Men},{c.Che}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "lamattack", .. args.Skip(1)]));
 
+        // runattcomm.pas, not runworld.pas: AttComm's unit chain isn't safe to link into runworld (see its header).
+        GoldenFile.Regenerate("getgroups", GetGroupsCases.All,
+            c => $"{c.Fgt},{c.Hkr},{c.Jmp},{c.Jtn},{c.Pen},{c.Ssp},{c.Trn},{c.Men},{c.Nnj},{string.Join(",", c.Keys.Select(k => (int)k))}",
+            args => PatchHarness.CompileAndRun("runattcomm", ["case", "getgroups", .. args.Skip(1)]));
+
         GoldenFile.Regenerate("techlevel", TechLevelCases.All,
             c => $"{(int)c.Tech},{(c.IsIndependent ? 1 : 0)},{(int)c.CapitalTech},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "techlevel", .. args.Skip(1)]));

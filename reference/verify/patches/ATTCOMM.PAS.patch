@@ -21,7 +21,16 @@
  {$IFDEF Overlay}
  {$O+,F+}
  {$ENDIF}
-@@ -76,10 +90,7 @@ PROCEDURE AttReport(Line: LineStr);
+@@ -33,6 +47,8 @@ USES Crt,                                       { Standard CRT Library. }
+ 
+ PROCEDURE AttackCommand(FltID: IDNumber);
+ PROCEDURE AutoAttackCommand(FltID: IDNumber);
++{ PATCH (test hook): promoted from IMPLEMENTATION so a harness can call it directly. }
++PROCEDURE GetGroups(FltID: IDNumber; VAR NoOfGp: Byte; VAR Group: GroupArray; VAR Exit: Boolean);
+ 
+ IMPLEMENTATION
+ 
+@@ -76,10 +92,7 @@ PROCEDURE AttReport(Line: LineStr);
     BEGIN
     ActivateWindow(AttackWindow);
     GotoXY(1,2);   ClrEOL;
@@ -33,7 +42,7 @@
  
     x:=40-(Length(Line) div 2);
     GotoXY(x,2);   Write(Line);
-@@ -108,19 +119,8 @@ PROCEDURE WarpIn(VAR Gp: GroupArray; G: Byte; NewPos: ShellPos);
+@@ -108,19 +121,8 @@ PROCEDURE WarpIn(VAR Gp: GroupArray; G: Byte; NewPos: ShellPos);
     Fin:=OrbLoc[NewPos]+PlayerOffset[G];
     Dist:=(Fin-Str) div 2;
  
@@ -55,7 +64,7 @@
     END;  { WarpIn }
  
  PROCEDURE WarpOut(VAR Gp: GroupArray; G: Byte; NewPos: ShellPos);
-@@ -132,18 +132,8 @@ PROCEDURE WarpOut(VAR Gp: GroupArray; G: Byte; NewPos: ShellPos);
+@@ -132,18 +134,8 @@ PROCEDURE WarpOut(VAR Gp: GroupArray; G: Byte; NewPos: ShellPos);
     Fin:=OrbLoc[NewPos]+PlayerOffset[G];
     Dist:=(Str-Fin) DIV 2;
  
@@ -76,7 +85,7 @@
     END;  { WarpOut }
  
  PROCEDURE EnemyStatus(En: EnemyArray);
-@@ -193,22 +183,7 @@ PROCEDURE EnemyStatus(En: EnemyArray);
+@@ -193,22 +185,7 @@ PROCEDURE EnemyStatus(En: EnemyArray);
        begin
        ActivateWindow(AttackWindow);
  
@@ -100,7 +109,7 @@
        end;  { DrawEnemyShips }
  
     { EnemyStatus: MAIN PROCEDURE }
-@@ -262,19 +237,7 @@ PROCEDURE Engage(NoOfGroups: Byte;
+@@ -262,19 +239,7 @@ PROCEDURE Engage(NoOfGroups: Byte;
  
           BEGIN
           ActivateWindow(AttackWindow);   GotoXY(1,1);
@@ -121,7 +130,7 @@
           end;  { DrawGroupShips }
  
        PROCEDURE AdvanceGroupsSFX;
-@@ -306,16 +269,7 @@ PROCEDURE Engage(NoOfGroups: Byte;
+@@ -306,16 +271,7 @@ PROCEDURE Engage(NoOfGroups: Byte;
                 Str(i:2,temp1);
                 AttReport('Group '+temp1+' destroyed.');
  
@@ -139,7 +148,7 @@
  
                 AttReport('');
                 END;
-@@ -491,15 +445,7 @@ PROCEDURE Engage(NoOfGroups: Byte;
+@@ -491,15 +447,7 @@ PROCEDURE Engage(NoOfGroups: Byte;
                    Start:=OrbLoc[Pos]+PlayerOffset[i];
                    Finish:=EdgeOfScreen+PlayerOffset[i];
                    Distance:=(Start-Finish) div 2;
@@ -156,7 +165,115 @@
                    end;
  
           EndBattle:=True;
-@@ -1142,20 +1088,7 @@ PROCEDURE AttackCommand(FltID: IDNumber);
+@@ -727,53 +675,6 @@ PROCEDURE GetTarget(FltID: IDNumber;
+    ClrDisplayScreen;
+    END;  { GetTarget }
+ 
+-PROCEDURE AttackCommand(FltID: IDNumber);
+-{ Attack:
+-   This procedure handles the attack command.  On entry, 'FltID' is the ID
+-   number of the fleet that is doing the attacking.  The fleet must be a 
+-   valid fleet and must belong to the proper empire.
+-
+-   FltID:   must be a fleet
+-            must be active
+-            must belong to 'Player'
+-            target must exist at coordinates (either enemy obj or enemy fleet)
+-   }
+-
+-   VAR
+-      Target: IDNumber;
+-      TargetName,FleetName: String32;
+-      CombatData: CombatDataRecord;
+-      Killed,Casualties: AttackArray;
+-      Result: AttackResultTypes;
+-      Exit: Boolean;
+-      NoOfGroups: Byte;
+-      Gp: GroupArray;
+-      En: EnemyArray;
+-      EnemyEmp: Empire;
+-      HKSurprise: Boolean;
+-      Ans: String8;
+-
+-   { PRIMITIVES }
+-
+-   { MAIN PROCEDURES }
+-	PROCEDURE TakeOverConOrGate(ID: IDNumber);
+-   	VAR
+-      	NameStr: String32;
+-      	Emp: Empire;
+-      	XY: XYCoord;
+-
+-   	BEGIN
+-   	ClrDisplayScreen;
+-   	WriteString('Attack:',1,1,C.SYSDispHigh);
+-
+-   	GetCoord(ID,XY);
+-   	NameStr:=ObjectName(Player,ID,LongFormat);
+-
+-   	DestroyConstructionOrGate(Player,HKSurprise,ID);
+-   	WriteString(NameStr+' has been destroyed.',2,3,C.SYSDispWind);
+-   	UMSector(XY.x,XY.y,Map^);
+-   	END;  { TakeOverConOrGate }
+-
+    PROCEDURE GetGroups(FltID: IDNumber; VAR NoOfGp: Byte;
+                        VAR Group: GroupArray; VAR Exit: Boolean);
+    { GetGroups:
+@@ -1068,6 +969,53 @@ PROCEDURE AttackCommand(FltID: IDNumber);
+                END;
+             END;
+       END;  { GetGroups }
++PROCEDURE AttackCommand(FltID: IDNumber);
++{ Attack:
++   This procedure handles the attack command.  On entry, 'FltID' is the ID
++   number of the fleet that is doing the attacking.  The fleet must be a 
++   valid fleet and must belong to the proper empire.
++
++   FltID:   must be a fleet
++            must be active
++            must belong to 'Player'
++            target must exist at coordinates (either enemy obj or enemy fleet)
++   }
++
++   VAR
++      Target: IDNumber;
++      TargetName,FleetName: String32;
++      CombatData: CombatDataRecord;
++      Killed,Casualties: AttackArray;
++      Result: AttackResultTypes;
++      Exit: Boolean;
++      NoOfGroups: Byte;
++      Gp: GroupArray;
++      En: EnemyArray;
++      EnemyEmp: Empire;
++      HKSurprise: Boolean;
++      Ans: String8;
++
++   { PRIMITIVES }
++
++   { MAIN PROCEDURES }
++	PROCEDURE TakeOverConOrGate(ID: IDNumber);
++   	VAR
++      	NameStr: String32;
++      	Emp: Empire;
++      	XY: XYCoord;
++
++   	BEGIN
++   	ClrDisplayScreen;
++   	WriteString('Attack:',1,1,C.SYSDispHigh);
++
++   	GetCoord(ID,XY);
++   	NameStr:=ObjectName(Player,ID,LongFormat);
++
++   	DestroyConstructionOrGate(Player,HKSurprise,ID);
++   	WriteString(NameStr+' has been destroyed.',2,3,C.SYSDispWind);
++   	UMSector(XY.x,XY.y,Map^);
++   	END;  { TakeOverConOrGate }
++
+ 
+    PROCEDURE DrawScreen(Target: IDNumber);
+ 
+@@ -1142,20 +1090,7 @@ PROCEDURE AttackCommand(FltID: IDNumber);
                 ( 0,0,10,14,16,16,16,14,10,0,0 );
  
           BEGIN
@@ -178,7 +295,7 @@
  
           WriteString('Range to attack defenses:                     Ã Def ´  Ã Ion/GDM ´',1,1,C.AttackWind);
           WriteString('Range of defenses:         ÃÄÄ Defense Sat.  ÄÁ GDM ´    Ã Ion ´',1,11,C.AttackWind);
-@@ -1166,8 +1099,7 @@ PROCEDURE AttackCommand(FltID: IDNumber);
+@@ -1166,8 +1101,7 @@ PROCEDURE AttackCommand(FltID: IDNumber);
              i: Byte;
  
           BEGIN
