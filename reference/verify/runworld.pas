@@ -70,7 +70,7 @@
                 -> "rebelled=<TRUE|FALSE>;legions=<v>;ninja=<v>;population=<v>;efficiency=<v>;revindex=<v>;total_rev_delta=<v>"
      production ClassOrd,TypeOrd,Population,Efficiency,TechOrd,AmbAddict,
                 IndusBio,IndusChe,IndusMin,IndusSYG,IndusSYJ,IndusSYS,IndusSYT,IndusSup,IndusTri,
-                CargoMen,CargoNnj,CargoAmb,CargoChe,CargoMet,CargoSup,CargoTri,TrillumReserve
+                CargoMen,CargoNnj,CargoAmb,CargoChe,CargoMet,CargoSup,CargoTri,TrillumReserve,IsIndependent,RevIndex
                 -> "bio,che,min,syg,syj,sys,syt,sup,tri,fgt,hkr,jmp,jtn,pen,ssp,trn,cargomen,
                     cargonnj,cargoamb,cargoche,cargomet,cargosup,cargotri,trillumreserve,
                     population,efficiency,techlevel,revindex (all <key>=<value>)"
@@ -996,7 +996,7 @@ procedure RunProductionCase(const arg: String);
      Ambrosia/Legions values -- unlike production.pas, nothing here needs
      excluding from the golden comparison. }
    var
-      parts: array[0..22] of LongInt;
+      parts: array[0..24] of LongInt;
       ID, CapID: IDNumber;
    begin
    ParseFields(arg,parts);
@@ -1005,6 +1005,7 @@ procedure RunProductionCase(const arg: String);
    FillChar(Universe^,SizeOf(Universe^),0);
    NoOfPlanets:=1;
 
+   Universe^.Planet[1].RevIndex:=parts[24];  { nonzero start keeps ChangeRevIndex's floor of 0 from absorbing a +1 }
    Universe^.Planet[1].Cls:=WorldClass(parts[0]);
    Universe^.Planet[1].Typ:=WorldTypes(parts[1]);
    Universe^.Planet[1].Pop:=parts[2];
@@ -1034,7 +1035,10 @@ procedure RunProductionCase(const arg: String);
    Universe^.Planet[1].Cargo[tri]:=parts[21];
 
    Universe^.Planet[1].TriReserve:=parts[22];
-   Universe^.Planet[1].Emp:=Empire1;
+   if parts[23]<>0 then
+      Universe^.Planet[1].Emp:=Indep   { ReportPlanetLack skips independent worlds (UPDATE.PAS:47) }
+   else
+      Universe^.Planet[1].Emp:=Empire1;
    Universe^.Planet[1].ImpExp:=DefaultISSP;  { every real planet gets this at settlement (PRIMINTR.PAS:631) --
                                                GetISSP reads it as four 4-bit dials (Che/Min/Sup/Tri), and a
                                                FillChar-zeroed planet would otherwise read ISSP index 0 (0.01)

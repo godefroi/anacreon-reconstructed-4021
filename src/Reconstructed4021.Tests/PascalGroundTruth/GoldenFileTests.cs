@@ -82,7 +82,7 @@ public class GoldenFileTests
         GoldenFile.Regenerate("production", ProductionCases.All,
             c => $"{(int)c.Class},{(int)c.Type},{c.Population},{c.Efficiency},{(int)c.Tech},{(c.AmbAddict ? 1 : 0)}," +
                  $"{c.IndusBio},{c.IndusChe},{c.IndusMin},{c.IndusSYG},{c.IndusSYJ},{c.IndusSYS},{c.IndusSYT},{c.IndusSup},{c.IndusTri}," +
-                 $"{c.CargoMen},{c.CargoNnj},{c.CargoAmb},{c.CargoChe},{c.CargoMet},{c.CargoSup},{c.CargoTri},{c.TrillumReserve}",
+                 $"{c.CargoMen},{c.CargoNnj},{c.CargoAmb},{c.CargoChe},{c.CargoMet},{c.CargoSup},{c.CargoTri},{c.TrillumReserve},{(c.Independent ? 1 : 0)},{c.RevIndex}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "production", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("maturation", MaturationCases.All,

@@ -30,7 +30,7 @@ public sealed record ProductionCase(
     int IndusBio, int IndusChe, int IndusMin, int IndusSYG, int IndusSYJ, int IndusSYS, int IndusSYT,
     int IndusSup, int IndusTri,
     int CargoMen, int CargoNnj, int CargoAmb, int CargoChe, int CargoMet, int CargoSup, int CargoTri,
-    int TrillumReserve) : INamedCase;
+    int TrillumReserve, bool Independent = false, int RevIndex = 0) : INamedCase;
 
 internal static class ProductionCases
 {
@@ -77,6 +77,22 @@ internal static class ProductionCases
             IndusSup: 0, IndusTri: 0,
             CargoMen: 0, CargoNnj: 0, CargoAmb: 5, CargoChe: 5000, CargoMet: 5000, CargoSup: 5000, CargoTri: 5000,
             TrillumReserve: 5000),
+
+        // Same world twice, out of chemicals/metals so ship production reports a raw-material lack
+        // (UPDATE.PAS:905) and industry growth reports IndLack (UPDATE.PAS:971). ReportPlanetLack only
+        // bumps RevIndex for an owned world (UPDATE.PAS:46-47); the independent twin must stay at 0.
+        new(Name: "ShortfallRaisesRevIndexForEmpireWorld", Class: WorldClass.EarthLike, Type: WorldType.Capital,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false, AllShipsUnlocked: true,
+            IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 100, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 0, IndusTri: 100,
+            CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 5000, CargoTri: 5000,
+            TrillumReserve: 5000, RevIndex: 50),
+        new(Name: "ShortfallLeavesRevIndexAloneForIndependentWorld", Class: WorldClass.EarthLike, Type: WorldType.Capital,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false, AllShipsUnlocked: true,
+            IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 100, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 0, IndusTri: 100,
+            CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 5000, CargoTri: 5000,
+            TrillumReserve: 5000, Independent: true, RevIndex: 50),
     ];
 
     /// <summary>MethodDataSource shape for AnnualTickHandlerProductionTests.MatchesGoldenFile — one
