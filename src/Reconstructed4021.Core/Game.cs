@@ -367,15 +367,16 @@ public sealed class Game(Galaxy.Galaxy galaxy)
     }
 
     /// <summary>
-    /// IDMatch (SCENA.PAS): a "type:index" reference (ObjectTypes ordinals — Pln=2, Base=3) to the
-    /// real object <see cref="NewGame.ScenarioLoader"/> created at that 1-based Pascal index, or null
-    /// for any other type or an out-of-range index. Only Pln/Base are supported — confirmed the only
-    /// two types any real WorldBackgroundIndex row or <c>[C:id]</c>/<c>[N:id]</c> marker ever
-    /// references, and the only two the TUI's own CloseUpWindow lays out background text for anyway.
+    /// IDMatch (SCENA.PAS): a "type:index" reference (ObjectTypes ordinals — Pln=2, Base=3, Gate=4) to
+    /// the real object <see cref="NewGame.ScenarioLoader"/> created at that 1-based Pascal index, or
+    /// null for any other type or an out-of-range index. Con (1) is deliberately absent: no scenario
+    /// command creates a construction site (NEWGAME.PAS has no such routine), so at load time, the only
+    /// time a WorldBackgroundIndex row resolves, a Con index never has anything to point at.
     /// </summary>
     internal static ISectorObject? ResolveWorldReference(Galaxy.Galaxy galaxy, int objType, int index) => objType switch {
         2 when index >= 1 && index <= galaxy.Planets.Count => galaxy.Planets[index - 1],
         3 when index >= 1 && index <= galaxy.Starbases.Count => galaxy.Starbases[index - 1],
+        4 when index >= 1 && index <= galaxy.Stargates.Count => galaxy.Stargates[index - 1],
         _ => null,
     };
 }

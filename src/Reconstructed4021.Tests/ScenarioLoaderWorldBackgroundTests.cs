@@ -72,6 +72,39 @@ public class ScenarioLoaderWorldBackgroundTests
         await Assert.That(game.BackgroundTexts[2]).Count().IsEqualTo(1);
     }
 
+    /// <summary>A Gate row resolves to the stargate created at that 1-based index (GitHub #80); a Con row never can, since no scenario command creates a construction site.</summary>
+    [Test]
+    public async Task Load_GateRowResolvesToStargate_ConRowIsDropped()
+    {
+        var game = new ScenarioLoader(new GalaxySetup(new FixedRandom(0)), new FixedRandom(0)).Load(
+            Header(20) +
+            "BEGINDESCRIPTION\r\n" +
+            "WorldBackgroundIndex\r\n" +
+            "4:1 1\r\n" +
+            "1:1 2\r\n" +
+            "EndIndex\r\n" +
+            "TEXT 1\r\n" +
+            "Gate text.\r\n" +
+            "ENDTEXT\r\n" +
+            "TEXT 2\r\n" +
+            "Never shown.\r\n" +
+            "ENDTEXT\r\n" +
+            "ENDDESCRIPTION\r\n" +
+            "CREATEPLAYEREMPIRE 0 5 3 0\r\n" +
+            "CREATEPLAYEREMPIRE 1 5 3 0\r\n" +
+            "CREATESTARGATE 5,5 24 8\r\n" +
+            "ENDSCENARIO",
+            _twoPlayers);
+
+        var gate = game.Galaxy.Stargates.Single();
+        await Assert.That(game.WorldBackgroundIndex).Count().IsEqualTo(1);
+        await Assert.That(game.WorldBackgroundIndex[0].World).IsSameReferenceAs(gate);
+
+        var lines = Game.FindWorldBackgroundText(game, gate, game.Empires[0], conquer: false);
+        await Assert.That(lines).IsNotNull();
+        await Assert.That(lines![0]).IsEqualTo("Gate text.");
+    }
+
     /// <summary>
     /// SCENA.PAS's ParseLine substitutes at most one [C:id]/[N:id] marker per line (the first '['
     /// through the first ']') -- two separate lines here, not two markers on one line, to actually

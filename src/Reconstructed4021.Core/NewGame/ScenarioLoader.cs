@@ -470,10 +470,8 @@ public sealed class ScenarioLoader(GalaxySetup galaxySetup, Random random, INpeH
     /// <see cref="Game.WorldBackgroundIndex"/> entry, now that every CreateWorld/CreateRandomWorlds/
     /// CreatePlayerEmpire/CreateNPEmpire command in the file has actually run — both the objects and
     /// <see cref="_empireBySlot"/> are only fully populated by the time <see cref="Load"/> returns. A
-    /// row whose object type isn't Pln/Base, or whose 1-based index is out of range, is silently
-    /// dropped — confirmed no real committed scenario ever references anything else. A hypothetical
-    /// Con/Gate row would fall into that same drop; this port's own CloseUpWindow doesn't lay out
-    /// background text for those object types at all yet either (GitHub #80).
+    /// row whose object type isn't Pln/Base/Gate, or whose 1-based index is out of range, is silently
+    /// dropped (see <see cref="Game.ResolveWorldReference"/> for why Con can never resolve here).
     /// </summary>
     private void ResolveWorldBackground(Galaxy.Galaxy galaxy, Game game)
     {

@@ -296,6 +296,10 @@ internal sealed class CloseUpOverlay : IOverlay
         {
             LayoutWorld(world, At);
         }
+        else
+        {
+            LayoutBackground(_obj, At);
+        }
 
         // No worldOwned branch: OpenExamine already routes any world the viewer owns to WorldInfoOverlay
         // instead of this class, so CloseUpOverlay only ever sees a fleet or someone else's world.
@@ -337,7 +341,13 @@ internal sealed class CloseUpOverlay : IOverlay
             $"  {Level(c.Legions),5}{Level(c.NinjaLegions),5}" +
             $"  {Level(d.Lams),5}{Level(d.DefenseSatellites),5}{Level(d.Gdms),5}{Level(d.IonCannons),5}");
 
-        if (scouted && Game.FindWorldBackgroundText(_game, world, _viewer, conquer: false) is { } background)
+        LayoutBackground(world, at);
+    }
+
+    /// <summary>CLSCOMM.PAS:804-805: any non-fleet object (world, Con, Gate) shows its WorldBackgroundIndex text once Scouted.</summary>
+    private void LayoutBackground(ISectorObject obj, Action<int, int, string> at)
+    {
+        if (Game.ScoutedOrOwned(_viewer, obj) && Game.FindWorldBackgroundText(_game, obj, _viewer, conquer: false) is { } background)
         {
             for (var i = 0; i < background.Count; i++)
             {
