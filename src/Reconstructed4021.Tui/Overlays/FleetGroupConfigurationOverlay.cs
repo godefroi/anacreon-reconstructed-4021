@@ -106,7 +106,7 @@ internal sealed class FleetGroupConfigurationOverlay : IOverlay
         {
             var ship = _currentType.AsShipType()!.Value;
             FleetGroupConfiguration.ChangeGroupType(_pool, _cargoPool, _groups[_selectedGroup], _currentType);
-            FleetGroupConfiguration.LoadShips(_pool, _groups[_selectedGroup], _pool[ship]);
+            FleetGroupConfiguration.LoadShips(_pool, _cargoPool, _groups[_selectedGroup], _pool[ship]);
             _error = string.Empty;
         }
         else if (ch is 'm' or 'M')
@@ -190,7 +190,7 @@ internal sealed class FleetGroupConfigurationOverlay : IOverlay
     {
         if (amount != 0)
         {
-            FleetGroupConfiguration.LoadShips(_pool, _groups[_selectedGroup], amount);
+            FleetGroupConfiguration.LoadShips(_pool, _cargoPool, _groups[_selectedGroup], amount);
         }
 
         _editBuffer = null;

@@ -41,6 +41,11 @@ public static class FleetGroupConfiguration
             shipPool[ship] += group.Num;
             group.Num = 0;
         }
+        ReturnTroops(cargoPool, group);
+    }
+
+    private static void ReturnTroops(CargoHold cargoPool, GroupRecord group)
+    {
         if (group.Gat > 0) {
             cargoPool[ToCargoType(group.GatTyp!.Value)] += group.Gat;
             group.Gat = 0;
@@ -53,14 +58,17 @@ public static class FleetGroupConfiguration
     /// <see cref="ChangeGroupType"/> first if the group's own <c>Typ</c> needs to change). Positive
     /// <paramref name="amount"/> pulls from the pool (clamped to what's available); negative returns
     /// ships to the pool (clamped to the group's own <see cref="GroupRecord.Num"/>) — Pascal's own
-    /// <c>LesserInt</c>/<c>-LesserInt</c> pair.
+    /// <c>LesserInt</c>/<c>-LesserInt</c> pair. Any troops the group carries go back to
+    /// <paramref name="cargoPool"/> after every change (ATTCOMM.PAS:899-906), since the old load no
+    /// longer matches the new capacity; <see cref="Finalize"/> reloads empty transport groups.
     /// </summary>
-    public static void LoadShips(ShipCounts shipPool, GroupRecord group, int amount)
+    public static void LoadShips(ShipCounts shipPool, CargoHold cargoPool, GroupRecord group, int amount)
     {
         var ship = group.Typ.AsShipType() ?? throw new InvalidOperationException($"LoadShips: group Typ {group.Typ} is not a ship type.");
         var transfer = amount > 0 ? Math.Min(amount, shipPool[ship]) : -Math.Min(-amount, group.Num);
         shipPool[ship] -= transfer;
         group.Num += transfer;
+        ReturnTroops(cargoPool, group);
     }
 
     /// <summary>
