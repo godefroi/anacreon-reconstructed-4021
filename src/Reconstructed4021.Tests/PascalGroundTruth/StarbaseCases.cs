@@ -18,7 +18,7 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// vary per case, since Cargo.Chemicals is the one field neither UpdateIndustry's Metal-only growth
 /// cost nor Production's ship-tech-gated builds can touch (see the driver's own doc comment).
 /// </summary>
-public sealed record StarbaseCase(string Name, int StarbaseChemicals, int NeighborChemicals, int RngFixedValue) : INamedCase;
+public sealed record StarbaseCase(string Name, int StarbaseChemicals, int NeighborChemicals, int RngFixedValue, int? SecondNeighborChemicals = null) : INamedCase;
 
 internal static class StarbaseCases
 {
@@ -29,6 +29,12 @@ internal static class StarbaseCases
         // Neighbor seeded at exactly 250 -> SupplyLink's own ">250" check is false, contributing
         // nothing, isolating this case to SurplusLink alone: transfer = Min(9999-250, 10050-9999) = 51.
         new(Name: "SurplusLinkPush", StarbaseChemicals: 10050, NeighborChemicals: 250, RngFixedValue: 0),
+
+        // Two neighbors, SE (6,6) and NW (4,4), both at 250 so SupplyLink pulls nothing. Surplus is
+        // 20000-9999 = 10001; Pascal visits SE first (N,NE,E,SE,S,SW,W,NW), which takes
+        // Min(9999-250, 10001) = 9749, leaving 252 for NW. A lexicographic walk visits NW first and
+        // swaps the two results.
+        new(Name: "SurplusLinkTwoNeighborsOrder", StarbaseChemicals: 20000, NeighborChemicals: 250, RngFixedValue: 0, SecondNeighborChemicals: 250),
     ];
 
     /// <summary>MethodDataSource shape for AnnualTickHandlerStarbaseTests.MatchesGoldenFile — one Func
