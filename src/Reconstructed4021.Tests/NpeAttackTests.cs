@@ -64,7 +64,7 @@ public class NpeAttackTests
 
         // Planet[2] is Empire2's capital whatever the target is, and the harness stocks it with the
         // defender's ships and legions either way.
-        var defenderPlanet2 = new Planet { Location = new Coordinate(50, 50), Owner = defender, Class = c.DefenderClass, Type = WorldType.Capital, TechLevel = c.DefenderTech };
+        var defenderPlanet2 = new Planet { Location = new Coordinate(50, 50), Owner = defender, Class = c.DefenderClass, Type = WorldType.Capital, TechLevel = c.DefenderTech, Efficiency = c.DefenderEff };
         defenderPlanet2.Ships.Fighters = c.DefenderFgt;
         defenderPlanet2.Ships.HunterKillers = c.DefenderHkr;
         defenderPlanet2.Cargo.Legions = c.DefenderMen;

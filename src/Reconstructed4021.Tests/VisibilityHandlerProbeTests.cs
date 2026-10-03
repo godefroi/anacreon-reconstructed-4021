@@ -286,22 +286,25 @@ public class VisibilityHandlerProbeTests
         var destPlanet = new Planet { Owner = destOwner, Location = destination };
         destPlanet.Cargo.Legions = c.DestLegions;
         game.Galaxy.Planets.Add(destPlanet);
+        // Set directly, as the harness does. RefreshVisibility would clear Scouted before resolving
+        // the probe, so this calls the probe routine on its own below.
         if (c.DestAlreadyScouted) {
-            // RefreshVisibility's own ClearScouted+ScoutObjects run before probe resolution in the
-            // same call, so "already scouted" has to come from something that scouts it earlier in
-            // *this* call (an owned planet adjacent to it), not a Scouted flag set once and never
-            // refreshed -- see VisibilityHandlerProbeTests.AlreadyScoutedCell_NeverRollsForDestruction.
-            game.Galaxy.Planets.Add(new Planet { Owner = human, Location = new Coordinate(11, 11) });
+            human.Planets.MarkScouted(destPlanet);
+        }
+        if (c.DestInDarkNebula) {
+            game.Galaxy.SetNebula(destination, NebulaType.DarkNebula);
         }
 
         var ringCell = new Planet { Owner = enemy, Location = new Coordinate(10, 9) }; // (0,-1)
         game.Galaxy.Planets.Add(ringCell);
 
-        human.TryLaunchProbe(destination);
-
-        new VisibilityHandler(new FixedRandom(c.RngFixedValue)).RefreshVisibility(human, game);
+        // ScoutFromProbe is ProbeScout itself, without RefreshVisibility's surrounding steps.
+        typeof(VisibilityHandler)
+            .GetMethod("ScoutFromProbe", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .Invoke(new VisibilityHandler(new FixedRandom(c.RngFixedValue)), [human, destination, game]);
 
         var expected = golden[c.Name];
+        await Assert.That(string.Join(",", human.News.Select(n => (int)n.Headline))).IsEqualTo(expected["news"]);
         await Assert.That(human.Planets.Scouted.Contains(destPlanet) ? 1 : 0).IsEqualTo(int.Parse(expected["destscouted"]));
         await Assert.That(human.Planets.Scouted.Contains(ringCell) ? 1 : 0).IsEqualTo(int.Parse(expected["ringscouted"]));
         await Assert.That(human.Planets.Known.Contains(destPlanet) ? 1 : 0).IsEqualTo(int.Parse(expected["destknown"]));

@@ -11,11 +11,11 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 ///
 /// Covers the arithmetic this domain exists to cross-check: ISqrt(Cargo[men]) and the
 /// Rnd(1,100)&lt;ChanceToDestroy threshold, plus its Exit-before-ScoutObject sequencing (a destroyed
-/// probe never gets to mark its own destroyer as scouted). Ring ordering/early-exit control flow
-/// itself is covered by VisibilityHandlerProbeTests' own hardcoded (fixed-Random) cases — there's no
-/// separate Pascal formula to cross-check there, just C#-side dispatch order.
+/// probe never gets to mark its own destroyer as scouted), and the Dark Nebula early exit. Both sides
+/// mark "already scouted" by setting the flags directly and then run only the probe routine.
 /// </summary>
-public sealed record ProbeScoutCase(string Name, bool DestOwnedByIndependent, int DestLegions, bool DestAlreadyScouted, int RngFixedValue) : INamedCase;
+public sealed record ProbeScoutCase(string Name, bool DestOwnedByIndependent, int DestLegions, bool DestAlreadyScouted, int RngFixedValue,
+    bool DestInDarkNebula = false) : INamedCase;
 
 internal static class ProbeScoutCases
 {
@@ -35,6 +35,11 @@ internal static class ProbeScoutCases
         // NOT Scouted(Emp,Obj) is false, so the destroy branch never runs even though the roll would
         // otherwise succeed.
         new(Name: "AlreadyScoutedNeverRolls", DestOwnedByIndependent: false, DestLegions: 100, DestAlreadyScouted: true, RngFixedValue: 0),
+
+        // A Dark Nebula at the destination stops the scan right after that cell, so the destination
+        // is scouted and the next ring cell isn't.
+        new(Name: "DarkNebulaAtDestinationStopsScan", DestOwnedByIndependent: false, DestLegions: 0, DestAlreadyScouted: false, RngFixedValue: 0,
+            DestInDarkNebula: true),
     ];
 
     public static IEnumerable<Func<ProbeScoutCase>> AsDataSource() => All.Select(c => (Func<ProbeScoutCase>)(() => c));

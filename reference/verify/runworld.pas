@@ -39,7 +39,7 @@
                 Planet3Present(0/1 -- a second Empire2 world, positioned/populated by the next 5
                 fields, letting a case drive ConquerEmpire's per-planet cascade once Planet[2]'s
                 capital falls; ignored/all-zero when 0),Planet3X,Planet3Y,Planet3Pop,Planet3RevIndex,
-                Planet3TechOrd
+                Planet3TechOrd,DefenderEff
                 -> "result=<AttackResultTypes ordinal>;cas_fgt=<v>;cas_hkr=<v>;cas_jtn=<v>;cas_nnj=<v>;
                     kill_fgt=<v>;kill_hkr=<v>;kill_men=<v>;def_owner=<Empire ordinal>;def_eff=<v>;
                     def_rev=<v>;def_type=<WorldTypes ordinal>[;p3_owner=<v>;p3_eff=<v>;p3_rev=<v>;
@@ -132,8 +132,9 @@
                 this harness's own INTRFACE.PAS), against one Empire1 fleet at (PosX,PosY). Requires
                 InitializeSector plus direct Sector[x]^[y].Obj writes for the gate(s)/fortress, same
                 requirement as the starbase/probescout/construction domains.
-     probescout DestOwnerOrd,DestLegions,DestAlreadyScouted(0/1),RngFixedValue -> "destscouted=<0|1>;
-                ringscouted=<0|1>;destknown=<0|1>;ringknown=<0|1>" -- calls the already-exported ProbeScout (INTRFACE.PAS:1289-1344)
+     probescout DestOwnerOrd,DestLegions,DestAlreadyScouted(0/1),RngFixedValue,DestDarkNebula(0/1)
+                -> "destscouted=<0|1>;ringscouted=<0|1>;destknown=<0|1>;ringknown=<0|1>;
+                news=<Empire1's NewsTypes ordinals>" -- calls the already-exported ProbeScout (INTRFACE.PAS:1289-1344)
                 directly against one planet at the probe's destination (5,5) and one at the very next
                 ring cell in Pascal's fixed offset order, (5,4). Covers ISqrt(Cargo[men]) and the
                 Rnd(1,100)<ChanceToDestroy threshold plus its Exit-before-ScoutObject sequencing -- ring
@@ -604,7 +605,7 @@ procedure RunNpeAttackCase(const arg: String);
      branches (immediate conquest / forced independence / distance-conquest / new-capital-candidate)
      deliberately -- see NpeAttackCases.cs's own doc comment for which case drives which branch. }
    var
-      parts: array[0..14] of LongInt;
+      parts: array[0..15] of LongInt;
       AttackerCapID, DefenderCapID, TargetID, FltID, Planet2ID, Planet3ID, NewCapID: IDNumber;
       Result: AttackResultTypes;
       Killed, Casualties: AttackArray;
@@ -635,6 +636,7 @@ procedure RunNpeAttackCase(const arg: String);
    Universe^.Planet[2].Cls:=WorldClass(parts[1]);
    Universe^.Planet[2].Typ:=CapTyp;
    Universe^.Planet[2].Tech:=TechLevel(parts[0]);
+   Universe^.Planet[2].Eff:=parts[15];
    Universe^.Planet[2].Ships[fgt]:=parts[3];
    Universe^.Planet[2].Ships[hkr]:=parts[4];
    Universe^.Planet[2].Cargo[men]:=parts[5];
@@ -2036,7 +2038,7 @@ procedure RunProbeScoutCase(const arg: String);
      Requires InitializeSector plus direct Sector[x]^[y].Obj writes for both planets -- ProbeScout
      resolves them via GetObject, same requirement as the starbase/construction domains. }
    var
-      parts: array[0..3] of LongInt;
+      parts: array[0..4] of LongInt;
       destID, ringID: IDNumber;
       dest: XYCoord;
       destOwner: Empire;
@@ -2047,6 +2049,9 @@ procedure RunProbeScoutCase(const arg: String);
    FillChar(Universe^,SizeOf(Universe^),0);
    InitializeSector(20);
    NoOfPlanets:=2;
+   { In use so AddNews records the probe's news for WriteNews. }
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire2].InUse:=True;
 
    destOwner:=Empire(parts[0]);
 
@@ -2075,12 +2080,17 @@ procedure RunProbeScoutCase(const arg: String);
    ForcedRandomValue:=parts[3];
 
    dest.x:=5;  dest.y:=5;
+   if parts[4]<>0 then
+      PutNebula(dest,DarkNebula);
    ProbeScout(Empire1,dest);
 
-   WriteLn('destscouted=',Ord(Empire1 IN Universe^.Planet[1].ScoutedBy),
+   Write('destscouted=',Ord(Empire1 IN Universe^.Planet[1].ScoutedBy),
            ';ringscouted=',Ord(Empire1 IN Universe^.Planet[2].ScoutedBy),
            ';destknown=',Ord(Empire1 IN Universe^.Planet[1].KnownBy),
            ';ringknown=',Ord(Empire1 IN Universe^.Planet[2].KnownBy));
+   WriteNews(Empire1);
+   WriteLn;
+   EraseNews(Empire2);
 
    Dispose(Universe);
    end;

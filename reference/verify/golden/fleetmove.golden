@@ -1,7 +1,10 @@
-case=PlainStepNoObstacles;newpos_x=1;newpos_y=1;passgate=0;passfortress=0
+case=PlainStepNoObstacles;newpos_x=5;newpos_y=5;passgate=0;passfortress=0
+case=StepTowardSmallerCoordinates;newpos_x=9;newpos_y=9;passgate=0;passfortress=0
+case=StepAlongOneAxisOnly;newpos_x=10;newpos_y=9;passgate=0;passfortress=0
 case=DenseNebulaBlocksTheStep;newpos_x=0;newpos_y=0;passgate=0;passfortress=0
-case=PublicGateAlwaysPasses;newpos_x=1;newpos_y=1;passgate=1;passfortress=0
-case=PrivateLinkToKnownMatchingLinkPasses;newpos_x=1;newpos_y=1;passgate=1;passfortress=0
-case=PrivateLinkToUnknownMatchingLinkDoesNotPass;newpos_x=1;newpos_y=1;passgate=0;passfortress=0
-case=PrivateLinkOwnerMismatchDoesNotPass;newpos_x=1;newpos_y=1;passgate=0;passfortress=0
-case=FortressAtPositionDetected;newpos_x=1;newpos_y=1;passgate=0;passfortress=1
+case=PublicGateAlwaysPasses;newpos_x=4;newpos_y=4;passgate=1;passfortress=0
+case=PrivateLinkToKnownMatchingLinkPasses;newpos_x=4;newpos_y=4;passgate=1;passfortress=0
+case=PrivateLinkToUnknownMatchingLinkDoesNotPass;newpos_x=4;newpos_y=4;passgate=0;passfortress=0
+case=PrivateLinkOwnerMismatchDoesNotPass;newpos_x=4;newpos_y=4;passgate=0;passfortress=0
+case=PrivateLinkOwnedByOtherEmpire;newpos_x=11;newpos_y=11;passgate=1;passfortress=0
+case=FortressAtPositionDetected;newpos_x=5;newpos_y=7;passgate=0;passfortress=1
