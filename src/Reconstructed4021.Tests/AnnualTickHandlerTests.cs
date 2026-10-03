@@ -211,7 +211,7 @@ public class AnnualTickHandlerRevolutionTests
         planet.Cargo.Supplies = 9999;
         var game = BuildGame(planet);
         game.Empires.Add(owner);
-        var handler = new AnnualTickHandler(new FixedRandom(0));
+        var handler = new AnnualTickHandler(new FixedRandom(c.RngFixedValue));
 
         handler.RunAnnualTick(game);
 
@@ -223,6 +223,7 @@ public class AnnualTickHandlerRevolutionTests
         await Assert.That(planet.RevolutionIndex).IsEqualTo(int.Parse(expected["revindex"]));
         await Assert.That(owner.TotalRevolutionIndex).IsEqualTo(int.Parse(expected["total_rev_delta"]));
         await Assert.That(planet.Owner.IsIndependent).IsEqualTo(bool.Parse(expected["rebelled"]));
+        await Assert.That(AnnualTickHandlerProductionTests.WorldTickNews(owner)).IsEqualTo(expected["news"]);
     }
 
     [Test]
@@ -533,6 +534,15 @@ public class AnnualTickHandlerHostileLifeTests
 /// </summary>
 public class AnnualTickHandlerProductionTests
 {
+    /// <summary>
+    /// The owner's headline ordinals, comma-joined, as the harness's WriteNews prints them. Leaves
+    /// out the empire-level research headlines: RunAnnualTick also runs NewTechLevel, which the
+    /// harness's single UpdateWorld call never reaches.
+    /// </summary>
+    internal static string WorldTickNews(Empire owner) => string.Join(",", owner.News
+        .Where(n => n.Headline is not (NewsType.EmpireGainedTechnology or NewsType.EmpireGainedTechLevel))
+        .Select(n => (int)n.Headline));
+
     private static Game BuildGame(params Planet[] planets)
     {
         var game = new Game(new Core.Galaxy.Galaxy(size: 20));
@@ -590,10 +600,12 @@ public class AnnualTickHandlerProductionTests
         var game = BuildGame(planet);
         if (!c.Independent)
             game.Empires.Add(owner);
-        var handler = new AnnualTickHandler(new FixedRandom(0));
+        var handler = new AnnualTickHandler(new FixedRandom(c.RngFixedValue));
 
         handler.RunAnnualTick(game);
 
+        // Pascal's AddNews drops news for an independent world, so the harness prints none.
+        await Assert.That(WorldTickNews(owner)).IsEqualTo(expected["news"]);
         await Assert.That(planet.RevolutionIndex).IsEqualTo(int.Parse(expected["revindex"]));
         await Assert.That(planet.Cargo.Chemicals).IsEqualTo(int.Parse(expected["cargoche"]));
         await Assert.That(planet.Cargo.Metals).IsEqualTo(int.Parse(expected["cargomet"]));

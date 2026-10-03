@@ -38,10 +38,8 @@ public class GoldenFileTests
             c => $"{(c.StartAddicted ? 1 : 0)},{c.StartAmbrosia},{c.RngFixedValue},{c.PlanetPop},{(int)c.Tech},{c.Efficiency}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "ambrosia", .. args.Skip(1)]));
 
-        // RngFixedValue is always 0 here, matching AnnualTickHandlerRevolutionTests.MatchesGoldenFile's
-        // own hardcoded FixedRandom(0) — RevolutionCase has no per-case field for it.
         GoldenFile.Regenerate("revolution", RevolutionCases.All,
-            c => $"{c.PlanetPop},{(int)c.Class},{(int)c.Tech},{c.Efficiency},{c.RevIndex},{c.Legions},0,{(int)c.Type}",
+            c => $"{c.PlanetPop},{(int)c.Class},{(int)c.Tech},{c.Efficiency},{c.RevIndex},{c.Legions},{c.RngFixedValue},{(int)c.Type}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "revolution", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("military", MilitaryCases.All,
@@ -87,7 +85,7 @@ public class GoldenFileTests
         GoldenFile.Regenerate("production", ProductionCases.All,
             c => $"{(int)c.Class},{(int)c.Type},{c.Population},{c.Efficiency},{(int)c.Tech},{(c.AmbAddict ? 1 : 0)}," +
                  $"{c.IndusBio},{c.IndusChe},{c.IndusMin},{c.IndusSYG},{c.IndusSYJ},{c.IndusSYS},{c.IndusSYT},{c.IndusSup},{c.IndusTri}," +
-                 $"{c.CargoMen},{c.CargoNnj},{c.CargoAmb},{c.CargoChe},{c.CargoMet},{c.CargoSup},{c.CargoTri},{c.TrillumReserve},{(c.Independent ? 1 : 0)},{c.RevIndex}",
+                 $"{c.CargoMen},{c.CargoNnj},{c.CargoAmb},{c.CargoChe},{c.CargoMet},{c.CargoSup},{c.CargoTri},{c.TrillumReserve},{(c.Independent ? 1 : 0)},{c.RevIndex},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "production", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("maturation", MaturationCases.All,

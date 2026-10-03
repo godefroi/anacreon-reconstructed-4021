@@ -27,7 +27,7 @@ public sealed record ProductionCase(
     int IndusBio, int IndusChe, int IndusMin, int IndusSYG, int IndusSYJ, int IndusSYS, int IndusSYT,
     int IndusSup, int IndusTri,
     int CargoMen, int CargoNnj, int CargoAmb, int CargoChe, int CargoMet, int CargoSup, int CargoTri,
-    int TrillumReserve, bool Independent = false, int RevIndex = 0) : INamedCase;
+    int TrillumReserve, bool Independent = false, int RevIndex = 0, int RngFixedValue = 0) : INamedCase;
 
 internal static class ProductionCases
 {
@@ -111,6 +111,68 @@ internal static class ProductionCases
             IndusSup: 50, IndusTri: 10,
             CargoMen: 200, CargoNnj: 0, CargoAmb: 0, CargoChe: 500, CargoMet: 500, CargoSup: 4000, CargoTri: 500,
             TrillumReserve: 2000, Independent: true, RevIndex: 10),
+
+        // HostileLife (UPDATE.PAS:458-515), which runs last in UpdateWorld for a hostile-life world.
+        // Few troops leave ChanceOfAttack high: at RngFixedValue 0 both rolls pass, so the aliens
+        // kill population. At 30 the attack roll (31) still passes but the population roll fails,
+        // so they attack troops instead. A large garrison drives ChanceOfAttack to 0, and the 20%
+        // roll has the aliens join.
+        new(Name: "HostileLifeKillsPopulation", Class: WorldClass.Hostile, Type: WorldType.Agricultural,
+            Population: 1000, Efficiency: 50, Tech: TechLevel.Warp, AmbAddict: false,
+            IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 0, IndusTri: 0,
+            CargoMen: 100, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 5000, CargoTri: 0,
+            TrillumReserve: 1000),
+        new(Name: "HostileLifeAttacksTroops", Class: WorldClass.Hostile, Type: WorldType.Agricultural,
+            Population: 1000, Efficiency: 50, Tech: TechLevel.Warp, AmbAddict: false,
+            IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 0, IndusTri: 0,
+            CargoMen: 500, CargoNnj: 50, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 5000, CargoTri: 0,
+            TrillumReserve: 1000, RngFixedValue: 30),
+        new(Name: "HostileLifeJoinsTroops", Class: WorldClass.Hostile, Type: WorldType.Agricultural,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Warp, AmbAddict: false,
+            IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 0, IndusTri: 0,
+            CargoMen: 4000, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 5000, CargoTri: 0,
+            TrillumReserve: 1000),
+
+        // UseUpFood with no supplies (UPDATE.PAS:1118-1161). A large Gate-tech population starves
+        // enough that TechAdj[Tech]*(Starve/10) exceeds the 45-point cap; a small Atomic-tech one
+        // starves a little, with a different TechAdj row.
+        new(Name: "StarvationRevoltCappedAt45", Class: WorldClass.EarthLike, Type: WorldType.Agricultural,
+            Population: 5000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false,
+            IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 0, IndusTri: 0,
+            CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 0, CargoTri: 0,
+            TrillumReserve: 1000),
+        new(Name: "StarvationAtAtomicTech", Class: WorldClass.EarthLike, Type: WorldType.Agricultural,
+            Population: 300, Efficiency: 100, Tech: TechLevel.Atomic, AmbAddict: false,
+            IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 0, IndusTri: 0,
+            CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 0, CargoTri: 0,
+            TrillumReserve: 1000),
+
+        // ProduceTrillum's three reserve tiers (UPDATE.PAS:757-795), at the same trillum industry as
+        // TrillumDrawsDownReserves: no reserves at all; reserves*20 below this year's production;
+        // reserves*10 below it, where the 1-in-2 roll passes at RngFixedValue 0.
+        new(Name: "TrillumReservesExhausted", Class: WorldClass.EarthLike, Type: WorldType.TrillumMine,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false,
+            IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 0, IndusTri: 100,
+            CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 1000, CargoTri: 0,
+            TrillumReserve: 0),
+        new(Name: "TrillumReservesVeryLow", Class: WorldClass.EarthLike, Type: WorldType.TrillumMine,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false,
+            IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 0, IndusTri: 100,
+            CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 1000, CargoTri: 0,
+            TrillumReserve: 5),
+        new(Name: "TrillumReservesLow", Class: WorldClass.EarthLike, Type: WorldType.TrillumMine,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false,
+            IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 0, IndusTri: 100,
+            CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 1000, CargoTri: 0,
+            TrillumReserve: 15),
     ];
 
     /// <summary>MethodDataSource shape for AnnualTickHandlerProductionTests.MatchesGoldenFile — one

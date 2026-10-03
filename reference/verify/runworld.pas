@@ -72,13 +72,16 @@
      ambrosia   Addicted,Ambrosia,RngFixedValue,PlanetPop,TechOrd,Efficiency
                 -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
      revolution PlanetPop,ClassOrd,TechOrd,Efficiency,RevIndex,Legions,RngFixedValue,TypOrd
-                -> "rebelled=<TRUE|FALSE>;legions=<v>;ninja=<v>;population=<v>;efficiency=<v>;revindex=<v>;total_rev_delta=<v>"
+                -> "rebelled=<TRUE|FALSE>;legions=<v>;ninja=<v>;population=<v>;efficiency=<v>;revindex=<v>;total_rev_delta=<v>;
+                    news=<NewsTypes ordinals>"
      production ClassOrd,TypeOrd,Population,Efficiency,TechOrd,AmbAddict,
                 IndusBio,IndusChe,IndusMin,IndusSYG,IndusSYJ,IndusSYS,IndusSYT,IndusSup,IndusTri,
-                CargoMen,CargoNnj,CargoAmb,CargoChe,CargoMet,CargoSup,CargoTri,TrillumReserve,IsIndependent,RevIndex
+                CargoMen,CargoNnj,CargoAmb,CargoChe,CargoMet,CargoSup,CargoTri,TrillumReserve,IsIndependent,RevIndex,
+                RngFixedValue
                 -> "bio,che,min,syg,syj,sys,syt,sup,tri,fgt,hkr,jmp,jtn,pen,ssp,trn,cargomen,
                     cargonnj,cargoamb,cargoche,cargomet,cargosup,cargotri,trillumreserve,
-                    population,efficiency,techlevel,revindex (all <key>=<value>)"
+                    population,efficiency,techlevel,revindex (all <key>=<value>);news=<NewsTypes
+                    ordinals of Empire1's news, in order>"
      empire     TechOrd,TechnologyBitmask,RngFixedValue,
                 Lab1Present,Lab1TypeOrd,Lab1ClassOrd,Lab1TechOrd,Lab1Eff,
                 Lab2Present,Lab2TypeOrd,Lab2ClassOrd,Lab2TechOrd,Lab2Eff,
@@ -227,6 +230,52 @@ procedure ParseFields(const arg: String; var parts: array of LongInt);
       WriteLn(StdErr,'runworld: expected ',High(parts)+1,' comma-separated fields, got ',partIdx,' in "',arg,'"');
       Halt(1);
       end;
+   end;
+
+procedure ResetGlobalSets;
+   { The active/owned-object sets are standalone globals (TYPES.PAS:180-188), not part of Universe^,
+     so FillChar(Universe^) leaves the previous case's members behind. A domain whose routine
+     allocates a slot from them (NextStarbaseSlot and friends) must clear them per case. }
+   var
+      Emp: Empire;
+   begin
+   SetOfActiveFleets:=[];
+   SetOfActivePlanets:=[];
+   SetOfActiveStarbases:=[];
+   SetOfActiveGates:=[];
+   SetOfActiveConstructionSites:=[];
+   for Emp:=Low(Empire) to High(Empire) do
+      begin
+      SetOfFleetsOf[Emp]:=[];
+      SetOfPlanetsOf[Emp]:=[];
+      SetOfStarbasesOf[Emp]:=[];
+      SetOfConstructionSitesOf[Emp]:=[];
+      end;
+   end;
+
+procedure WriteNews(Emp: Empire);
+   { Writes ";news=o1,o2,..." -- the NewsTypes ordinals of Emp's news, in the order added -- then
+     erases it. News lives in NEWS.PAS's unit-global list, not in Universe^, so it would otherwise
+     carry over into the next case in the same process. }
+   var
+      Item: NewsRecordPtr;
+      Head: NewsTypes;
+      Loc: Location;
+      P1,P2,P3: Integer;
+      First: Boolean;
+   begin
+   Write(';news=');
+   First:=True;
+   GetNewsList(Emp,Item);
+   while Item<>Nil do
+      begin
+      GetNewsItem(Item,Head,Loc,P1,P2,P3);
+      if not First then Write(',');
+      Write(Ord(Head));
+      First:=False;
+      Item:=Item^.Next;
+      end;
+   EraseNews(Emp);
    end;
 
 procedure RunTechLevelCase(const arg: String);
@@ -996,13 +1045,15 @@ procedure RunRevolutionCase(const arg: String);
    ID.ObjTyp:=Pln;  ID.Index:=1;
    UpdateWorld(ID);
 
-   WriteLn('rebelled=',(Universe^.Planet[1].Emp=Indep),
+   Write('rebelled=',(Universe^.Planet[1].Emp=Indep),
            ';legions=',Universe^.Planet[1].Cargo[men],
            ';ninja=',Universe^.Planet[1].Cargo[nnj],
            ';population=',Universe^.Planet[1].Pop,
            ';efficiency=',Universe^.Planet[1].Eff,
            ';revindex=',Universe^.Planet[1].RevIndex,
            ';total_rev_delta=',GetNewTotalRevIndex(Empire1)-RevDeltaBefore);
+   WriteNews(Empire1);
+   WriteLn;
 
    Dispose(Universe);
    end;
@@ -1030,7 +1081,7 @@ procedure RunProductionCase(const arg: String);
      Ambrosia/Legions values -- unlike production.pas, nothing here needs
      excluding from the golden comparison. }
    var
-      parts: array[0..24] of LongInt;
+      parts: array[0..25] of LongInt;
       ID, CapID: IDNumber;
    begin
    ParseFields(arg,parts);
@@ -1086,12 +1137,12 @@ procedure RunProductionCase(const arg: String);
    Universe^.EmpireData[Empire1].Capital:=CapID;
    Universe^.EmpireData[Empire1].Technology:=[Low(TechnologyTypes)..High(TechnologyTypes)];
 
-   ForcedRandomValue:=0;
+   ForcedRandomValue:=parts[25];
 
    ID.ObjTyp:=Pln;  ID.Index:=1;
    UpdateWorld(ID);
 
-   WriteLn('bio=',Universe^.Planet[1].Indus[BioInd],
+   Write('bio=',Universe^.Planet[1].Indus[BioInd],
            ';che=',Universe^.Planet[1].Indus[CheInd],
            ';min=',Universe^.Planet[1].Indus[MinInd],
            ';syg=',Universe^.Planet[1].Indus[SYGInd],
@@ -1119,6 +1170,8 @@ procedure RunProductionCase(const arg: String);
            ';efficiency=',Universe^.Planet[1].Eff,
            ';techlevel=',Ord(Universe^.Planet[1].Tech),
            ';revindex=',Universe^.Planet[1].RevIndex);
+   WriteNews(Empire1);
+   WriteLn;
 
    Dispose(Universe);
    end;
@@ -1365,7 +1418,8 @@ procedure RunConstructionCase(const arg: String);
      NextStargateSlot pick the highest available slot counting down from MaxNoOfStarbases/
      MaxNoOfStargates (INTRFACE.PAS:359-368,399-408); starting with zero active starbases/gates
      means a completion always lands at exactly MaxNoOfStarbases/MaxNoOfStargates, so those two
-     fixed slots are read back unconditionally below regardless of what this case actually built. }
+     fixed slots are read back unconditionally below regardless of what this case actually built.
+     ResetGlobalSets keeps an earlier case's completed starbase or gate from occupying that slot. }
    var
       parts: array[0..11] of LongInt;
    begin
@@ -1373,6 +1427,7 @@ procedure RunConstructionCase(const arg: String);
 
    New(Universe);
    FillChar(Universe^,SizeOf(Universe^),0);
+   ResetGlobalSets;
    InitializeSector(20); { required before any Sector[x]^[y] access -- PutMine/EnemyMine/
                            CreateStarbase/CreateStargate all touch it (same requirement as
                            RunStarbaseCase's own InitializeSector call). }
