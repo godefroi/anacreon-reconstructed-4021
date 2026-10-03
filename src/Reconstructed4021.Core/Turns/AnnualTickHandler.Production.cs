@@ -322,7 +322,9 @@ public sealed partial class AnnualTickHandler
     /// </summary>
     private static void ReportResourceShortfall(IEconomicWorld world, CargoType resource, NewsType headline, HashSet<CargoType> reportedShortfalls)
     {
-        if (reportedShortfalls.Add(resource)) {
+        // Pascal's guard also skips independent worlds (UPDATE.PAS:47): no news, no RevIndex bump.
+        // OtherReports is only updated inside that guard in Pascal; adding to the set either way is harmless here.
+        if (reportedShortfalls.Add(resource) && !world.Owner.IsIndependent) {
             world.Owner.AddNews(headline, world, resource: new ResourceKind.Cargo(resource));
             ChangeRevIndex(world, 1);
         }

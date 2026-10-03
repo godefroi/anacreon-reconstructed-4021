@@ -556,6 +556,7 @@ public class AnnualTickHandlerProductionTests
             TrillumReserve = c.TrillumReserve,
             IsAddictedToAmbrosia = c.AmbAddict,
         };
+        planet.RevolutionIndex = c.RevIndex;
         planet.Industry.Bioindustry = c.IndusBio;
         planet.Industry.Chemical = c.IndusChe;
         planet.Industry.Mining = c.IndusMin;
@@ -583,17 +584,19 @@ public class AnnualTickHandlerProductionTests
         var golden = PascalGroundTruth.GoldenFile.Load("production.golden");
         var expected = golden[c.Name];
 
-        var owner = new Empire { Name = "Test" };
+        var owner = c.Independent ? Empire.Independent : new Empire { Name = "Test" };
         if (c.AllShipsUnlocked)
             owner.Technology.Ships.UnionWith(Enum.GetValues<ShipType>());
         owner.Technology.Defenses.UnionWith(Enum.GetValues<DefenseType>());
         var planet = MakePlanet(c, owner);
         var game = BuildGame(planet);
-        game.Empires.Add(owner);
+        if (!c.Independent)
+            game.Empires.Add(owner);
         var handler = new AnnualTickHandler(new FixedRandom(0));
 
         handler.RunAnnualTick(game);
 
+        await Assert.That(planet.RevolutionIndex).IsEqualTo(int.Parse(expected["revindex"]));
         await Assert.That(planet.Cargo.Chemicals).IsEqualTo(int.Parse(expected["cargoche"]));
         await Assert.That(planet.Cargo.Metals).IsEqualTo(int.Parse(expected["cargomet"]));
 
