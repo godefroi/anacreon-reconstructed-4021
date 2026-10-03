@@ -455,9 +455,13 @@ public static class CombatEngine
             killed[AttackType.Gdm] += noOfGdm;
 
             foreach (var g in groups) {
+                // A landed group's Typ is Legion/NinjaLegion (AdvanceGroups' Typ<-GATTyp swap) and stays that way.
+                // Pascal reads GDMKill[Typ] out of range there (range checks are off); the result is never used
+                // because a landed group doesn't attack at SubOrbit, so its Targ row is never read.
+                if (g.Typ.AsShipType() is not { } ship) {
+                    continue;
+                }
                 var gdmAtTarget = PascalRound((priority2[g].GetValueOrDefault(AttackType.Gdm) / 1000.0) * noOfGdm);
-                var ship = g.Typ.AsShipType()
-                    ?? throw new InvalidOperationException("BuildTargetArray: GDM interception against a troop-typed group requires AdvanceGroups' Typ<-GATTyp swap to have already run.");
                 gdmAtTarget -= PascalRound(CombatConstants.GdmKill[ship] / 10.0 * g.Num);
                 if (gdmAtTarget < 0) {
                     gdmAtTarget = 0;

@@ -164,6 +164,24 @@ public class InteractiveCombatTests
     }
 
     [Test]
+    [Arguments(GroupStatus.Ready)]
+    [Arguments(GroupStatus.Destroyed)]
+    public async Task Engage_LandedTroopGroup_DoesNotBreakGdmInterceptionForGroupStillAtOrbit(GroupStatus landedStatus)
+    {
+        // AdvanceGroups swaps a landed transport group's Typ to Legion and it keeps that Typ for good,
+        // even once destroyed (GitHub #109). BuildTargetArray's Orbit-shell GDM loop runs over every group.
+        var enemy = new EnemyForces();
+        enemy[ShellPosition.Orbit, AttackType.Fighter] = 50;
+        var landed = Group(AttackType.Legion, ShellPosition.Ground, landedStatus);
+        var orbiting = Group(AttackType.Transport, ShellPosition.Orbit);
+        var state = new InteractiveCombatState([landed, orbiting], enemy, PlanetCombatData);
+
+        state.Engage(new FixedRandom(0));
+
+        await Assert.That(state.Groups.Count).IsEqualTo(2);
+    }
+
+    [Test]
     public async Task Retreat_ForcesAttackerRetreats_AndEndsTheEngagement()
     {
         // A lone group at DeepSpace with no target, against an empty EnemyForces -- nothing can kill it
