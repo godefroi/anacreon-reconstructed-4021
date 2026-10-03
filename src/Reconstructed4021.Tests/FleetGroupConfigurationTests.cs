@@ -42,7 +42,7 @@ public class FleetGroupConfigurationTests
         var pool = new ShipCounts { Fighters = 30 };
         var group = new GroupRecord { Typ = AttackType.Fighter, Num = 0 };
 
-        FleetGroupConfiguration.LoadShips(pool, group, 100);
+        FleetGroupConfiguration.LoadShips(pool, new CargoHold(), group, 100);
 
         await Assert.That(group.Num).IsEqualTo(30);
         await Assert.That(pool.Fighters).IsEqualTo(0);
@@ -54,10 +54,45 @@ public class FleetGroupConfigurationTests
         var pool = new ShipCounts { Fighters = 10 };
         var group = new GroupRecord { Typ = AttackType.Fighter, Num = 20 };
 
-        FleetGroupConfiguration.LoadShips(pool, group, -100);
+        FleetGroupConfiguration.LoadShips(pool, new CargoHold(), group, -100);
 
         await Assert.That(group.Num).IsEqualTo(0);
         await Assert.That(pool.Fighters).IsEqualTo(30);
+    }
+
+    [Test]
+    public async Task LoadShips_RemovingTransports_ReturnsCarriedTroopsToPool()
+    {
+        var shipPool = new ShipCounts();
+        var cargoPool = new CargoHold();
+        var group = new GroupRecord { Typ = AttackType.Transport, Num = 10, Gat = 50, GatTyp = AttackType.Legion };
+
+        FleetGroupConfiguration.LoadShips(shipPool, cargoPool, group, -8);
+
+        await Assert.That(group.Num).IsEqualTo(2);
+        await Assert.That(group.Gat).IsEqualTo(0);
+        await Assert.That(group.GatTyp).IsNull();
+        await Assert.That(cargoPool.Legions).IsEqualTo(50);
+        await Assert.That(shipPool.Transports).IsEqualTo(8);
+    }
+
+    [Test]
+    public async Task LoadShips_AddingTransports_ReturnsCarriedTroopsSoFinalizeReloadsAtNewCapacity()
+    {
+        var shipPool = new ShipCounts { Transports = 8 };
+        var cargoPool = new CargoHold();
+        var group = new GroupRecord { Typ = AttackType.Transport, Num = 2, Gat = 10, GatTyp = AttackType.Legion };
+
+        FleetGroupConfiguration.LoadShips(shipPool, cargoPool, group, 8);
+
+        await Assert.That(group.Gat).IsEqualTo(0);
+        await Assert.That(cargoPool.Legions).IsEqualTo(10);
+
+        var result = FleetGroupConfiguration.Finalize([group], cargoPool);
+
+        // Transport: TrnAdj=1, CargoSpace[Legion]=5 -- 10 transports hold 50, but only 10 are available.
+        await Assert.That(result[0].Gat).IsEqualTo(10);
+        await Assert.That(cargoPool.Legions).IsEqualTo(0);
     }
 
     [Test]

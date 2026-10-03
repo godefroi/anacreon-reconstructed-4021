@@ -508,6 +508,21 @@ own header comment, not repeated here.
   Cross-checked against `Reconstructed4021.LegacyNpe.PirateTurnHandler` by
   `PirateGoldenTests.MatchesGoldenFile`.
 
+### Fleet Group Configuration (its own driver)
+
+- **`getgroups`** (`runattcomm.pas`, not `runworld.pas`) — the real `ATTCOMM.PAS` `GetGroups`, driven
+  by a keystroke script. `LoadShips`/`ChangeGroupType`/`LoadTransports` are nested inside
+  `GetGroups` (itself nested in `AttackCommand`), so nothing can call them directly; running the
+  whole procedure is the only way to reach them, along with its compaction and auto-load tail.
+  Two patches make that possible: `ATTCOMM.PAS.patch` moves `AttackCommand`'s header and `VAR` block
+  below `GetGroups` (so `GetGroups` becomes a top-level procedure, a move rather than a rewrite)
+  and exports it from `INTERFACE`; `SWINDOWS.PAS.patch` adds `ScriptedActive`/`ScriptedKeys`, which
+  `GetCharacter` (and so `GetInputString`) reads instead of the keyboard when set. A separate
+  driver for the same reason as `runload.pas`: `AttComm`'s interface pulls in `LoadSave`.
+  The C# side (`FleetGroupConfigurationGroundTruthTests`) replays the same script through
+  `FleetGroupConfiguration`. `GATTyp` is only compared while `GAT > 0`: Pascal zeroes `GAT` without
+  clearing `GATTyp`.
+
 ### Not a `UpdateWorld`/`GalaxySetup` domain
 
 - **`groundtruthrng`** — a standing regression fixture for `GroundTruthRandom.cs`, the C# twin of
