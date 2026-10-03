@@ -92,6 +92,14 @@ public static class ProductionRedirection
             return;
         }
 
+        // DeployFleet would launch a partially fueled fleet if the planet is short on trillum; redirection
+        // skips instead (issue #57), leaving production and trillum in place. Same capacity/rounding math
+        // as ChangeCompositionOfFleet's world branch, for a fleet that starts at 0 fuel.
+        var tonsNeeded = PascalRound(FleetLogistics.FuelCapacity(ships) / FleetLogistics.FuelPerTon);
+        if (planet.Cargo.Trillum < tonsNeeded) {
+            return;
+        }
+
         var fleet = FleetLifecycle.DeployFleet(planet.Owner, planet, ships, cargo, destination, game);
         fleet.Names[planet.Owner] = $"Redirect-{settings.NextDispatchNumber}";
         settings.NextDispatchNumber++;

@@ -125,6 +125,7 @@ public class ProductionRedirectionTests
         var planet = new Planet { Location = new Coordinate(1, 1), Owner = owner, Type = WorldType.Base };
         planet.Redirection.Destination = new Coordinate(10, 10);
         planet.Redirection.Ships[ShipType.Fighter] = RedirectionMode.Yes;
+        planet.Cargo.Trillum = 5000;
         galaxy.Planets.Add(planet);
 
         var shipsBefore = new ShipCounts(); // nothing produced yet
@@ -143,6 +144,28 @@ public class ProductionRedirectionTests
     }
 
     [Test]
+    public async Task Apply_InsufficientTrillum_SkipsAndLeavesEverythingAtSource()
+    {
+        var (game, galaxy) = NewGame();
+        var owner = NewEmpire("Owner");
+        var planet = new Planet { Location = new Coordinate(1, 1), Owner = owner, Type = WorldType.Base };
+        planet.Redirection.Destination = new Coordinate(10, 10);
+        planet.Redirection.Ships[ShipType.Starship] = RedirectionMode.Yes;
+        planet.Cargo.Trillum = 1; // far below the full fuel requirement for 100 starships (~11 tons)
+        galaxy.Planets.Add(planet);
+
+        var shipsBefore = new ShipCounts();
+        planet.Ships.Starships = 100;
+
+        ProductionRedirection.Apply(planet, game, shipsBefore, legionsBefore: 0, ninjaLegionsBefore: 0);
+
+        await Assert.That(galaxy.Fleets).IsEmpty();
+        await Assert.That(planet.Ships.Starships).IsEqualTo(100);
+        await Assert.That(planet.Cargo.Trillum).IsEqualTo(1);
+        await Assert.That(planet.Redirection.NextDispatchNumber).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task Apply_JoinOnArrival_CompilesAJoinOrder()
     {
         var (game, galaxy) = NewGame();
@@ -152,6 +175,7 @@ public class ProductionRedirectionTests
         planet.Redirection.Ships[ShipType.Fighter] = RedirectionMode.Yes;
         planet.Redirection.JoinOnArrival = true;
         planet.Redirection.PreserveOverflowOnJoin = true;
+        planet.Cargo.Trillum = 5000;
         galaxy.Planets.Add(planet);
 
         var shipsBefore = new ShipCounts();
