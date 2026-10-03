@@ -108,6 +108,10 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
         var legionsBeforeProduction = planet.Cargo.Legions;
         var ninjaLegionsBeforeProduction = planet.Cargo.NinjaLegions;
 
+        // UpdateWorld computes the world's Technology set once, before UpdateTechLevel/UseUpAmbrosia
+        // can move Tech, and UpdateDefenses uses that set (UPDATE.PAS:1359-1369, 1387).
+        var tickStartTech = EffectiveTechnologyLevel(planet);
+
         RunProductionPipeline(planet, reportedShortfalls);
 
         // Production redirection (GitHub issue #8, no Pascal equivalent -- see RedirectionSettings'
@@ -121,7 +125,7 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
         UseUpFood(planet, reportedShortfalls);
         UseUpAmbrosia(planet);
         UpdateMilitary(planet);
-        UpdateDefenses(planet, reportedShortfalls);
+        UpdateDefenses(planet, reportedShortfalls, tickStartTech);
         planet.ShortfallsLastTick = reportedShortfalls;
         UpdateRevolution(planet, game, newTotalRevIndex);
 
@@ -142,6 +146,8 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
     {
         var isComplex = starbase.Kind == StarbaseKind.IndustrialComplex;
         var reportedShortfalls = new HashSet<CargoType>();
+        // Same tick-start Technology set as the planet path (UPDATE.PAS:1396-1401, used at :1429).
+        var tickStartTech = EffectiveTechnologyLevel(starbase);
 
         if (isComplex) {
             RunProductionPipeline(starbase, reportedShortfalls, () => SupplyLink(starbase, game.Galaxy), () => SurplusLink(starbase, game.Galaxy));
@@ -160,7 +166,7 @@ public sealed partial class AnnualTickHandler(Random random, Action<string>? tec
 
         // UpdateDefenses runs unconditionally for every starbase (UPDATE.PAS:1429), unlike the rest of
         // the economy pipeline above, which only runs for industrial complexes.
-        UpdateDefenses(starbase, reportedShortfalls);
+        UpdateDefenses(starbase, reportedShortfalls, tickStartTech);
         starbase.ShortfallsLastTick = reportedShortfalls;
     }
 

@@ -130,9 +130,13 @@ static Dictionary<string, int> Snapshot(Planet p) => new() {
     ["syt"] = p.Industry.ShipyardTransport, ["sup"] = p.Industry.Supply, ["tri"] = p.Industry.TrillumMining,
     ["fgt"] = p.Ships.Fighters, ["hkr"] = p.Ships.HunterKillers, ["jmp"] = p.Ships.Jumpships,
     ["jtn"] = p.Ships.Jumptransports, ["pen"] = p.Ships.Penetrators, ["ssp"] = p.Ships.Starships, ["trn"] = p.Ships.Transports,
-    ["cargomen"] = p.Cargo.Legions, ["cargoche"] = p.Cargo.Chemicals, ["cargomet"] = p.Cargo.Metals,
+    ["cargomen"] = p.Cargo.Legions, ["cargonnj"] = p.Cargo.NinjaLegions, ["cargoamb"] = p.Cargo.Ambrosia,
+    ["cargoche"] = p.Cargo.Chemicals, ["cargomet"] = p.Cargo.Metals,
     ["cargosup"] = p.Cargo.Supplies, ["cargotri"] = p.Cargo.Trillum, ["trillumreserve"] = p.TrillumReserve,
     ["lam"] = p.Defenses.Lams, ["def"] = p.Defenses.DefenseSatellites, ["gdm"] = p.Defenses.Gdms, ["ion"] = p.Defenses.IonCannons,
+    ["ambaddict"] = p.IsAddictedToAmbrosia ? 1 : 0, ["type"] = (int)p.Type,
+    // Empire1 is ordinal 0 and Indep is 8.
+    ["owner"] = p.Owner.IsIndependent ? 8 : 0,
 };
 
 static Dictionary<string, int> ParseLine(string line) =>

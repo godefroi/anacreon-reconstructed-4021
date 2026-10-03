@@ -498,6 +498,25 @@ public class GalaxySetupTests
         await Assert.That(planet.Defenses.DefenseSatellites).IsEqualTo(int.Parse(expected["defDef"]));
         await Assert.That(planet.Defenses.Gdms).IsEqualTo(int.Parse(expected["defGDM"]));
         await Assert.That(planet.Defenses.IonCannons).IsEqualTo(int.Parse(expected["defIon"]));
+
+        await Assert.That((int)planet.Class).IsEqualTo(int.Parse(expected["cls"]));
+        await Assert.That((int)planet.TechLevel).IsEqualTo(int.Parse(expected["tech"]));
+        await Assert.That((int)planet.Type).IsEqualTo(int.Parse(expected["type"]));
+        // Indep is ordinal 8.
+        await Assert.That(planet.Owner.IsIndependent ? 8 : -1).IsEqualTo(int.Parse(expected["owner"]));
+        await Assert.That(planet.Industry.Bioindustry).IsEqualTo(int.Parse(expected["bio"]));
+        await Assert.That(planet.Industry.Chemical).IsEqualTo(int.Parse(expected["che"]));
+        await Assert.That(planet.Industry.Mining).IsEqualTo(int.Parse(expected["min"]));
+        await Assert.That(planet.Industry.ShipyardGeneral).IsEqualTo(int.Parse(expected["syg"]));
+        await Assert.That(planet.Industry.ShipyardJump).IsEqualTo(int.Parse(expected["syj"]));
+        await Assert.That(planet.Industry.ShipyardStarship).IsEqualTo(int.Parse(expected["sys"]));
+        await Assert.That(planet.Industry.ShipyardTransport).IsEqualTo(int.Parse(expected["syt"]));
+        await Assert.That(planet.Industry.Supply).IsEqualTo(int.Parse(expected["sup"]));
+        await Assert.That(planet.Industry.TrillumMining).IsEqualTo(int.Parse(expected["tri"]));
+        await Assert.That((int)planet.SelfSufficiency.Chemical).IsEqualTo(int.Parse(expected["isspche"]));
+        await Assert.That((int)planet.SelfSufficiency.Metal).IsEqualTo(int.Parse(expected["isspmet"]));
+        await Assert.That((int)planet.SelfSufficiency.Supply).IsEqualTo(int.Parse(expected["isspsup"]));
+        await Assert.That((int)planet.SelfSufficiency.Trillum).IsEqualTo(int.Parse(expected["issptri"]));
     }
 
     /// <summary>Compares the whole painted grid as one string rather than per-cell asserts, so a mismatch shows a clear diff of both grids.</summary>

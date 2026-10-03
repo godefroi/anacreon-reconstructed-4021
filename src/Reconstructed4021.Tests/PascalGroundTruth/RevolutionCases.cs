@@ -14,14 +14,14 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// type is reported short in a tick, triggered by UpdateIndustry/Production's real
 /// raw-material-shortfall checks) is modeled here too — see <c>AnnualTickHandler.ReportResourceShortfall</c>.
 ///
-/// Every case uses Type=Agricultural/Ninja=0 (hardcoded in the driver, matching every case here) and
-/// is Owned with its own capital pointing at itself — CapitalTech always equals Tech, so
+/// Ninja=0 is hardcoded in the driver. Every case is Owned with its own capital pointing at itself —
+/// CapitalTech always equals Tech, so
 /// UpdateTechLevel can never drift TechLevel mid-tick, the same "capital tech level never actually
 /// read" outcome the C# test gets from its own empire having no Capital at all.
 /// </summary>
 public sealed record RevolutionCase(
     string Name, int PlanetPop, WorldClass Class, TechLevel Tech,
-    int Efficiency, int RevIndex, int Legions, WorldType Type) : INamedCase;
+    int Efficiency, int RevIndex, int Legions, WorldType Type, int RngFixedValue = 0) : INamedCase;
 
 internal static class RevolutionCases
 {
@@ -49,6 +49,28 @@ internal static class RevolutionCases
         // never fires.
         new(Name: "LowRevIndexNoRebellion", PlanetPop: 50, Class: WorldClass.EarthLike,
             Tech: TechLevel.Gate, Efficiency: 100, RevIndex: 50, Legions: 0, Type: WorldType.Agricultural),
+
+        // UpdateRevolution's other branches (UPDATE.PAS:712-753). With no empire revolution total and
+        // RngFixedValue 0, a non-capital world's index first drops by 5 (Rnd(-5,2)).
+        // A surplus garrison on a world above 30 calms it by Rnd(1,surplus/100)=1, too little for
+        // the RevControl headline (Factor>5).
+        new(Name: "SurplusTroopsCalmRebellion", PlanetPop: 2000, Class: WorldClass.EarthLike,
+            Tech: TechLevel.Gate, Efficiency: 100, RevIndex: 55, Legions: 5000, Type: WorldType.Agricultural),
+        // At RngFixedValue 10 the calming Factor is 11, enough for the RevControl headline.
+        new(Name: "SurplusTroopsCalmRebellionWithNews", PlanetPop: 2000, Class: WorldClass.EarthLike,
+            Tech: TechLevel.Gate, Efficiency: 100, RevIndex: 55, Legions: 5000, Type: WorldType.Agricultural,
+            RngFixedValue: 10),
+        // The same garrison on a calm, non-capital, non-base world breeds resentment: Rnd(1,5)=1.
+        new(Name: "SurplusTroopsWantOut", PlanetPop: 2000, Class: WorldClass.EarthLike,
+            Tech: TechLevel.Gate, Efficiency: 100, RevIndex: 20, Legions: 5000, Type: WorldType.Agricultural),
+        // ...but not on a base world, which is exempt.
+        new(Name: "SurplusTroopsOnBaseWorldNoResentment", PlanetPop: 2000, Class: WorldClass.EarthLike,
+            Tech: TechLevel.Gate, Efficiency: 100, RevIndex: 20, Legions: 5000, Type: WorldType.Base),
+        // Warning tiers 3 (66-70) and 4 (71-75), from 73 and 78 after the drop of 5.
+        new(Name: "RebellionWarningTier3", PlanetPop: 2000, Class: WorldClass.EarthLike,
+            Tech: TechLevel.Gate, Efficiency: 100, RevIndex: 73, Legions: 0, Type: WorldType.Agricultural),
+        new(Name: "RebellionWarningTier4", PlanetPop: 2000, Class: WorldClass.EarthLike,
+            Tech: TechLevel.Gate, Efficiency: 100, RevIndex: 78, Legions: 0, Type: WorldType.Agricultural),
     ];
 
     /// <summary>MethodDataSource shape for AnnualTickHandlerRevolutionTests.MatchesGoldenFile — one

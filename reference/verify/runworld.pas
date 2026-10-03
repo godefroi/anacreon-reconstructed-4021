@@ -11,10 +11,12 @@
      ./runworld case <domain> <case1> <case2> ...
    Each <caseN> is a comma-separated tuple, shape depends on <domain>:
      techlevel  TechOrd,IsIndependent,CapitalTechOrd,RngFixedValue -> "techlevel=<ordinal>"
-     military   PlanetPop,TechOrd,Legions,TypOrd,RngFixedValue     -> "legions=<value>"
+     military   PlanetPop,TechOrd,Legions,TypOrd,RngFixedValue,ClassOrd -> "legions=<value>"
      defenses   PlanetPop,TechOrd,Legions,NinjaLegions,TypOrd,Efficiency,
-                CargoChe,CargoMet,CargoTri,TechnologyBitmask,RngFixedValue
-                -> "lam=<v>;def=<v>;gdm=<v>;ion=<v>" -- TechnologyBitmask uses the same
+                CargoChe,CargoMet,CargoTri,TechnologyBitmask,RngFixedValue,
+                CapitalTechOrd (-1 = the world is its own capital)
+                -> "lam=<v>;def=<v>;gdm=<v>;ion=<v>;cargoche=<v>;cargomet=<v>;cargotri=<v>;
+                techlevel=<v>" -- TechnologyBitmask uses the same
                 26-bit encoding as the empire domain (bit i = TechnologyTypes(i+1));
                 only bits 0-3 (LAM,def,GDM,ion) matter here
      combat     AttackerCapTechOrd,DefenderTechOrd,DefenderClassOrd,DefenderRevIndex,
@@ -37,12 +39,18 @@
                 Planet3Present(0/1 -- a second Empire2 world, positioned/populated by the next 5
                 fields, letting a case drive ConquerEmpire's per-planet cascade once Planet[2]'s
                 capital falls; ignored/all-zero when 0),Planet3X,Planet3Y,Planet3Pop,Planet3RevIndex,
-                Planet3TechOrd
+                Planet3TechOrd,DefenderEff,DefenderCargo (seeds Planet[2]'s amb/che/met/sup/tri)
                 -> "result=<AttackResultTypes ordinal>;cas_fgt=<v>;cas_hkr=<v>;cas_jtn=<v>;cas_nnj=<v>;
                     kill_fgt=<v>;kill_hkr=<v>;kill_men=<v>;def_owner=<Empire ordinal>;def_eff=<v>;
                     def_rev=<v>;def_type=<WorldTypes ordinal>[;p3_owner=<v>;p3_eff=<v>;p3_rev=<v>;
                     p3_type=<v> -- only when Planet3Present];newcap_idx=<Empire2's post-attack capital
-                    Planet index, 0 if none>" -- real NPEAttack end to end (its own multi-round
+                    Planet index, 0 if none>;def_fgt=<v>;def_hkr=<v>;def_men=<v>;def_nnj=<v>;
+                    def_amb=<v>;def_che=<v>;def_met=<v>;def_sup=<v>;def_tri=<v>;
+                    att_active=<0|1>;att_fgt=<v>;att_hkr=<v>;att_jtn=<v>;att_nnj=<v>;att_men=<v>;
+                    att_fuel=<v>;tgt_active=<0|1>;tgt_fgt=<v>;tgt_hkr=<v>;rev1=<v>;rev2=<v>;
+                    inuse2=<0|1>" (att_* is Fleet[1], tgt_* is Fleet[2] -- both 0 when that fleet is
+                gone or, for tgt_*, was never created; rev1/rev2 are EmpireData.TotalRevIndex of
+                Empire1/Empire2) -- real NPEAttack end to end (its own multi-round
                 FleetRetreats/Targetting/GroupEngage/AdvanceGroups loop, not one round in isolation),
                 now including outcome application (ResolveAttack/ConquerWorld/ConquerEmpire/
                 RestoreCombatant, Phase 5 commit 5f); see RunNpeAttackCase's own comment. Note:
@@ -59,21 +67,23 @@
                 cargo after the strike, 0 if the fleet was destroyed) --
                 real ATTACK.PAS's own LAMAttack called directly (not through NPEAttack -- LAMAttack
                 has no Rnd calls at all, so no RngFixedValue field here), see RunLamAttackCase's own
-                comment. Both target and player are always Empire2/Empire1 respectively; DestroyFleet
-                is the same no-op stand-in ATTACK.PAS.patch already carries for 5f, so this domain
-                only asserts LAMAttack's own ShipsDest/DefnsDest VAR out-params, not whether a
-                totally-destroyed fleet was actually removed.
-     starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue,Neighbor2Chemicals (-1 = no second neighbor)
-                -> "starbaseChe=<v>;neighborChe=<v>;neighbor2Che=<v>"
-     ambrosia   Addicted,Ambrosia,RngFixedValue                    -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
-     revolution PlanetPop,ClassOrd,TechOrd,Efficiency,RevIndex,Legions,RngFixedValue
-                -> "rebelled=<TRUE|FALSE>;legions=<v>;ninja=<v>;population=<v>;efficiency=<v>;revindex=<v>;total_rev_delta=<v>"
+                comment. Both target and player are always Empire2/Empire1 respectively.
+     starbase   StarbaseChemicals,NeighborChemicals,RngFixedValue,Neighbor2Chemicals (-1 = no second neighbor),
+                StarbaseTechOrd,Legions,TechnologyBitmask,MetalsAndTrillum
+                -> "starbaseChe=<v>;neighborChe=<v>;neighbor2Che=<v>;techlevel=<v>;lam=<v>;def=<v>;gdm=<v>;ion=<v>"
+     ambrosia   Addicted,Ambrosia,RngFixedValue,PlanetPop,TechOrd,Efficiency
+                -> "population=<v>;efficiency=<v>;techlevel=<v>;ambrosia=<v>;addicted=<TRUE|FALSE>"
+     revolution PlanetPop,ClassOrd,TechOrd,Efficiency,RevIndex,Legions,RngFixedValue,TypOrd
+                -> "rebelled=<TRUE|FALSE>;legions=<v>;ninja=<v>;population=<v>;efficiency=<v>;revindex=<v>;total_rev_delta=<v>;
+                    news=<NewsTypes ordinals>"
      production ClassOrd,TypeOrd,Population,Efficiency,TechOrd,AmbAddict,
                 IndusBio,IndusChe,IndusMin,IndusSYG,IndusSYJ,IndusSYS,IndusSYT,IndusSup,IndusTri,
-                CargoMen,CargoNnj,CargoAmb,CargoChe,CargoMet,CargoSup,CargoTri,TrillumReserve,IsIndependent,RevIndex
+                CargoMen,CargoNnj,CargoAmb,CargoChe,CargoMet,CargoSup,CargoTri,TrillumReserve,IsIndependent,RevIndex,
+                RngFixedValue
                 -> "bio,che,min,syg,syj,sys,syt,sup,tri,fgt,hkr,jmp,jtn,pen,ssp,trn,cargomen,
                     cargonnj,cargoamb,cargoche,cargomet,cargosup,cargotri,trillumreserve,
-                    population,efficiency,techlevel,revindex (all <key>=<value>)"
+                    population,efficiency,techlevel,revindex (all <key>=<value>);news=<NewsTypes
+                    ordinals of Empire1's news, in order>"
      empire     TechOrd,TechnologyBitmask,RngFixedValue,
                 Lab1Present,Lab1TypeOrd,Lab1ClassOrd,Lab1TechOrd,Lab1Eff,
                 Lab2Present,Lab2TypeOrd,Lab2ClassOrd,Lab2TechOrd,Lab2Eff,
@@ -100,7 +110,9 @@
      randomplanet ClassOrd,TechOrd,RngFixedValue -> "population=<v>;efficiency=<v>;
                 fgt=<v>;hkr=<v>;jmp=<v>;jtn=<v>;pen=<v>;ssp=<v>;trn=<v>;
                 cargomen=<v>;cargoche=<v>;cargomet=<v>;cargosup=<v>;cargotri=<v>;
-                defLAM=<v>;defDef=<v>;defGDM=<v>;defIon=<v> (all <key>=<value>)"
+                defLAM=<v>;defDef=<v>;defGDM=<v>;defIon=<v>;cls=<v>;tech=<v>;type=<v>;owner=<v>;
+                bio..tri=<v> (the nine industries);isspche=<v>;isspmet=<v>;isspsup=<v>;issptri=<v>
+                (all <key>=<value>)"
      nebula     SizeOfGalaxy,Mode(1=band,2=patches),PatchCount(patches mode only),RngFixedValue
                 -> "grid=<SizeOfGalaxy*SizeOfGalaxy chars, row-major y=1..Size then x=1..Size,
                     '1'=Nebula '0'=None>" -- GetRandomXY/CreateRandomWorlds have no domain here; see
@@ -122,14 +134,14 @@
                 this harness's own INTRFACE.PAS), against one Empire1 fleet at (PosX,PosY). Requires
                 InitializeSector plus direct Sector[x]^[y].Obj writes for the gate(s)/fortress, same
                 requirement as the starbase/probescout/construction domains.
-     probescout DestOwnerOrd,DestLegions,DestAlreadyScouted(0/1),RngFixedValue -> "destscouted=<0|1>;
-                ringscouted=<0|1>" -- calls the already-exported ProbeScout (INTRFACE.PAS:1289-1344)
+     probescout DestOwnerOrd,DestLegions,DestAlreadyScouted(0/1),RngFixedValue,DestDarkNebula(0/1)
+                -> "destscouted=<0|1>;ringscouted=<0|1>;destknown=<0|1>;ringknown=<0|1>;
+                news=<Empire1's NewsTypes ordinals>" -- calls the already-exported ProbeScout (INTRFACE.PAS:1289-1344)
                 directly against one planet at the probe's destination (5,5) and one at the very next
                 ring cell in Pascal's fixed offset order, (5,4). Covers ISqrt(Cargo[men]) and the
-                Rnd(1,100)<ChanceToDestroy threshold plus its Exit-before-ScoutObject sequencing -- ring
-                ordering/early-exit control flow itself is hardcoded-tested on the C# side
-                (VisibilityHandlerProbeTests), since there's no separate Pascal formula to cross-check
-                there.
+                Rnd(1,100)<ChanceToDestroy threshold plus its Exit-before-ScoutObject sequencing, and
+                the Dark Nebula early exit when DestDarkNebula is set. Further ring-ordering cases are
+                hardcoded on the C# side (VisibilityHandlerProbeTests).
      groundtruthrng Seed,Range,Count -> "values=<Count comma-joined GroundTruthNextU32-scaled draws
                 after GroundTruthSeed:=Seed>;reals=<Count comma-joined GroundTruthRandomReal draws,
                 seed reset to Seed first>" -- not a UpdateWorld/GalaxySetup domain; a standing
@@ -154,13 +166,14 @@
                 list) -- not a per-entity dump, deliberately: real dos_131 files have up to ~160
                 worlds, and a mismatch anywhere (a wrong coordinate, a dropped jitter, a missed empire)
                 perturbs at least one of these sums, which is what a golden-file regression actually
-                needs to catch. The C# side (ScenarioLoaderGoldenTests.MatchesGoldenFile) only
-                exact-matches a subset of these fields, not all of them -- every field touched by a
-                random draw anywhere in the file turned out to be fragile to RNG-stream-position drift
-                between two independently-written implementations, even fields that look explicit/
-                deterministic on their face (see that test's own doc comment, and the root README's
-                "Known limitation" section, for why). This driver still emits every field: useful for
-                manual diagnosis even where the C# test doesn't assert on it.
+                needs to catch. Also sumtype, sumindus, sumissp, indepplanets, and three sorted
+                per-empire lists: techmasks (TechnologySet as a bitmask, bit n = TechnologyTypes
+                ordinal n), planetcounts, and capitals (planet index, or 1000+index for a starbase);
+                and two sorted per-kingdom-NPE lists of persona draws packed base 128:
+                kingdomgenes (ImpGene,DefGene,OffGene,Provoke) and kingdomtraits
+                (WorldPower,SphereX,Offset).
+                ScenarioLoaderGoldenTests.MatchesGoldenFile asserts all of them exactly, except
+                AWAKEN.SCN's starbase fields (see that test's doc comment).
    One output line per case, in order, to stdout -- consumed by PatchHarness
    in the C# test project via GoldenFile.Regenerate's runHarness override.
    With no arguments, runs a single hardcoded techlevel case as a
@@ -222,6 +235,52 @@ procedure ParseFields(const arg: String; var parts: array of LongInt);
       WriteLn(StdErr,'runworld: expected ',High(parts)+1,' comma-separated fields, got ',partIdx,' in "',arg,'"');
       Halt(1);
       end;
+   end;
+
+procedure ResetGlobalSets;
+   { The active/owned-object sets are standalone globals (TYPES.PAS:180-188), not part of Universe^,
+     so FillChar(Universe^) leaves the previous case's members behind. RunCaseMode clears them
+     before every case. }
+   var
+      Emp: Empire;
+   begin
+   SetOfActiveFleets:=[];
+   SetOfActivePlanets:=[];
+   SetOfActiveStarbases:=[];
+   SetOfActiveGates:=[];
+   SetOfActiveConstructionSites:=[];
+   for Emp:=Low(Empire) to High(Empire) do
+      begin
+      SetOfFleetsOf[Emp]:=[];
+      SetOfPlanetsOf[Emp]:=[];
+      SetOfStarbasesOf[Emp]:=[];
+      SetOfConstructionSitesOf[Emp]:=[];
+      end;
+   end;
+
+procedure WriteNews(Emp: Empire);
+   { Writes ";news=o1,o2,..." -- the NewsTypes ordinals of Emp's news, in the order added -- then
+     erases it. News lives in NEWS.PAS's unit-global list, not in Universe^, so it would otherwise
+     carry over into the next case in the same process. }
+   var
+      Item: NewsRecordPtr;
+      Head: NewsTypes;
+      Loc: Location;
+      P1,P2,P3: Integer;
+      First: Boolean;
+   begin
+   Write(';news=');
+   First:=True;
+   GetNewsList(Emp,Item);
+   while Item<>Nil do
+      begin
+      GetNewsItem(Item,Head,Loc,P1,P2,P3);
+      if not First then Write(',');
+      Write(Ord(Head));
+      First:=False;
+      Item:=Item^.Next;
+      end;
+   EraseNews(Emp);
    end;
 
 procedure RunTechLevelCase(const arg: String);
@@ -294,10 +353,9 @@ procedure RunMilitaryCase(const arg: String);
      read" outcome the C# side gets from its test empire's Capital being
      null (AnnualTickHandlerMilitaryTests.MatchesGoldenFile) -- reached here
      by a route Pascal's IDNumber (no null planet reference) can represent.
-     Class is hardcoded to ClsM and Efficiency to 100, matching every
-     MilitaryCase (neither is varied by any case). }
+     Efficiency is hardcoded to 100, matching every MilitaryCase. }
    var
-      parts: array[0..4] of LongInt;
+      parts: array[0..5] of LongInt;
       ID, CapID: IDNumber;
    begin
    ParseFields(arg,parts);
@@ -306,7 +364,7 @@ procedure RunMilitaryCase(const arg: String);
    FillChar(Universe^,SizeOf(Universe^),0);
    NoOfPlanets:=1;
 
-   Universe^.Planet[1].Cls:=ClsM;
+   Universe^.Planet[1].Cls:=WorldClass(parts[5]);
    Universe^.Planet[1].Typ:=WorldTypes(parts[3]);
    Universe^.Planet[1].Tech:=TechLevel(parts[1]);
    Universe^.Planet[1].Eff:=100;
@@ -346,9 +404,12 @@ procedure RunDefensesCase(const arg: String);
      optimum before UpdateDefenses ever reads TroopStrength -- not shielded
      against, since the golden file captures whatever the real pipeline
      produces end to end, the same way MilitaryCase's own legions=<value>
-     already does for a different field. }
+     already does for a different field.
+
+     CapitalTechOrd (parts[11]) of -1 keeps the world as its own capital. Otherwise Planet[2] is a
+     separate capital at that tech, so UpdateTechLevel can move the world's tech this tick. }
    var
-      parts: array[0..10] of LongInt;
+      parts: array[0..11] of LongInt;
       ID, CapID: IDNumber;
       i: Integer;
       techSet: TechnologySet;
@@ -380,6 +441,19 @@ procedure RunDefensesCase(const arg: String);
    Universe^.EmpireData[Empire1].InUse:=True;
    Universe^.EmpireData[Empire1].IsAPlayer:=False;
    CapID.ObjTyp:=Pln;  CapID.Index:=1;
+   if parts[11]>=0 then
+      begin
+      NoOfPlanets:=2;
+      Universe^.Planet[2].Cls:=ClsM;
+      Universe^.Planet[2].Typ:=CapTyp;
+      Universe^.Planet[2].Tech:=TechLevel(parts[11]);
+      Universe^.Planet[2].Eff:=100;
+      Universe^.Planet[2].Pop:=10;
+      Universe^.Planet[2].Emp:=Empire1;
+      SetOfActivePlanets:=[1,2];
+      SetOfPlanetsOf[Empire1]:=[1,2];
+      CapID.Index:=2;
+      end;
    Universe^.EmpireData[Empire1].Capital:=CapID;
 
    techSet:=[];
@@ -399,7 +473,8 @@ procedure RunDefensesCase(const arg: String);
            ';ion=',Universe^.Planet[1].Defns[ion],
            ';cargoche=',Universe^.Planet[1].Cargo[che],
            ';cargomet=',Universe^.Planet[1].Cargo[met],
-           ';cargotri=',Universe^.Planet[1].Cargo[tri]);
+           ';cargotri=',Universe^.Planet[1].Cargo[tri],
+           ';techlevel=',Ord(Universe^.Planet[1].Tech));
 
    Dispose(Universe);
    end;
@@ -517,9 +592,10 @@ procedure RunCombatCase(const arg: String);
    end;
 
 procedure RunNpeAttackCase(const arg: String);
-   { Runs real ATTNPE.PAS's own NPEAttack end to end -- now the FULL body (Phase 5 commit 5f restored
-     ATTACK.PAS's ConquerWorld/ConquerEmpire/RestoreCombatant/ResolveAttack, see ATTACK.PAS.patch),
-     not just the Casualties/Killed/Result-producing resolution loop 5e covered: Empire1's fleet (200
+   { Runs real ATTNPE.PAS's own NPEAttack end to end, including ATTACK.PAS's unpatched
+     ConquerWorld/ConquerEmpire/RestoreCombatant/ResolveAttack and the real DestroyFleet/
+     DestroyEmpire, so a destroyed fleet is Disposed and a destroyed empire has InUse cleared.
+     Empire1's fleet (200
      fgt, 200 hkr, plus an optional troop-carrying jtn group when AttackerCarriesTroops<>0) attacks
      either Empire2's capital planet (WorldEngage) or Empire2's own fleet (FleetEngage). Empire2's
      DefenseSettings is the same InitDefenseRecord distribution EmpireFactory.SeedDefenseSettings
@@ -533,7 +609,7 @@ procedure RunNpeAttackCase(const arg: String);
      branches (immediate conquest / forced independence / distance-conquest / new-capital-candidate)
      deliberately -- see NpeAttackCases.cs's own doc comment for which case drives which branch. }
    var
-      parts: array[0..14] of LongInt;
+      parts: array[0..16] of LongInt;
       AttackerCapID, DefenderCapID, TargetID, FltID, Planet2ID, Planet3ID, NewCapID: IDNumber;
       Result: AttackResultTypes;
       Killed, Casualties: AttackArray;
@@ -564,6 +640,12 @@ procedure RunNpeAttackCase(const arg: String);
    Universe^.Planet[2].Cls:=WorldClass(parts[1]);
    Universe^.Planet[2].Typ:=CapTyp;
    Universe^.Planet[2].Tech:=TechLevel(parts[0]);
+   Universe^.Planet[2].Eff:=parts[15];
+   Universe^.Planet[2].Cargo[amb]:=parts[16];
+   Universe^.Planet[2].Cargo[che]:=parts[16];
+   Universe^.Planet[2].Cargo[met]:=parts[16];
+   Universe^.Planet[2].Cargo[sup]:=parts[16];
+   Universe^.Planet[2].Cargo[tri]:=parts[16];
    Universe^.Planet[2].Ships[fgt]:=parts[3];
    Universe^.Planet[2].Ships[hkr]:=parts[4];
    Universe^.Planet[2].Cargo[men]:=parts[5];
@@ -659,13 +741,34 @@ procedure RunNpeAttackCase(const arg: String);
       end;
 
    { Empire2's post-attack capital, if any -- 0 when ConquerEmpire's "totally destroyed" branch fired
-     (DestroyEmpire's own no-op stub can't be observed directly, see ATTACK.PAS.patch) instead of
-     choosing a new one. }
+     instead of choosing a new one. }
    GetCapital(Empire2,NewCapID);
    if NewCapID.ObjTyp=Pln then
-      WriteLn(';newcap_idx=',NewCapID.Index)
+      Write(';newcap_idx=',NewCapID.Index)
    else
-      WriteLn(';newcap_idx=0');
+      Write(';newcap_idx=0');
+
+   Write(';def_fgt=',Universe^.Planet[2].Ships[fgt],';def_hkr=',Universe^.Planet[2].Ships[hkr],
+         ';def_men=',Universe^.Planet[2].Cargo[men],';def_nnj=',Universe^.Planet[2].Cargo[nnj],
+         ';def_amb=',Universe^.Planet[2].Cargo[amb],';def_che=',Universe^.Planet[2].Cargo[che],
+         ';def_met=',Universe^.Planet[2].Cargo[met],';def_sup=',Universe^.Planet[2].Cargo[sup],
+         ';def_tri=',Universe^.Planet[2].Cargo[tri]);
+
+   { A destroyed fleet is already Disposed, so it prints as all zeros rather than reading freed memory. }
+   if 1 in SetOfActiveFleets then
+      Write(';att_active=1;att_fgt=',Universe^.Fleet[1]^.Ships[fgt],';att_hkr=',Universe^.Fleet[1]^.Ships[hkr],
+            ';att_jtn=',Universe^.Fleet[1]^.Ships[jtn],';att_nnj=',Universe^.Fleet[1]^.Cargo[nnj],
+            ';att_men=',Universe^.Fleet[1]^.Cargo[men],';att_fuel=',Trunc(GetFleetFuel(FltID)))
+   else
+      Write(';att_active=0;att_fgt=0;att_hkr=0;att_jtn=0;att_nnj=0;att_men=0;att_fuel=0');
+
+   if (parts[7]<>0) and (2 in SetOfActiveFleets) then
+      Write(';tgt_active=1;tgt_fgt=',Universe^.Fleet[2]^.Ships[fgt],';tgt_hkr=',Universe^.Fleet[2]^.Ships[hkr])
+   else
+      Write(';tgt_active=0;tgt_fgt=0;tgt_hkr=0');
+
+   WriteLn(';rev1=',Universe^.EmpireData[Empire1].TotalRevIndex,';rev2=',Universe^.EmpireData[Empire2].TotalRevIndex,
+           ';inuse2=',Ord(Universe^.EmpireData[Empire2].InUse));
 
    { PATCH-note: found via a real Runtime error 204 (heap corruption from a double-dispose) on the
      case immediately after this one -- ATTACK.PAS's real DestroyFleet (not the old lane's no-op
@@ -685,10 +788,9 @@ procedure RunLamAttackCase(const arg: String);
      since LAMAttack has no Rnd calls at all (pure proportional-distribution arithmetic, Round/Trunc
      against ProtecNeeded/CombatTable), so there's no combat-engine setup to exercise, only the
      formula itself. Player is always Empire1; the target (Fleet[1] or Planet[1], whichever
-     TargetIsFleet selects) is always owned by Empire2. DestroyFleet/FleetNameDestruction/
-     BalanceFleet reuse the same no-op stand-ins ATTACK.PAS.patch already carries for 5f -- this
-     domain reports LAMAttack's own ShipsDest/DefnsDest VAR out-params directly, not whatever state
-     those stand-ins would have left behind. }
+     TargetIsFleet selects) is always owned by Empire2. DestroyFleet, FleetNameDestruction and
+     BalanceFleet are the real routines, so a fully destroyed fleet is Disposed and a surviving
+     one has its cargo rebalanced; the fleet cargo fields read 0 once the fleet is gone. }
    var
       parts: array[0..11] of LongInt;
       TargetIsFleet: Boolean;
@@ -787,10 +889,18 @@ procedure RunStarbaseCase(const arg: String);
      GetObject, unlike techlevel/military's own scenarios, which never call
      it. Never route through Intrface's PutObject for this (same reasoning
      as the GlobalSets note above: stay on the real standalone state this
-     driver already owns, not a heavier unit pulled in for one write). }
+     driver already owns, not a heavier unit pulled in for one write).
+
+     StarbaseTechOrd, Legions, TechnologyBitmask and MetalsAndTrillum (parts[4..7]; bitmask bit i =
+     TechnologyTypes(i+1), as in the defenses domain) set the complex's tech, troops, the empire's
+     researched defenses, and the metals and trillum defenses are built from.
+     The capital (neighbor planet 1) is PreTech, so UpdateTechLevel's regression roll can lower the
+     starbase's tech this tick, which checks which tech level gates its defenses. }
    var
-      parts: array[0..3] of LongInt;
+      parts: array[0..7] of LongInt;
       ID, PlanetID, Planet2ID: IDNumber;
+      i: Integer;
+      techSet: TechnologySet;
    begin
    ParseFields(arg,parts);
 
@@ -833,16 +943,25 @@ procedure RunStarbaseCase(const arg: String);
    Universe^.Starbase[1].Emp:=Empire1;
    Universe^.Starbase[1].STyp:=cmp;
    Universe^.Starbase[1].Typ:=BseSTyp;
-   Universe^.Starbase[1].Tech:=WrpTchLvl;
+   Universe^.Starbase[1].Tech:=TechLevel(parts[4]);
    Universe^.Starbase[1].Eff:=100;
    Universe^.Starbase[1].Pop:=0;
    Universe^.Starbase[1].Cargo[che]:=parts[0];
+   Universe^.Starbase[1].Cargo[men]:=parts[5];
+   Universe^.Starbase[1].Cargo[met]:=parts[7];
+   Universe^.Starbase[1].Cargo[tri]:=parts[7];
 
    SetOfActiveStarbases:=[1];
    SetOfStarbasesOf[Empire1]:=[1];
    Universe^.EmpireData[Empire1].InUse:=True;
    Universe^.EmpireData[Empire1].IsAPlayer:=False;
    Universe^.EmpireData[Empire1].Capital:=PlanetID;
+
+   techSet:=[];
+   for i:=0 to 25 do
+      if ((parts[6] shr i) and 1)=1 then
+         techSet:=techSet+[TechnologyTypes(i+1)];
+   Universe^.EmpireData[Empire1].Technology:=techSet;
 
    ForcedRandomValue:=parts[2];
 
@@ -851,7 +970,10 @@ procedure RunStarbaseCase(const arg: String);
 
    WriteLn('starbaseChe=',Universe^.Starbase[1].Cargo[che],
            ';neighborChe=',Universe^.Planet[1].Cargo[che],
-           ';neighbor2Che=',Universe^.Planet[2].Cargo[che]);
+           ';neighbor2Che=',Universe^.Planet[2].Cargo[che],
+           ';techlevel=',Ord(Universe^.Starbase[1].Tech),
+           ';lam=',Universe^.Starbase[1].Defns[LAM],';def=',Universe^.Starbase[1].Defns[def],
+           ';gdm=',Universe^.Starbase[1].Defns[GDM],';ion=',Universe^.Starbase[1].Defns[ion]);
 
    Dispose(Universe);
    end;
@@ -859,13 +981,11 @@ procedure RunStarbaseCase(const arg: String);
 procedure RunAmbrosiaCase(const arg: String);
    { Owned by Empire1 with its capital set to itself (same rationale as
      RunMilitaryCase) so UpdateTechLevel can never drift TechLevel mid-tick.
-     PlanetPop=1000, Efficiency=100, Tech=Warp, Class=ClsM, Type=CapTyp are
-     hardcoded -- every AmbrosiaCase uses the same values, so only what
-     actually varies (Addicted, Ambrosia, RngFixedValue) is parametrized.
-     Cargo[sup]=9999 keeps UseUpFood from starving Population before
-     UseUpAmbrosia (which runs right after) reads it. }
+     Class=ClsM and Type=CapTyp are hardcoded. Cargo[sup]=9999 keeps
+     UseUpFood from starving Population before UseUpAmbrosia (which runs
+     right after) reads it. }
    var
-      parts: array[0..2] of LongInt;
+      parts: array[0..5] of LongInt;
       ID, CapID: IDNumber;
    begin
    ParseFields(arg,parts);
@@ -876,9 +996,9 @@ procedure RunAmbrosiaCase(const arg: String);
 
    Universe^.Planet[1].Cls:=ClsM;
    Universe^.Planet[1].Typ:=CapTyp;
-   Universe^.Planet[1].Tech:=WrpTchLvl;
-   Universe^.Planet[1].Eff:=100;
-   Universe^.Planet[1].Pop:=1000;
+   Universe^.Planet[1].Tech:=TechLevel(parts[4]);
+   Universe^.Planet[1].Eff:=parts[5];
+   Universe^.Planet[1].Pop:=parts[3];
    Universe^.Planet[1].Cargo[sup]:=9999;
    Universe^.Planet[1].Cargo[amb]:=parts[1];
    if parts[0]<>0 then
@@ -910,9 +1030,7 @@ procedure RunAmbrosiaCase(const arg: String);
 
 procedure RunRevolutionCase(const arg: String);
    { Owned by Empire1 with its capital set to itself (same rationale as
-     RunMilitaryCase/RunAmbrosiaCase). Type=AgrTyp and Ninja=0 are hardcoded
-     -- every RevolutionCase uses them; Class/Tech/Efficiency/RevIndex/Legions
-     vary and are parametrized. Cargo[sup]=9999 keeps UseUpFood from starving
+     RunMilitaryCase/RunAmbrosiaCase). Ninja=0 is hardcoded. Cargo[sup]=9999 keeps UseUpFood from starving
      Population before UpdateRevolution (which runs right after) reads it.
 
      total_rev_delta reads GetNewTotalRevIndex (a UPDATE.PAS patch, see there)
@@ -926,7 +1044,7 @@ procedure RunRevolutionCase(const arg: String);
      means regardless of what an earlier case in this same process left
      sitting in the accumulator. }
    var
-      parts: array[0..6] of LongInt;
+      parts: array[0..7] of LongInt;
       ID, CapID: IDNumber;
       RevDeltaBefore: Integer;
    begin
@@ -937,7 +1055,7 @@ procedure RunRevolutionCase(const arg: String);
    NoOfPlanets:=1;
 
    Universe^.Planet[1].Cls:=WorldClass(parts[1]);
-   Universe^.Planet[1].Typ:=AgrTyp;
+   Universe^.Planet[1].Typ:=WorldTypes(parts[7]);
    Universe^.Planet[1].Tech:=TechLevel(parts[2]);
    Universe^.Planet[1].Eff:=parts[3];
    Universe^.Planet[1].Pop:=parts[0];
@@ -961,13 +1079,15 @@ procedure RunRevolutionCase(const arg: String);
    ID.ObjTyp:=Pln;  ID.Index:=1;
    UpdateWorld(ID);
 
-   WriteLn('rebelled=',(Universe^.Planet[1].Emp=Indep),
+   Write('rebelled=',(Universe^.Planet[1].Emp=Indep),
            ';legions=',Universe^.Planet[1].Cargo[men],
            ';ninja=',Universe^.Planet[1].Cargo[nnj],
            ';population=',Universe^.Planet[1].Pop,
            ';efficiency=',Universe^.Planet[1].Eff,
            ';revindex=',Universe^.Planet[1].RevIndex,
            ';total_rev_delta=',GetNewTotalRevIndex(Empire1)-RevDeltaBefore);
+   WriteNews(Empire1);
+   WriteLn;
 
    Dispose(Universe);
    end;
@@ -982,8 +1102,7 @@ procedure RunProductionCase(const arg: String);
      old isolated production.pas harness (which hardcoded Technology:=
      TechDev[Tech] directly, bypassing the per-empire set entirely) and
      CargoTechAvailable's C# model (gates purely on TechLevel, no per-empire
-     cargo-research tracking). A partially-populated Technology set (e.g. only
-     when some "AllShipsUnlocked" case flag was set) would model an empire
+     cargo-research tracking). A partially-populated Technology set would model an empire
      that hasn't finished individually researching every item unlocked by its
      own tech level -- a real Pascal mechanic (UPDATE.PAS's NewTechLevel/
      GetNewTech), but one no reachable game state exercises for the resource
@@ -996,7 +1115,7 @@ procedure RunProductionCase(const arg: String);
      Ambrosia/Legions values -- unlike production.pas, nothing here needs
      excluding from the golden comparison. }
    var
-      parts: array[0..24] of LongInt;
+      parts: array[0..25] of LongInt;
       ID, CapID: IDNumber;
    begin
    ParseFields(arg,parts);
@@ -1052,12 +1171,12 @@ procedure RunProductionCase(const arg: String);
    Universe^.EmpireData[Empire1].Capital:=CapID;
    Universe^.EmpireData[Empire1].Technology:=[Low(TechnologyTypes)..High(TechnologyTypes)];
 
-   ForcedRandomValue:=0;
+   ForcedRandomValue:=parts[25];
 
    ID.ObjTyp:=Pln;  ID.Index:=1;
    UpdateWorld(ID);
 
-   WriteLn('bio=',Universe^.Planet[1].Indus[BioInd],
+   Write('bio=',Universe^.Planet[1].Indus[BioInd],
            ';che=',Universe^.Planet[1].Indus[CheInd],
            ';min=',Universe^.Planet[1].Indus[MinInd],
            ';syg=',Universe^.Planet[1].Indus[SYGInd],
@@ -1085,6 +1204,8 @@ procedure RunProductionCase(const arg: String);
            ';efficiency=',Universe^.Planet[1].Eff,
            ';techlevel=',Ord(Universe^.Planet[1].Tech),
            ';revindex=',Universe^.Planet[1].RevIndex);
+   WriteNews(Empire1);
+   WriteLn;
 
    Dispose(Universe);
    end;
@@ -1148,6 +1269,7 @@ procedure RunMaturationCase(const arg: String);
    Universe^.EmpireData[Empire1].IsAPlayer:=False;
    CapID.ObjTyp:=Pln;  CapID.Index:=1;
    Universe^.EmpireData[Empire1].Capital:=CapID;
+   Universe^.EmpireData[Empire1].TechnologyLevel:=TechLevel(parts[4]);
    Universe^.EmpireData[Empire1].Technology:=[Low(TechnologyTypes)..High(TechnologyTypes)];
 
    ForcedRandomValue:=0;
@@ -1163,9 +1285,11 @@ procedure RunMaturationCase(const arg: String);
               ';sup=',Indus[SupInd],';tri=',Indus[TriInd],
               ';fgt=',Ships[fgt],';hkr=',Ships[hkr],';jmp=',Ships[jmp],';jtn=',Ships[jtn],
               ';pen=',Ships[pen],';ssp=',Ships[ssp],';trn=',Ships[trn],
-              ';cargomen=',Cargo[men],';cargoche=',Cargo[che],';cargomet=',Cargo[met],
+              ';cargomen=',Cargo[men],';cargonnj=',Cargo[nnj],';cargoamb=',Cargo[amb],
+              ';cargoche=',Cargo[che],';cargomet=',Cargo[met],
               ';cargosup=',Cargo[sup],';cargotri=',Cargo[tri],';trillumreserve=',TriReserve,
-              ';lam=',Defns[LAM],';def=',Defns[def],';gdm=',Defns[GDM],';ion=',Defns[ion]);
+              ';lam=',Defns[LAM],';def=',Defns[def],';gdm=',Defns[GDM],';ion=',Defns[ion],
+              ';ambaddict=',Ord(AmbAddict IN Special),';type=',Ord(Typ),';owner=',Ord(Emp));
 
    Dispose(Universe);
    end;
@@ -1328,7 +1452,9 @@ procedure RunConstructionCase(const arg: String);
      NextStargateSlot pick the highest available slot counting down from MaxNoOfStarbases/
      MaxNoOfStargates (INTRFACE.PAS:359-368,399-408); starting with zero active starbases/gates
      means a completion always lands at exactly MaxNoOfStarbases/MaxNoOfStargates, so those two
-     fixed slots are read back unconditionally below regardless of what this case actually built. }
+     fixed slots are read back unconditionally below regardless of what this case actually built.
+     RunCaseMode's per-case ResetGlobalSets keeps an earlier case's completed starbase or gate from
+     occupying that slot. }
    var
       parts: array[0..11] of LongInt;
    begin
@@ -1459,7 +1585,7 @@ procedure RunRandomPlanetCase(const arg: String);
    Coord.x:=5;  Coord.y:=5;
    CreateRndPlanet(ID,Coord,WorldClass(parts[0]),TechLevel(parts[1]));
 
-   WriteLn('population=',Universe^.Planet[1].Pop,
+   Write('population=',Universe^.Planet[1].Pop,
            ';efficiency=',Universe^.Planet[1].Eff,
            ';fgt=',Universe^.Planet[1].Ships[fgt],
            ';hkr=',Universe^.Planet[1].Ships[hkr],
@@ -1477,6 +1603,14 @@ procedure RunRandomPlanetCase(const arg: String);
            ';defDef=',Universe^.Planet[1].Defns[def],
            ';defGDM=',Universe^.Planet[1].Defns[GDM],
            ';defIon=',Universe^.Planet[1].Defns[ion]);
+   { ISSP nibbles unpack the way GetISSP does (PRIMINTR.PAS:519-522): che, met, sup, tri. }
+   with Universe^.Planet[1] do
+      WriteLn(';cls=',Ord(Cls),';tech=',Ord(Tech),';type=',Ord(Typ),';owner=',Ord(Emp),
+              ';bio=',Indus[BioInd],';che=',Indus[CheInd],';min=',Indus[MinInd],';syg=',Indus[SYGInd],
+              ';syj=',Indus[SYJInd],';sys=',Indus[SYSInd],';syt=',Indus[SYTInd],
+              ';sup=',Indus[SupInd],';tri=',Indus[TriInd],
+              ';isspche=',ImpExp mod 16,';isspmet=',(ImpExp div 16) mod 16,
+              ';isspsup=',(ImpExp div 256) mod 16,';issptri=',(ImpExp div 4096) mod 16);
 
    Dispose(Universe);
    end;
@@ -1580,6 +1714,31 @@ procedure RunGroundTruthRngCase(const arg: String);
    WriteLn('values=',Values,';reals=',Reals);
    end;
 
+procedure WriteSortedList(const Key: String; var A: array of LongInt; N: Integer);
+   { Writes ";Key=v1,v2,..." with A[0..N-1] sorted ascending (insertion sort; N is at most 8). Used
+     for per-empire values, which the C# side can't match slot for slot: its empires are listed in
+     creation order, not by the .SCN's empire numbers. }
+   var
+      i,j: Integer;
+      t: LongInt;
+   begin
+   for i:=1 to N-1 do
+      begin
+      t:=A[i];  j:=i-1;
+      while (j>=0) and (A[j]>t) do
+         begin
+         A[j+1]:=A[j];  Dec(j);
+         end;
+      A[j+1]:=t;
+      end;
+   Write(';',Key,'=');
+   for i:=0 to N-1 do
+      begin
+      if i>0 then Write(',');
+      Write(A[i]);
+      end;
+   end;
+
 procedure RunScenarioCase(const arg: String);
    { Calls the real NEWGAME.PAS LoadScenario end to end (promoted to this unit's INTERFACE, see
      NEWGAME.PAS's own PATCH note) instead of hand-reimplementing its header-parse/command-dispatch
@@ -1620,6 +1779,13 @@ procedure RunScenarioCase(const arg: String);
       ShpI: ShipTypes;
       CarI: CargoTypes;
       DefI: DefnsTypes;
+      IndI: IndusTypes;
+      TechI: TechnologyTypes;
+      SumType,SumIndus,SumIssp,IndepCount: LongInt;
+      TechMasks,PlanetCounts,Capitals: array[0..7] of LongInt;
+      NEmp: Integer;
+      KingdomGenes,KingdomTraits: array[0..7] of LongInt;
+      NKingdom: Integer;
 
    begin
    { Path,Seed,NumPlayers -- Path may itself contain no commas (a plain relative path), so this is
@@ -1723,7 +1889,7 @@ procedure RunScenarioCase(const arg: String);
             Inc(MinedCellCount);
          end;
 
-   WriteLn('year=',Year,
+   Write('year=',Year,
            ';planetcount=',PlanetCount,
            ';sumplanetx=',SumPlanetX,';sumplanety=',SumPlanetY,
            ';sumpop=',SumPop,';sumeff=',SumEff,';sumtri=',SumTri,
@@ -1734,6 +1900,64 @@ procedure RunScenarioCase(const arg: String);
            ';empirecount=',EmpireCount,';sumempiretech=',SumEmpireTech,';sumrevfactor=',SumRevFactor,
            ';sumcentralmodifier=',SumCentralModifier,';sumempress=',SumEmpress,
            ';nebulacellcount=',NebulaCellCount,';minedcellcount=',MinedCellCount);
+
+   SumType:=0;  SumIndus:=0;  SumIssp:=0;  IndepCount:=0;
+   for i:=1 to LastFirstWorld-1 do
+      with Universe^.Planet[i] do
+         begin
+         Inc(SumType,Ord(Typ));
+         for IndI:=BioInd to TriInd do
+            Inc(SumIndus,Indus[IndI]);
+         Inc(SumIssp,(ImpExp mod 16)+((ImpExp div 16) mod 16)+((ImpExp div 256) mod 16)+((ImpExp div 4096) mod 16));
+         if Emp=Indep then
+            Inc(IndepCount);
+         end;
+   Write(';sumtype=',SumType,';sumindus=',SumIndus,';sumissp=',SumIssp,';indepplanets=',IndepCount);
+
+   { Per in-use empire: its TechnologySet as a bitmask (bit n = TechnologyTypes ordinal n), how many
+     planets it owns, and its capital (planet index, or 1000+index for a starbase). }
+   NEmp:=0;
+   for Emp:=Empire1 to Empire8 do
+      if Universe^.EmpireData[Emp].InUse then
+         with Universe^.EmpireData[Emp] do
+            begin
+            TechMasks[NEmp]:=0;
+            for TechI:=LAM to dis do
+               if TechI in Technology then
+                  TechMasks[NEmp]:=TechMasks[NEmp] or (LongInt(1) shl Ord(TechI));
+            PlanetCounts[NEmp]:=0;
+            for i:=1 to LastFirstWorld-1 do
+               if Universe^.Planet[i].Emp=Emp then
+                  Inc(PlanetCounts[NEmp]);
+            case Capital.ObjTyp of
+               Pln: Capitals[NEmp]:=Capital.Index;
+               Base: Capitals[NEmp]:=1000+Capital.Index;
+            else
+               Capitals[NEmp]:=0;
+            end;
+            Inc(NEmp);
+            end;
+   WriteSortedList('techmasks',TechMasks,NEmp);
+   WriteSortedList('planetcounts',PlanetCounts,NEmp);
+   WriteSortedList('capitals',Capitals,NEmp);
+
+   { Each kingdom NPE's Rnd-drawn persona fields (NPE02.PAS's InitializeKingdom1NPE/2NPE), packed
+     base 128 (every field is at most 100): genes = ImpGene,DefGene,OffGene,Provoke; traits =
+     WorldPower,SphereX,Offset. NPEData is a unit global, so only this scenario's NPEs (in use, not
+     players) are read. }
+   NKingdom:=0;
+   for Emp:=Empire1 to Empire8 do
+      if Universe^.EmpireData[Emp].InUse and (not Universe^.EmpireData[Emp].IsAPlayer)
+         and (NPEData[Emp].Typ in [Kingdom1NPE,Kingdom2NPE]) then
+         with Kingdom1DataPtr(NPEData[Emp].Data)^.Persona do
+            begin
+            KingdomGenes[NKingdom]:=((LongInt(ImpGene)*128+DefGene)*128+OffGene)*128+Provoke;
+            KingdomTraits[NKingdom]:=(LongInt(WorldPower)*128+SphereX)*128+Offset;
+            Inc(NKingdom);
+            end;
+   WriteSortedList('kingdomgenes',KingdomGenes,NKingdom);
+   WriteSortedList('kingdomtraits',KingdomTraits,NKingdom);
+   WriteLn;
 
    Dispose(Universe);
    end;
@@ -1858,14 +2082,14 @@ procedure RunProbeScoutCase(const arg: String);
      owner/legions/already-scouted, and one at the very next ring cell in Pascal's fixed offset order,
      (5,4) -- (dx,dy)=(0,-1) -- used purely as a "did the scan continue past the destination" signal;
      its own owner (Empire2) and legions (0) never vary. Covers ISqrt(Cargo[men]) and the
-     Rnd(1,100)<ChanceToDestroy threshold plus its Exit-before-ScoutObject sequencing -- ring
-     ordering/early-exit control flow itself is hardcoded-tested on the C# side
-     (VisibilityHandlerProbeTests), since there's no separate Pascal formula to cross-check there.
+     Rnd(1,100)<ChanceToDestroy threshold plus its Exit-before-ScoutObject sequencing, and the Dark
+     Nebula early exit (DestDarkNebula). Further ring-ordering cases are hardcoded on the C# side
+     (VisibilityHandlerProbeTests).
 
      Requires InitializeSector plus direct Sector[x]^[y].Obj writes for both planets -- ProbeScout
      resolves them via GetObject, same requirement as the starbase/construction domains. }
    var
-      parts: array[0..3] of LongInt;
+      parts: array[0..4] of LongInt;
       destID, ringID: IDNumber;
       dest: XYCoord;
       destOwner: Empire;
@@ -1876,6 +2100,9 @@ procedure RunProbeScoutCase(const arg: String);
    FillChar(Universe^,SizeOf(Universe^),0);
    InitializeSector(20);
    NoOfPlanets:=2;
+   { In use so AddNews records the probe's news for WriteNews. }
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire2].InUse:=True;
 
    destOwner:=Empire(parts[0]);
 
@@ -1904,10 +2131,17 @@ procedure RunProbeScoutCase(const arg: String);
    ForcedRandomValue:=parts[3];
 
    dest.x:=5;  dest.y:=5;
+   if parts[4]<>0 then
+      PutNebula(dest,DarkNebula);
    ProbeScout(Empire1,dest);
 
-   WriteLn('destscouted=',Ord(Empire1 IN Universe^.Planet[1].ScoutedBy),
-           ';ringscouted=',Ord(Empire1 IN Universe^.Planet[2].ScoutedBy));
+   Write('destscouted=',Ord(Empire1 IN Universe^.Planet[1].ScoutedBy),
+           ';ringscouted=',Ord(Empire1 IN Universe^.Planet[2].ScoutedBy),
+           ';destknown=',Ord(Empire1 IN Universe^.Planet[1].KnownBy),
+           ';ringknown=',Ord(Empire1 IN Universe^.Planet[2].KnownBy));
+   WriteNews(Empire1);
+   WriteLn;
+   EraseNews(Empire2);
 
    Dispose(Universe);
    end;
@@ -2267,6 +2501,9 @@ procedure RunCaseMode;
    begin
    domain:=ParamStr(2);
    for i:=3 to ParamCount do
+      begin
+      { Every case starts from empty object sets, whatever the previous case left behind. }
+      ResetGlobalSets;
       if domain='techlevel' then
          RunTechLevelCase(ParamStr(i))
       else if domain='military' then
@@ -2318,6 +2555,7 @@ procedure RunCaseMode;
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');
          Halt(1);
          end;
+      end;
    end;
 
 begin

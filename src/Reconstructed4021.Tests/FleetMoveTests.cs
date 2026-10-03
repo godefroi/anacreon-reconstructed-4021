@@ -67,6 +67,8 @@ public class FleetMoveTests
         var passGate = FleetMovementHandler.IsPassingThroughGate(fleet, pos, dest, game);
         var passFortress = FleetMovementHandler.IsAtFortress(pos, game);
 
+        // Pascal writes Limbo (0,0) for a blocked step where C# returns null. No case starts at (0,0),
+        // so the two outcomes stay distinguishable.
         await Assert.That(newPos?.X ?? 0).IsEqualTo(int.Parse(expected["newpos_x"]));
         await Assert.That(newPos?.Y ?? 0).IsEqualTo(int.Parse(expected["newpos_y"]));
         await Assert.That(passGate ? 1 : 0).IsEqualTo(int.Parse(expected["passgate"]));

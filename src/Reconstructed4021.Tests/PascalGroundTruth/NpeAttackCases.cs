@@ -7,9 +7,8 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// Named inputs shared between the golden-file generator (GoldenFileTests) and the always-on
 /// NpeAttackTests.MatchesGoldenFile. Expected outputs live exclusively in
 /// reference/verify/golden/npeattack.golden, computed patch-based: a real run of ATTNPE.PAS's own
-/// NPEAttack (the full body, including RestoreCombatant/ResolveAttack — see
-/// ATTNPE.PAS.patch/ATTACK.PAS.patch) against a hand-assembled Universe^ (reference/verify/runworld.pas's
-/// npeattack domain).
+/// NPEAttack (the full body, including RestoreCombatant/ResolveAttack; ATTNPE.PAS.patch only adds
+/// test getters) against a hand-assembled Universe^ (reference/verify/runworld.pas's npeattack domain).
 ///
 /// The attacker is always Empire1's fleet: 200 fighters, 200 hunter-killers, plus (when
 /// AttackerCarriesTroops) a 20-ship jumptransport group carrying 1000 ninja-legion cargo —
@@ -24,7 +23,8 @@ public sealed record NpeAttackCase(
     string Name, TechLevel DefenderTech, WorldClass DefenderClass, bool AttackerCarriesTroops,
     int DefenderFgt, int DefenderHkr, int DefenderMen, AttackIntentionType Intent, bool TargetIsFleet, int RngFixedValue,
     bool Planet3Present = false, int Planet3X = 0, int Planet3Y = 0, int Planet3Population = 0,
-    int Planet3RevIndex = 0, TechLevel Planet3Tech = TechLevel.PreTech) : INamedCase;
+    int Planet3RevIndex = 0, TechLevel Planet3Tech = TechLevel.PreTech, int DefenderEff = 0,
+    int DefenderCargo = 0) : INamedCase;
 
 internal static class NpeAttackCases
 {
@@ -94,6 +94,25 @@ internal static class NpeAttackCases
             AttackerCarriesTroops: true, DefenderFgt: 10, DefenderHkr: 10, DefenderMen: 50,
             Intent: AttackIntentionType.Conquer, TargetIsFleet: false, RngFixedValue: 0,
             Planet3Present: true, Planet3X: 5, Planet3Y: 5, Planet3Population: 2000, Planet3RevIndex: 20, Planet3Tech: TechLevel.Bio),
+
+        // Every case above uses a defender at efficiency 0 and RngFixedValue 0. These two give the
+        // defender world a real efficiency (ConquerWorld scales it, and CalculateCombatData reads the
+        // defender's state) and shift every Rnd off its minimum.
+        new(Name: "ConquestWithDefenderEfficiencyAndRng", DefenderTech: TechLevel.Jump, DefenderClass: WorldClass.EarthLike,
+            AttackerCarriesTroops: true, DefenderFgt: 10, DefenderHkr: 10, DefenderMen: 50,
+            Intent: AttackIntentionType.Conquer, TargetIsFleet: false, RngFixedValue: 7, DefenderEff: 70),
+        new(Name: "StrongDefenderWithEfficiencyAndRng", DefenderTech: TechLevel.Bio, DefenderClass: WorldClass.Ocean,
+            AttackerCarriesTroops: false, DefenderFgt: 150, DefenderHkr: 150, DefenderMen: 300,
+            Intent: AttackIntentionType.Conquer, TargetIsFleet: false, RngFixedValue: 13, DefenderEff: 90),
+
+        // A stocked defender world (DefenderCargo seeds ambrosia, chemicals, metals, supplies and
+        // trillum), conquered and held. ConquerWorld transfers the world with that cargo untouched.
+        new(Name: "ConquestOfStockedWorld", DefenderTech: TechLevel.Jump, DefenderClass: WorldClass.EarthLike,
+            AttackerCarriesTroops: true, DefenderFgt: 10, DefenderHkr: 10, DefenderMen: 50,
+            Intent: AttackIntentionType.Conquer, TargetIsFleet: false, RngFixedValue: 0, DefenderEff: 60, DefenderCargo: 3000),
+        new(Name: "StockedWorldHoldsOut", DefenderTech: TechLevel.Jump, DefenderClass: WorldClass.EarthLike,
+            AttackerCarriesTroops: false, DefenderFgt: 200, DefenderHkr: 200, DefenderMen: 500,
+            Intent: AttackIntentionType.Conquer, TargetIsFleet: false, RngFixedValue: 0, DefenderEff: 60, DefenderCargo: 3000),
     ];
 
     /// <summary>MethodDataSource shape for NpeAttackTests.MatchesGoldenFile.</summary>

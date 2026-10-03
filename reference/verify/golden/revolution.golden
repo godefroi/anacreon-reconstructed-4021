@@ -1,4 +1,10 @@
-case=SanityAnchor;rebelled=TRUE;legions=3144;ninja=0;population=2339;efficiency=75;revindex=51;total_rev_delta=5
-case=TinyPopulation;rebelled=TRUE;legions=225;ninja=0;population=12;efficiency=95;revindex=51;total_rev_delta=5
-case=MilitarySuppression;rebelled=FALSE;legions=3001;ninja=0;population=9999;efficiency=75;revindex=75;total_rev_delta=-1
-case=LowRevIndexNoRebellion;rebelled=FALSE;legions=0;ninja=0;population=52;efficiency=100;revindex=46;total_rev_delta=0
+case=SanityAnchor;rebelled=TRUE;legions=3144;ninja=0;population=2339;efficiency=75;revindex=51;total_rev_delta=5;news=43,7
+case=TinyPopulation;rebelled=TRUE;legions=225;ninja=0;population=12;efficiency=95;revindex=51;total_rev_delta=5;news=43,7
+case=MilitarySuppression;rebelled=FALSE;legions=3001;ninja=0;population=9999;efficiency=75;revindex=75;total_rev_delta=-1;news=43,8
+case=LowRevIndexNoRebellion;rebelled=FALSE;legions=0;ninja=0;population=52;efficiency=100;revindex=46;total_rev_delta=0;news=43,10
+case=SurplusTroopsCalmRebellion;rebelled=FALSE;legions=5000;ninja=0;population=2057;efficiency=100;revindex=50;total_rev_delta=0;news=43,10
+case=SurplusTroopsCalmRebellionWithNews;rebelled=FALSE;legions=5000;ninja=0;population=2057;efficiency=100;revindex=50;total_rev_delta=0;news=43,71,10
+case=SurplusTroopsWantOut;rebelled=FALSE;legions=5000;ninja=0;population=2057;efficiency=100;revindex=21;total_rev_delta=0;news=43,70
+case=SurplusTroopsOnBaseWorldNoResentment;rebelled=FALSE;legions=5000;ninja=0;population=2057;efficiency=100;revindex=16;total_rev_delta=0;news=43
+case=RebellionWarningTier3;rebelled=FALSE;legions=10;ninja=0;population=2057;efficiency=100;revindex=69;total_rev_delta=0;news=43,11
+case=RebellionWarningTier4;rebelled=FALSE;legions=10;ninja=0;population=2057;efficiency=100;revindex=74;total_rev_delta=0;news=43,12

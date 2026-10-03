@@ -9,8 +9,9 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// only-minimally-touched UpdateWorld against a hand-assembled Universe^ (reference/verify/
 /// runworld.pas's defenses domain), covering UpdateDefenses (UPDATE.PAS:1278-1351).
 ///
-/// Every case is Owned (Empire1) with its own capital pointing at itself, matching MilitaryCase's
-/// own "CapitalTech always equals Tech" trick so UpdateTechLevel can't drift Tech mid-tick. The real
+/// Every case is Owned (Empire1). With CapitalTech null the world is its own capital, so
+/// UpdateTechLevel can't drift Tech mid-tick; with CapitalTech set, a separate capital at that tech
+/// lets the world's tech move this tick, which checks which tech level gates defenses. The real
 /// UpdateMilitary step still runs first in the same real UpdateWorld pipeline and may grow
 /// Cargo.Legions toward its own optimum before UpdateDefenses ever reads TroopStrength — not
 /// shielded against; whatever the real pipeline produces end to end is what both sides compare
@@ -23,7 +24,8 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// </summary>
 public sealed record DefensesCase(
     string Name, int PlanetPop, TechLevel Tech, int Legions, int NinjaLegions, WorldType Type,
-    int Efficiency, int CargoChe, int CargoMet, int CargoTri, int TechnologyBitmask, int RngFixedValue) : INamedCase;
+    int Efficiency, int CargoChe, int CargoMet, int CargoTri, int TechnologyBitmask, int RngFixedValue,
+    TechLevel? CapitalTech = null) : INamedCase;
 
 internal static class DefensesCases
 {
@@ -81,6 +83,22 @@ internal static class DefensesCases
             Legions: 100, NinjaLegions: 0, Type: WorldType.Capital, Efficiency: 50,
             CargoChe: 5000, CargoMet: 5000, CargoTri: 5,
             TechnologyBitmask: AllFourDefensesResearched, RngFixedValue: 0),
+
+        // Separate Starship capital: Rnd(1,100)=1 passes the advance roll, so the world goes Jump->Bio
+        // this tick, crossing DefenseSatellite's Bio threshold. UpdateWorld gates defenses on the
+        // Technology set it computed from the tick-start tech (UPDATE.PAS:1359-1369, 1387), so no
+        // satellites yet (issue #103).
+        new(Name: "TechAdvancesAcrossThresholdUsesTickStartTech", PlanetPop: 20000, Tech: TechLevel.Jump,
+            Legions: 100, NinjaLegions: 0, Type: WorldType.Capital, Efficiency: 50,
+            CargoChe: 99999, CargoMet: 99999, CargoTri: 99999,
+            TechnologyBitmask: AllFourDefensesResearched, RngFixedValue: 0, CapitalTech: TechLevel.Starship),
+
+        // The reverse: a Jump capital and Rnd(1,15)=1 regress the world Bio->Jump this tick, and the
+        // tick-start Bio tech still builds satellites (issue #103).
+        new(Name: "TechRegressesAcrossThresholdUsesTickStartTech", PlanetPop: 20000, Tech: TechLevel.Bio,
+            Legions: 100, NinjaLegions: 0, Type: WorldType.Capital, Efficiency: 50,
+            CargoChe: 99999, CargoMet: 99999, CargoTri: 99999,
+            TechnologyBitmask: AllFourDefensesResearched, RngFixedValue: 0, CapitalTech: TechLevel.Jump),
     ];
 
     /// <summary>MethodDataSource shape for AnnualTickHandlerDefensesTests.MatchesGoldenFile.</summary>

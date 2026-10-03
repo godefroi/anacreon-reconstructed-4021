@@ -1,5 +1,6 @@
-case=NoLegionsNeverDestroys;destscouted=1;ringscouted=1
-case=HighLegionsDestroysOnLowRoll;destscouted=0;ringscouted=0
-case=HighLegionsSurvivesOnHighRoll;destscouted=1;ringscouted=1
-case=IndependentNeverDestroysDespiteLegions;destscouted=1;ringscouted=1
-case=AlreadyScoutedNeverRolls;destscouted=1;ringscouted=1
+case=NoLegionsNeverDestroys;destscouted=1;ringscouted=1;destknown=1;ringknown=1;news=13,13
+case=HighLegionsDestroysOnLowRoll;destscouted=0;ringscouted=0;destknown=0;ringknown=0;news=45
+case=HighLegionsSurvivesOnHighRoll;destscouted=1;ringscouted=1;destknown=1;ringknown=1;news=13,13
+case=IndependentNeverDestroysDespiteLegions;destscouted=1;ringscouted=1;destknown=1;ringknown=1;news=13,13
+case=AlreadyScoutedNeverRolls;destscouted=1;ringscouted=1;destknown=1;ringknown=1;news=13
+case=DarkNebulaAtDestinationStopsScan;destscouted=1;ringscouted=0;destknown=1;ringknown=0;news=13

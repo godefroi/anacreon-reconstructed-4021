@@ -35,22 +35,20 @@ public class GoldenFileTests
     public void RegenerateAllGoldenFiles()
     {
         GoldenFile.Regenerate("ambrosia", AmbrosiaCases.All,
-            c => $"{(c.StartAddicted ? 1 : 0)},{c.StartAmbrosia},{c.RngFixedValue}",
+            c => $"{(c.StartAddicted ? 1 : 0)},{c.StartAmbrosia},{c.RngFixedValue},{c.PlanetPop},{(int)c.Tech},{c.Efficiency}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "ambrosia", .. args.Skip(1)]));
 
-        // RngFixedValue is always 0 here, matching AnnualTickHandlerRevolutionTests.MatchesGoldenFile's
-        // own hardcoded FixedRandom(0) — RevolutionCase has no per-case field for it.
         GoldenFile.Regenerate("revolution", RevolutionCases.All,
-            c => $"{c.PlanetPop},{(int)c.Class},{(int)c.Tech},{c.Efficiency},{c.RevIndex},{c.Legions},0",
+            c => $"{c.PlanetPop},{(int)c.Class},{(int)c.Tech},{c.Efficiency},{c.RevIndex},{c.Legions},{c.RngFixedValue},{(int)c.Type}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "revolution", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("military", MilitaryCases.All,
-            c => $"{c.PlanetPop},{(int)c.Tech},{c.Legions},{(int)c.Type},{c.RngFixedValue}",
+            c => $"{c.PlanetPop},{(int)c.Tech},{c.Legions},{(int)c.Type},{c.RngFixedValue},{(int)c.Class}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "military", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("defenses", DefensesCases.All,
             c => $"{c.PlanetPop},{(int)c.Tech},{c.Legions},{c.NinjaLegions},{(int)c.Type},{c.Efficiency}," +
-                 $"{c.CargoChe},{c.CargoMet},{c.CargoTri},{c.TechnologyBitmask},{c.RngFixedValue}",
+                 $"{c.CargoChe},{c.CargoMet},{c.CargoTri},{c.TechnologyBitmask},{c.RngFixedValue},{(c.CapitalTech is { } t ? (int)t : -1)}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "defenses", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("combat", CombatCases.All,
@@ -64,7 +62,7 @@ public class GoldenFileTests
         GoldenFile.Regenerate("npeattack", NpeAttackCases.All,
             c => $"{(int)c.DefenderTech},{(int)c.DefenderClass},{(c.AttackerCarriesTroops ? 1 : 0)}," +
                  $"{c.DefenderFgt},{c.DefenderHkr},{c.DefenderMen},{(int)c.Intent},{(c.TargetIsFleet ? 1 : 0)},{c.RngFixedValue}," +
-                 $"{(c.Planet3Present ? 1 : 0)},{c.Planet3X},{c.Planet3Y},{c.Planet3Population},{c.Planet3RevIndex},{(int)c.Planet3Tech}",
+                 $"{(c.Planet3Present ? 1 : 0)},{c.Planet3X},{c.Planet3Y},{c.Planet3Population},{c.Planet3RevIndex},{(int)c.Planet3Tech},{c.DefenderEff},{c.DefenderCargo}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "npeattack", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("lamattack", LamAttackCases.All,
@@ -81,13 +79,14 @@ public class GoldenFileTests
             args => PatchHarness.CompileAndRun("runworld", ["case", "techlevel", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("starbase", StarbaseCases.All,
-            c => $"{c.StarbaseChemicals},{c.NeighborChemicals},{c.RngFixedValue},{c.SecondNeighborChemicals ?? -1}",
+            c => $"{c.StarbaseChemicals},{c.NeighborChemicals},{c.RngFixedValue},{c.SecondNeighborChemicals ?? -1}," +
+                 $"{(int)c.StarbaseTech},{c.Legions},{c.TechnologyBitmask},{c.MetalsAndTrillum}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "starbase", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("production", ProductionCases.All,
             c => $"{(int)c.Class},{(int)c.Type},{c.Population},{c.Efficiency},{(int)c.Tech},{(c.AmbAddict ? 1 : 0)}," +
                  $"{c.IndusBio},{c.IndusChe},{c.IndusMin},{c.IndusSYG},{c.IndusSYJ},{c.IndusSYS},{c.IndusSYT},{c.IndusSup},{c.IndusTri}," +
-                 $"{c.CargoMen},{c.CargoNnj},{c.CargoAmb},{c.CargoChe},{c.CargoMet},{c.CargoSup},{c.CargoTri},{c.TrillumReserve},{(c.Independent ? 1 : 0)},{c.RevIndex}",
+                 $"{c.CargoMen},{c.CargoNnj},{c.CargoAmb},{c.CargoChe},{c.CargoMet},{c.CargoSup},{c.CargoTri},{c.TrillumReserve},{(c.Independent ? 1 : 0)},{c.RevIndex},{c.RngFixedValue}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "production", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("maturation", MaturationCases.All,
@@ -145,7 +144,7 @@ public class GoldenFileTests
             args => PatchHarness.CompileAndRun("runworld", ["case", "scenario", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("probescout", ProbeScoutCases.All,
-            c => $"{(c.DestOwnedByIndependent ? 8 : 1)},{c.DestLegions},{(c.DestAlreadyScouted ? 1 : 0)},{c.RngFixedValue}",
+            c => $"{(c.DestOwnedByIndependent ? 8 : 1)},{c.DestLegions},{(c.DestAlreadyScouted ? 1 : 0)},{c.RngFixedValue},{(c.DestInDarkNebula ? 1 : 0)}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "probescout", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("fleetlogistics", FleetLogisticsCases.All,
@@ -154,7 +153,7 @@ public class GoldenFileTests
 
         GoldenFile.Regenerate("fleetmove", FleetMoveCases.All,
             c => $"{c.PosX},{c.PosY},{c.DestX},{c.DestY},{c.NebulaX},{c.NebulaY}," +
-                 $"{c.GateKind},{c.GateOwner},{c.DestGateKind},{c.DestGateOwner},{(c.DestGateKnown ? 1 : 0)},{(c.FortressAtPos ? 1 : 0)}",
+                 $"{c.GateKind},{c.GateOwner - 1},{c.DestGateKind},{c.DestGateOwner - 1},{(c.DestGateKnown ? 1 : 0)},{(c.FortressAtPos ? 1 : 0)}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "fleetmove", .. args.Skip(1)]));
     }
 }

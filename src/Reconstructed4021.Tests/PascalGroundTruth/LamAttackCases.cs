@@ -4,7 +4,7 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// Named inputs shared between the golden-file generator (GoldenFileTests) and the always-on
 /// LamAttackTests.MatchesGoldenFile. Expected outputs live exclusively in
 /// reference/verify/golden/lamattack.golden, computed patch-based: a real run of ATTACK.PAS's own
-/// LAMAttack (see ATTACK.PAS.patch) against a hand-assembled Universe^
+/// LAMAttack, unpatched, against a hand-assembled Universe^
 /// (reference/verify/runworld.pas's lamattack domain). Unlike every other combat domain, LAMAttack
 /// has no Rnd calls at all — no RngFixedValue field here — so this is pure deterministic arithmetic
 /// verification of its proportional-distribution formula (Round/Trunc against ProtecNeeded/

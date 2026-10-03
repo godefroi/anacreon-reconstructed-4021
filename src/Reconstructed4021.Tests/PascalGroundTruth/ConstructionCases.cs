@@ -70,6 +70,25 @@ internal static class ConstructionCases
         new(Name: "CompletionCreatesIndustrialComplexStarbase", Building: ConstructionType.IndustrialComplex,
             YearsToCompletion: 1, OwnerTechLevel: TechLevel.Starship, RngFixedValue: 0,
             Fleet1: new ConstructionFleet(Chemicals: 700, Metals: 2700, Trillum: 200), Fleet2: null),
+
+        // The remaining completion kinds. One ample fleet each, so cost never blocks completion and
+        // the leftover cargo shows each kind's cost. CommandBase uses RngFixedValue 5 so
+        // CreateBase's Rnd-derived starting stats aren't all at their minimums.
+        new(Name: "CompletionCreatesCommandBase", Building: ConstructionType.CommandBase,
+            YearsToCompletion: 1, OwnerTechLevel: TechLevel.Starship, RngFixedValue: 5,
+            Fleet1: new ConstructionFleet(Chemicals: 9000, Metals: 9000, Trillum: 9000), Fleet2: null),
+        new(Name: "CompletionCreatesFortress", Building: ConstructionType.Fortress,
+            YearsToCompletion: 1, OwnerTechLevel: TechLevel.Starship, RngFixedValue: 0,
+            Fleet1: new ConstructionFleet(Chemicals: 9000, Metals: 9000, Trillum: 9000), Fleet2: null),
+        new(Name: "CompletionCreatesOutpost", Building: ConstructionType.Outpost,
+            YearsToCompletion: 1, OwnerTechLevel: TechLevel.Starship, RngFixedValue: 0,
+            Fleet1: new ConstructionFleet(Chemicals: 9000, Metals: 9000, Trillum: 9000), Fleet2: null),
+        new(Name: "CompletionCreatesWarpLink", Building: ConstructionType.WarpLink,
+            YearsToCompletion: 1, OwnerTechLevel: TechLevel.Gate, RngFixedValue: 0,
+            Fleet1: new ConstructionFleet(Chemicals: 9000, Metals: 9000, Trillum: 9000), Fleet2: null),
+        new(Name: "CompletionCreatesDisrupter", Building: ConstructionType.Disrupter,
+            YearsToCompletion: 1, OwnerTechLevel: TechLevel.Gate, RngFixedValue: 0,
+            Fleet1: new ConstructionFleet(Chemicals: 9000, Metals: 9000, Trillum: 9000), Fleet2: null),
     ];
 
     /// <summary>MethodDataSource shape for AnnualTickHandlerConstructionTests.MatchesGoldenFile — one
