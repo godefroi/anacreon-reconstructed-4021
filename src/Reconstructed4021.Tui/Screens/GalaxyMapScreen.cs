@@ -874,15 +874,58 @@ internal sealed class GalaxyMapScreen : IScreen
 
     // Fleet menu > Change Destination (FLTCOMM.PAS: ChangeDestinationCommand, :614-630): reuses the
     // same map-cursor destination pick Deploy's own XYParm step uses. FleetLifecycle.SetFleetDestination
-    // is unconditional -- no legality check beyond "a coordinate" -- works whether the fleet is Ready
-    // or already InTransit.
-    private void ChangeDestination() => PickOwnFleetAtCursor("Change Destination", ChangeDestination);
+    // is unconditional -- no legality check beyond "a coordinate" -- works whether the mover is Ready
+    // or already InTransit. The object pick accepts the player's own fleets and own command base/
+    // fortress. Pascal's NotMoving check (PLAYTURN.PAS:582-589) passes every Base, but only command
+    // bases and fortresses ever move (SBASE.PAS:226), so an outpost or industrial complex would take a
+    // destination and silently ignore it; this port rejects those with the same "immobile" text instead.
+    private void ChangeDestination()
+    {
+        var movers = _fleetsByLocation[_cursor].Where(f => ReferenceEquals(f.Owner, _player)).Cast<ISectorObject>().ToList();
+        Starbase? immobile = null;
+        if (_objectsByLocation.TryGetValue(_cursor, out var obj) && obj is Starbase starbase && ReferenceEquals(starbase.Owner, _player))
+        {
+            if (starbase.Kind is StarbaseKind.CommandBase or StarbaseKind.Fortress)
+            {
+                movers.Add(starbase);
+            }
+            else
+            {
+                immobile = starbase;
+            }
+        }
 
-    private void ChangeDestination(Fleet fleet) =>
+        switch (movers.Count)
+        {
+            case 0 when immobile is not null:
+                ShowInfo("Change Destination", $"What an idea!  Unfortunately, {CloseUpOverlay.DisplayName(immobile, _player)} is immobile.");
+                break;
+            case 0:
+                ShowInfo("Change Destination", "Move the cursor onto one of your own fleets or starbases first.");
+                break;
+            case 1:
+                ChangeDestination(movers[0]);
+                break;
+            default:
+                _overlays.Add(new ObjectPickerOverlay(movers, _player, ChangeDestination));
+                break;
+        }
+    }
+
+    private void ChangeDestination(ISectorObject mover) =>
         BeginPick("Change Destination -- move cursor to new destination, Enter: select, Esc: cancel",
             destination =>
             {
-                FleetLifecycle.SetFleetDestination(fleet, destination);
+                switch (mover)
+                {
+                    case Fleet fleet:
+                        FleetLifecycle.SetFleetDestination(fleet, destination);
+                        break;
+                    case Starbase starbase:
+                        FleetLifecycle.SetFleetDestination(starbase, destination);
+                        break;
+                }
+
                 Refresh();
             });
 
