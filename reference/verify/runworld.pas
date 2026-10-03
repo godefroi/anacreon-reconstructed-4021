@@ -13,8 +13,10 @@
      techlevel  TechOrd,IsIndependent,CapitalTechOrd,RngFixedValue -> "techlevel=<ordinal>"
      military   PlanetPop,TechOrd,Legions,TypOrd,RngFixedValue,ClassOrd -> "legions=<value>"
      defenses   PlanetPop,TechOrd,Legions,NinjaLegions,TypOrd,Efficiency,
-                CargoChe,CargoMet,CargoTri,TechnologyBitmask,RngFixedValue
-                -> "lam=<v>;def=<v>;gdm=<v>;ion=<v>" -- TechnologyBitmask uses the same
+                CargoChe,CargoMet,CargoTri,TechnologyBitmask,RngFixedValue,
+                CapitalTechOrd (-1 = the world is its own capital)
+                -> "lam=<v>;def=<v>;gdm=<v>;ion=<v>;cargoche=<v>;cargomet=<v>;cargotri=<v>;
+                techlevel=<v>" -- TechnologyBitmask uses the same
                 26-bit encoding as the empire domain (bit i = TechnologyTypes(i+1));
                 only bits 0-3 (LAM,def,GDM,ion) matter here
      combat     AttackerCapTechOrd,DefenderTechOrd,DefenderClassOrd,DefenderRevIndex,
@@ -348,9 +350,12 @@ procedure RunDefensesCase(const arg: String);
      optimum before UpdateDefenses ever reads TroopStrength -- not shielded
      against, since the golden file captures whatever the real pipeline
      produces end to end, the same way MilitaryCase's own legions=<value>
-     already does for a different field. }
+     already does for a different field.
+
+     CapitalTechOrd (parts[11]) of -1 keeps the world as its own capital. Otherwise Planet[2] is a
+     separate capital at that tech, so UpdateTechLevel can move the world's tech this tick. }
    var
-      parts: array[0..10] of LongInt;
+      parts: array[0..11] of LongInt;
       ID, CapID: IDNumber;
       i: Integer;
       techSet: TechnologySet;
@@ -382,6 +387,19 @@ procedure RunDefensesCase(const arg: String);
    Universe^.EmpireData[Empire1].InUse:=True;
    Universe^.EmpireData[Empire1].IsAPlayer:=False;
    CapID.ObjTyp:=Pln;  CapID.Index:=1;
+   if parts[11]>=0 then
+      begin
+      NoOfPlanets:=2;
+      Universe^.Planet[2].Cls:=ClsM;
+      Universe^.Planet[2].Typ:=CapTyp;
+      Universe^.Planet[2].Tech:=TechLevel(parts[11]);
+      Universe^.Planet[2].Eff:=100;
+      Universe^.Planet[2].Pop:=10;
+      Universe^.Planet[2].Emp:=Empire1;
+      SetOfActivePlanets:=[1,2];
+      SetOfPlanetsOf[Empire1]:=[1,2];
+      CapID.Index:=2;
+      end;
    Universe^.EmpireData[Empire1].Capital:=CapID;
 
    techSet:=[];
@@ -401,7 +419,8 @@ procedure RunDefensesCase(const arg: String);
            ';ion=',Universe^.Planet[1].Defns[ion],
            ';cargoche=',Universe^.Planet[1].Cargo[che],
            ';cargomet=',Universe^.Planet[1].Cargo[met],
-           ';cargotri=',Universe^.Planet[1].Cargo[tri]);
+           ';cargotri=',Universe^.Planet[1].Cargo[tri],
+           ';techlevel=',Ord(Universe^.Planet[1].Tech));
 
    Dispose(Universe);
    end;

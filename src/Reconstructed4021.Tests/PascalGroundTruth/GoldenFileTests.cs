@@ -50,7 +50,7 @@ public class GoldenFileTests
 
         GoldenFile.Regenerate("defenses", DefensesCases.All,
             c => $"{c.PlanetPop},{(int)c.Tech},{c.Legions},{c.NinjaLegions},{(int)c.Type},{c.Efficiency}," +
-                 $"{c.CargoChe},{c.CargoMet},{c.CargoTri},{c.TechnologyBitmask},{c.RngFixedValue}",
+                 $"{c.CargoChe},{c.CargoMet},{c.CargoTri},{c.TechnologyBitmask},{c.RngFixedValue},{(c.CapitalTech is { } t ? (int)t : -1)}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "defenses", .. args.Skip(1)]));
 
         GoldenFile.Regenerate("combat", CombatCases.All,

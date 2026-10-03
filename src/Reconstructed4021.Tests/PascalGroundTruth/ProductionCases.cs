@@ -90,6 +90,27 @@ internal static class ProductionCases
             IndusSup: 0, IndusTri: 100,
             CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 5000, CargoTri: 5000,
             TrillumReserve: 5000, Independent: true, RevIndex: 50),
+
+        // The cases above all run at Efficiency 100 and mostly at Gate tech. These vary efficiency,
+        // tech and revolution index, which feed TotalProd, the TechDev gates and UpdateRevolution.
+        new(Name: "MidTechLowEfficiencyCapital", Class: WorldClass.ClassM, Type: WorldType.Capital,
+            Population: 2500, Efficiency: 60, Tech: TechLevel.Warp, AmbAddict: false,
+            IndusBio: 0, IndusChe: 40, IndusMin: 40, IndusSYG: 60, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 30, IndusTri: 30,
+            CargoMen: 500, CargoNnj: 0, CargoAmb: 0, CargoChe: 3000, CargoMet: 3000, CargoSup: 3000, CargoTri: 3000,
+            TrillumReserve: 3000, RevIndex: 20),
+        new(Name: "UnrestfulBaseWorldAtJumpTech", Class: WorldClass.Ocean, Type: WorldType.Base,
+            Population: 800, Efficiency: 35, Tech: TechLevel.Jump, AmbAddict: false,
+            IndusBio: 10, IndusChe: 20, IndusMin: 25, IndusSYG: 40, IndusSYJ: 20, IndusSYS: 0, IndusSYT: 10,
+            IndusSup: 20, IndusTri: 15,
+            CargoMen: 300, CargoNnj: 0, CargoAmb: 0, CargoChe: 1500, CargoMet: 1200, CargoSup: 2000, CargoTri: 800,
+            TrillumReserve: 1500, RevIndex: 80),
+        new(Name: "IndependentAgriculturalAtBioTech", Class: WorldClass.Jungle, Type: WorldType.Agricultural,
+            Population: 1500, Efficiency: 75, Tech: TechLevel.Bio, AmbAddict: false,
+            IndusBio: 80, IndusChe: 10, IndusMin: 10, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 50, IndusTri: 10,
+            CargoMen: 200, CargoNnj: 0, CargoAmb: 0, CargoChe: 500, CargoMet: 500, CargoSup: 4000, CargoTri: 500,
+            TrillumReserve: 2000, Independent: true, RevIndex: 10),
     ];
 
     /// <summary>MethodDataSource shape for AnnualTickHandlerProductionTests.MatchesGoldenFile — one

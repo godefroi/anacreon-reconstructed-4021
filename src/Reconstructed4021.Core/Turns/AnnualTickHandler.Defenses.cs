@@ -56,14 +56,15 @@ public sealed partial class AnnualTickHandler
     /// per-world tick) — unlike Production's own raw-material shortfall, DefensesLackResources fires
     /// for a starbase too, with no IsPlanet guard (UPDATE.PAS:1336 has none, unlike UPDATE.PAS:904's
     /// planet-only ReportPlanetLack call).
+    /// <paramref name="effectiveTech"/> is the world's effective tech level from the start of the
+    /// tick, before UpdateTechLevel and UseUpAmbrosia can change it.
     /// </summary>
-    private void UpdateDefenses(IEconomicWorld world, HashSet<CargoType> reportedShortfalls)
+    private void UpdateDefenses(IEconomicWorld world, HashSet<CargoType> reportedShortfalls, TechLevel effectiveTech)
     {
         var troopStrength = world.Cargo.Legions + 2 * world.Cargo.NinjaLegions;
         var buildRate = (troopStrength / 2000.0) * (1 + (world.Efficiency - 50) / 100.0);
         var optimum = troopStrength / 100.0;
         var isOutpost = false;
-        var effectiveTech = EffectiveTechnologyLevel(world);
 
         if (world.IsPlanet) {
             buildRate *= world.Population / 2000.0;

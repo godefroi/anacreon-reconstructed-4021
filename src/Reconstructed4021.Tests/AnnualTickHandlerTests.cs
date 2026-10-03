@@ -960,12 +960,17 @@ public class AnnualTickHandlerDefensesTests
         planet.Cargo.Trillum = c.CargoTri;
         planet.Cargo.Supplies = 9999;
         var game = BuildGame(planet, owner);
-        owner.Capital = planet;
+        // The harness's separate capital isn't ticked (UpdateWorld runs on Planet[1] only), so it
+        // stays out of the galaxy here.
+        owner.Capital = c.CapitalTech is { } capitalTech
+            ? new Planet { Location = new Coordinate(1, 1), Owner = owner, Class = WorldClass.ClassM, Type = WorldType.Capital, TechLevel = capitalTech, Efficiency = 100, Population = 10 }
+            : planet;
         var handler = new AnnualTickHandler(new FixedRandom(c.RngFixedValue));
 
         handler.RunAnnualTick(game);
 
         var expected = golden[c.Name];
+        await Assert.That((int)planet.TechLevel).IsEqualTo(int.Parse(expected["techlevel"]));
         await Assert.That(planet.Defenses.Lams).IsEqualTo(int.Parse(expected["lam"]));
         await Assert.That(planet.Defenses.DefenseSatellites).IsEqualTo(int.Parse(expected["def"]));
         await Assert.That(planet.Defenses.Gdms).IsEqualTo(int.Parse(expected["gdm"]));
