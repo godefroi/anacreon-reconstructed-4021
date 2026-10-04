@@ -15,7 +15,7 @@ manual dance.
 
 patched/<File> must already contain the hand-edited target state (edit it directly, same
 as build.ps1's own workflow: run build.ps1 once to populate patched/, hand-edit the file(s)
-you're changing, confirm `fpc -Mtp -CfSSE2 runworld.pas` still compiles from inside
+you're changing, confirm `fpc -Mtp -CfSSE2 -Pi386 runworld.pas` still compiles from inside
 patched/, then run this script).
 
 .PARAMETER File

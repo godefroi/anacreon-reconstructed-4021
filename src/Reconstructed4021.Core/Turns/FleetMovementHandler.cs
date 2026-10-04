@@ -112,9 +112,12 @@ public sealed class FleetMovementHandler(Random random, bool useLegacyOrderResol
         }
     }
 
+    // Inactive (out-of-fuel) fleets are still updated, as Pascal's UpdateAllFleets never checks
+    // status: ConsumeFuel retries every turn, so a fleet that has since gained fuel or cargo trillum
+    // moves again, and one that's still dry re-reports NoFuel (FLEET.PAS:686-691, 861-905).
     private static bool ShouldAdvanceActingEmpireFleet(Fleet fleet, Game game)
     {
-        if (fleet.Status == FleetStatus.Lost || fleet.Status == FleetStatus.Inactive) {
+        if (fleet.Status == FleetStatus.Lost) {
             return false;
         }
 
@@ -124,7 +127,7 @@ public sealed class FleetMovementHandler(Random random, bool useLegacyOrderResol
 
     private static bool ShouldAdvanceNextEmpireFleet(Fleet fleet, Game game)
     {
-        if (fleet.Status == FleetStatus.Lost || fleet.Status == FleetStatus.Inactive) {
+        if (fleet.Status == FleetStatus.Lost) {
             return false;
         }
 
@@ -171,7 +174,7 @@ public sealed class FleetMovementHandler(Random random, bool useLegacyOrderResol
     /// </summary>
     private void AdvanceFleet(Fleet fleet, Game game)
     {
-        if (fleet.Status is FleetStatus.Lost or FleetStatus.Inactive)
+        if (fleet.Status is FleetStatus.Lost)
             return;
 
         if (fleet.Destination is not { } destination || fleet.Location == destination) {
@@ -218,7 +221,14 @@ public sealed class FleetMovementHandler(Random random, bool useLegacyOrderResol
             return; // fleet destroyed by a minefield — caller's snapshot list still holds the reference, but nothing left to update
 
         fleet.Location = nextLocation;
-        fleet.Status = fleet.Location == destination ? FleetStatus.Ready : FleetStatus.InTransit;
+        // Pascal only sets FReady on arrival and otherwise leaves the status alone (FLEET.PAS:844-850),
+        // so an Inactive fleet that moves again on fuel it was handed stays Inactive until it arrives
+        // or is refuelled.
+        if (fleet.Location == destination) {
+            fleet.Status = FleetStatus.Ready;
+        } else if (fleet.Status != FleetStatus.Inactive) {
+            fleet.Status = FleetStatus.InTransit;
+        }
 
         if (fleet.Location == destination) {
             fleet.Destination = null;
@@ -764,24 +774,22 @@ public sealed class FleetMovementHandler(Random random, bool useLegacyOrderResol
     }
 
     /// <summary>
-    /// The far-from-destination branch of fortress pass-through (FLEET.PAS:768-779) — up to 5
-    /// <see cref="GetNewPos"/> steps toward the destination, silently stopping at the first
-    /// dense-nebula block. No <c>FltBlocked</c> news fires here, unlike <see cref="StepFleet"/>'s own
-    /// nebula check — a real asymmetry in source (this branch never calls the news-firing code path
-    /// at all), not something to "fix" for consistency.
+    /// The far-from-destination branch of fortress pass-through (FLEET.PAS:768-779). Pascal's loop
+    /// records the current position before each of its 5 <see cref="GetNewPos"/> calls and moves the
+    /// fleet to the last recorded one, so the hop covers 4 cells, not 5 (Pascal's own arrival estimate
+    /// agrees: <c>Dist-4</c>, INTRFACE.PAS:878). A dense-nebula block ends the loop the same way, leaving
+    /// the fleet on the last clear cell. No <c>FltBlocked</c> news fires here, unlike
+    /// <see cref="StepFleet"/>'s own nebula check — a real asymmetry in source (this branch never calls
+    /// the news-firing code path at all), not something to "fix" for consistency.
     /// </summary>
     private static Coordinate HopThroughFortress(Coordinate start, Coordinate destination, Game game)
     {
         var current = start;
+        Coordinate? next = start;
 
-        for (var step = 0; step < 5; step++) {
-            if (current == destination)
-                break;
-
-            if (GetNewPos(current, destination, game) is not { } next)
-                break;
-
-            current = next;
+        for (var step = 0; step < 5 && next is { } reached; step++) {
+            current = reached;
+            next = GetNewPos(reached, destination, game);
         }
 
         return current;
@@ -923,9 +931,10 @@ public sealed class FleetMovementHandler(Random random, bool useLegacyOrderResol
                 return false;
             }
 
+            // RefuelFleet(FltID,FltID,TriToUse), as Pascal calls it: it also resets the status to
+            // InTransit/Ready, which wakes an Inactive fleet.
             var trillumToConvert = Math.Max(1, Math.Min(fleet.Cargo.Trillum, PascalRound(consumption / (double)FleetLogistics.FuelPerTon)));
-            fleet.Cargo.Trillum -= trillumToConvert;
-            fleet.Fuel = Math.Min(fleet.Fuel + trillumToConvert * FleetLogistics.FuelPerTon, FleetLogistics.FuelCapacity(fleet.Ships));
+            FleetLifecycle.RefuelFleet(fleet, fleet, trillumToConvert);
         }
     }
 

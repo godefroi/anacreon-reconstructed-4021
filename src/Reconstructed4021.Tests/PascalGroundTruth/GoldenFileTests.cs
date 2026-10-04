@@ -155,5 +155,8 @@ public class GoldenFileTests
             c => $"{c.PosX},{c.PosY},{c.DestX},{c.DestY},{c.NebulaX},{c.NebulaY}," +
                  $"{c.GateKind},{c.GateOwner - 1},{c.DestGateKind},{c.DestGateOwner - 1},{(c.DestGateKnown ? 1 : 0)},{(c.FortressAtPos ? 1 : 0)}",
             args => PatchHarness.CompileAndRun("runworld", ["case", "fleetmove", .. args.Skip(1)]));
+
+        GoldenFile.Regenerate("fleetturn", FleetTurnCases.All, FleetTurnCases.Format,
+            args => PatchHarness.CompileAndRun("runworld", ["case", "fleetturn", .. args.Skip(1)]));
     }
 }

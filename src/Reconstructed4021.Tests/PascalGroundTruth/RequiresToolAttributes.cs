@@ -9,7 +9,7 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// [Explicit] + manual category selection on machines that happen to have FreePascal installed.
 /// </summary>
 internal sealed class RequiresFpcAttribute()
-    : SkipAttribute("fpc not found on PATH — install FreePascal to run this ground-truth test")
+    : SkipAttribute("fpc with an i386 compiler not found on PATH — install FreePascal (and ppc386 on a 64-bit-only install) to run this ground-truth test")
 {
     public override Task<bool> ShouldSkip(TestRegisteredContext context) =>
         Task.FromResult(!PascalHarness.IsFpcAvailable);

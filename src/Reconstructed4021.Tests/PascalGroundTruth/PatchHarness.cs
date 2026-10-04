@@ -73,7 +73,8 @@ internal static class PatchHarness
             }
             File.Copy(driverPath, Path.Combine(outDir, driverName + ".pas"), overwrite: true);
 
-            PascalHarness.RunProcess(PascalHarness.FpcPath, ["-Mtp", "-CfSSE2", driverName + ".pas"], outDir);
+            // -Pi386: the patched tree assumes 4-byte pointers (DATASTRC.PAS.patch's guard says why).
+            PascalHarness.RunProcess(PascalHarness.FpcPath, ["-Mtp", "-CfSSE2", "-Pi386", driverName + ".pas"], outDir);
             _builtDrivers.Add(driverName);
         }
 

@@ -370,15 +370,15 @@ public class FleetMovementHandlerTests
     }
 
     [Test]
-    public async Task FleetAtFortress_FarFromDestination_HopsFiveThenContinuesWithOrdinaryMovementSameTurn()
+    public async Task FleetAtFortress_FarFromDestination_HopsFourThenContinuesWithOrdinaryMovementSameTurn()
     {
         var empire = new Empire { Name = "Human" };
         var game = new Game(new Galaxy(size: 20));
         game.Galaxy.Starbases.Add(new Starbase { Owner = empire, Location = new Coordinate(0, 0), Kind = StarbaseKind.Fortress });
 
         // Standard fleet: FltMovementRate=1, so a plain fleet would only reach (1,1) this turn.
-        // A fortress boosts it 5 cells first (to (5,5)), then the ordinary 1-cell allotment applies
-        // on top, landing at (6,6) -- both apply in the same turn (FLEET.PAS:768-838).
+        // A fortress boosts it 4 cells first (to (4,4)), then the ordinary 1-cell allotment applies
+        // on top, landing at (5,5) -- both apply in the same turn (FLEET.PAS:768-838).
         var fleet = new Fleet { Owner = empire, Location = new Coordinate(0, 0), Destination = new Coordinate(15, 15), Fuel = 1000, Status = FleetStatus.Ready };
         fleet.Ships.Fighters = 1;
         game.Galaxy.Fleets.Add(fleet);
@@ -386,7 +386,7 @@ public class FleetMovementHandlerTests
         var handler = new FleetMovementHandler(new FixedRandom(0));
         handler.AdvanceFleets(game, new Empire { Name = "AI" }, empire);
 
-        await Assert.That(fleet.Location).IsEqualTo(new Coordinate(6, 6));
+        await Assert.That(fleet.Location).IsEqualTo(new Coordinate(5, 5));
         await Assert.That(fleet.Status).IsEqualTo(FleetStatus.InTransit);
     }
 
@@ -598,8 +598,9 @@ public class FleetMovementHandlerTests
 
         await Assert.That(ground.Cargo.Trillum).IsEqualTo(100 - expectedTrillum);
         // MaxTrillumToRefuel rounds its tons-needed estimate up (FleetLifecycle's own +1), so a
-        // ground with plenty of trillum tops the tank exactly to capacity, not to trillum*FuelPerTon.
-        await Assert.That(fleet.Fuel).IsEqualTo(FleetLogistics.FuelCapacity(fleet.Ships));
+        // ground with plenty of trillum tops the tank to capacity (truncated on write, as Pascal's
+        // SetFleetFuel does), not to trillum*FuelPerTon.
+        await Assert.That(fleet.Fuel).IsEqualTo(Math.Truncate(FleetLogistics.FuelCapacity(fleet.Ships)));
     }
 
     [Test]

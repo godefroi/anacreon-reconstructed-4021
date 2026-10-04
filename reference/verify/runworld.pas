@@ -134,6 +134,19 @@
                 this harness's own INTRFACE.PAS), against one Empire1 fleet at (PosX,PosY). Requires
                 InitializeSector plus direct Sector[x]^[y].Obj writes for the gate(s)/fortress, same
                 requirement as the starbase/probescout/construction domains.
+     fleetturn  PosX,PosY,Fgt,Hkr,Jmp,Jtn,Pen,Ssp,Trn,Men,Nnj,Amb,Che,Met,Sup,Tri,Fuel,Turns,
+                RngFixedValue,NebulaX,NebulaY(dense; both 0 disables),MineX,MineY(Empire2's; both 0
+                disables),DisrupterX,DisrupterY(Empire2's; both 0 disables),GateX,GateY(Empire2's
+                public gte; both 0 disables),FortressAtPos(0/1, Empire1's),WorldX,WorldY
+                (both 0 disables),WorldOwnerOrd,WorldFgt..WorldTrn,WorldMen..WorldTri,
+                InactiveDestX,InactiveDestY(both 0 disables; otherwise the fleet starts FInactive
+                headed there, as after running dry en route), then '|' and the order lines
+                separated by '/' (may be empty)
+                -> "alive=<0|1>[;x;y;destx;desty;status=<FleetStatus ordinal>;fuel=<6dp>;
+                    fgt..trn;men..tri;nextorder -- only when alive][;minescouted=<0|1> -- only with a
+                    mine][;w_fgt..w_tri -- the world's ships/cargo, only with a world];
+                    c_fgt..c_tri (the capital's ships/cargo);news1=<Empire1's NewsTypes ordinals>;
+                    news2=<Empire2's>" -- see RunFleetTurnCase
      probescout DestOwnerOrd,DestLegions,DestAlreadyScouted(0/1),RngFixedValue,DestDarkNebula(0/1)
                 -> "destscouted=<0|1>;ringscouted=<0|1>;destknown=<0|1>;ringknown=<0|1>;
                 news=<Empire1's NewsTypes ordinals>" -- calls the already-exported ProbeScout (INTRFACE.PAS:1289-1344)
@@ -192,7 +205,7 @@ PROGRAM RunWorld;
   relaxation, not a behavior change. }
 {$V-}
 
-USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, AttNPE, Fleet, Intrface, DFA, Strg, NewGame, NPETypes, NPE01;
+USES Types, DataCnst, DataStrc, Galaxy, Int, Misc, PrimIntr, Environ, News, Update, Attack, AttNPE, Fleet, Intrface, DFA, Strg, NewGame, NPETypes, NPE01, Orders, TextStrc;
 
 function ParseLongInt(const s: String): LongInt;
    var
@@ -258,8 +271,8 @@ procedure ResetGlobalSets;
       end;
    end;
 
-procedure WriteNews(Emp: Empire);
-   { Writes ";news=o1,o2,..." -- the NewsTypes ordinals of Emp's news, in the order added -- then
+procedure WriteNewsAs(const Key: String; Emp: Empire);
+   { Writes ";<Key>=o1,o2,..." -- the NewsTypes ordinals of Emp's news, in the order added -- then
      erases it. News lives in NEWS.PAS's unit-global list, not in Universe^, so it would otherwise
      carry over into the next case in the same process. }
    var
@@ -269,7 +282,7 @@ procedure WriteNews(Emp: Empire);
       P1,P2,P3: Integer;
       First: Boolean;
    begin
-   Write(';news=');
+   Write(';',Key,'=');
    First:=True;
    GetNewsList(Emp,Item);
    while Item<>Nil do
@@ -281,6 +294,11 @@ procedure WriteNews(Emp: Empire);
       Item:=Item^.Next;
       end;
    EraseNews(Emp);
+   end;
+
+procedure WriteNews(Emp: Empire);
+   begin
+   WriteNewsAs('news',Emp);
    end;
 
 procedure RunTechLevelCase(const arg: String);
@@ -2076,6 +2094,238 @@ procedure RunFleetMoveCase(const arg: String);
    Dispose(Universe);
    end;
 
+procedure RunFleetTurnCase(const arg: String);
+   { Real per-turn fleet update: one Empire1 fleet (Fleet[1]) run through Turns rounds of
+     UpdateAllFleets(Empire2,Empire1) then UpdateAllFleets(Empire1,Empire2) -- the two calls a
+     two-empire game makes per round, so a fleet moves on the same call its type would in real play
+     (FLEET.PAS:861-905). That reaches UpdateFleet, UseUpFuel's recursive refuel, MineFieldDamage,
+     InRangeOfDisrupter, the fortress hop, gates, and ExecuteFleetOrders/ExecuteTransCOM on arrival.
+
+     The order text after '|' ('/' between lines) goes through the real CompileOrders, so the
+     parser is covered too. The fleet starts Ready with Dest=XY (unless InactiveDestX/Y start it
+     Inactive and headed elsewhere); a moving case gives it a DEST
+     order, which ExecuteFleetOrders runs on the first update. DEST coordinates are relative to
+     Empire1's capital, Planet[1] at (10,10) (Name2Coord reads Environ.Player's capital).
+
+     Mines, the disrupter and the public gate belong to Empire2; the fortress at Pos belongs to
+     Empire1. The transfer world is Planet[2]. Each sector holds one object, so a case keeps the
+     capital, gate, disrupter, fortress and world on separate cells. }
+   const
+      ResKey: array[fgt..tri] of String[3] =
+         ('fgt','hkr','jmp','jtn','pen','ssp','trn','men','nnj','amb','che','met','sup','tri');
+   var
+      parts: array[0..46] of LongInt;
+      sep,turn,i: Integer;
+      ordersText,line: String;
+      fltID,objID: IDNumber;
+      fltXY,xy,mineXY: XYCoord;
+      res: ResourceTypes;
+      Source: TextStructure;
+      CurrLine: LineRecordPtr;
+      Code: OrderStructure;
+      Error,LineNo: Word;
+      firstLine: Boolean;
+
+   procedure AddOrderLine(const l: String);
+      begin
+      if firstLine then
+         firstLine:=False
+      else
+         begin
+         InsertLine(Source,CurrLine);
+         CurrLine:=TXTNextLine(CurrLine);
+         end;
+      TXTSetLine(CurrLine,l);
+      end;
+
+   begin
+   sep:=Pos('|',arg);
+   if sep=0 then
+      begin
+      WriteLn(StdErr,'runworld: fleetturn case needs "<fields>|<orders>" in "',arg,'"');
+      Halt(1);
+      end;
+   ParseFields(Copy(arg,1,sep-1),parts);
+   ordersText:=Copy(arg,sep+1,Length(arg));
+
+   New(Universe);
+   FillChar(Universe^,SizeOf(Universe^),0);
+   InitializeSector(20);
+   Universe^.EmpireData[Empire1].InUse:=True;
+   Universe^.EmpireData[Empire2].InUse:=True;
+   Player:=Empire1;
+   ForcedRandomValue:=parts[18];
+
+   objID.ObjTyp:=Pln;  objID.Index:=1;
+   Universe^.Planet[1].XY.x:=10;  Universe^.Planet[1].XY.y:=10;
+   Universe^.Planet[1].Emp:=Empire1;
+   Sector[10]^[10].Obj:=objID;
+   Universe^.EmpireData[Empire1].Capital:=objID;
+   SetOfActivePlanets:=[1];
+   SetOfPlanetsOf[Empire1]:=[1];
+
+   fltXY.x:=parts[0];  fltXY.y:=parts[1];
+
+   if (parts[19]<>0) or (parts[20]<>0) then
+      begin
+      xy.x:=parts[19];  xy.y:=parts[20];
+      PutNebula(xy,DenseNebula);
+      end;
+
+   mineXY.x:=parts[21];  mineXY.y:=parts[22];
+   if (mineXY.x<>0) or (mineXY.y<>0) then
+      PutMine(mineXY,Empire2);
+
+   if (parts[23]<>0) or (parts[24]<>0) then
+      begin
+      Universe^.Stargate[2].XY.x:=parts[23];  Universe^.Stargate[2].XY.y:=parts[24];
+      Universe^.Stargate[2].Emp:=Empire2;
+      Universe^.Stargate[2].GTyp:=dis;
+      SetOfActiveGates:=SetOfActiveGates+[2];
+      objID.ObjTyp:=Gate;  objID.Index:=2;
+      Sector[parts[23]]^[parts[24]].Obj:=objID;
+      end;
+
+   if (parts[25]<>0) or (parts[26]<>0) then
+      begin
+      Universe^.Stargate[1].XY.x:=parts[25];  Universe^.Stargate[1].XY.y:=parts[26];
+      Universe^.Stargate[1].Emp:=Empire2;
+      Universe^.Stargate[1].GTyp:=gte;
+      SetOfActiveGates:=SetOfActiveGates+[1];
+      objID.ObjTyp:=Gate;  objID.Index:=1;
+      Sector[parts[25]]^[parts[26]].Obj:=objID;
+      end;
+
+   if parts[27]<>0 then
+      begin
+      Universe^.Starbase[1].XY:=fltXY;
+      Universe^.Starbase[1].Emp:=Empire1;
+      Universe^.Starbase[1].STyp:=frt;
+      SetOfActiveStarbases:=[1];
+      SetOfStarbasesOf[Empire1]:=[1];
+      objID.ObjTyp:=Base;  objID.Index:=1;
+      Sector[fltXY.x]^[fltXY.y].Obj:=objID;
+      end;
+
+   if (parts[28]<>0) or (parts[29]<>0) then
+      begin
+      with Universe^.Planet[2] do
+         begin
+         XY.x:=parts[28];  XY.y:=parts[29];
+         Emp:=Empire(parts[30]);
+         for res:=fgt to trn do
+            Ships[res]:=parts[31+Ord(res)-Ord(fgt)];
+         for res:=men to tri do
+            Cargo[res]:=parts[38+Ord(res)-Ord(men)];
+         end;
+      SetOfActivePlanets:=SetOfActivePlanets+[2];
+      SetOfPlanetsOf[Empire(parts[30])]:=SetOfPlanetsOf[Empire(parts[30])]+[2];
+      objID.ObjTyp:=Pln;  objID.Index:=2;
+      Sector[parts[28]]^[parts[29]].Obj:=objID;
+      end;
+
+   New(Universe^.Fleet[1]);
+   FillChar(Universe^.Fleet[1]^,SizeOf(FleetRecord),0);
+   with Universe^.Fleet[1]^ do
+      begin
+      Emp:=Empire1;
+      XY:=fltXY;
+      Dest:=fltXY;
+      Status:=FReady;
+      for res:=fgt to trn do
+         Ships[res]:=parts[2+Ord(res)-Ord(fgt)];
+      for res:=men to tri do
+         Cargo[res]:=parts[9+Ord(res)-Ord(men)];
+      if (parts[45]<>0) or (parts[46]<>0) then
+         begin
+         Dest.x:=parts[45];  Dest.y:=parts[46];
+         Status:=FInactive;
+         end;
+      end;
+   SetOfActiveFleets:=[1];
+   SetOfFleetsOf[Empire1]:=[1];
+   Sector[fltXY.x]^[fltXY.y].Flts:=[Empire1];
+   fltID.ObjTyp:=Flt;  fltID.Index:=1;
+   SetFleetFuel(fltID,parts[16]);
+
+   InitializeOrders(Code);
+   if ordersText<>'' then
+      begin
+      InitializeText(Source);
+      CurrLine:=TXTFirstLine(Source);
+      firstLine:=True;
+      line:='';
+      for i:=1 to Length(ordersText) do
+         if ordersText[i]='/' then
+            begin
+            AddOrderLine(line);
+            line:='';
+            end
+         else
+            line:=line+ordersText[i];
+      AddOrderLine(line);
+
+      CompileOrders(Empire1,Source,Code,Error,LineNo);
+      DisposeText(Source);
+      if Error<>0 then
+         begin
+         WriteLn(StdErr,'runworld: fleetturn order error ',Error,' on line ',LineNo,' of "',ordersText,'"');
+         Halt(1);
+         end;
+      SetFleetCode(fltID,Code);
+      if NumberOfCommands(Code)>0 then
+         SetFleetNextStatement(fltID,1);
+      end;
+
+   for turn:=1 to parts[17] do
+      begin
+      UpdateAllFleets(Empire2,Empire1);
+      UpdateAllFleets(Empire1,Empire2);
+      end;
+
+   if 1 in SetOfActiveFleets then
+      with Universe^.Fleet[1]^ do
+         begin
+         Write('alive=1;x=',XY.x,';y=',XY.y,';destx=',Dest.x,';desty=',Dest.y,
+               ';status=',Ord(Status),';fuel=',GetFleetFuel(fltID):0:6);
+         for res:=fgt to trn do
+            Write(';',ResKey[res],'=',Ships[res]);
+         for res:=men to tri do
+            Write(';',ResKey[res],'=',Cargo[res]);
+         Write(';nextorder=',NextOrder);
+         end
+   else
+      Write('alive=0');
+
+   if (mineXY.x<>0) or (mineXY.y<>0) then
+      Write(';minescouted=',Ord(Empire1 IN Sector[mineXY.x]^[mineXY.y].MineScout));
+
+   if (parts[28]<>0) or (parts[29]<>0) then
+      with Universe^.Planet[2] do
+         begin
+         for res:=fgt to trn do
+            Write(';w_',ResKey[res],'=',Ships[res]);
+         for res:=men to tri do
+            Write(';w_',ResKey[res],'=',Cargo[res]);
+         end;
+
+   with Universe^.Planet[1] do
+      begin
+      for res:=fgt to trn do
+         Write(';c_',ResKey[res],'=',Ships[res]);
+      for res:=men to tri do
+         Write(';c_',ResKey[res],'=',Cargo[res]);
+      end;
+
+   WriteNewsAs('news1',Empire1);
+   WriteNewsAs('news2',Empire2);
+   WriteLn;
+
+   if 1 in SetOfActiveFleets then
+      DestroyFleet(fltID);
+   Dispose(Universe);
+   end;
+
 procedure RunProbeScoutCase(const arg: String);
    { ProbeScout (INTRFACE.PAS:1289-1344), called directly (already exported, no patch needed) against
      a hand-assembled Universe^: one planet at the probe's destination (5,5) with configurable
@@ -2550,6 +2800,8 @@ procedure RunCaseMode;
          RunFleetLogisticsCase(ParamStr(i))
       else if domain='fleetmove' then
          RunFleetMoveCase(ParamStr(i))
+      else if domain='fleetturn' then
+         RunFleetTurnCase(ParamStr(i))
       else
          begin
          WriteLn(StdErr,'runworld: unknown domain "',domain,'"');

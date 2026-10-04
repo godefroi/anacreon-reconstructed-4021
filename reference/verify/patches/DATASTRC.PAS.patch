@@ -1,15 +1,23 @@
 --- a/DATASTRC.PAS
 +++ b/DATASTRC.PAS
-@@ -16,6 +16,8 @@ USES
+@@ -16,6 +16,16 @@ USES
     Types,
     Galaxy;
  
 +{$PACKRECORDS 1}
 +
++{ FleetRecord.OrderData is 6 bytes: ORDERS.PAS's SetFleetCode/GetFleetCode copy a whole
++  OrderStructure (a Word and a pointer) through it, which fits only with 4-byte pointers, as Turbo
++  Pascal's real-mode far pointers were. A 64-bit target would silently overwrite the fields after it.
++  The harness builds compile with -Pi386; this stops any build that doesn't. }
++{$IF SizeOf(Pointer)<>4}
++{$FATAL The Anacreon harness needs a 32-bit target (fpc -Pi386): FleetRecord.OrderData holds a 4-byte pointer.}
++{$ENDIF}
++
  TYPE
     { PLANETS
        This is a record of all the information stored for each planet. }
-@@ -205,20 +207,6 @@ TYPE
+@@ -205,20 +215,6 @@ TYPE
  
     EmpireDataArray = ARRAY [Empire] OF EmpireDataRecord;
  
@@ -30,7 +38,7 @@
     { THE UNIVERSE }
  
     UniverseRecord = RECORD
-@@ -232,7 +220,6 @@ TYPE
+@@ -232,7 +228,6 @@ TYPE
  
  VAR
     Universe: ^UniverseRecord;

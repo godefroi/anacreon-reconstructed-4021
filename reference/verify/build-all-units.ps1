@@ -160,7 +160,7 @@ try {
     }
     foreach ($f in $units) {
         Write-Host "--- $f ---"
-        fpc -Mtp -CfSSE2 $f
+        fpc -Mtp -CfSSE2 -Pi386 $f
     }
 } finally {
     Pop-Location

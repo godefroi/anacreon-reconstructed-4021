@@ -50,11 +50,8 @@ public static class FleetLifecycle
         }
 
         // Floor, not a top-up (FLEET.PAS:432-433): fires only when ChangeCompositionOfFleet left the
-        // new fleet at exactly 0.0. An exact double comparison is correct here, not a float-equality
-        // bug: fleet.Fuel starts at 0.0 (a fresh Fleet's default) and the only way it can still read
-        // 0.0 here is if nothing was ever added to it — the not-a-fleet branch's FuelChange clamps to
-        // TonsOnGround*FuelPerTon, which is exactly 0.0 (not some tiny epsilon) when the launch world
-        // has no trillum at all.
+        // new fleet at 0. Fleet.Fuel truncates on write, as Pascal's SetFleetFuel does, so this also
+        // fires for a fleet handed less than one unit (a small split-off fleet), exactly as in Pascal.
         if (fleet.Fuel == 0) {
             fleet.Fuel = 10;
         }
@@ -194,6 +191,10 @@ public static class FleetLifecycle
     {
         var targetFuel = target is Fleet targetAsFleet ? targetAsFleet.Fuel : 0;
         var maxFuel = FleetLogistics.FuelCapacity(target.Ships);
+        // Pascal takes this from the cargo as it was on entry (GetCargo at the top, FLEET.PAS:465-479).
+        // It matters when the ground is the fleet itself (UseUpFuel's refuel from cargo): the trillum
+        // spent below would otherwise lighten the cargo before the status check.
+        var consumption = FleetLogistics.FuelConsumption(target.Ships, target.Cargo);
 
         ground.Cargo.Trillum -= trillum;
         targetFuel = Math.Min(targetFuel + trillum * FleetLogistics.FuelPerTon, maxFuel);
@@ -202,7 +203,7 @@ public static class FleetLifecycle
             fleetTarget.Fuel = targetFuel;
         }
 
-        if (targetFuel > FleetLogistics.FuelConsumption(target.Ships, target.Cargo) && target is IMovable movable) {
+        if (targetFuel > consumption && target is IMovable movable) {
             var location = ((ISectorObject)target).Location;
             // Real Pascal's GetFleetDestination always returns a real coordinate (defaulting to the
             // fleet's own location once arrived) -- this port instead nulls Destination out on arrival

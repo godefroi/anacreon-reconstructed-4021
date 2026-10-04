@@ -17,7 +17,21 @@ internal static class PascalHarness
     private static readonly Lazy<string?> FpcPathLazy = new(() => TryLocateOnPath("fpc"));
     private static readonly Lazy<string?> GitPathLazy = new(() => TryLocateOnPath("git"));
 
-    public static bool IsFpcAvailable => FpcPathLazy.Value is not null;
+    // The patched tree needs a 32-bit target (DATASTRC.PAS.patch's guard says why), and an fpc install
+    // can lack the i386 compiler (common for x86_64 Linux packages), so ask fpc rather than assume.
+    private static readonly Lazy<bool> FpcTargetsI386Lazy = new(() => {
+        if (FpcPathLazy.Value is not { } fpc)
+            return false;
+        try {
+            RunProcess(fpc, ["-Pi386", "-iTP"], AppContext.BaseDirectory);
+            return true;
+        } catch (InvalidOperationException) {
+            return false;
+        }
+    });
+
+    /// <summary>fpc is on PATH and can compile for i386, which the patch-based harnesses require.</summary>
+    public static bool IsFpcAvailable => FpcTargetsI386Lazy.Value;
     public static bool IsGitAvailable => GitPathLazy.Value is not null;
 
     /// <summary>Resolved fpc path, shared with PatchHarness (which compiles a different driver in a
