@@ -221,14 +221,9 @@ public sealed class FleetMovementHandler(Random random, bool useLegacyOrderResol
             return; // fleet destroyed by a minefield — caller's snapshot list still holds the reference, but nothing left to update
 
         fleet.Location = nextLocation;
-        // Pascal only sets FReady on arrival and otherwise leaves the status alone (FLEET.PAS:844-850),
-        // so an Inactive fleet that moves again on fuel it was handed stays Inactive until it arrives
-        // or is refuelled.
-        if (fleet.Location == destination) {
-            fleet.Status = FleetStatus.Ready;
-        } else if (fleet.Status != FleetStatus.Inactive) {
-            fleet.Status = FleetStatus.InTransit;
-        }
+        // Pascal never sets FInTrans here, so a once-dry fleet moving again keeps showing Inactive until
+        // it arrives; the port deliberately doesn't (see development/PORT_DESIGN.md, "Fleet status").
+        fleet.Status = fleet.Location == destination ? FleetStatus.Ready : FleetStatus.InTransit;
 
         if (fleet.Location == destination) {
             fleet.Destination = null;

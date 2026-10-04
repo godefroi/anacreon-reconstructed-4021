@@ -32,7 +32,8 @@ public sealed record FleetTurnCase(
     int GateX = 0, int GateY = 0,
     bool FortressAtPos = false,
     int WorldX = 0, int WorldY = 0, int WorldOwner = 1, string World = "",
-    int InactiveDestX = 0, int InactiveDestY = 0) : INamedCase
+    int InactiveDestX = 0, int InactiveDestY = 0,
+    bool InTransitWherePascalSaysInactive = false) : INamedCase
 {
     /// <summary>The fleet starts Inactive and headed to (InactiveDestX,InactiveDestY), as after running dry en route.</summary>
     public bool StartsInactive => InactiveDestX != 0 || InactiveDestY != 0;
@@ -99,9 +100,10 @@ internal static class FleetTurnCases
             Orders: [$"DEST {Rel(10, 4)}"]),
 
         // A fleet that went Inactive en route and has since gained fuel (an Abort/Join, say) is still
-        // updated, and moves again.
+        // updated, and moves again. Pascal leaves it marked Inactive while it travels; the port shows
+        // InTransit (a deliberate divergence, development/PORT_DESIGN.md "Fleet status").
         new(Name: "InactiveFleetWithFuelMovesAgain", PosX: 2, PosY: 4, Fleet: "fgt=5", Turns: 2, Fuel: 100,
-            InactiveDestX: 10, InactiveDestY: 4, Orders: []),
+            InactiveDestX: 10, InactiveDestY: 4, InTransitWherePascalSaysInactive: true, Orders: []),
 
         // Same, but with cargo trillum instead: UseUpFuel refuels from it and the fleet moves.
         new(Name: "InactiveFleetWithCargoTrillumMovesAgain", PosX: 2, PosY: 4, Fleet: "trn=40 tri=5", Turns: 2, Fuel: 0,

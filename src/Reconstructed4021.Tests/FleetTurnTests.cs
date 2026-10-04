@@ -111,6 +111,13 @@ public class FleetTurnTests
 
         // Reports every differing field at once; one field's mismatch (fuel, say) usually drags others along.
         var actualFields = actual.Select(f => f.Split('=', 2)).ToDictionary(p => p[0], p => p[1]);
+
+        if (c.InTransitWherePascalSaysInactive) {
+            // Pin both sides of the deliberate divergence, then leave status out of the comparison.
+            await Assert.That(expected["status"]).IsEqualTo(((int)FleetStatus.Inactive).ToString(CultureInfo.InvariantCulture));
+            await Assert.That(fleet.Status).IsEqualTo(FleetStatus.InTransit);
+            actualFields["status"] = expected["status"];
+        }
         var diffs = expected.Keys.Where(k => k != "case").Union(actualFields.Keys)
             .Where(k => expected.GetValueOrDefault(k) != actualFields.GetValueOrDefault(k))
             .Select(k => $"{k}: Pascal {expected.GetValueOrDefault(k) ?? "(absent)"}, C# {actualFields.GetValueOrDefault(k) ?? "(absent)"}")

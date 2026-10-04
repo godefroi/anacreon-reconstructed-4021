@@ -274,6 +274,20 @@ both starbases with the stats in the file. This is a deliberate divergence, so
 `ScenarioLoaderGoldenTests` skips Awaken's starbase-derived fields rather than matching Pascal's
 corrupted values. Don't add a cap to match Pascal.
 
+## Fleet status: a moving fleet is InTransit, even after running dry
+
+In Pascal, `UpdateFleet`'s movement step only ever sets `FReady` (on arrival); it never sets
+`FInTrans` (`FLEET.PAS:844-850`). A fleet that ran dry is set `FInactive`. If it later gets fuel
+without going through `RefuelFleet` (another fleet aborting or joining into it adds fuel directly),
+it moves again on its next update but stays `FInactive` until it arrives, so the fleet list shows
+"Inactive" for a fleet that's travelling. Status only feeds that display and the `FReady` check
+before running orders, so this is a display oversight, not a mechanic. `AdvanceFleet` sets
+`InTransit` after any step that doesn't arrive.
+
+This is a deliberate divergence. `FleetTurnTests` checks it explicitly for
+`InactiveFleetWithFuelMovesAgain`: Pascal's golden status must still read Inactive, and the port's
+must read InTransit. Don't change `AdvanceFleet` to match Pascal.
+
 ## Ground-truth harness generation
 
 Two ways to get real-Pascal ground truth for a C# behavior, so a check can't silently agree with the
