@@ -49,10 +49,10 @@ type-modeling gap the narrower type would have silently dropped rather than surf
 ## Technology tracking
 
 `Empire.Technology` (`UnlockedTechnology`) has four buckets — `Ships`/`Defenses`/`Constructions`/
-`Resources` — not three. `Resources` (`HashSet<CargoType>`) was added once
-`NewTechLevel`'s outer guard turned out to be a real equality check against Pascal's `TechSet`, which
-spans resource types too; without it the guard could never detect "still missing a resource-type
-unlock." `TechCatalog.FullSetAt(TechLevel)` computes `TechDev[level]` on demand from the
+`Resources`. Pascal's `TechSet` spans resource types, and research grants them one at a time just
+like ships, so `Resources` matters in two places: `NewTechLevel`'s outer guard compares the whole set
+against `TechDev[Tech]`, and an owned world only produces cargo types that are both in `Resources`
+and allowed by its tech level (`UPDATE.PAS:1367-1368`). `TechCatalog.FullSetAt(TechLevel)` computes `TechDev[level]` on demand from the
 same per-category min-tech tables rather than storing all 11 raw Pascal sets — valid because `TechDev`
 is genuinely monotonic in `TechLevel` (verified by expanding all 11 rows to explicit enum-position
 membership, not assumed).

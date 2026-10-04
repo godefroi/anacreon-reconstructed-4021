@@ -79,7 +79,7 @@
      production ClassOrd,TypeOrd,Population,Efficiency,TechOrd,AmbAddict,
                 IndusBio,IndusChe,IndusMin,IndusSYG,IndusSYJ,IndusSYS,IndusSYT,IndusSup,IndusTri,
                 CargoMen,CargoNnj,CargoAmb,CargoChe,CargoMet,CargoSup,CargoTri,TrillumReserve,IsIndependent,RevIndex,
-                RngFixedValue
+                RngFixedValue,TechnologyBitmask (same 26-bit encoding as the empire domain)
                 -> "bio,che,min,syg,syj,sys,syt,sup,tri,fgt,hkr,jmp,jtn,pen,ssp,trn,cargomen,
                     cargonnj,cargoamb,cargoche,cargomet,cargosup,cargotri,trillumreserve,
                     population,efficiency,techlevel,revindex (all <key>=<value>);news=<NewsTypes
@@ -1113,28 +1113,22 @@ procedure RunRevolutionCase(const arg: String);
 procedure RunProductionCase(const arg: String);
    { Owned by Empire1 with its capital set to itself (same rationale as
      RunMilitaryCase/RunAmbrosiaCase/RunRevolutionCase). EmpireData.Technology
-     is set to every TechnologyTypes value unconditionally: UpdateWorld
-     intersects it with TechDev[Tech] (UPDATE.PAS:1367-1368) to get the
-     Technology set production is actually gated on, so a full input set
-     reduces that intersection to exactly TechDev[Tech] -- matching both the
-     old isolated production.pas harness (which hardcoded Technology:=
-     TechDev[Tech] directly, bypassing the per-empire set entirely) and
-     CargoTechAvailable's C# model (gates purely on TechLevel, no per-empire
-     cargo-research tracking). A partially-populated Technology set would model an empire
-     that hasn't finished individually researching every item unlocked by its
-     own tech level -- a real Pascal mechanic (UPDATE.PAS's NewTechLevel/
-     GetNewTech), but one no reachable game state exercises for the resource
-     types (che/met/sup/tri) production depends on: CreateEmpire always seeds
-     a new empire with the full TechDev[Pred(Tech)] set (NEWGAME.PAS:1203,
-     1240), so this harness's Technology set should always be "full" too.
+     comes from TechnologyBitmask (parts[26]); UpdateWorld intersects it with
+     TechDev[Tech] (UPDATE.PAS:1367-1368) to get the set production is gated
+     on. A full mask reduces that to exactly TechDev[Tech]. A partial one
+     models an empire that hasn't yet rolled every item its tech level allows:
+     NewTechLevel's GetNewTech grants one item at a time, cargo types
+     included, and a level-up grants none (UPDATE.PAS:373-380, 408).
      Runs the real UpdateWorld, not just the production sub-pipeline, so
      unlike the old isolated FullPipeline this also computes genuine post-tick
      Population/Efficiency/TechLevel/RevolutionIndex and Cargo.Supplies/
      Ambrosia/Legions values -- unlike production.pas, nothing here needs
      excluding from the golden comparison. }
    var
-      parts: array[0..25] of LongInt;
+      parts: array[0..26] of LongInt;
       ID, CapID: IDNumber;
+      i: Integer;
+      techSet: TechnologySet;
    begin
    ParseFields(arg,parts);
 
@@ -1187,7 +1181,11 @@ procedure RunProductionCase(const arg: String);
    Universe^.EmpireData[Empire1].IsAPlayer:=False;
    CapID.ObjTyp:=Pln;  CapID.Index:=1;
    Universe^.EmpireData[Empire1].Capital:=CapID;
-   Universe^.EmpireData[Empire1].Technology:=[Low(TechnologyTypes)..High(TechnologyTypes)];
+   techSet:=[];
+   for i:=0 to 25 do
+      if ((parts[26] shr i) and 1)=1 then
+         techSet:=techSet+[TechnologyTypes(i+1)];
+   Universe^.EmpireData[Empire1].Technology:=techSet;
 
    ForcedRandomValue:=parts[25];
 

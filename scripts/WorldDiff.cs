@@ -73,6 +73,7 @@ if (pascal.Count != years) {
 var owner = new Empire { Name = "WorldDiff", TechnologyLevel = source.TechLevel };
 owner.Technology.Ships.UnionWith(Enum.GetValues<ShipType>());
 owner.Technology.Defenses.UnionWith(Enum.GetValues<DefenseType>());
+owner.Technology.Resources.UnionWith(Enum.GetValues<CargoType>());
 var planet = new Planet {
     Location = new Coordinate(0, 0), Owner = owner, Class = source.Class, Type = source.Type, TechLevel = source.TechLevel,
     Efficiency = source.Efficiency, Population = source.Population, TrillumReserve = source.TrillumReserve,
