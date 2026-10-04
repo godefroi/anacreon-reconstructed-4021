@@ -9,17 +9,16 @@ namespace Reconstructed4021.Tests.PascalGroundTruth;
 /// production.golden, computed by a real FreePascal run of the real, patched UpdateWorld (via
 /// reference/verify/runworld.pas's production domain).
 ///
-/// runworld.pas sets the planet's owning empire's full Pascal TechnologySet unconditionally
-/// (UPDATE.PAS:1367-1368 intersects it with TechDev[Tech] to decide what a world can produce) and
-/// its ISSP dial (ImpExp) to DefaultISSP ($5555, DATACNST.PAS:516 — every real planet's value at
+/// TechnologyBitmask is the owning empire's researched TechnologySet (bit i = TechnologyTypes(i+1),
+/// as in the empire domain); UPDATE.PAS:1367-1368 intersects it with TechDev[Tech] to decide what an
+/// owned world can produce. It defaults to everything researched. runworld.pas also sets the planet's
+/// ISSP dial (ImpExp) to DefaultISSP ($5555, DATACNST.PAS:516 — every real planet's value at
 /// settlement, PRIMINTR.PAS:631, which GetIndustrialDistribution's sqrt-based formulas are sensitive
 /// to), matching what any reachable game state actually has.
 ///
 /// Every case here has at most one developed industry within BioInd..SYTInd at a time; no case
 /// exercises two simultaneously-developed industries under scarce raw materials at once, which would
 /// exercise Production's own single loop more thoroughly.
-///
-/// runworld.pas grants the full Technology set, so the C# test unlocks every ship and defense.
 /// </summary>
 public sealed record ProductionCase(
     string Name, WorldClass Class, WorldType Type, int Population, int Efficiency, TechLevel Tech,
@@ -27,10 +26,17 @@ public sealed record ProductionCase(
     int IndusBio, int IndusChe, int IndusMin, int IndusSYG, int IndusSYJ, int IndusSYS, int IndusSYT,
     int IndusSup, int IndusTri,
     int CargoMen, int CargoNnj, int CargoAmb, int CargoChe, int CargoMet, int CargoSup, int CargoTri,
-    int TrillumReserve, bool Independent = false, int RevIndex = 0, int RngFixedValue = 0) : INamedCase;
+    int TrillumReserve, bool Independent = false, int RevIndex = 0, int RngFixedValue = 0,
+    int TechnologyBitmask = ProductionCases.EverythingResearched) : INamedCase;
 
 internal static class ProductionCases
 {
+    public const int EverythingResearched = (1 << 26) - 1;
+
+    // CargoType's bits in the 26-bit mask: defenses take 0-3, ships 4-10, then men..tri.
+    private const int ChemicalsBit = 1 << 14;
+    private const int TrillumBit = 1 << 17;
+
     public static readonly IReadOnlyList<ProductionCase> All = [
         // ProduceRawMaterial runs before UpdateIndustry in the pipeline, so this result depends only
         // on the Industry level set here, not on anything GetIndustrialDistribution/UpdateIndustry
@@ -173,6 +179,23 @@ internal static class ProductionCases
             IndusSup: 0, IndusTri: 100,
             CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 1000, CargoTri: 0,
             TrillumReserve: 15),
+
+        // An owned world only produces cargo its empire has researched, not everything its tech level
+        // allows (UPDATE.PAS:1367-1368, 819). Research grants one item at a time, so an empire can
+        // reach Atomic without trillum: no production, no reserve drain, no reserve news. The same
+        // empire missing chemicals at Gate makes none from a fully developed chemical industry.
+        new(Name: "UnresearchedTrillumNotProduced", Class: WorldClass.EarthLike, Type: WorldType.TrillumMine,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Atomic, AmbAddict: false,
+            IndusBio: 0, IndusChe: 0, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 0, IndusTri: 100,
+            CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 1000, CargoTri: 0,
+            TrillumReserve: 5, TechnologyBitmask: EverythingResearched & ~TrillumBit),
+        new(Name: "UnresearchedChemicalsNotProduced", Class: WorldClass.EarthLike, Type: WorldType.Chemical,
+            Population: 1000, Efficiency: 100, Tech: TechLevel.Gate, AmbAddict: false,
+            IndusBio: 0, IndusChe: 100, IndusMin: 0, IndusSYG: 0, IndusSYJ: 0, IndusSYS: 0, IndusSYT: 0,
+            IndusSup: 0, IndusTri: 0,
+            CargoMen: 0, CargoNnj: 0, CargoAmb: 0, CargoChe: 0, CargoMet: 0, CargoSup: 1000, CargoTri: 0,
+            TrillumReserve: 1000, TechnologyBitmask: EverythingResearched & ~ChemicalsBit),
     ];
 
     /// <summary>MethodDataSource shape for AnnualTickHandlerProductionTests.MatchesGoldenFile — one

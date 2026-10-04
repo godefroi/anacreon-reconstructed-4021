@@ -391,18 +391,23 @@ public sealed partial class AnnualTickHandler
     /// <summary>
     /// The Technology set gating which resources a world can currently produce (UPDATE.PAS:1359-1369).
     /// Independent worlds are capped one tech level behind their nominal <see cref="TechLevel"/>; owned worlds use
-    /// their own <see cref="TechLevel"/> directly, further gated per-ship by <see cref="ShipTechAvailable"/> against
-    /// the empire's individually-researched ships (raw materials/cargo aren't individually researched
-    /// — see <see cref="UnlockedTechnology"/>'s own doc comment — so no further empire-level gate
-    /// applies to them beyond <see cref="TechLevel"/>).
+    /// their own <see cref="TechLevel"/> directly, intersected with the empire's individually-researched items by
+    /// <see cref="ShipTechAvailable"/> and <see cref="CargoTechAvailable"/>.
     /// </summary>
     private static TechLevel EffectiveTechnologyLevel(IEconomicWorld world) =>
         world.Owner.IsIndependent && world.TechLevel > TechLevel.PreTech
             ? world.TechLevel - 1
             : world.TechLevel;
 
-    private static bool CargoTechAvailable(CargoType cargo, TechLevel effectiveTech) =>
-        effectiveTech >= TechCatalog.MinTechForCargo[cargo];
+    private static bool CargoTechAvailable(IEconomicWorld world, CargoType cargo, TechLevel effectiveTech)
+    {
+        if (effectiveTech < TechCatalog.MinTechForCargo[cargo])
+            return false;
+
+        // Research grants cargo types one at a time like ships, so an owned world's tech level can
+        // allow a type its empire hasn't rolled yet (UPDATE.PAS:373-380, 1367-1368).
+        return world.Owner.IsIndependent || world.Owner.Technology.Resources.Contains(cargo);
+    }
 
     private static bool ShipTechAvailable(IEconomicWorld world, ShipType ship, TechLevel effectiveTech)
     {
@@ -438,7 +443,7 @@ public sealed partial class AnnualTickHandler
             foreach (var cargo in _rawMaterialCargoTypes) {
                 if (!_thgAdjRawMaterial.TryGetValue((industry, cargo), out var adjustment) || adjustment == 0)
                     continue;
-                if (!CargoTechAvailable(cargo, effectiveTech))
+                if (!CargoTechAvailable(world, cargo, effectiveTech))
                     continue;
 
                 var production = Math.Max(1, ClampResource(prodAdj * adjustment));
@@ -650,7 +655,7 @@ public sealed partial class AnnualTickHandler
     {
         if (!_thgAdjCargoProduction.TryGetValue((industry, cargo), out var adjustment) || adjustment == 0)
             return;
-        if (!CargoTechAvailable(cargo, effectiveTech))
+        if (!CargoTechAvailable(world, cargo, effectiveTech))
             return;
 
         var production = ClampResource(prodAdj * adjustment);

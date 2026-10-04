@@ -592,10 +592,12 @@ public class AnnualTickHandlerProductionTests
         var expected = golden[c.Name];
 
         // A local independent rather than the shared Empire.Independent, so granting technology here
-        // can't leak into other tests. The harness grants the full Technology set.
+        // can't leak into other tests. The harness never runs empire research; with the empire at the
+        // world's tech level, the full set makes research a no-op and a partial one can only roll the
+        // missing item, after production.
         var owner = c.Independent ? new Empire { Name = "Independent", IsIndependent = true } : new Empire { Name = "Test" };
-        owner.Technology.Ships.UnionWith(Enum.GetValues<ShipType>());
-        owner.Technology.Defenses.UnionWith(Enum.GetValues<DefenseType>());
+        owner.TechnologyLevel = c.Tech;
+        AnnualTickHandlerEmpireTests.ApplyTechnologyBitmask(owner.Technology, c.TechnologyBitmask);
         var planet = MakePlanet(c, owner);
         var game = BuildGame(planet);
         if (!c.Independent)
@@ -677,8 +679,7 @@ public class AnnualTickHandlerMaturationTests
         // Matches the harness's full Technology set, and a capital that is the world itself so
         // UpdateTechLevel has nothing to chase.
         var owner = new Empire { Name = "Test", TechnologyLevel = c.Tech };
-        owner.Technology.Ships.UnionWith(Enum.GetValues<ShipType>());
-        owner.Technology.Defenses.UnionWith(Enum.GetValues<DefenseType>());
+        AnnualTickHandlerEmpireTests.ApplyTechnologyBitmask(owner.Technology, PascalGroundTruth.ProductionCases.EverythingResearched);
         var planet = new Planet {
             Location = new Coordinate(0, 0),
             Owner = owner,
