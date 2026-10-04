@@ -261,6 +261,19 @@ internal sealed class GalaxyMapScreen : IScreen
 
     public void HandleKey(ConsoleKeyInfo key)
     {
+        DispatchKey(key);
+
+        // Keys can open an overlay while a dropdown is still open (F-keys are checked before the menu
+        // bar, and a letter the open menu doesn't claim falls through to the map shortcuts), so any
+        // overlay left up after a key closes the menus (#131).
+        if (_overlays.Count > 0 || _savePrompt is not null || _infoMessage is not null)
+        {
+            _menuBar.Close();
+        }
+    }
+
+    private void DispatchKey(ConsoleKeyInfo key)
+    {
         if (_infoMessage is not null)
         {
             _infoTitle = null;

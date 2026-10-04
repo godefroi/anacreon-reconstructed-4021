@@ -55,6 +55,8 @@ internal sealed class CloseUpOverlay : IOverlay
     private readonly TabKind[] _tabKinds;
     private readonly TabFrame _frame;
     private readonly TextEditor? _ordersEditor;
+    private readonly string? _initialOrdersText;
+    private readonly int? _initialMarkedLine;
 
     public bool IsDismissed { get; private set; }
 
@@ -76,6 +78,8 @@ internal sealed class CloseUpOverlay : IOverlay
             {
                 MarkedLine = ownFleet.NextOrder > 0 ? ownFleet.NextOrder : lines.Count > 0 ? 1 : 0,
             };
+            _initialOrdersText = _ordersEditor.Text;
+            _initialMarkedLine = _ordersEditor.MarkedLine;
         }
         else
         {
@@ -184,6 +188,13 @@ internal sealed class CloseUpOverlay : IOverlay
     // discards every edit and closes, No/Esc returns to the editor).
     private void TryCommitOrders()
     {
+        // Untouched orders close without recompiling or the "Orders ... completed" popup (#126).
+        if (_ordersEditor!.Text == _initialOrdersText && _ordersEditor.MarkedLine == _initialMarkedLine)
+        {
+            IsDismissed = true;
+            return;
+        }
+
         var fleet = (Fleet)_obj;
         var result = FleetOrderCompiler.Compile(_game, fleet.Owner, _ordersEditor!.Lines, _ordersEditor.MarkedLine);
 
