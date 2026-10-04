@@ -68,8 +68,9 @@ public class FleetLifecycleTests
             new ShipCounts { Fighters = 1 }, new CargoHold(),
             game);
 
-        await Assert.That(fleet.Fuel).IsEqualTo(1.0 + expectedFuelChange).Within(0.000001);
-        await Assert.That(ground.Fuel).IsEqualTo(5.0 - expectedFuelChange).Within(0.000001);
+        // Fleet.Fuel truncates on write, as Pascal's SetFleetFuel does.
+        await Assert.That(fleet.Fuel).IsEqualTo(Math.Truncate(1.0 + expectedFuelChange));
+        await Assert.That(ground.Fuel).IsEqualTo(Math.Truncate(5.0 - expectedFuelChange));
         await Assert.That(fleet.Ships.Fighters).IsEqualTo(10);
         await Assert.That(ground.Ships.Fighters).IsEqualTo(1);
     }
@@ -100,7 +101,7 @@ public class FleetLifecycleTests
             new ShipCounts(), newGroundCargo,
             game);
 
-        await Assert.That(fleet.Fuel).IsEqualTo(newCapacity).Within(0.000001);
+        await Assert.That(fleet.Fuel).IsEqualTo(Math.Truncate(newCapacity));
         await Assert.That(world.Cargo.Trillum).IsEqualTo(4); // 5 - 1 ton needed
     }
 

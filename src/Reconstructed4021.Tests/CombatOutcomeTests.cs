@@ -326,6 +326,6 @@ public class CombatOutcomeTests
         await Assert.That(fleet.Ships.Transports).IsEqualTo(48);
         await Assert.That(fleet.Cargo.Legions).IsEqualTo(240); // BalanceFleet trims back to the new capacity.
         await Assert.That(FleetLogistics.FleetCargoSpace(fleet.Ships, fleet.Cargo)).IsEqualTo(0);
-        await Assert.That(fleet.Fuel).IsEqualTo(FleetLogistics.FuelCapacity(fleet.Ships)); // Reclamped, not left at the 50-transport figure.
+        await Assert.That(fleet.Fuel).IsEqualTo(Math.Truncate(FleetLogistics.FuelCapacity(fleet.Ships))); // Reclamped, not left at the 50-transport figure.
     }
 }

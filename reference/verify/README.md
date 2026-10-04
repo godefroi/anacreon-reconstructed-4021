@@ -224,7 +224,7 @@ is for `Rnd`/`GroundTruthNextU32`.
 
 1. Run `build.ps1` to get a fresh `patched/` tree, then hand-edit the target file directly under
    `patched/`.
-2. Compile it directly (`fpc -Mtp -CfSSE2 runworld.pas` from inside `patched/`) and confirm it
+2. Compile it directly (`fpc -Mtp -CfSSE2 -Pi386 runworld.pas` from inside `patched/`) and confirm it
    compiles and whatever domain you're touching still runs correctly.
 3. Run `./regenerate-patch.ps1 -File FILE.PAS` to regenerate `patches/FILE.PAS.patch` from the
    hand-edited copy. Pass `-OutDir` to try a regeneration without touching the committed patch.
@@ -357,6 +357,16 @@ Cross-cutting lessons, not specific to one domain — read before touching *any*
   the same way the buggy ordering did) breaks index-into-a-statically-sized-array logic the moment
   a shared forced offset exceeds a small collection's `Count` — confirmed empirically (several
   pre-existing tests broke instantly) before reverting in favor of the `INT.PAS` reorder.
+- **`-Pi386`: the harness always builds a 32-bit target.** The game's records assume 4-byte
+  pointers, which is what Turbo Pascal's real-mode far pointers were. `FleetRecord.OrderData` is 6
+  bytes, and `ORDERS.PAS`'s `SetFleetCode`/`GetFleetCode` copy a whole `OrderStructure` (a `Word`
+  and a pointer) through it. A 64-bit build compiles fine but silently overwrites the fields after
+  `OrderData` whenever a fleet holds orders. The `.SAV` record sizes and the `{$PACKRECORDS 1}`
+  checks below were also measured on i386. So `build.ps1`, `build-all-units.ps1` and
+  `PatchHarness.cs` pass `-Pi386`, and `DATASTRC.PAS.patch` adds a `{$IF SizeOf(Pointer)<>4}`
+  `{$FATAL}` guard for any compile that doesn't. i386 is fpc's default target on Windows. A machine
+  with only an x86_64 fpc (common on Linux) fails at that guard and needs fpc's i386 compiler
+  (`ppc386`) installed.
 - **`-CfSSE2` (the compile flag `build.ps1`/`build-all-units.ps1`/`PatchHarness.cs` all use).**
   `fpc`'s default i386 codegen keeps chained `Real` expressions in the x87 FPU's 80-bit
   extended-precision stack until explicitly stored, while C#'s `double` is always strict 64-bit
@@ -501,6 +511,17 @@ own header comment, not repeated here.
   domain (and `FleetMoveTests`) can call them in isolation. `GetNewBasePos`/`XY2Dir` (`SBASE.PAS`,
   starbase obstacle-avoidance) have no domain here yet — `SBase` is never patched into this
   harness; `FleetMovementHandlerTests.cs` covers that hardcoded instead.
+- **`fleetturn`** — the real per-turn fleet update: one Empire1 fleet run for N rounds of
+  `UpdateAllFleets(Empire2,Empire1)` then `UpdateAllFleets(Empire1,Empire2)` (`FLEET.PAS`), which
+  reaches `UpdateFleet`, `UseUpFuel`'s recursive refuel from cargo, `MineFieldDamage`,
+  `InRangeOfDisrupter`, the fortress hop, gates, and `ExecuteFleetOrders`/`ExecuteTransCOM` on
+  arrival. Orders go in as text and are compiled by the real `CompileOrders` (`ORDERS.PAS`), so the
+  parser is covered too; DEST coordinates are relative to Empire1's capital, which the domain always
+  places at (10,10) (`Name2Coord` reads `Environ.Player`'s capital). The C# side
+  (`FleetTurnTests`) runs `FleetMovementHandler` in legacy order-resolution mode, the one mode that
+  executes orders on arrival as Pascal does; the default two-phase `ResolveOrders` is a port
+  addition this domain doesn't cover. This is also the first domain to store compiled orders in a
+  Pascal `FleetRecord`, which is what makes the 32-bit target matter (see Landmines).
 - **`npepirate`** — NPE01.PAS's real `ImplementPirateNPE`, one turn, against a hand-built
   `Universe^`/`PirateDataRecord` (no `InitializePirateNPE` call — see `RunNpePirateCase`'s own
   comment for why). `Mode` selects one of six fixed scenarios: a patrol fleet's deployment and

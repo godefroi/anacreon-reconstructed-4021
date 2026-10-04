@@ -36,7 +36,7 @@ try {
         foreach ($p in $patches) {
             git apply -p1 --verbose $p.FullName
         }
-        fpc -Mtp -CfSSE2 runworld.pas
+        fpc -Mtp -CfSSE2 -Pi386 runworld.pas
         if ($LASTEXITCODE -ne 0) {
             throw "fpc exited $LASTEXITCODE"
         }
