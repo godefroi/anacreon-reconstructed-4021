@@ -55,6 +55,8 @@ internal sealed class CloseUpOverlay : IOverlay
     private readonly TabKind[] _tabKinds;
     private readonly TabFrame _frame;
     private readonly TextEditor? _ordersEditor;
+    private string? _cycleArgument; // the argument Tab started cycling from; null when not mid-cycle.
+    private int _cycleIndex;
     private readonly string? _initialOrdersText;
     private readonly int? _initialMarkedLine;
 
@@ -179,7 +181,49 @@ internal sealed class CloseUpOverlay : IOverlay
             return;
         }
 
+        if (key.Key == ConsoleKey.Tab)
+        {
+            CompleteDestination(backwards: key.Modifiers.HasFlag(ConsoleModifiers.Shift));
+            return;
+        }
+
+        _cycleArgument = null;
         _ordersEditor!.HandleKey(key);
+    }
+
+    // Tab on a DESTination line types the nearest listed place (the one the help panel marks); repeated
+    // Tab / Shift+Tab walks the same list, which stays fixed to what was typed before the first Tab.
+    private void CompleteDestination(bool backwards)
+    {
+        var line = _ordersEditor!.Lines[_ordersEditor.CursorRow];
+        if (FleetOrderHelp.For(line)?.Token != "DEST")
+        {
+            return;
+        }
+
+        var candidates = DestinationCandidates(_cycleArgument ?? FleetOrderCompletion.Argument(line));
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        if (_cycleArgument is null)
+        {
+            _cycleArgument = FleetOrderCompletion.Argument(line);
+            _cycleIndex = backwards ? candidates.Count - 1 : 0;
+        }
+        else
+        {
+            _cycleIndex = (_cycleIndex + (backwards ? -1 : 1) + candidates.Count) % candidates.Count;
+        }
+
+        _ordersEditor.ReplaceCurrentLine(FleetOrderCompletion.Apply(line, candidates[_cycleIndex]));
+    }
+
+    private IReadOnlyList<FleetOrderCompletion.Candidate> DestinationCandidates(string argument)
+    {
+        var from = FleetOrderCompletion.ReferencePoint(_game, _viewer, _obj.Location, _ordersEditor!.Lines, _ordersEditor.CursorRow);
+        return FleetOrderCompletion.Candidates(_game, _viewer, from, argument);
     }
 
     // FleetOrdersTabView.TryCommit: Esc attempts to commit (FleetOrdersCommand's own
@@ -256,12 +300,137 @@ internal sealed class CloseUpOverlay : IOverlay
         var name = DisplayName(fleet, _viewer);
         fb.DrawText(cx, cy, $"Orders: {name}", ContentFg, ContentBg);
 
-        const int hintLines = 2;
-        var editorHeight = Math.Max(1, ch - 1 - hintLines);
-        _ordersEditor!.Draw(fb, cx, cy + 1, cw, editorHeight, ContentFg, ContentBg, GutterFg, CursorFg, CursorBg);
+        // Editor on the left, help for the cursor's line on the right (FleetOrderHelp). Commands are
+        // short, so the editor loses little by giving up the right half.
+        const int helpWidth = 36;
+        var editorWidth = cw - helpWidth - 2;
+        var editorHeight = Math.Max(1, ch - 3);
+        _ordersEditor!.Draw(fb, cx, cy + 1, editorWidth, editorHeight, ContentFg, ContentBg, GutterFg, CursorFg, CursorBg);
 
-        fb.DrawText(cx, cy + ch - 2, "DESTination <name/x,y>  TRANsfer <amt> <code>  REPEat  WAIT  REFUel  JOIN [OVER]", ContentFg, ContentBg, maxWidth: cw);
+        var helpX = cx + cw - helpWidth;
+        for (var row = 0; row < editorHeight; row++)
+        {
+            fb.DrawText(helpX - 2, cy + 1 + row, "│", ContentFg, ContentBg);
+        }
+
+        var helpRow = 0;
+        void HelpLine(string text)
+        {
+            if (helpRow < editorHeight)
+            {
+                fb.DrawText(helpX, cy + 1 + helpRow++, text, ContentFg, ContentBg, maxWidth: helpWidth);
+            }
+        }
+
+        var cursorLine = _ordersEditor.Lines[_ordersEditor.CursorRow];
+        if (FleetOrderHelp.For(cursorLine) is { Token: "DEST" } destCommand)
+        {
+            DrawDestinationHelp(destCommand, cursorLine, helpX, cy + 1, helpWidth, editorHeight, fb);
+        }
+        else if (FleetOrderHelp.For(cursorLine) is { } command)
+        {
+            HelpLine(command.Syntax);
+            HelpLine("");
+            foreach (var line in WrapWords(command.Detail, helpWidth))
+            {
+                HelpLine(line);
+            }
+        }
+        else
+        {
+            foreach (var c in FleetOrderHelp.Commands)
+            {
+                HelpLine(c.Syntax);
+                HelpLine("  " + c.Summary);
+            }
+        }
+
         fb.DrawText(cx, cy + ch - 1, "Ctrl+N: mark as next order   Esc: compile and close", ContentFg, ContentBg, maxWidth: cw);
+    }
+
+    // Syntax and the command's full help, a status line when what's typed isn't a known place, then the
+    // known places nearest the reference point (FleetOrderCompletion) in each owner's map colour. The row
+    // Tab would type is marked; typing a full destination narrows the list to it, so the list doubles as
+    // the decode of what the line points at.
+    private void DrawDestinationHelp(FleetOrderHelp.Command command, string line, int x, int y, int width, int height, FrameBuffer fb)
+    {
+        var row = 0;
+        void Put(string text, ConsoleColor fg)
+        {
+            if (row < height)
+            {
+                fb.DrawText(x, y + row++, text, fg, ContentBg, maxWidth: width);
+            }
+        }
+
+        Put(command.Syntax, ContentFg);
+        Put("", ContentFg);
+        foreach (var detailLine in WrapWords(command.Detail, width))
+        {
+            Put(detailLine, ContentFg);
+        }
+
+        Put("", ContentFg);
+
+        var argument = _cycleArgument ?? FleetOrderCompletion.Argument(line);
+        var candidates = DestinationCandidates(argument);
+        switch (FleetOrderCompletion.Decode(_game, _viewer, line))
+        {
+            case { Resolved: false }:
+                Put("No such location", ConsoleColor.Red);
+                break;
+            case { Target: null, Coordinates: { } coordinates }:
+                Put($"{coordinates} is empty space", ContentFg);
+                break;
+        }
+
+        if (candidates.Count == 0)
+        {
+            Put("No known places match", ContentFg);
+            return;
+        }
+
+        Put("Tab / Shift+Tab: pick from list", ContentFg);
+        Put(PlaceRow("", "Place", "Dist", "Empire"), ContentFg);
+
+        var selected = _cycleArgument is null ? 0 : _cycleIndex;
+        var rows = Math.Max(1, height - row);
+        var first = selected >= rows ? selected - rows + 1 : 0;
+        for (var i = first; i < candidates.Count && i < first + rows; i++)
+        {
+            var place = candidates[i];
+            Put(PlaceRow($"{(i == selected ? '►' : ' ')}{GalaxyMapScreen.GlyphOf(place.Object)}", place.InsertText, place.Distance.ToString(), place.Object.Owner.Name), ContentFg);
+        }
+    }
+
+    // Place is exactly what Tab types: the viewer's own name for it if there is one, else x,y. Distance is
+    // in sectors from the list's reference point, the same metric fleets travel by. Long text is cut with
+    // an ellipsis so the columns stay put.
+    private static string PlaceRow(string markAndGlyph, string place, string distance, string empire) =>
+        $"{markAndGlyph,-2} {Fit(place, 12),-12} {Fit(distance, 4),4} {Fit(empire, 12)}";
+
+    private static string Fit(string text, int width) => text.Length <= width ? text : text[..(width - 1)] + "…";
+
+    private static IEnumerable<string> WrapWords(string text, int width)
+    {
+        var line = "";
+        foreach (var word in text.Split(' '))
+        {
+            if (line.Length > 0 && line.Length + 1 + word.Length > width)
+            {
+                yield return line;
+                line = word;
+            }
+            else
+            {
+                line = line.Length == 0 ? word : line + " " + word;
+            }
+        }
+
+        if (line.Length > 0)
+        {
+            yield return line;
+        }
     }
 
     private void DrawContent(FrameBuffer fb, int cx, int cy, int cw, int ch)

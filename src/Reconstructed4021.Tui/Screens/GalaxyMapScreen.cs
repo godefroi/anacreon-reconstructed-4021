@@ -2015,19 +2015,20 @@ internal sealed class GalaxyMapScreen : IScreen
         fb.Set(col, row, new Cell(new Rune(glyph), color, Bg));
     }
 
+    internal static char GlyphOf(ISectorObject sectorObject) => sectorObject switch
+    {
+        Planet p => WorldTypeGlyphs[(int)p.Type],
+        Starbase s => StarbaseGlyphs[(int)s.Kind],
+        Stargate g => StargateGlyphs[(int)g.Kind],
+        ConstructionSite => '#',
+        _ => '?',
+    };
+
     private (char Glyph, ConsoleColor Color) WorldGlyphAt(Coordinate coordinate, NebulaType nebula)
     {
         if (_objectsByLocation.TryGetValue(coordinate, out var sectorObject) && Game.Visible(_player, sectorObject))
         {
-            var glyph = sectorObject switch
-            {
-                Planet p => WorldTypeGlyphs[(int)p.Type],
-                Starbase s => StarbaseGlyphs[(int)s.Kind],
-                Stargate g => StargateGlyphs[(int)g.Kind],
-                ConstructionSite => '#',
-                _ => '?',
-            };
-            return (glyph, OwnerColor(sectorObject.Owner));
+            return (GlyphOf(sectorObject), OwnerColor(sectorObject.Owner));
         }
 
         if (_game.Galaxy.GetMineOwner(coordinate) is { } mineOwner)

@@ -179,7 +179,7 @@ public static class FleetOrderCompiler
     /// <see cref="Galaxy.Galaxy"/> has no torus/wraparound anywhere, so a plain bounds check on the
     /// resulting absolute coordinate is the rest of the job.
     /// </summary>
-    private static bool ResolveDestination(Game game, Empire owner, string text, out ISectorObject? destinationObject, out Coordinate? destinationPosition)
+    public static bool ResolveDestination(Game game, Empire owner, string text, out ISectorObject? destinationObject, out Coordinate? destinationPosition)
     {
         foreach (ISectorObject candidate in NamedObjects(game.Galaxy)) {
             if (candidate.Names.TryGetValue(owner, out var name) && string.Equals(name, text, StringComparison.OrdinalIgnoreCase)) {
@@ -207,7 +207,7 @@ public static class FleetOrderCompiler
     }
 
     /// <summary>GetCoord(Universe^.EmpireData[Player].Capital,CapXY) (PRIMINTR.PAS:1125/1136) -- the origin every relative coordinate in the Orders language is measured from. Same capital-or-galaxy-center fallback every other screen already uses for a capital-less empire.</summary>
-    private static Coordinate Origin(Game game, Empire empire) => empire.Capital?.Location ?? new Coordinate(game.Galaxy.Size / 2, game.Galaxy.Size / 2);
+    public static Coordinate Origin(Game game, Empire empire) => empire.Capital?.Location ?? new Coordinate(game.Galaxy.Size / 2, game.Galaxy.Size / 2);
 
     private static IEnumerable<ISectorObject> NamedObjects(Galaxy.Galaxy galaxy)
     {
