@@ -58,8 +58,12 @@ public sealed partial class AnnualTickHandler
     /// planet-only ReportPlanetLack call).
     /// <paramref name="effectiveTech"/> is the world's effective tech level from the start of the
     /// tick, before UpdateTechLevel and UseUpAmbrosia can change it.
+    /// <paramref name="tickStartOwner"/> is the owner whose research that Technology set was built
+    /// from (UPDATE.PAS:1396-1401). A starbase that rebels in UpdateRevolution changes
+    /// <see cref="IEconomicWorld.Owner"/> before UpdateDefenses runs, but Pascal still gates on the
+    /// original owner's set.
     /// </summary>
-    private void UpdateDefenses(IEconomicWorld world, HashSet<CargoType> reportedShortfalls, TechLevel effectiveTech)
+    private void UpdateDefenses(IEconomicWorld world, HashSet<CargoType> reportedShortfalls, TechLevel effectiveTech, Empire tickStartOwner)
     {
         var troopStrength = world.Cargo.Legions + 2 * world.Cargo.NinjaLegions;
         var buildRate = (troopStrength / 2000.0) * (1 + (world.Efficiency - 50) / 100.0);
@@ -77,7 +81,7 @@ public sealed partial class AnnualTickHandler
         }
 
         foreach (var defenseType in Enum.GetValues<DefenseType>()) {
-            if (!DefenseTechAvailable(world, defenseType, effectiveTech))
+            if (!DefenseTechAvailable(tickStartOwner, defenseType, effectiveTech))
                 continue;
 
             var optimumDef = ClampResource(optimum * _defenseAdjustment[defenseType]);
@@ -122,11 +126,11 @@ public sealed partial class AnnualTickHandler
     /// no empire research to check, only the tech-level gate (at one level below its own, per
     /// EffectiveTechnologyLevel).
     /// </summary>
-    private static bool DefenseTechAvailable(IEconomicWorld world, DefenseType defenseType, TechLevel effectiveTech)
+    private static bool DefenseTechAvailable(Empire tickStartOwner, DefenseType defenseType, TechLevel effectiveTech)
     {
         if (effectiveTech < TechCatalog.MinTechForDefense[defenseType])
             return false;
 
-        return world.Owner.IsIndependent || world.Owner.Technology.Defenses.Contains(defenseType);
+        return tickStartOwner.IsIndependent || tickStartOwner.Technology.Defenses.Contains(defenseType);
     }
 }

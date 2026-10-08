@@ -1580,6 +1580,39 @@ public class AnnualTickHandlerStarbaseTests
         await Assert.That(starbase.Kind).IsEqualTo(StarbaseKind.IndustrialComplex);
         await Assert.That(starbase.Cargo.Legions).IsEqualTo(2517);
     }
+
+    [Test]
+    public async Task StarbaseThatRebelsStillGatesDefensesOnItsTickStartOwnersResearch()
+    {
+        // Same deterministic rebellion as above. UPDATE.PAS:1396-1401 builds Technology from the
+        // starbase's owner at the top of the tick, and UpdateDefenses (:1429) still receives it after
+        // UpdateRevolution flips Emp to Indep. The owner has researched no defenses, so no GDM gets
+        // built, even though an independent world at Atomic would pass its own tech-level-only gate.
+        var owner = new Empire { Name = "Test" };
+        var starbase = new Starbase {
+            Location = new Coordinate(5, 5),
+            Owner = owner,
+            Kind = StarbaseKind.IndustrialComplex,
+            Type = WorldType.Outpost,
+            TechLevel = TechLevel.Atomic,
+            Efficiency = 100,
+            Population = 1500,
+            RevolutionIndex = 90,
+        };
+        starbase.Cargo.Supplies = 9999;
+        starbase.Cargo.Chemicals = 9999;
+        starbase.Cargo.Metals = 9999;
+        starbase.Cargo.Trillum = 9999;
+        var game = BuildGame(starbase);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(starbase.Owner).IsEqualTo(Empire.Independent);
+        await Assert.That(starbase.Cargo.Legions).IsGreaterThan(0); // rebels exist, so GDMs would be wanted
+        await Assert.That(starbase.Defenses.Gdms).IsEqualTo(0);
+    }
 }
 
 /// <summary>
