@@ -149,6 +149,74 @@ public class FleetLifecycleTests
         await Assert.That(world.Ships.Fighters).IsEqualTo(3); // AbortFleet dumped the fleet's ships onto the world
     }
 
+    private static (Fleet Fleet, Planet World, Empire Dropper, Empire Owner) ForeignWorld()
+    {
+        var dropper = NewEmpire("Dropper");
+        var owner = NewEmpire("Owner");
+        var fleet = new Fleet { Location = new Coordinate(0, 0), Owner = dropper };
+        var world = new Planet { Location = new Coordinate(0, 0), Owner = owner, Type = WorldType.Base };
+        return (fleet, world, dropper, owner);
+    }
+
+    [Test]
+    public async Task ReportTransferToForeignGround_Drop_SendsHeaderAndNonzeroDetailsOnly()
+    {
+        var (fleet, world, dropper, owner) = ForeignWorld();
+
+        FleetLifecycle.ReportTransferToForeignGround(
+            fleet, world,
+            new ShipCounts(), new CargoHold(),
+            new ShipCounts { Fighters = 4 }, new CargoHold { Trillum = 30 });
+
+        await Assert.That(owner.News.Select(n => n.Headline).ToArray())
+            .IsEquivalentTo([NewsType.ShipsOrCargoTransferredToYou, NewsType.TransferDetail, NewsType.TransferDetail]);
+        await Assert.That(owner.News[0].OtherEmpire).IsEqualTo(dropper);
+        await Assert.That(owner.News[1].Parm1).IsEqualTo(4);
+        await Assert.That(owner.News[2].Parm1).IsEqualTo(30);
+    }
+
+    [Test]
+    public async Task ReportTransferToForeignGround_PartlyClamped_ReportsWhatArrived()
+    {
+        var (fleet, world, _, owner) = ForeignWorld();
+
+        // The editor clamped a 50-fighter drop onto 9990 down to 9999.
+        FleetLifecycle.ReportTransferToForeignGround(
+            fleet, world,
+            new ShipCounts { Fighters = 9990 }, new CargoHold(),
+            new ShipCounts { Fighters = 9999 }, new CargoHold());
+
+        await Assert.That(owner.News.Count).IsEqualTo(2);
+        await Assert.That(owner.News[1].Parm1).IsEqualTo(9);
+    }
+
+    [Test]
+    public async Task ReportTransferToForeignGround_FullyClamped_SendsNothing()
+    {
+        var (fleet, world, _, owner) = ForeignWorld();
+
+        FleetLifecycle.ReportTransferToForeignGround(
+            fleet, world,
+            new ShipCounts { Fighters = 9999 }, new CargoHold(),
+            new ShipCounts { Fighters = 9999 }, new CargoHold());
+
+        await Assert.That(owner.News).IsEmpty();
+    }
+
+    [Test]
+    public async Task ReportTransferToForeignGround_OwnGround_SendsNothing()
+    {
+        var (fleet, world, dropper, _) = ForeignWorld();
+        world.Owner = dropper;
+
+        FleetLifecycle.ReportTransferToForeignGround(
+            fleet, world,
+            new ShipCounts(), new CargoHold(),
+            new ShipCounts { Fighters = 4 }, new CargoHold());
+
+        await Assert.That(dropper.News).IsEmpty();
+    }
+
     [Test]
     public async Task ChangeCompositionOfFleet_EmptyNewGroundShipsAndGroundIsFleet_AbortsAndDestroysGround()
     {
