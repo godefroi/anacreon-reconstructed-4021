@@ -56,7 +56,12 @@ public sealed partial class AnnualTickHandler
             }
             default: { // CommandBase, Fortress, IndustrialComplex, Outpost
                 var starbase = CreateStarbase(site);
-                game.Galaxy.Starbases.Add(starbase);
+                // Pascal gives a new starbase the highest free slot (NextStarbaseSlot,
+                // INTRFACE.PAS:359-368) and UpdateUniverse walks slots in ascending order
+                // (UPDATE.PAS:1458-1466), so newer starbases tick first. Inserting at the front
+                // reproduces that. It's inexact once a lower slot has been freed by a destroyed
+                // starbase (Pascal would reuse it); that would need an explicit slot index.
+                game.Galaxy.Starbases.Insert(0, starbase);
                 foreach (var (namer, name) in site.Names) {
                     starbase.Names[namer] = name;
                 }

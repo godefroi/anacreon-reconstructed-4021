@@ -1580,6 +1580,39 @@ public class AnnualTickHandlerStarbaseTests
         await Assert.That(starbase.Kind).IsEqualTo(StarbaseKind.IndustrialComplex);
         await Assert.That(starbase.Cargo.Legions).IsEqualTo(2517);
     }
+
+    [Test]
+    public async Task StarbaseThatRebelsStillGatesDefensesOnItsTickStartOwnersResearch()
+    {
+        // Same deterministic rebellion as above. UPDATE.PAS:1396-1401 builds Technology from the
+        // starbase's owner at the top of the tick, and UpdateDefenses (:1429) still receives it after
+        // UpdateRevolution flips Emp to Indep. The owner has researched no defenses, so no GDM gets
+        // built, even though an independent world at Atomic would pass its own tech-level-only gate.
+        var owner = new Empire { Name = "Test" };
+        var starbase = new Starbase {
+            Location = new Coordinate(5, 5),
+            Owner = owner,
+            Kind = StarbaseKind.IndustrialComplex,
+            Type = WorldType.Outpost,
+            TechLevel = TechLevel.Atomic,
+            Efficiency = 100,
+            Population = 1500,
+            RevolutionIndex = 90,
+        };
+        starbase.Cargo.Supplies = 9999;
+        starbase.Cargo.Chemicals = 9999;
+        starbase.Cargo.Metals = 9999;
+        starbase.Cargo.Trillum = 9999;
+        var game = BuildGame(starbase);
+        game.Empires.Add(owner);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(starbase.Owner).IsEqualTo(Empire.Independent);
+        await Assert.That(starbase.Cargo.Legions).IsGreaterThan(0); // rebels exist, so GDMs would be wanted
+        await Assert.That(starbase.Defenses.Gdms).IsEqualTo(0);
+    }
 }
 
 /// <summary>
@@ -1755,6 +1788,32 @@ public class AnnualTickHandlerConstructionTests
         var starbase = game.Galaxy.Starbases.Single();
         await Assert.That(starbase.Names[owner]).IsEqualTo("My Fortress");
         await Assert.That(starbase.Names[watcher]).IsEqualTo("Enemy Base");
+    }
+
+    /// <summary>
+    /// Pascal hands a new starbase the highest free slot and UpdateUniverse walks slots ascending, so a
+    /// newly built starbase ticks before older ones (INTRFACE.PAS:359-368, UPDATE.PAS:1458-1466).
+    /// </summary>
+    [Test]
+    public async Task Completion_PutsTheNewStarbaseAheadOfOlderOnesInTickOrder()
+    {
+        var owner = new Empire { Name = "Owner" };
+        var site = new ConstructionSite { Location = SiteLocation, Owner = owner, Building = ConstructionType.CommandBase, YearsToCompletion = 1 };
+        var fleet = new Fleet { Location = SiteLocation, Owner = owner };
+        fleet.Cargo.Chemicals = 460;
+        fleet.Cargo.Metals = 2300;
+        fleet.Cargo.Trillum = 180;
+
+        var game = BuildGame(owner, site, [fleet]);
+        var older = new Starbase { Location = new Coordinate(9, 9), Owner = owner, Kind = StarbaseKind.CommandBase, Type = WorldType.Base };
+        game.Galaxy.Starbases.Add(older);
+        var handler = new AnnualTickHandler(new FixedRandom(0));
+
+        handler.RunAnnualTick(game);
+
+        await Assert.That(game.Galaxy.Starbases.Count).IsEqualTo(2);
+        await Assert.That(game.Galaxy.Starbases[0].Location).IsEqualTo(SiteLocation);
+        await Assert.That(game.Galaxy.Starbases[1]).IsEqualTo(older);
     }
 
     /// <summary>A completed minefield creates no entity to carry a name onto — UPDATE.PAS's own CASE has no AddName arm for the SRM branch, a genuine net deletion, not an oversight (see UpdateConstruction's own doc comment).</summary>
