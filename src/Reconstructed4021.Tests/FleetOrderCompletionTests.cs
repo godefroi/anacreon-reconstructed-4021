@@ -66,15 +66,15 @@ public class FleetOrderCompletionTests
     }
 
     [Test]
-    public async Task Population_IsShownOnlyForOwnedOrScoutedWorlds()
+    public async Task Distance_IsTheGamesTravelDistanceFromTheReferencePoint()
     {
         var f = NewFixture();
 
         var candidates = FleetOrderCompletion.Candidates(f.Game, f.Viewer, new Coordinate(10, 10), "");
 
-        await Assert.That(candidates.Single(c => c.Object == f.Near).Population).IsEqualTo(900);
-        await Assert.That(candidates.Single(c => c.Object == f.Far).Population).IsEqualTo(500);
-        await Assert.That(candidates.Single(c => c.Object == f.Seen).Population).IsNull();
+        await Assert.That(candidates.Single(c => c.Object == f.Near).Distance).IsEqualTo(1);
+        await Assert.That(candidates.Single(c => c.Object == f.Far).Distance).IsEqualTo(2);
+        await Assert.That(candidates.Single(c => c.Object == f.Seen).Distance).IsEqualTo(3);
     }
 
     [Test]
@@ -103,12 +103,12 @@ public class FleetOrderCompletionTests
         var outOfBounds = FleetOrderCompletion.Decode(f.Game, f.Viewer, "DEST 99,99");
         var byName = FleetOrderCompletion.Decode(f.Game, f.Viewer, "DEST Bee");
 
-        await Assert.That(world!.Target!.Object).IsEqualTo(f.Far);
+        await Assert.That(world!.Target).IsEqualTo(f.Far);
         await Assert.That(emptySpace).IsEqualTo(new FleetOrderCompletion.Decoded(true, null, "5,5"));
         // A world the viewer hasn't seen decodes as empty space, not as itself.
         await Assert.That(unseenWorld).IsEqualTo(new FleetOrderCompletion.Decoded(true, null, "5,0"));
         await Assert.That(outOfBounds!.Resolved).IsFalse();
-        await Assert.That(byName!.Target!.Object).IsEqualTo(f.Near);
+        await Assert.That(byName!.Target).IsEqualTo(f.Near);
     }
 
     [Test]

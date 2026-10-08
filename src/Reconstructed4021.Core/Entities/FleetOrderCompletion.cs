@@ -12,17 +12,17 @@ namespace Reconstructed4021.Core.Entities;
 /// </summary>
 public static class FleetOrderCompletion
 {
-    /// <param name="Object">The world, starbase or stargate itself (the panel takes its glyph and owner colour from it).</param>
+    /// <param name="Object">The world, starbase or stargate itself (the panel takes its glyph and owner name from it).</param>
     /// <param name="Coordinates">Capital-relative <c>x,y</c>, the same form the compiler parses.</param>
     /// <param name="Name">The viewer's own name for it, or null.</param>
     /// <param name="InsertText">What a completion types after the command word: the name if it has one, else <paramref name="Coordinates"/>.</param>
-    /// <param name="Population">Null unless the viewer owns or has scouted it, same rule as Close-Up.</param>
-    public sealed record Candidate(ISectorObject Object, string Coordinates, string? Name, string InsertText, int? Population);
+    /// <param name="Distance">From the list's reference point, in the game's own travel metric (<see cref="Coordinate.DistanceTo"/>).</param>
+    public sealed record Candidate(ISectorObject Object, string Coordinates, string? Name, string InsertText, int Distance);
 
     /// <param name="Resolved">False when the destination text matches no name and no in-bounds coordinate (what Esc-compile would reject).</param>
     /// <param name="Target">The known object there, or null for empty space or something the viewer can't see.</param>
     /// <param name="Coordinates">Capital-relative position, null when unresolved.</param>
-    public sealed record Decoded(bool Resolved, Candidate? Target, string? Coordinates);
+    public sealed record Decoded(bool Resolved, ISectorObject? Target, string? Coordinates);
 
     /// <summary>
     /// Known worlds, starbases and stargates whose coordinates (when <paramref name="argument"/> starts
@@ -34,13 +34,17 @@ public static class FleetOrderCompletion
         var query = argument.Trim();
         var byCoordinate = query.Length > 0 && (char.IsDigit(query[0]) || query[0] == '-');
 
-        var result = new List<(Candidate Candidate, long Distance)>();
+        var origin = FleetOrderCompiler.Origin(game, viewer);
+        var result = new List<Candidate>();
         foreach (var obj in Places(game.Galaxy)) {
             if (!Game.Visible(viewer, obj)) {
                 continue;
             }
 
-            var candidate = Describe(game, viewer, obj);
+            var coordinates = RelativeCoordinate.Format(obj.Location, origin);
+            // A name with a space can't be typed back as a destination (the compiler reads one word).
+            var name = obj.Names.TryGetValue(viewer, out var n) && !n.Contains(' ') ? n : null;
+            var candidate = new Candidate(obj, coordinates, name, name ?? coordinates, from.DistanceTo(obj.Location));
             var matches = query.Length == 0
                 || (byCoordinate
                     ? candidate.Coordinates.StartsWith(query, StringComparison.Ordinal)
@@ -49,12 +53,10 @@ public static class FleetOrderCompletion
                 continue;
             }
 
-            long dx = obj.Location.X - from.X;
-            long dy = obj.Location.Y - from.Y;
-            result.Add((candidate, dx * dx + dy * dy));
+            result.Add(candidate);
         }
 
-        return [.. result.OrderBy(r => r.Distance).ThenBy(r => r.Candidate.Coordinates, StringComparer.Ordinal).Select(r => r.Candidate)];
+        return [.. result.OrderBy(c => c.Distance).ThenBy(c => c.Coordinates, StringComparer.Ordinal)];
     }
 
     /// <summary>
@@ -93,7 +95,7 @@ public static class FleetOrderCompletion
         }
 
         var origin = FleetOrderCompiler.Origin(game, viewer);
-        var target = obj is not null && Game.Visible(viewer, obj) ? Describe(game, viewer, obj) : null;
+        var target = obj is not null && Game.Visible(viewer, obj) ? obj : null;
         return new Decoded(true, target, RelativeCoordinate.Format(obj?.Location ?? position!.Value, origin));
     }
 
@@ -114,15 +116,6 @@ public static class FleetOrderCompletion
 
     // The compiler reads only the first word after the command (ParseLine's parts[1]).
     private static string FirstArgument(string line) => Argument(line).Split(' ')[0];
-
-    private static Candidate Describe(Game game, Empire viewer, ISectorObject obj)
-    {
-        var coordinates = RelativeCoordinate.Format(obj.Location, FleetOrderCompiler.Origin(game, viewer));
-        // A name with a space can't be typed back as a destination (the compiler reads one word).
-        var name = obj.Names.TryGetValue(viewer, out var n) && !n.Contains(' ') ? n : null;
-        var population = obj is IEconomicWorld world && Game.ScoutedOrOwned(viewer, obj) ? world.Population : (int?)null;
-        return new Candidate(obj, coordinates, name, name ?? coordinates, population);
-    }
 
     private static IEnumerable<ISectorObject> Places(Galaxy.Galaxy galaxy)
     {

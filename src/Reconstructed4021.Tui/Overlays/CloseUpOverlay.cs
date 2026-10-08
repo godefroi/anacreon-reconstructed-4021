@@ -391,7 +391,7 @@ internal sealed class CloseUpOverlay : IOverlay
         }
 
         Put("Tab / Shift+Tab: pick from list", ContentFg);
-        Put(PlaceRow("", "x,y", "Name", "Empire", "Pop"), ContentFg);
+        Put(PlaceRow("", "x,y", "Name", "Dist", "Empire"), ContentFg);
 
         var selected = _cycleArgument is null ? 0 : _cycleIndex;
         var rows = Math.Max(1, height - row);
@@ -399,15 +399,14 @@ internal sealed class CloseUpOverlay : IOverlay
         for (var i = first; i < candidates.Count && i < first + rows; i++)
         {
             var place = candidates[i];
-            var population = place.Object is IEconomicWorld ? place.Population?.ToString() ?? "?" : "";
-            Put(PlaceRow($"{(i == selected ? '►' : ' ')}{GalaxyMapScreen.GlyphOf(place.Object)}", place.Coordinates, place.Name ?? "", place.Object.Owner.Name, population), ContentFg);
+            Put(PlaceRow($"{(i == selected ? '►' : ' ')}{GalaxyMapScreen.GlyphOf(place.Object)}", place.Coordinates, place.Name ?? "", place.Distance.ToString(), place.Object.Owner.Name), ContentFg);
         }
     }
 
-    // Population is the raw integer Close-Up shows ("?" for a world the viewer hasn't scouted); Name is the
+    // Distance is in sectors from the list's reference point, the same metric fleets travel by. Name is the
     // viewer's own, usually blank. Long text is cut with an ellipsis so the columns stay put.
-    private static string PlaceRow(string markAndGlyph, string coordinates, string name, string empire, string population) =>
-        $"{markAndGlyph,-2} {Fit(coordinates, 7),-7} {Fit(name, 7),-7} {Fit(empire, 9),-9} {Fit(population, 5),5}";
+    private static string PlaceRow(string markAndGlyph, string coordinates, string name, string distance, string empire) =>
+        $"{markAndGlyph,-2} {Fit(coordinates, 7),-7} {Fit(name, 7),-7} {Fit(distance, 4),4} {Fit(empire, 12)}";
 
     private static string Fit(string text, int width) => text.Length <= width ? text : text[..(width - 1)] + "…";
 
