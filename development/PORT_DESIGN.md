@@ -122,6 +122,16 @@ own ordinal) alongside its unlock delegate.
 set — built from scratch (`Rebellion`'s "world goes independent" branch was the first real caller)
 since nothing needed a broadcast-style news call before then.
 
+## Transfer news: reports what arrived, skips zero lines
+
+When a transfer leaves ships or cargo on ground the player doesn't own, the ground's owner gets
+`ShipsOrCargoTransferredToYou` plus `TransferDetail` lines (`FleetLifecycle.ReportTransferToForeignGround`,
+from FLTCOMM.PAS:474-488). Two deliberate departures from Pascal. Pascal's detail loop runs over every
+resource type with no zero check, so the recipient sees "0 fighters" lines; the port sends only nonzero
+amounts, as Pascal's own AbortFleet news does (FLEET.PAS:193-199). Pascal also reports the raw typed
+amounts (`ResTrans`), although the write is clamped to 9999 and the overflow destroyed; the port
+reports what the ground actually gained, and sends nothing if every drop was clamped away.
+
 ## Combat: a unified `AttackType` axis
 
 `AttackType` (`Types/AttackType.cs`) mirrors Pascal's `AttackTypes = NoRes..nnj` — spanning

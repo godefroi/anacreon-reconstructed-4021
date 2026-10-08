@@ -146,6 +146,45 @@ public static class FleetLifecycle
     }
 
     /// <summary>
+    /// Tells the owner of <paramref name="ground"/> what <paramref name="fleet"/>'s owner left there
+    /// (FLTCOMM.PAS:474-488, run when the transfer screen closes). Sends nothing on the player's own
+    /// ground or when nothing arrived. Two deliberate departures from Pascal: detail lines are only
+    /// sent for nonzero amounts (Pascal's loop emits "0 fighters" etc.), and amounts are what the ground
+    /// actually gained (<paramref name="newShips"/>/<paramref name="newCargo"/> minus the old values, so
+    /// the 9999 clamp is already applied) rather than the raw typed amounts.
+    /// </summary>
+    public static void ReportTransferToForeignGround(
+        Fleet fleet, ISectorObject ground,
+        ShipCounts oldShips, CargoHold oldCargo, ShipCounts newShips, CargoHold newCargo)
+    {
+        var groundOwner = ground.Owner;
+        if (groundOwner == fleet.Owner) {
+            return;
+        }
+
+        var received = new List<(ResourceKind Kind, int Amount)>();
+        foreach (var t in Enum.GetValues<ShipType>()) {
+            if (newShips[t] > oldShips[t]) {
+                received.Add((new ResourceKind.Ship(t), newShips[t] - oldShips[t]));
+            }
+        }
+        foreach (var t in Enum.GetValues<CargoType>()) {
+            if (newCargo[t] > oldCargo[t]) {
+                received.Add((new ResourceKind.Cargo(t), newCargo[t] - oldCargo[t]));
+            }
+        }
+
+        if (received.Count == 0) {
+            return;
+        }
+
+        groundOwner.AddNews(NewsType.ShipsOrCargoTransferredToYou, ground, otherEmpire: fleet.Owner);
+        foreach (var (kind, amount) in received) {
+            groundOwner.AddNews(NewsType.TransferDetail, ground, p1: amount, resource: kind);
+        }
+    }
+
+    /// <summary>
     /// AbortFleet (FLEET.PAS:150-209), exposed publicly for Fleet menu &gt; Abort/Join
     /// (FLTCOMM.PAS: AbortFleetCommand's own tail, lines 597-609): dumps every ship/cargo in
     /// <paramref name="fleet"/> onto <paramref name="ground"/>, then removes <paramref name="fleet"/>.

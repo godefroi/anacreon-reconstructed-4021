@@ -815,12 +815,15 @@ internal sealed class GalaxyMapScreen : IScreen
         var groundCargo = CloneCargo(groundHolder.Cargo);
         var fleetName = CloseUpOverlay.DisplayName(fleet, _player);
         var groundName = CloseUpOverlay.DisplayName(ground, _player);
+        var oldGroundShips = CloneShips(groundHolder.Ships);
+        var oldGroundCargo = CloneCargo(groundHolder.Cargo);
 
         _overlays.Add(new ResourceDistributionOverlay(
             $"Transfer -- {fleetName} <-> {groundName}", fleetShips, fleetCargo, groundShips, groundCargo,
             groundIsPlayerOwned: ReferenceEquals(ground.Owner, _player), groundIsAFleet: ground is Fleet,
             onCommitted: () =>
             {
+                FleetLifecycle.ReportTransferToForeignGround(fleet, ground, oldGroundShips, oldGroundCargo, groundShips, groundCargo);
                 // ChangeCompositionOfFleet (FLEET.PAS:282-389) -- may destroy either side, see that
                 // method's own doc comment; TransferFleetCommand calls it unconditionally too.
                 FleetLifecycle.ChangeCompositionOfFleet(fleet, groundHolder, fleetShips, fleetCargo, groundShips, groundCargo, _game);
