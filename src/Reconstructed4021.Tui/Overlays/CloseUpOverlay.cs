@@ -350,8 +350,10 @@ internal sealed class CloseUpOverlay : IOverlay
         fb.DrawText(cx, cy + ch - 1, "Ctrl+N: mark as next order   Esc: compile and close", ContentFg, ContentBg, maxWidth: cw);
     }
 
-    // Syntax, then what the line's destination decodes to, then the known places nearest the reference
-    // point (FleetOrderCompletion) in each owner's map colour. The row Tab would type is marked.
+    // Syntax and the command's full help, a status line when what's typed isn't a known place, then the
+    // known places nearest the reference point (FleetOrderCompletion) in each owner's map colour. The row
+    // Tab would type is marked; typing a full destination narrows the list to it, so the list doubles as
+    // the decode of what the line points at.
     private void DrawDestinationHelp(FleetOrderHelp.Command command, string line, int x, int y, int width, int height, FrameBuffer fb)
     {
         var row = 0;
@@ -364,45 +366,52 @@ internal sealed class CloseUpOverlay : IOverlay
         }
 
         Put(command.Syntax, ContentFg);
-
-        switch (FleetOrderCompletion.Decode(_game, _viewer, line))
+        Put("", ContentFg);
+        foreach (var detailLine in WrapWords(command.Detail, width))
         {
-            case null:
-                Put("", ContentFg);
-                break;
-            case { Resolved: false }:
-                Put("= no such location", ConsoleColor.Red);
-                break;
-            case { Target: { } target }:
-                Put("=" + PlaceRow(target, selected: false)[1..], _ownerColor(target.Object.Owner));
-                break;
-            case { Coordinates: { } coordinates }:
-                Put($"= {coordinates}  empty space", ContentFg);
-                break;
+            Put(detailLine, ContentFg);
         }
+
+        Put("", ContentFg);
 
         var argument = _cycleArgument ?? FleetOrderCompletion.Argument(line);
         var candidates = DestinationCandidates(argument);
-        var origin = FleetOrderCompiler.Origin(_game, _viewer);
-        var from = FleetOrderCompletion.ReferencePoint(_game, _viewer, _obj.Location, _ordersEditor!.Lines, _ordersEditor.CursorRow);
-        Put(candidates.Count == 0 ? "No known places match" : $"Near {RelativeCoordinate.Format(from, origin)}  (Tab: insert)", ContentFg);
+        switch (FleetOrderCompletion.Decode(_game, _viewer, line))
+        {
+            case { Resolved: false }:
+                Put("No such location", ConsoleColor.Red);
+                break;
+            case { Target: null, Coordinates: { } coordinates }:
+                Put($"{coordinates} is empty space", ContentFg);
+                break;
+        }
+
+        if (candidates.Count == 0)
+        {
+            Put("No known places match", ContentFg);
+            return;
+        }
+
+        Put("Tab / Shift+Tab: pick from list", ContentFg);
+        Put(PlaceRow("", "x,y", "Name", "Empire", "Pop"), ContentFg);
 
         var selected = _cycleArgument is null ? 0 : _cycleIndex;
         var rows = Math.Max(1, height - row);
         var first = selected >= rows ? selected - rows + 1 : 0;
         for (var i = first; i < candidates.Count && i < first + rows; i++)
         {
-            Put(PlaceRow(candidates[i], i == selected), _ownerColor(candidates[i].Object.Owner));
+            var place = candidates[i];
+            var population = place.Object is IEconomicWorld ? place.Population?.ToString() ?? "?" : "";
+            Put(PlaceRow($"{(i == selected ? '►' : ' ')}{GalaxyMapScreen.GlyphOf(place.Object)}", place.Coordinates, place.Name ?? "", place.Object.Owner.Name, population), _ownerColor(place.Object.Owner));
         }
     }
 
-    // mark, glyph, relative x,y, the viewer's own name if any, population -- the same raw integer Close-Up
-    // shows, "?" for a world the viewer hasn't scouted.
-    private static string PlaceRow(FleetOrderCompletion.Candidate place, bool selected)
-    {
-        var population = place.Object is IEconomicWorld ? place.Population?.ToString() ?? "?" : "";
-        return $"{(selected ? '►' : ' ')}{GalaxyMapScreen.GlyphOf(place.Object)} {place.Coordinates,-8} {place.Name,-12} {population,7}";
-    }
+    // Population is the raw integer Close-Up shows ("?" for a world the viewer hasn't scouted); Name is the
+    // viewer's own, usually blank. Long text is cut with an ellipsis so the columns stay put.
+    private static string PlaceRow(string markAndGlyph, string coordinates, string name, string empire, string population) =>
+        $"{markAndGlyph,-2} {Fit(coordinates, 7),-7} {Fit(name, 7),-7} {Fit(empire, 9),-9} {Fit(population, 5),5}";
+
+    private static string Fit(string text, int width) => text.Length <= width ? text : text[..(width - 1)] + "…";
 
     private static IEnumerable<string> WrapWords(string text, int width)
     {
