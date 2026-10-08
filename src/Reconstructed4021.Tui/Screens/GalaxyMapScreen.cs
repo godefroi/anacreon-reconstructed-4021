@@ -1316,7 +1316,7 @@ internal sealed class GalaxyMapScreen : IScreen
     private void TradeTechnologyCommand()
     {
         var candidates = _game.Empires
-            .Where(e => !ReferenceEquals(e, _player) && HasTradeableTech(e))
+            .Where(e => !ReferenceEquals(e, _player) && e.Status == EmpireStatus.Active && HasTradeableTech(e))
             .ToList();
 
         if (candidates.Count == 0)
@@ -1437,8 +1437,9 @@ internal sealed class GalaxyMapScreen : IScreen
     private void ConfirmSelfDestruct(ISectorObject target)
     {
         var name = DisplayName(target);
-        var warning = target is Starbase
-            ? $"{name} reports: Destruct sequence activated...\nAre you sure about this, {MyLord()}? Destruction of the base will destroy all ships in the sector."
+        // MSCCOMM.PAS:493-505: Str(Pop*10,PopN), "deaths of N million people".
+        var warning = target is Starbase starbase
+            ? $"{name} reports: Destruct sequence activated...\nAre you sure about this, {MyLord()}? Destruction of the base will result in the deaths of {starbase.Population * 10} million people and will destroy all ships in the sector."
             : $"Atomic charges set on {name}...\nAre you sure about this, {MyLord()}? It took us many years to build this structure.";
 
         _overlays.Add(new ConfirmOverlay("Self-Destruct", warning, yes =>
