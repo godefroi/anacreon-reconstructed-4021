@@ -67,3 +67,35 @@ DUMP
 Alt+F
 O
 DUMP
+
+# Destination completion. On a DEST line the panel lists known places nearest first (glyph, x,y, name,
+# Close-Up population, in each owner's map colour) and decodes the typed destination. Tab types the
+# marked row, Tab/Shift+Tab walk the list.
+Down
+Down
+Down
+End
+Enter
+D
+E
+S
+T
+Space
+DUMP
+
+Tab
+DUMP
+
+Tab
+Shift+Tab
+Shift+Tab
+DUMP
+
+# A typed prefix narrows the list, and the decode line follows what's typed.
+Backspace
+Backspace
+Backspace
+Backspace
+4
+,
+DUMP

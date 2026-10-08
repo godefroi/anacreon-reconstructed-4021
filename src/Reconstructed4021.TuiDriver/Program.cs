@@ -131,6 +131,18 @@ static bool TryParseKey(string token, out ConsoleKeyInfo key)
         return false;
     }
 
+    if (token.StartsWith("Shift+", StringComparison.OrdinalIgnoreCase))
+    {
+        if (TryParseKey(token[6..], out var inner))
+        {
+            key = new ConsoleKeyInfo(inner.KeyChar, inner.Key, shift: true, inner.Modifiers.HasFlag(ConsoleModifiers.Alt), inner.Modifiers.HasFlag(ConsoleModifiers.Control));
+            return true;
+        }
+
+        key = default;
+        return false;
+    }
+
     if (token.StartsWith("Alt+", StringComparison.OrdinalIgnoreCase) && token.Length == 5)
     {
         var ch = token[4];

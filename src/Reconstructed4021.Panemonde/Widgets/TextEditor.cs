@@ -197,6 +197,13 @@ public sealed class TextEditor
         return false;
     }
 
+    /// <summary>Replaces the cursor's line wholesale and puts the cursor at its end -- completion's "type this instead".</summary>
+    public void ReplaceCurrentLine(string text)
+    {
+        _lines[CursorRow].Text = text;
+        CursorCol = text.Length;
+    }
+
     // InsertPageBreak (EDIT.PAS:398-431): splits the current line at the cursor. The first half always
     // ends a paragraph now (a real Enter happened right there); the new second half inherits whatever
     // the pre-split line's own EndsParagraph was (still mid-paragraph if the split happened partway

@@ -54,14 +54,18 @@ internal sealed class CloseUpOverlay : IOverlay
     private readonly Action<ISectorObject> _onGoToMap;
     private readonly TabKind[] _tabKinds;
     private readonly TabFrame _frame;
+    private readonly Func<Empire, ConsoleColor> _ownerColor; // GalaxyMapScreen's own OwnerColor, so the Orders help panel's rows read the same as the map.
     private readonly TextEditor? _ordersEditor;
+    private string? _cycleArgument; // the argument Tab started cycling from; null when not mid-cycle.
+    private int _cycleIndex;
     private readonly string? _initialOrdersText;
     private readonly int? _initialMarkedLine;
 
     public bool IsDismissed { get; private set; }
 
-    public CloseUpOverlay(ISectorObject obj, Empire viewer, Game game, Action<string, string> showInfo, Action<IOverlay> push, Func<char, Fleet, Action<Fleet>?> resolveFleetAction, Action<ISectorObject> onGoToMap, string initialTab = "Close Up")
+    public CloseUpOverlay(ISectorObject obj, Empire viewer, Game game, Action<string, string> showInfo, Action<IOverlay> push, Func<char, Fleet, Action<Fleet>?> resolveFleetAction, Action<ISectorObject> onGoToMap, Func<Empire, ConsoleColor> ownerColor, string initialTab = "Close Up")
     {
+        _ownerColor = ownerColor;
         _obj = obj;
         _viewer = viewer;
         _game = game;
@@ -179,7 +183,49 @@ internal sealed class CloseUpOverlay : IOverlay
             return;
         }
 
+        if (key.Key == ConsoleKey.Tab)
+        {
+            CompleteDestination(backwards: key.Modifiers.HasFlag(ConsoleModifiers.Shift));
+            return;
+        }
+
+        _cycleArgument = null;
         _ordersEditor!.HandleKey(key);
+    }
+
+    // Tab on a DESTination line types the nearest listed place (the one the help panel marks); repeated
+    // Tab / Shift+Tab walks the same list, which stays fixed to what was typed before the first Tab.
+    private void CompleteDestination(bool backwards)
+    {
+        var line = _ordersEditor!.Lines[_ordersEditor.CursorRow];
+        if (FleetOrderHelp.For(line)?.Token != "DEST")
+        {
+            return;
+        }
+
+        var candidates = DestinationCandidates(_cycleArgument ?? FleetOrderCompletion.Argument(line));
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        if (_cycleArgument is null)
+        {
+            _cycleArgument = FleetOrderCompletion.Argument(line);
+            _cycleIndex = backwards ? candidates.Count - 1 : 0;
+        }
+        else
+        {
+            _cycleIndex = (_cycleIndex + (backwards ? -1 : 1) + candidates.Count) % candidates.Count;
+        }
+
+        _ordersEditor.ReplaceCurrentLine(FleetOrderCompletion.Apply(line, candidates[_cycleIndex]));
+    }
+
+    private IReadOnlyList<FleetOrderCompletion.Candidate> DestinationCandidates(string argument)
+    {
+        var from = FleetOrderCompletion.ReferencePoint(_game, _viewer, _obj.Location, _ordersEditor!.Lines, _ordersEditor.CursorRow);
+        return FleetOrderCompletion.Candidates(_game, _viewer, from, argument);
     }
 
     // FleetOrdersTabView.TryCommit: Esc attempts to commit (FleetOrdersCommand's own
@@ -279,7 +325,11 @@ internal sealed class CloseUpOverlay : IOverlay
         }
 
         var cursorLine = _ordersEditor.Lines[_ordersEditor.CursorRow];
-        if (FleetOrderHelp.For(cursorLine) is { } command)
+        if (FleetOrderHelp.For(cursorLine) is { Token: "DEST" } destCommand)
+        {
+            DrawDestinationHelp(destCommand, cursorLine, helpX, cy + 1, helpWidth, editorHeight, fb);
+        }
+        else if (FleetOrderHelp.For(cursorLine) is { } command)
         {
             HelpLine(command.Syntax);
             HelpLine("");
@@ -298,6 +348,60 @@ internal sealed class CloseUpOverlay : IOverlay
         }
 
         fb.DrawText(cx, cy + ch - 1, "Ctrl+N: mark as next order   Esc: compile and close", ContentFg, ContentBg, maxWidth: cw);
+    }
+
+    // Syntax, then what the line's destination decodes to, then the known places nearest the reference
+    // point (FleetOrderCompletion) in each owner's map colour. The row Tab would type is marked.
+    private void DrawDestinationHelp(FleetOrderHelp.Command command, string line, int x, int y, int width, int height, FrameBuffer fb)
+    {
+        var row = 0;
+        void Put(string text, ConsoleColor fg)
+        {
+            if (row < height)
+            {
+                fb.DrawText(x, y + row++, text, fg, ContentBg, maxWidth: width);
+            }
+        }
+
+        Put(command.Syntax, ContentFg);
+
+        switch (FleetOrderCompletion.Decode(_game, _viewer, line))
+        {
+            case null:
+                Put("", ContentFg);
+                break;
+            case { Resolved: false }:
+                Put("= no such location", ConsoleColor.Red);
+                break;
+            case { Target: { } target }:
+                Put("=" + PlaceRow(target, selected: false)[1..], _ownerColor(target.Object.Owner));
+                break;
+            case { Coordinates: { } coordinates }:
+                Put($"= {coordinates}  empty space", ContentFg);
+                break;
+        }
+
+        var argument = _cycleArgument ?? FleetOrderCompletion.Argument(line);
+        var candidates = DestinationCandidates(argument);
+        var origin = FleetOrderCompiler.Origin(_game, _viewer);
+        var from = FleetOrderCompletion.ReferencePoint(_game, _viewer, _obj.Location, _ordersEditor!.Lines, _ordersEditor.CursorRow);
+        Put(candidates.Count == 0 ? "No known places match" : $"Near {RelativeCoordinate.Format(from, origin)}  (Tab: insert)", ContentFg);
+
+        var selected = _cycleArgument is null ? 0 : _cycleIndex;
+        var rows = Math.Max(1, height - row);
+        var first = selected >= rows ? selected - rows + 1 : 0;
+        for (var i = first; i < candidates.Count && i < first + rows; i++)
+        {
+            Put(PlaceRow(candidates[i], i == selected), _ownerColor(candidates[i].Object.Owner));
+        }
+    }
+
+    // mark, glyph, relative x,y, the viewer's own name if any, population -- the same raw integer Close-Up
+    // shows, "?" for a world the viewer hasn't scouted.
+    private static string PlaceRow(FleetOrderCompletion.Candidate place, bool selected)
+    {
+        var population = place.Object is IEconomicWorld ? place.Population?.ToString() ?? "?" : "";
+        return $"{(selected ? '►' : ' ')}{GalaxyMapScreen.GlyphOf(place.Object)} {place.Coordinates,-8} {place.Name,-12} {population,7}";
     }
 
     private static IEnumerable<string> WrapWords(string text, int width)
