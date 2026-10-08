@@ -256,12 +256,70 @@ internal sealed class CloseUpOverlay : IOverlay
         var name = DisplayName(fleet, _viewer);
         fb.DrawText(cx, cy, $"Orders: {name}", ContentFg, ContentBg);
 
-        const int hintLines = 2;
-        var editorHeight = Math.Max(1, ch - 1 - hintLines);
-        _ordersEditor!.Draw(fb, cx, cy + 1, cw, editorHeight, ContentFg, ContentBg, GutterFg, CursorFg, CursorBg);
+        // Editor on the left, help for the cursor's line on the right (FleetOrderHelp). Commands are
+        // short, so the editor loses little by giving up the right half.
+        const int helpWidth = 36;
+        var editorWidth = cw - helpWidth - 2;
+        var editorHeight = Math.Max(1, ch - 3);
+        _ordersEditor!.Draw(fb, cx, cy + 1, editorWidth, editorHeight, ContentFg, ContentBg, GutterFg, CursorFg, CursorBg);
 
-        fb.DrawText(cx, cy + ch - 2, "DESTination <name/x,y>  TRANsfer <amt> <code>  REPEat  WAIT  REFUel  JOIN [OVER]", ContentFg, ContentBg, maxWidth: cw);
+        var helpX = cx + cw - helpWidth;
+        for (var row = 0; row < editorHeight; row++)
+        {
+            fb.DrawText(helpX - 2, cy + 1 + row, "│", ContentFg, ContentBg);
+        }
+
+        var helpRow = 0;
+        void HelpLine(string text)
+        {
+            if (helpRow < editorHeight)
+            {
+                fb.DrawText(helpX, cy + 1 + helpRow++, text, ContentFg, ContentBg, maxWidth: helpWidth);
+            }
+        }
+
+        var cursorLine = _ordersEditor.Lines[_ordersEditor.CursorRow];
+        if (FleetOrderHelp.For(cursorLine) is { } command)
+        {
+            HelpLine(command.Syntax);
+            HelpLine("");
+            foreach (var line in WrapWords(command.Detail, helpWidth))
+            {
+                HelpLine(line);
+            }
+        }
+        else
+        {
+            foreach (var c in FleetOrderHelp.Commands)
+            {
+                HelpLine(c.Syntax);
+                HelpLine("  " + c.Summary);
+            }
+        }
+
         fb.DrawText(cx, cy + ch - 1, "Ctrl+N: mark as next order   Esc: compile and close", ContentFg, ContentBg, maxWidth: cw);
+    }
+
+    private static IEnumerable<string> WrapWords(string text, int width)
+    {
+        var line = "";
+        foreach (var word in text.Split(' '))
+        {
+            if (line.Length > 0 && line.Length + 1 + word.Length > width)
+            {
+                yield return line;
+                line = word;
+            }
+            else
+            {
+                line = line.Length == 0 ? word : line + " " + word;
+            }
+        }
+
+        if (line.Length > 0)
+        {
+            yield return line;
+        }
     }
 
     private void DrawContent(FrameBuffer fb, int cx, int cy, int cw, int ch)
