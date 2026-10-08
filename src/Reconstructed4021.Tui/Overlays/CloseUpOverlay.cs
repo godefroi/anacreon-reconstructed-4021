@@ -391,7 +391,7 @@ internal sealed class CloseUpOverlay : IOverlay
         }
 
         Put("Tab / Shift+Tab: pick from list", ContentFg);
-        Put(PlaceRow("", "x,y", "Name", "Dist", "Empire"), ContentFg);
+        Put(PlaceRow("", "Place", "Dist", "Empire"), ContentFg);
 
         var selected = _cycleArgument is null ? 0 : _cycleIndex;
         var rows = Math.Max(1, height - row);
@@ -399,14 +399,15 @@ internal sealed class CloseUpOverlay : IOverlay
         for (var i = first; i < candidates.Count && i < first + rows; i++)
         {
             var place = candidates[i];
-            Put(PlaceRow($"{(i == selected ? '►' : ' ')}{GalaxyMapScreen.GlyphOf(place.Object)}", place.Coordinates, place.Name ?? "", place.Distance.ToString(), place.Object.Owner.Name), ContentFg);
+            Put(PlaceRow($"{(i == selected ? '►' : ' ')}{GalaxyMapScreen.GlyphOf(place.Object)}", place.InsertText, place.Distance.ToString(), place.Object.Owner.Name), ContentFg);
         }
     }
 
-    // Distance is in sectors from the list's reference point, the same metric fleets travel by. Name is the
-    // viewer's own, usually blank. Long text is cut with an ellipsis so the columns stay put.
-    private static string PlaceRow(string markAndGlyph, string coordinates, string name, string distance, string empire) =>
-        $"{markAndGlyph,-2} {Fit(coordinates, 7),-7} {Fit(name, 7),-7} {Fit(distance, 4),4} {Fit(empire, 12)}";
+    // Place is exactly what Tab types: the viewer's own name for it if there is one, else x,y. Distance is
+    // in sectors from the list's reference point, the same metric fleets travel by. Long text is cut with
+    // an ellipsis so the columns stay put.
+    private static string PlaceRow(string markAndGlyph, string place, string distance, string empire) =>
+        $"{markAndGlyph,-2} {Fit(place, 12),-12} {Fit(distance, 4),4} {Fit(empire, 12)}";
 
     private static string Fit(string text, int width) => text.Length <= width ? text : text[..(width - 1)] + "…";
 
