@@ -54,7 +54,6 @@ internal sealed class CloseUpOverlay : IOverlay
     private readonly Action<ISectorObject> _onGoToMap;
     private readonly TabKind[] _tabKinds;
     private readonly TabFrame _frame;
-    private readonly Func<Empire, ConsoleColor> _ownerColor; // GalaxyMapScreen's own OwnerColor, so the Orders help panel's rows read the same as the map.
     private readonly TextEditor? _ordersEditor;
     private string? _cycleArgument; // the argument Tab started cycling from; null when not mid-cycle.
     private int _cycleIndex;
@@ -63,9 +62,8 @@ internal sealed class CloseUpOverlay : IOverlay
 
     public bool IsDismissed { get; private set; }
 
-    public CloseUpOverlay(ISectorObject obj, Empire viewer, Game game, Action<string, string> showInfo, Action<IOverlay> push, Func<char, Fleet, Action<Fleet>?> resolveFleetAction, Action<ISectorObject> onGoToMap, Func<Empire, ConsoleColor> ownerColor, string initialTab = "Close Up")
+    public CloseUpOverlay(ISectorObject obj, Empire viewer, Game game, Action<string, string> showInfo, Action<IOverlay> push, Func<char, Fleet, Action<Fleet>?> resolveFleetAction, Action<ISectorObject> onGoToMap, string initialTab = "Close Up")
     {
-        _ownerColor = ownerColor;
         _obj = obj;
         _viewer = viewer;
         _game = game;
@@ -402,7 +400,7 @@ internal sealed class CloseUpOverlay : IOverlay
         {
             var place = candidates[i];
             var population = place.Object is IEconomicWorld ? place.Population?.ToString() ?? "?" : "";
-            Put(PlaceRow($"{(i == selected ? '►' : ' ')}{GalaxyMapScreen.GlyphOf(place.Object)}", place.Coordinates, place.Name ?? "", place.Object.Owner.Name, population), _ownerColor(place.Object.Owner));
+            Put(PlaceRow($"{(i == selected ? '►' : ' ')}{GalaxyMapScreen.GlyphOf(place.Object)}", place.Coordinates, place.Name ?? "", place.Object.Owner.Name, population), ContentFg);
         }
     }
 

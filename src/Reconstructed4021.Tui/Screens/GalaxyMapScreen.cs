@@ -442,7 +442,7 @@ internal sealed class GalaxyMapScreen : IScreen
             return;
         }
 
-        _overlays.Add(new CloseUpOverlay(obj, _player, _game, ShowInfo, _overlays.Add, ResolveFleetContextAction, GoToMapFromExamine, OwnerColor, initialTab));
+        _overlays.Add(new CloseUpOverlay(obj, _player, _game, ShowInfo, _overlays.Add, ResolveFleetContextAction, GoToMapFromExamine, initialTab));
     }
 
     // CloseUpOverlay and WorldInfoOverlay's own F10: drop every overlay (Close Up/World Info itself,
