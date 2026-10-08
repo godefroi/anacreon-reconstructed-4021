@@ -1,64 +1,69 @@
-# Deploy a fleet, open Close Up on it (2 objects share the sector -- capital + fleet -- so this also
-# exercises the object picker), switch to the new Orders tab, type a real order, mark it as next, and
-# commit. Then reopen, feed it an invalid order, and confirm the discard path leaves the prior
-# (successfully committed) orders untouched.
+# Run with --load "assets/saves/Resupply Smoke Test.json" (one own fleet, TestFleet, at the capital). Opens the Orders
+# tab through Fleet > Orders, types orders and checks the help panel on the right follows the cursor
+# line: the command list on a blank/unrecognised line, that command's own help once its first four
+# letters are typed. Then marks a line as the next order, commits with Esc, reopens to confirm the
+# orders round-tripped, and feeds it an invalid line to confirm the discard path keeps the prior
+# orders.
 Alt+F
-D
-Enter
-Enter
-Right
-Right
-Down
-Down
-Enter
-Up
-Escape
-Left
-Left
-Up
-Up
-
-Enter
-Down
-Enter
+O
 DUMP
 
-Ctrl+PageDown
-DUMP
-
+# Blank first line: command list.
 W
 A
+DUMP
+
+# Four letters in: WAIT's own help.
 I
 T
+DUMP
+
+# Next line, REFUel, then a deliberately unrecognised word (back to the list).
+Enter
+R
+E
+F
+U
+DUMP
+Enter
+X
+DUMP
+
+# Replace the junk line with JOIN, mark it as the next order, commit.
+Backspace
+J
+O
+I
+N
 Ctrl+N
 DUMP
-
 Escape
 DUMP
-
 Enter
 DUMP
 
-Enter
+# Reopen on Orders: the three orders should have round-tripped.
+Alt+F
+O
+DUMP
+
+# An invalid line: Esc offers to discard rather than closing, and discarding keeps the prior orders.
 Down
-Enter
-Ctrl+PageDown
-DUMP
-
+Down
+Down
 End
-Backspace
-Backspace
-Backspace
-Backspace
+Enter
 B
 O
 G
 U
 S
-DUMP
-
 Escape
 DUMP
-
 Enter
+DUMP
+
+# Discarded: the saved orders are unchanged (no BOGUS).
+Alt+F
+O
 DUMP
